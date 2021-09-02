@@ -9,7 +9,7 @@ Getting Started
 
 The current development beta version has been developped for the use of ULS students and researchers
 
-Prerequisites
+Installation
 =============
 
 The current version needs does not include a package installation. The package source folder (../lime/src/) needs to be

@@ -12,10 +12,6 @@ from astropy.io import fits
 from distutils.util import strtobool
 import pylatex
 
-__all__ = ['PdfMaker', 'lineslogFile_to_DF', 'latex_science_float',
-           'LOG_COLUMNS', '_LOG_EXPORT', 'STANDARD_PLOT', 'STANDARD_AXES', 'DARK_PLOT',
-           'FLUX_TEX_TABLE_HEADERS', 'FLUX_TXT_TABLE_HEADERS', 'KIN_TEX_TABLE_HEADERS', 'KIN_TXT_TABLE_HEADERS']
-
 # Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
 LOG_COLUMNS = {'wavelength': [False, False, True],
                'intg_flux': [True, False, False],
@@ -272,7 +268,7 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
 
 
 # Function to import SpecSyzer configuration file #TODO repeated
-def loadConfData(filepath, objList_check=False, group_variables=False):
+def loadConfData(filepath, objList_check=False):
 
     # Open the file
     if Path(filepath).is_file():
@@ -281,49 +277,31 @@ def loadConfData(filepath, objList_check=False, group_variables=False):
     else:
         exit(f'-ERROR Configuration file not found at:\n{filepath}')
 
-    if group_variables:
-        #
-        # # Read conversion settings # TODO exclude this metadata from file
-        # string_parameter = cfg['conf_entries']['string_conf'].split(',')
+    confDict = {}
 
-        # Loop through configuration file sections and merge into a dictionary
-        confDict = {}
-        for i in range(1, len(cfg.sections())):
-            section = cfg.sections()[i]
-            for option in cfg.options(section):
-                confDict[option] = cfg[section][option]
+    for section in cfg.sections():
+        confDict[section] = {}
+        for option_key in cfg.options(section):
+            option_value = cfg[section][option_key]
+            confDict[section][option_key] = formatStringEntry(option_value, option_key, section)
 
-        # Convert the entries to the right format
-        for key, value in confDict.items():
-            confDict[key] = formatStringEntry(value, key)
+    if objList_check is True:
 
-    else:
+        assert 'file_information' in confDict, '- No file_information section in configuration file'
+        assert 'object_list' in confDict['file_information'], '- No object_list option in configuration file'
+        objList = confDict['file_information']['object_list']
 
-        confDict = {}
-
-        for section in cfg.sections():
-            confDict[section] = {}
-            for option_key in cfg.options(section):
-                option_value = cfg[section][option_key]
-                confDict[section][option_key] = formatStringEntry(option_value, option_key, section)
-
-        if objList_check is True:
-
-            assert 'file_information' in confDict, '- No file_information section in configuration file'
-            assert 'object_list' in confDict['file_information'], '- No object_list option in configuration file'
-            objList = confDict['file_information']['object_list']
-
-            # Combine sample with obj properties if available
-            if objList is not None:
-                for key_group in GLOBAL_LOCAL_GROUPS:
-                    global_group = f'default{key_group}'
-                    if global_group in confDict:
-                        for objname in objList:
-                            local_group = f'{objname}{key_group}'
-                            dict_global = copy.deepcopy(confDict[global_group])
-                            if local_group in confDict:
-                                dict_global.update(confDict[local_group])
-                            confDict[local_group] = dict_global
+        # Combine sample with obj properties if available
+        if objList is not None:
+            for key_group in GLOBAL_LOCAL_GROUPS:
+                global_group = f'default{key_group}'
+                if global_group in confDict:
+                    for objname in objList:
+                        local_group = f'{objname}{key_group}'
+                        dict_global = copy.deepcopy(confDict[global_group])
+                        if local_group in confDict:
+                            dict_global.update(confDict[local_group])
+                        confDict[local_group] = dict_global
 
     return confDict
 

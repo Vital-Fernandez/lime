@@ -10,7 +10,7 @@ README = (HERE/"README.rst").read_text()
 # Setup
 setup(
     name='lime',
-    version='0.1.0',
+    version='0.1.1',
     description="Read the latest Real Python tutorials",
     long_description=README,
     long_description_content_type='text/x-rst',
