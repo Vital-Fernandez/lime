@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from astropy.io import fits
 
 from lmfit import fit_report
 
 from .model import EmissionFitting
 from .tools import label_decomposition
 from .plots import LiMePlots
-from .io import _LOG_EXPORT, LOG_COLUMNS, lineslogFile_to_DF
-
+from .io import _LOG_EXPORT, LOG_COLUMNS, lineslogFile_to_DF, lineslog_to_HDU
 
 class Spectrum(EmissionFitting, LiMePlots):
 
@@ -108,7 +108,7 @@ class Spectrum(EmissionFitting, LiMePlots):
             if '_b' in self.lineLabel:
                 self.blended_check = True
 
-        # Check the kinematics import
+        # Import kinematics if requested
         self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
 
         # Gaussian fitting # TODO Add logic for very small lines
@@ -125,7 +125,7 @@ class Spectrum(EmissionFitting, LiMePlots):
 
     def import_line_kinematics(self, user_conf, z_cor):
 
-        # Check if line kinematics are contained in blended line
+        # Check if imported kinematics come from blended component
         if self.blended_label != 'None':
             childs_list = self.blended_label.split('-')
         else:
@@ -269,11 +269,36 @@ class Spectrum(EmissionFitting, LiMePlots):
 
         return
 
-    def save_lineslog(self, linesDF, file_address):
+    def save_line_log(self, output_address, linelog=None, output_type='txt', fits_extension=None, fits_header=None):
 
-        with open(file_address, 'wb') as output_file:
-            string_DF = linesDF.to_string()
-            output_file.write(string_DF.encode('UTF-8'))
+        # If no linelog is provided we use the object lineLog
+        if linelog is None:
+            linelog = self.linesDF
+
+        # Default txt log with the complete information
+        if output_type == 'txt':
+            with open(output_address, 'wb') as output_file:
+                string_DF = linelog.to_string()
+                output_file.write(string_DF.encode('UTF-8'))
+
+        # PdF fluxes table
+        elif output_type == 'flux_table':
+            self.table_fluxes(linelog, output_address)
+
+        # Linelog in a fits file
+        elif output_type == 'fits':
+            if isinstance(linelog, pd.DataFrame):
+                lineLogHDU = lineslog_to_HDU(linelog, ext_name=fits_extension, header_dict=fits_header)
+
+                fits_address = Path(output_address)
+                if fits_address.is_file():
+                    try:
+                        fits.update(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
+                    except KeyError:
+                        fits.append(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+                else:
+                    hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
+                    hdul.writeto(fits_address, overwrite=True, output_verify='fix')
 
         return
 

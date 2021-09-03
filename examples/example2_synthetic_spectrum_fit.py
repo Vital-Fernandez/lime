@@ -68,6 +68,7 @@ mask_df.loc['O3_5007A'] = np.array([4972.7, 4987.0, 4992.0, 5024.7, 5031.5, 5043
 mask_df.loc['H1_6563A_b'] = np.array([6438.0, 6508.6, 6535.10, 6600.9, 6627.69, 6661.8])
 
 # Declare fit configuration
+
 conf_dict = dict(fit_conf={'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
                            'H1_6563A_b': 'H1_6563A-H1_6563A_w1',
                            'H1_6563A_w1_sigma': {'expr': '>1*H1_6563A_sigma'}})
@@ -91,7 +92,8 @@ for i, lineLabel in enumerate(matchedDF.index.values):
     lm.plot_line_velocity()
 
 # Save to txt file
-output_address = Path.home()/'synthetic_spectrum_fit_results.txt'
-lm.save_lineslog(lm.linesDF, output_address)
+lm.save_line_log(Path.home()/'synth_spec_linelog.txt', output_type='txt')
+lm.save_line_log(Path.home()/'synth_spec_flux_table', output_type='flux_table')
+lm.save_line_log(Path.home()/'synth_spec_linelog.fits', output_type='fits')
 
 

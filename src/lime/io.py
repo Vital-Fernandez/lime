@@ -403,20 +403,12 @@ def lineslog_to_HDU(log_DF, ext_name, column_types={}, header_dict={}):
     linesCol = fits.ColDefs(linesSA)
     linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name)
 
-    if len(header_dict) != 0:
-        for key, value in header_dict.items():
-            linesHDU.header[key] = value
+    if header_dict is not None:
+        if len(header_dict) != 0:
+            for key, value in header_dict.items():
+                linesHDU.header[key] = value
 
     return linesHDU
-
-
-def save_lineslog(linesDF, file_address):
-
-    with open(file_address, 'wb') as output_file:
-        string_DF = linesDF.to_string()
-        output_file.write(string_DF.encode('UTF-8'))
-
-    return
 
 
 def import_fits_data(file_address, instrument, frame_idx=None):

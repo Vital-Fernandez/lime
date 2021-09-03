@@ -9,10 +9,10 @@ sys.path.append(src_folder)
 import lime
 
 # Declare the data location
-example_path = Path(__file__).parent
-obsFitsFile = example_path/'sample_data/gp121903_BR.fits'
-lineMaskFile = example_path/'sample_data/gp121903_BR_mask.txt'
-cfgFile = example_path/'sample_data/gtc_greenpeas_data.ini'
+data_folder_path = Path(__file__).parent
+obsFitsFile = data_folder_path/'sample_data/gp121903_BR.fits'
+lineMaskFile = data_folder_path/'sample_data/gp121903_BR_mask.txt'
+cfgFile = data_folder_path/'sample_data/gtc_greenpeas_data.ini'
 
 # Load configuration
 obsConf = lime.loadConfData(cfgFile, objList_check=True)
@@ -30,8 +30,6 @@ norm_flux = obsConf['sample_data']['norm_flux']
 lm = lime.Spectrum(wave, flux, redshift=z_obj, normFlux=norm_flux)
 lm.plot_spectrum()
 
-
-lm.wave
 # Find lines
 norm_spec = lime.continuum_remover(lm.wave_rest, lm.flux, noiseRegionLims=obsConf['sample_data']['noiseRegion_array'])
 obsLinesTable = lime.line_finder(lm.wave_rest, norm_spec, noiseWaveLim=obsConf['sample_data']['noiseRegion_array'], intLineThreshold=3)
@@ -55,8 +53,8 @@ lm.plot_line_grid(lm.linesDF, frame='obs')
 
 # # Save the results
 home_folder = Path.home()
-lm.save_lineslog(lm.linesDF, home_folder/'linesLog.txt')
-lm.table_fluxes(lm.linesDF, home_folder/'linesTable')
-
+lm.save_line_log(home_folder/'gp121903_linelog.txt', output_type='txt')
+lm.save_line_log(home_folder/'gp121903_flux_table', output_type='flux_table')
+lm.save_line_log(home_folder/'gp121903_linelog.fits', output_type='fits')
 
 
