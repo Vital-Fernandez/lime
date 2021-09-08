@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from sys import exit
 from astropy.io import fits
 from distutils.util import strtobool
 import pylatex

@@ -10,7 +10,7 @@ README = (HERE/"README.rst").read_text()
 # Setup
 setup(
     name='lime',
-    version='0.1.2',
+    version='0.1.3',
     description="Line Measurer for ionized gas analysis",
     long_description=README,
     long_description_content_type='text/x-rst',

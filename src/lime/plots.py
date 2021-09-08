@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, rcParams, spines, gridspec, patches
 from scipy.interpolate import interp1d
+from sys import exit
 
 from .tools import label_decomposition, kinematic_component_labelling
 from .model import c_KMpS, gaussian_model, linear_model
