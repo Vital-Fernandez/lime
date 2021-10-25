@@ -29,8 +29,6 @@ w_max = w_min + dw * nPixels
 wave_rest = np.linspace(w_min, w_max, nPixels, endpoint=False)
 wave_obs = (1 + z_true) * wave_rest
 
-wave, flux = np.loadtxt(Path.home()/'synthetic_spectrum.txt', unpack=True)
-
 # Linear continuum : slope and interception
 continuum_lineal = np.array([-0.001, 20.345])
 

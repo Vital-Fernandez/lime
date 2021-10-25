@@ -20,6 +20,4 @@ _setup_cfg = configparser.ConfigParser()
 _setup_cfg.optionxform = str
 _setup_cfg.read(os.path.join(setup_path, 'setup.cfg'))
 
-
-
-
+__version__ = _setup_cfg['metadata']['version']
