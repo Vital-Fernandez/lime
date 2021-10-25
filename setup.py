@@ -34,6 +34,7 @@ setup(
                 ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
+    package_data={'': ['lime.cfg']},
     include_package_data=True,
     install_requires=['numpy', 'matplotlib', 'pandas', 'astropy'],
     )

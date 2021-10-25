@@ -15,9 +15,8 @@ __python_version__ = sys.version_info
 
 # Read lime configuration
 _dir_path = os.path.dirname(os.path.realpath(__file__))
-setup_path = os.path.abspath(os.path.join(_dir_path, os.path.join(os.pardir, os.pardir)))
 _setup_cfg = configparser.ConfigParser()
 _setup_cfg.optionxform = str
-_setup_cfg.read(os.path.join(setup_path, 'setup.cfg'))
+_setup_cfg.read(os.path.join(_dir_path, 'lime.cfg'))
 
 __version__ = _setup_cfg['metadata']['version']
