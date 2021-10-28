@@ -1,16 +1,8 @@
-# Include the library into the python path
-import sys
-from pathlib import Path
-example_file_path = Path(__file__).resolve()
-lime_path = example_file_path.parent.parent/'src'
-src_folder = str(lime_path)
-sys.path.append(src_folder)
-import lime
 import numpy as np
+import lime
 
-# Declare the data location
-example_path = Path(__file__).parent
-obsFitsFile = example_path/'sample_data/gp121903_BR.fits'
+# Looking for the sample_data folder in the script location
+obsFitsFile = './sample_data/gp121903_BR.fits'
 
 # Load spectrum
 wave, flux, header = lime.import_fits_data(obsFitsFile, instrument='OSIRIS')

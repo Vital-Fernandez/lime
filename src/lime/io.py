@@ -593,7 +593,7 @@ class PdfMaker:
                 self.pdfDoc.packages.append(pylatex.Package('nicefrac'))
                 self.pdfDoc.packages.append(pylatex.Package('siunitx'))
                 self.pdfDoc.packages.append(pylatex.Package('makecell'))
-                self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
+                # self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
                 self.pdfDoc.packages.append(pylatex.Package('colortbl', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
                 self.pdfDoc.packages.append(pylatex.Package('xcolor', options=['table']))
 

@@ -1,18 +1,9 @@
-
-# Include the library into the python path
-import sys
-from pathlib import Path
-example_file_path = Path(__file__).resolve()
-lime_path = example_file_path.parent.parent/'src'
-src_folder = str(lime_path)
-sys.path.append(src_folder)
 import lime
 
 # Declare the data location
-data_folder_path = Path(__file__).parent
-obsFitsFile = data_folder_path/'sample_data/gp121903_BR.fits'
-lineMaskFile = data_folder_path/'sample_data/gp121903_BR_mask.txt'
-cfgFile = data_folder_path/'sample_data/gtc_greenpeas_data.ini'
+obsFitsFile = './sample_data/gp121903_BR.fits'
+lineMaskFile = './sample_data/gp121903_BR_mask.txt'
+cfgFile = './sample_data/gtc_greenpeas_data.ini'
 
 # Load configuration
 obsConf = lime.loadConfData(cfgFile, objList_check=True)
@@ -37,7 +28,7 @@ matchedDF = lime.match_lines(lm.wave_rest, lm.flux, obsLinesTable, maskDF)
 lm.plot_spectrum(obsLinesTable=obsLinesTable, matchedLinesDF=matchedDF, specLabel=f'Emission line detection')
 
 # Correct line region
-corrected_mask_file = Path('./sample_data/gp121903_BR_mask_corrected.txt')
+corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'
 
 # Load corrected masks
 objMaskDF = lime.lineslogFile_to_DF(corrected_mask_file)
@@ -52,9 +43,8 @@ for i, lineLabel in enumerate(objMaskDF.index.values):
 lm.plot_line_grid(lm.linesDF, frame='obs')
 
 # # Save the results
-home_folder = Path.home()
-lm.save_line_log(home_folder/'gp121903_linelog.txt', output_type='txt')
-lm.save_line_log(home_folder/'gp121903_flux_table', output_type='flux_table')
-lm.save_line_log(home_folder/'gp121903_linelog.fits', output_type='fits')
+lm.save_line_log('gp121903_linelog.txt', output_type='txt')
+lm.save_line_log('gp121903_flux_table', output_type='flux_table')
+lm.save_line_log('gp121903_linelog.fits', output_type='fits')
 
 

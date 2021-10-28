@@ -1,15 +1,6 @@
-
-# Include the library into the python path
-import sys
-from pathlib import Path
-example_file_path = Path(__file__).resolve()
-lime_path = example_file_path.parent.parent/'src'
-src_folder = str(lime_path)
-sys.path.append(src_folder)
-
-import lime
 import numpy as np
 import pandas as pd
+import lime
 from lime.model import gaussian_model
 
 # ------------------------------------- Generate the synthetic spectrum ------------------------------------------------
@@ -90,8 +81,8 @@ for i, lineLabel in enumerate(matchedDF.index.values):
     lm.plot_line_velocity()
 
 # Save to txt file
-lm.save_line_log(Path.home()/'synth_spec_linelog.txt', output_type='txt')
-lm.save_line_log(Path.home()/'synth_spec_flux_table', output_type='flux_table')
-lm.save_line_log(Path.home()/'synth_spec_linelog.fits', output_type='fits')
+lm.save_line_log('synth_spec_linelog.txt', output_type='txt')
+lm.save_line_log('synth_spec_flux_table', output_type='flux_table')
+lm.save_line_log('synth_spec_linelog.fits', output_type='fits')
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, rcParams, spines, gridspec, patches
+from matplotlib import pyplot as plt, rcParams, rcParamsDefault, spines, gridspec, patches
 from scipy.interpolate import interp1d
 from sys import exit
 
@@ -8,12 +8,12 @@ from .tools import label_decomposition, kinematic_component_labelling
 from .model import c_KMpS, gaussian_model, linear_model
 from .io import PdfMaker
 
-STANDARD_PLOT = {'figure.figsize': (14, 7),
-                 'axes.titlesize': 14,
-                 'axes.labelsize': 14,
-                 'legend.fontsize': 12,
-                 'xtick.labelsize': 12,
-                 'ytick.labelsize': 12}
+STANDARD_PLOT = {'figure.figsize': (12, 5),
+                 'axes.titlesize': 12,
+                 'axes.labelsize': 12,
+                 'legend.fontsize': 10,
+                 'xtick.labelsize': 10,
+                 'ytick.labelsize': 10}
 
 background_color = np.array((43, 43, 43))/255.0
 foreground_color = np.array((179, 199, 216))/255.0
@@ -62,7 +62,7 @@ class LiMePlots:
 
     def plot_spectrum(self, continuumFlux=None, obsLinesTable=None, matchedLinesDF=None, noise_region=None,
                       log_scale=False, plotConf={}, axConf={}, specLabel='Observed spectrum', output_address=None,
-                      dark_mode=True):
+                      dark_mode=False):
 
         # Plot Configuration
         if dark_mode:
@@ -132,10 +132,12 @@ class LiMePlots:
 
         plt.close(fig)
 
+        rcParams.update(rcParamsDefault)
+
         return
 
     def plot_fit_components(self, lmfit_output=None, line_label=None, fig_conf={}, ax_conf={}, output_address=None,
-                                  log_scale=False, frame='rest', dark_mode=True):
+                                  log_scale=False, frame='rest', dark_mode=False):
 
         # Determine line Label:
         # TODO this function should read from lines log
@@ -150,7 +152,7 @@ class LiMePlots:
             color_fit = 'yellow'
         else:
             defaultConf = STANDARD_PLOT.copy()
-            foreground = defaultConf['text.color']
+            foreground = 'black'
             color_fit = 'tab:blue'
 
         # Plot Configuration
@@ -263,10 +265,12 @@ class LiMePlots:
         else:
             plt.savefig(output_address, bbox_inches='tight')
 
+        rcParams.update(rcParamsDefault)
+
         return
 
     def plot_line_velocity(self, line_label=None, fig_conf={}, ax_conf={}, output_address=None,
-                                  log_scale=False, plot_title='', dark_mode=True):
+                                  log_scale=False, plot_title='', dark_mode=False):
 
         # Determine line Label:
         # TODO this function should read from lines log
@@ -365,6 +369,8 @@ class LiMePlots:
         else:
             plt.savefig(output_address, bbox_inches='tight')
 
+        rcParams.update(rcParamsDefault)
+
         return
 
     def plot_line_grid(self, linesDF, plotConf={}, ncols=10, nrows=None, output_address=None, log_scale=True, frame='rest'):
@@ -393,6 +399,7 @@ class LiMePlots:
 
         # Figure configuration
         defaultConf = STANDARD_PLOT.copy()
+        defaultConf['axes.titlesize'] = 8
         defaultConf.update(plotConf)
         rcParams.update(defaultConf)
 
@@ -467,6 +474,8 @@ class LiMePlots:
             plt.savefig(output_address, bbox_inches='tight')
 
         plt.close(fig)
+
+        rcParams.update(rcParamsDefault)
 
         return
 
