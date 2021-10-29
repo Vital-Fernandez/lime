@@ -4,12 +4,7 @@ Line Measurer (LiMe)
 
 This library provides a set of tools to fit emission lines from ionized spectra. Its data pipeline aims for a simple and
 personalised analysis of both single line and Big Data observations. The data labeling and storage has been designed to
-meet the requirements of the chemical and kinematic analysis of astronomical nebulae.
-
-Getting Started
-===============
-
-The current beta version has been developed for the ULS students and researchers.
+for the chemical and kinematic analysis of astronomical nebulae.
 
 Installation
 ============
@@ -36,7 +31,7 @@ Development
 ===========
 
 LiMe is currently in a beta realese. Please check its github_ for the latest version news and tutorials.
-Any comment/issue/request can be added as an issue on its github_ page.
+Any comment/issue/request can be added as an issue on the github_ page.
 
 
 .. _pip: https://pypi.org/project/lime-stable/
