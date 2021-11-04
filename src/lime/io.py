@@ -1,17 +1,18 @@
 import os
 import configparser
 import copy
-from functools import partial
-from collections import Sequence
-
-from pathlib import Path
 import numpy as np
 import pandas as pd
+import pylatex
 
 from sys import exit
-from astropy.io import fits
+from pathlib import Path
+from functools import partial
+from collections import Sequence
 from distutils.util import strtobool
-import pylatex
+
+from astropy.io import fits
+
 
 # Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
 LOG_COLUMNS = {'wavelength': [False, False, True],
@@ -269,7 +270,7 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
 
 
 # Function to import SpecSyzer configuration file #TODO repeated
-def loadConfData(filepath, objList_check=False):
+def load_cfg(filepath, objList_check=False):
 
     # Open the file
     if Path(filepath).is_file():
@@ -369,7 +370,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def lineslogFile_to_DF(lineslog_address):
+def load_lines_log(lineslog_address):
     """
     This function attemps several approaches to import a lines log from a sheet or text file lines as a pandas
     dataframe
@@ -391,7 +392,45 @@ def lineslogFile_to_DF(lineslog_address):
     return lineslogDF
 
 
-def lineslog_to_HDU(log_DF, ext_name, column_types={}, header_dict={}):
+def save_line_log(linelog, file_address, file_type='txt', ext=None, fits_header=None):
+
+    # Default txt log with the complete information
+    if file_type == 'txt':
+        with open(f'{file_address}.{file_type}', 'wb') as output_file:
+            string_DF = linelog.to_string()
+            output_file.write(string_DF.encode('UTF-8'))
+
+    # Pdf fluxes table
+    elif file_type == 'pdf':
+        table_fluxes(linelog, file_address)
+
+    # Linelog in a fits file
+    elif file_type == 'fits':
+        if isinstance(linelog, pd.DataFrame):
+            lineLogHDU = lineslog_to_HDU(linelog, ext_name=ext, header_dict=fits_header)
+
+            fits_address = Path(f'{file_address}.{file_type}')
+            if fits_address.is_file():
+                try:
+                    fits.update(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
+                except KeyError:
+                    fits.append(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+            else:
+                hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
+                hdul.writeto(fits_address, overwrite=True, output_verify='fix')
+
+    # Default log in excel format
+    elif file_type == 'xlsx' or file_type == 'xls':
+        sheet_name = ext if ext is not None else 'Sheet1'
+        linelog.to_excel(f'{file_address}.{file_type}', sheet_name=sheet_name)
+
+    else:
+        exit(f'--WARNING: output file extension {file_type} was not recognised. Exiting program')
+
+    return
+
+
+def lineslog_to_HDU(log_DF, ext_name=None, column_types={}, header_dict={}):
 
     if len(column_types) == 0:
         params_dtype = LINELOG_TYPES
@@ -412,7 +451,7 @@ def lineslog_to_HDU(log_DF, ext_name, column_types={}, header_dict={}):
     return linesHDU
 
 
-def import_fits_data(file_address, instrument, frame_idx=None):
+def load_fits(file_address, instrument, frame_idx=None):
 
     if instrument == 'ISIS':
 
@@ -538,6 +577,115 @@ def import_fits_data(file_address, instrument, frame_idx=None):
             data, header = hdul[frame_idx].data, hdul[frame_idx].header
 
         return data, header
+
+
+def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_type='pdf'):
+
+    if table_type == 'pdf':
+        output_address = f'{table_address}'
+    if table_type == 'txt-ascii':
+        output_address = f'{table_address}.txt'
+
+    # Measure line fluxes
+    pdf = PdfMaker()
+    pdf.create_pdfDoc(pdf_type='table')
+    pdf.pdf_insert_table(FLUX_TEX_TABLE_HEADERS)
+
+    # Dataframe as container as a txt file
+    tableDF = pd.DataFrame(columns=FLUX_TXT_TABLE_HEADERS[1:])
+
+    # Normalization line
+    if 'H1_4861A' in lines_df.index:
+        flux_Hbeta = lines_df.loc['H1_4861A', 'intg_flux']
+    else:
+        flux_Hbeta = scaleTable
+
+    obsLines = lines_df.index.values
+    for lineLabel in obsLines:
+
+        label_entry = lines_df.loc[lineLabel, 'latexLabel']
+        wavelength = lines_df.loc[lineLabel, 'wavelength']
+        eqw, eqwErr = lines_df.loc[lineLabel, 'eqw'], lines_df.loc[lineLabel, 'eqw_err']
+
+        flux_intg = lines_df.loc[lineLabel, 'intg_flux'] / flux_Hbeta * scaleTable
+        flux_intgErr = lines_df.loc[lineLabel, 'intg_err'] / flux_Hbeta * scaleTable
+        flux_gauss = lines_df.loc[lineLabel, 'gauss_flux'] / flux_Hbeta * scaleTable
+        flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err'] / flux_Hbeta * scaleTable
+
+        if (lines_df.loc[lineLabel, 'blended_label'] != 'None') and ('_m' not in lineLabel):
+            flux, fluxErr = flux_gauss, flux_gaussErr
+            label_entry = label_entry + '$_{gauss}$'
+        else:
+            flux, fluxErr = flux_intg, flux_intgErr
+
+        # Correct the flux
+        if pyneb_rc is not None:
+            corr = pyneb_rc.getCorrHb(wavelength)
+            intensity, intensityErr = flux * corr, fluxErr * corr
+            intensity_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(intensity, intensityErr)
+        else:
+            intensity, intensityErr = '-', '-'
+            intensity_entry = '-'
+
+        eqw_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(eqw, eqwErr)
+        flux_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(flux, fluxErr)
+
+        # Add row of data
+        tex_row_i = [label_entry, eqw_entry, flux_entry, intensity_entry]
+        txt_row_i = [label_entry, eqw, eqwErr, flux, fluxErr, intensity, intensityErr]
+
+        lastRow_check = True if lineLabel == obsLines[-1] else False
+        pdf.addTableRow(tex_row_i, last_row=lastRow_check)
+        tableDF.loc[lineLabel] = txt_row_i[1:]
+
+    if pyneb_rc is not None:
+
+        # Data last rows
+        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
+                         '',
+                         flux_Hbeta,
+                         flux_Hbeta * pyneb_rc.getCorr(4861)]
+
+        row_cHbeta = [r'$c(H\beta)$',
+                      '',
+                      float(pyneb_rc.cHbeta),
+                      '']
+    else:
+        # Data last rows
+        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
+                         '',
+                         flux_Hbeta,
+                         '-']
+
+        row_cHbeta = [r'$c(H\beta)$',
+                      '',
+                      '-',
+                      '']
+
+    pdf.addTableRow(row_Hbetaflux, last_row=False)
+    pdf.addTableRow(row_cHbeta, last_row=False)
+    tableDF.loc[row_Hbetaflux[0]] = row_Hbetaflux[1:] + [''] * 3
+    tableDF.loc[row_cHbeta[0]] = row_cHbeta[1:] + [''] * 3
+
+    # Format last rows
+    pdf.table.add_hline()
+    pdf.table.add_hline()
+
+    # Save the pdf table
+    if table_type == 'pdf':
+        try:
+            pdf.generate_pdf(table_address, clean_tex=True)
+        except:
+            print('-- PDF compilation failure')
+
+    # Save the txt table
+    if table_type == 'txt-ascii':
+        with open(output_address, 'wb') as output_file:
+            string_DF = tableDF.to_string()
+            string_DF = string_DF.replace('$', '')
+            output_file.write(string_DF.encode('UTF-8'))
+
+    return
 
 
 class PdfMaker:

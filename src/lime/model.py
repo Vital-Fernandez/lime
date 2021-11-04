@@ -207,7 +207,6 @@ class EmissionFitting:
 
         # Compute the line redshift and reference wavelength
         if self.blended_check:
-            ion_ref, theoWave_ref, latexLabel_ref = label_decomposition(line_label, scalar_output=True)
             ref_wave = theoWave_arr * (1 + z_obj)
         else:
             ref_wave = np.array([self.peak_wave], ndmin=1)
@@ -268,24 +267,18 @@ class EmissionFitting:
             self.z_line[i] = self.center[i]/theoWave_arr[i] - 1
 
             # Gaussian area
-            lineArea = self.fit_output.params[f'{line}_area']
-            # TODO we need a robest mechanic to express the uncertainty in the N2_6548A and similar lines
-            if line != 'N2_6548A':
-                self.gauss_flux[i], self.gauss_err[i] = lineArea.value, lineArea.stderr
-            elif (lineArea.stderr == 0) and ('N2_6584A_area' in self.fit_output.params):
-                self.gauss_flux[i], self.gauss_err[i] = lineArea.value, self.fit_output.params['N2_6584A_area'].stderr/k_GaussArea
-            else:
-                self.gauss_flux[i], self.gauss_err[i] = lineArea.value, lineArea.stderr
+            self.gauss_flux[i] = self.fit_output.params[f'{line}_area'].value
+            self.gauss_err[i] = self.fit_output.params[f'{line}_area'].stderr
 
             # Equivalent with gaussian flux for blended components TODO compute self.cont from linear fit
             if self.blended_check:
                 eqw_g[i], eqwErr_g[i] = self.gauss_flux[i] / self.cont, self.gauss_err[i] / self.cont
 
             # Kinematics
-            self.v_r[i] = c_KMpS * (self.center[i] - self.peak_wave)/self.peak_wave                                   # wavelength_to_vel(self.center[i] - theoWave_arr[i], theoWave_arr[i])#self.v_r[i] =
-            self.v_r_err[i] = c_KMpS * (self.center_err[i])/self.peak_wave                                            # np.abs(wavelength_to_vel(self.center_err[i], theoWave_arr[i]))
-            self.sigma_vel[i] = c_KMpS * self.sigma[i]/self.peak_wave                                               # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
-            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/self.peak_wave                                          # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
+            self.v_r[i] = c_KMpS * (self.center[i] - ref_wave[i])/ref_wave[i]                                    # wavelength_to_vel(self.center[i] - theoWave_arr[i], theoWave_arr[i])#self.v_r[i] =
+            self.v_r_err[i] = c_KMpS * (self.center_err[i])/ref_wave[i]                                             # np.abs(wavelength_to_vel(self.center_err[i], theoWave_arr[i]))
+            self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]                                               # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
+            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]                                           # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
 
         if self.blended_check:

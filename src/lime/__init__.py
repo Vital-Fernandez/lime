@@ -1,5 +1,5 @@
 """
-LiMe - A python package for Measuring emission lines to study ionized gas chemical and dynamical properties
+LiMe - A python package for measuring emission lines to study ionized gas chemical and dynamical properties
 """
 
 import os
@@ -7,7 +7,7 @@ import sys
 import configparser
 
 from .treatment import Spectrum
-from .io import loadConfData, lineslogFile_to_DF, import_fits_data
+from .io import load_fits, load_cfg, load_lines_log, save_line_log
 from .tools import label_decomposition, continuum_remover, line_finder, match_lines
 
 # Get python version being used

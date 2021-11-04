@@ -8,7 +8,8 @@ from lmfit import fit_report
 from .model import EmissionFitting
 from .tools import label_decomposition
 from .plots import LiMePlots
-from .io import _LOG_EXPORT, LOG_COLUMNS, lineslogFile_to_DF, lineslog_to_HDU
+from .io import _LOG_EXPORT, LOG_COLUMNS, load_lines_log
+
 
 class Spectrum(EmissionFitting, LiMePlots):
 
@@ -66,13 +67,13 @@ class Spectrum(EmissionFitting, LiMePlots):
         # Otherwise use the one from the user
         else:
             if Path(self.linesLogAddress).is_file():
-                self.linesDF = lineslogFile_to_DF(linesDF_address)
+                self.linesDF = load_lines_log(linesDF_address)
             else:
                 print(f'-- WARNING: linesLog not found at {self.linesLogAddress}')
 
         return
 
-    def fit_from_wavelengths(self, label, line_wavelengths, user_conf={}, algorithm='lmfit'):
+    def fit_from_wavelengths(self, label, line_wavelengths, user_cfg={}, algorithm='lmfit'):
 
         """
         This function fits an emission line by providing its label, location and an optional fit configuration. The
@@ -81,13 +82,13 @@ class Spectrum(EmissionFitting, LiMePlots):
 
         :param str label: Line reference incluiding the ion and wavelength. Example: O3_5007A
         :param np.ndarray line_wavelengths: Array with 6 wavelength values defining an emision line left continuum,  emission region and right continuum
-        :param dict user_conf: Dictionary with the user configuration for the fitting
+        :param dict user_cfg: Dictionary with the user configuration for the fitting
         :param algorithm: Algorithm for the line profile fitting (Not implemented)
         """
 
         # For security previous measurement is cleared and a copy of the user configuration is used
         self.clear_fit()
-        fit_conf = user_conf.copy()
+        fit_conf = user_cfg.copy()
 
         # Label the current measurement
         self.lineLabel = label
@@ -213,34 +214,35 @@ class Spectrum(EmissionFitting, LiMePlots):
 
         return
 
-    def display_results(self, label=None, show_fit_report=True, show_plot=False, log_scale=True, frame='obs'):
+    def display_results(self, label=None, show_fit_report=False, show_plot=False, log_scale=True, frame='obs'):
 
         # Case no line as input: Show the current measurement
         if label is None:
             if self.lineLabel is not None:
                 label = self.lineLabel
-                output_ref = (f'Input line: {label}\n'
+                output_ref = (f'\nLine label: {label}\n'
                               f'- Line regions: {self.lineWaves}\n'
-                              f'- Spectrum: normalization flux: {self.normFlux}; redshift {self.redshift}\n'
-                              f'- Peak: wavelength {self.peak_wave:.2f}; peak intensity {self.peak_flux:.2f}\n'
-                              f'- Continuum: slope {self.m_cont:.2e}; intercept {self.n_cont:.2e}\n')
+                              f'- Normalization flux: {self.normFlux}\n'
+                              f'- Redshift: {self.redshift}\n'
+                              f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
+                              f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
 
                 if self.blended_check:
                     mixtureComponents = np.array(self.blended_label.split('-'))
                 else:
                     mixtureComponents = np.array([label], ndmin=1)
 
-                if mixtureComponents.size == 1:
-                    output_ref += f'- Intg Eqw: {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
+                output_ref += f'\n- {label} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
 
-                output_ref += f'- Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
+                if mixtureComponents.size == 1:
+                    output_ref += f'- {label} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
 
                 for i, lineRef in enumerate(mixtureComponents):
-                    output_ref += (f'- {lineRef} gaussian fitting:\n'
+                    output_ref += (f'\n- {lineRef} gaussian fitting:\n'
                                    f'-- Gauss flux: {self.gauss_flux[i]:.3f} +/- {self.gauss_err[i]:.3f}\n'
-                                   f'-- Amplitude: {self.amp[i]:.3f} +/- {self.amp_err[i]:.3f}\n'
+                                   # f'-- Amplitude: {self.amp[i]:.3f} +/- {self.amp_err[i]:.3f}\n'
                                    f'-- Center: {self.center[i]:.2f} +/- {self.center_err[i]:.2f}\n'
-                                   f'-- Sigma: {self.sigma[i]:.2f} +/- {self.sigma_err[i]:.2f}\n\n')
+                                   f'-- Sigma (km/s): {self.sigma_vel[i]:.2f} +/- {self.sigma_vel_err[i]:.2f}\n')
             else:
                 output_ref = f'- No measurement performed\n'
 
@@ -256,9 +258,9 @@ class Spectrum(EmissionFitting, LiMePlots):
         # Display the print lmfit report if available
         if show_fit_report:
             if self.fit_output is not None:
-                output_ref += f'- LmFit output:\n{fit_report(self.fit_output)}\n'
+                output_ref += f'\n- LmFit output:\n{fit_report(self.fit_output)}\n'
             else:
-                output_ref += f'- LmFit output not available\n'
+                output_ref += f'\n- LmFit output not available\n'
 
         # Show the result
         print(output_ref)
@@ -266,39 +268,6 @@ class Spectrum(EmissionFitting, LiMePlots):
         # Display plot
         if show_plot:
             self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
-
-        return
-
-    def save_line_log(self, output_address, linelog=None, output_type='txt', fits_extension=None, fits_header=None):
-
-        # If no linelog is provided we use the object lineLog
-        if linelog is None:
-            linelog = self.linesDF
-
-        # Default txt log with the complete information
-        if output_type == 'txt':
-            with open(output_address, 'wb') as output_file:
-                string_DF = linelog.to_string()
-                output_file.write(string_DF.encode('UTF-8'))
-
-        # PdF fluxes table
-        elif output_type == 'flux_table':
-            self.table_fluxes(linelog, output_address)
-
-        # Linelog in a fits file
-        elif output_type == 'fits':
-            if isinstance(linelog, pd.DataFrame):
-                lineLogHDU = lineslog_to_HDU(linelog, ext_name=fits_extension, header_dict=fits_header)
-
-                fits_address = Path(output_address)
-                if fits_address.is_file():
-                    try:
-                        fits.update(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
-                    except KeyError:
-                        fits.append(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
-                else:
-                    hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
-                    hdul.writeto(fits_address, overwrite=True, output_verify='fix')
 
         return
 
