@@ -275,10 +275,10 @@ class EmissionFitting:
                 eqw_g[i], eqwErr_g[i] = self.gauss_flux[i] / self.cont, self.gauss_err[i] / self.cont
 
             # Kinematics
-            self.v_r[i] = c_KMpS * (self.center[i] - ref_wave[i])/ref_wave[i]                                    # wavelength_to_vel(self.center[i] - theoWave_arr[i], theoWave_arr[i])#self.v_r[i] =
-            self.v_r_err[i] = c_KMpS * (self.center_err[i])/ref_wave[i]                                             # np.abs(wavelength_to_vel(self.center_err[i], theoWave_arr[i]))
-            self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]                                               # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
-            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]                                           # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
+            self.v_r[i] = c_KMpS * (self.center[i] - ref_wave[i])/ref_wave[i] # wavelength_to_vel(self.center[i] - theoWave_arr[i], theoWave_arr[i])#self.v_r[i] =
+            self.v_r_err[i] = c_KMpS * (self.center_err[i])/ref_wave[i] # np.abs(wavelength_to_vel(self.center_err[i], theoWave_arr[i]))
+            self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i] # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
+            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i] # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
 
         if self.blended_check:
