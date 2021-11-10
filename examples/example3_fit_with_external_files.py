@@ -17,7 +17,7 @@ wave, flux, header = lime.load_fits(obsFitsFile, instrument='OSIRIS')
 # Declare line measuring object
 z_obj = sample_cfg['sample_data']['z_array'][2]
 norm_flux = sample_cfg['sample_data']['norm_flux']
-gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, normFlux=norm_flux)
+gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
 gp_spec.plot_spectrum()
 
 # Find lines
@@ -27,7 +27,7 @@ matchedDF = lime.match_lines(gp_spec.wave_rest, gp_spec.flux, obsLinesTable, mas
 gp_spec.plot_spectrum(obsLinesTable=obsLinesTable, matchedLinesDF=matchedDF, specLabel=f'Emission line detection')
 
 # Correct line region
-corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'
+corrected_mask_file = './sample_data/gp121903_BR_mask_corrected'
 
 # Object line fitting configuration
 fit_cfg = sample_cfg['gp121903_line_fitting']

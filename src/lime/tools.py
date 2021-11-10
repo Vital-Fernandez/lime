@@ -159,6 +159,7 @@ def continuum_remover(wave_rest, flux, noiseRegionLims, intLineThreshold=((4, 4)
 
     return input_flux - noise_mean
 
+
 def kinematic_component_labelling(line_latex_label, comp_ref):
 
     if len(comp_ref) != 2:

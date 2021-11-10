@@ -1,14 +1,16 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from astropy.io import fits
-
 from lmfit import fit_report
+from sys import exit
 
 from .model import EmissionFitting
 from .tools import label_decomposition
-from .plots import LiMePlots
-from .io import _LOG_EXPORT, LOG_COLUMNS, load_lines_log
+from .plots import LiMePlots, STANDARD_PLOT
+from .io import _LOG_EXPORT, LOG_COLUMNS, load_lines_log, save_line_log
+
+from matplotlib import pyplot as plt, rcParams
+from matplotlib.widgets import SpanSelector
 
 
 class Spectrum(EmissionFitting, LiMePlots):
@@ -20,8 +22,7 @@ class Spectrum(EmissionFitting, LiMePlots):
     :ivar flux: Flux array
     """
 
-    def __init__(self, input_wave=None, input_flux=None, input_err=None, linesDF_address=None, redshift=0,
-                 normFlux=1.0, crop_waves=None):
+    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
 
         # Load parent classes
         EmissionFitting.__init__(self)
@@ -31,9 +32,8 @@ class Spectrum(EmissionFitting, LiMePlots):
         self.wave = None
         self.flux = None
         self.errFlux = None
-        self.normFlux = normFlux
+        self.normFlux = norm_flux
         self.redshift = redshift
-        self.linesLogAddress = linesDF_address
         self.linesDF = None
 
         # Start cropping the input spectrum if necessary
@@ -60,16 +60,7 @@ class Spectrum(EmissionFitting, LiMePlots):
                 self.errFlux = self.errFlux / self.normFlux
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
-        self.linesLogAddress = linesDF_address
-        if self.linesLogAddress is None:
-            self.linesDF = pd.DataFrame(columns=LOG_COLUMNS.keys())
-
-        # Otherwise use the one from the user
-        else:
-            if Path(self.linesLogAddress).is_file():
-                self.linesDF = load_lines_log(linesDF_address)
-            else:
-                print(f'-- WARNING: linesLog not found at {self.linesLogAddress}')
+        self.linesDF = pd.DataFrame(columns=LOG_COLUMNS.keys())
 
         return
 
@@ -275,3 +266,264 @@ class Spectrum(EmissionFitting, LiMePlots):
         super().__init__()
         return
 
+
+class MaskSelector(Spectrum):
+
+    def __init__(self, input_lines_DF, output_log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
+                 norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
+
+
+        # Output file address
+        self.linesLogAddress = output_log_address
+
+        # Assign attributes to the parent class
+        super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
+
+        # If no log is provided by the user we use the one in the address
+        if input_lines_DF is not None:
+            self.linesDF = pd.DataFrame.copy(input_lines_DF)
+
+        else:
+            if Path(output_log_address).is_file():
+                self.linesDF = load_lines_log(output_log_address)
+            else:
+                exit(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
+                     f' {output_log_address}')
+
+        # Figure grid
+        n_lines = len(self.linesDF.index)
+        if nrows is None:
+            nrows = int(np.ceil(n_lines/ncols))
+
+        defaultConf = STANDARD_PLOT.copy()
+        plotConf = {'figure.figsize': (nrows * 2, 8)}
+        defaultConf.update(plotConf)
+        rcParams.update(defaultConf)
+
+        self.fig, ax = plt.subplots(nrows=nrows, ncols=ncols)
+        self.ax = ax.flatten()
+        self.in_ax = None
+        self.dict_spanSelec = {}
+        self.axConf = {}
+
+        # Plot function
+        self.plot_line_mask_selection(logscale='auto', grid_size = nrows*ncols)
+        plt.gca().axes.yaxis.set_ticklabels([])
+        manager = plt.get_current_fig_manager()
+        manager.window.showMaximized()
+        plt.tight_layout()
+        plt.show()
+        plt.close(self.fig)
+
+        return
+
+    def plot_line_mask_selection(self, logscale='auto', grid_size=None):
+
+        # Plot data
+        lineLabels = self.linesDF.index.values
+        n_lines = lineLabels.size
+
+        # Generate plot
+        for i in np.arange(grid_size):
+            if i < n_lines:
+                self.lineWaves = self.linesDF.loc[lineLabels[i], 'w1':'w6'].values
+                self.plot_line_region_i(self.ax[i], lineLabels[i], logscale=logscale)
+                self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
+                                                                   self.on_select,
+                                                                   'horizontal',
+                                                                   useblit=True,
+                                                                   rectprops=dict(alpha=0.5, facecolor='tab:blue'))
+
+            # Clear not filled axes
+            else:
+                self.fig.delaxes(self.ax[i])
+
+        bpe = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        aee = self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+
+        return
+
+    def plot_line_region_i(self, ax, lineLabel, limitPeak=5, logscale='auto'):
+
+        # Plot line region:
+        ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True)
+
+        # Decide type of plot
+        non_nan = (~pd.isnull(self.lineWaves)).sum()
+
+        # Incomplete selections
+        if non_nan < 6:  # selections
+
+            # Peak region
+            idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
+            wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
+
+            # Plot region
+            idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (lineWave - limitPeak * 2 <= self.lineWaves[3])
+            waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
+
+            # Plot the line region
+            ax.step(waveLine, fluxLine)
+
+            # Fill the user selections
+            if non_nan == 2:
+                idx1, idx2 = np.searchsorted(self.wave_rest, self.lineWaves[0:2])
+                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
+                                step='mid', alpha=0.5)
+
+            if non_nan == 4:
+                idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.lineWaves[0:4])
+                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
+                                step='mid', alpha=0.5)
+                ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor='tab:green',
+                                step='mid', alpha=0.5)
+
+        # Complete selections
+        else:
+
+            # Get line regions
+            idcsContLeft = (self.lineWaves[0] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[1])
+            idcsContRight = (self.lineWaves[4] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[5])
+
+            idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
+            idcsLineArea = (self.lineWaves[2] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[3])
+
+            waveCentral, fluxCentral = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
+            wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
+
+            idcsLinePlot = (self.lineWaves[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.lineWaves[5] + 5)
+            waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
+
+            # Plot the line
+            ax.step(waveLine, fluxLine)
+
+            # Fill the user selections
+            ax.fill_between(waveCentral, 0, fluxCentral, step="pre", alpha=0.4)
+            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor='tab:orange', step="pre", alpha=0.2)
+            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor='tab:orange', step="pre", alpha=0.2)
+
+        # Plot format
+        ax.yaxis.set_major_locator(plt.NullLocator())
+        ax.xaxis.set_major_locator(plt.NullLocator())
+
+        ax.update({'title': lineLabel})
+        ax.yaxis.set_ticklabels([])
+        ax.axes.yaxis.set_visible(False)
+
+        idxPeakFlux = np.argmax(fluxPeak)
+        ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
+
+        if logscale == 'auto':
+            if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
+                ax.set_yscale('log')
+
+        return
+
+    def on_select(self, w_low, w_high):
+
+        # Check we are not just clicking on the plot
+        if w_low != w_high:
+
+            # Count number of empty entries to determine next step
+            non_nans = (~pd.isnull(self.lineWaves)).sum()
+
+            # Case selecting 1/3 region
+            if non_nans == 0:
+                self.lineWaves[0] = w_low
+                self.lineWaves[1] = w_high
+
+            # Case selecting 2/3 region
+            elif non_nans == 2:
+                self.lineWaves[2] = w_low
+                self.lineWaves[3] = w_high
+                self.lineWaves = np.sort(self.lineWaves)
+
+            # Case selecting 3/3 region
+            elif non_nans == 4:
+                self.lineWaves[4] = w_low
+                self.lineWaves[5] = w_high
+                self.lineWaves = np.sort(self.lineWaves)
+
+            elif non_nans == 6:
+                self.lineWaves = np.sort(self.lineWaves)
+
+                # Caso que se corrija la region de la linea
+                if w_low > self.lineWaves[1] and w_high < self.lineWaves[4]:
+                    self.lineWaves[2] = w_low
+                    self.lineWaves[3] = w_high
+
+                # Caso que se corrija el continuum izquierdo
+                elif w_low < self.lineWaves[2] and w_high < self.lineWaves[2]:
+                    self.lineWaves[0] = w_low
+                    self.lineWaves[1] = w_high
+
+                # Caso que se corrija el continuum derecho
+                elif w_low > self.lineWaves[3] and w_high > self.lineWaves[3]:
+                    self.lineWaves[4] = w_low
+                    self.lineWaves[5] = w_high
+
+                # Case we want to select the complete region
+                elif w_low < self.lineWaves[0] and w_high > self.lineWaves[5]:
+
+                    # # Remove line from dataframe and save it
+                    # self.remove_lines_df(self.current_df, self.Current_Label)
+                    #
+                    # # Save lines log df
+                    # self.save_lineslog_dataframe(self.current_df, self.lineslog_df_address)
+
+                    # Clear the selections
+                    # self.lineWaves = np.array([np.nan] * 6)
+                    print(f'\n-- The line {self.lineLabel} mask has been removed')
+
+                else:
+                    print('- WARNING: Unsucessful line selection:')
+                    print(f'-- {self.lineLabel}: w_low: {w_low}, w_high: {w_high}')
+
+            # Check number of measurements after selection
+            non_nans = (~pd.isnull(self.lineWaves)).sum()
+
+            # Proceed to re-measurement if possible:
+            if non_nans == 6:
+
+                self.linesDF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
+
+                # TODO add option to perform the measurement a new
+                # self.clear_fit()
+                # self.fit_from_wavelengths(self.lineLabel, self.lineWaves, user_cfg={})
+
+                # Parse the line regions to the dataframe
+                self.results_to_database(self.lineLabel, self.linesDF, fit_conf={}, export_params=[])
+
+                # Store the data frame
+                save_line_log(self.linesDF, self.linesLogAddress, 'txt')
+
+            # Redraw the line measurement
+            self.in_ax.clear()
+            self.plot_line_region_i(self.in_ax, self.lineLabel, logscale='auto')
+            self.in_fig.canvas.draw()
+
+        return
+
+    def on_enter_axes(self, event):
+
+        # Assign new axis
+        self.in_fig = event.canvas.figure
+        self.in_ax = event.inaxes
+
+        # TODO we need a better way to index than the latex label
+        # Recognise line label
+        idx_line = self.linesDF.index == self.in_ax.get_title()
+        self.lineLabel = self.linesDF.loc[idx_line].index.values[0]
+        self.lineWaves = self.linesDF.loc[idx_line, 'w1':'w6'].values[0]
+
+        # Restore measurements from log
+        # self.database_to_attr()
+
+        # event.inaxes.patch.set_edgecolor('red')
+        # event.canvas.draw()
+
+    def on_click(self, event):
+
+        if event.dblclick:
+            print(self.lineLabel)
+            print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')

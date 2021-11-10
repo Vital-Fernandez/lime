@@ -62,7 +62,7 @@ cfg_dict = dict(fit_conf={'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
                           'H1_6563A_w1_sigma': {'expr': '>1*H1_6563A_sigma'}})
 
 # Define line measuring object
-synth_spec = lime.Spectrum(wave_obs, flux_obs, redshift=z_true, normFlux=norm_obj)
+synth_spec = lime.Spectrum(wave_obs, flux_obs, redshift=z_true, norm_flux=norm_obj)
 synth_spec.plot_spectrum()
 
 # Measure the emission lines

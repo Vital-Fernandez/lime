@@ -6,7 +6,7 @@ import os
 import sys
 import configparser
 
-from .treatment import Spectrum
+from .treatment import Spectrum, MaskSelector
 from .io import load_fits, load_cfg, load_lines_log, save_line_log
 from .tools import label_decomposition, continuum_remover, line_finder, match_lines
 
