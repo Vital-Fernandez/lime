@@ -58,6 +58,8 @@ LOG_COLUMNS = {'wavelength': [False, False, True],
                'v_10': [False, False, False],
                'v_90': [False, False, False],
                'v_95': [False, False, False],
+               'chisqr': [False, False, False],
+               'redchi': [False, False, False],
                'observation': [False, False, False],
                'comments': [False, False, False]}
 
@@ -107,6 +109,8 @@ LINELOG_TYPES = {'index': '<U50',
                  'v_10': '<f8',
                  'v_90': '<f8',
                  'v_95': '<f8',
+                 'chisqr': '<f8',
+                 'redchi': '<f8',
                  'observation': '<U50',
                  'comments': '<U50',
                  'obsFlux': '<f8',
@@ -180,7 +184,7 @@ def importConfigFile(config_path):
         cfg.optionxform = str
         cfg.read(config_path)
     else:
-        exit(f'--WARNING: Configuration file {config_path} was not found. Exiting program')
+        exit(f"--WARNING: Configuration file {config_path} was not found. Exiting program")
 
     return cfg
 
@@ -425,7 +429,8 @@ def save_line_log(linelog, file_address, file_type='txt', ext=None, fits_header=
         linelog.to_excel(f'{file_address}.{file_type}', sheet_name=sheet_name)
 
     else:
-        exit(f'--WARNING: output file extension {file_type} was not recognised. Exiting program')
+        print(f"--WARNING: output file extension {file_type} was not recognised. Exiting program")
+        exit()
 
     return
 

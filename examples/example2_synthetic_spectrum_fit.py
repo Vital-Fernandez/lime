@@ -65,6 +65,8 @@ cfg_dict = dict(fit_conf={'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
 synth_spec = lime.Spectrum(wave_obs, flux_obs, redshift=z_true, norm_flux=norm_obj)
 synth_spec.plot_spectrum()
 
+synth_spec.intg_flux
+
 # Measure the emission lines
 for i, lineLabel in enumerate(mask_df.index.values):
     wave_regions = mask_df.loc[lineLabel, 'w1':'w6'].values

@@ -269,31 +269,41 @@ class Spectrum(EmissionFitting, LiMePlots):
 
 class MaskSelector(Spectrum):
 
-    def __init__(self, input_lines_DF, output_log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
+    def __init__(self, lines_log_address, lines_DF, input_wave=None, input_flux=None, input_err=None, redshift=0,
                  norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
 
 
         # Output file address
-        self.linesLogAddress = output_log_address
+        self.linesLogAddress = Path(lines_log_address)
 
         # Assign attributes to the parent class
         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
 
-        # If no log is provided by the user we use the one in the address
-        if input_lines_DF is not None:
-            self.linesDF = pd.DataFrame.copy(input_lines_DF)
+        # DF is provided
+        if lines_DF is not None:
+            self.linesDF = pd.DataFrame.copy(lines_DF)
 
+        # DF is not provided
         else:
-            if Path(output_log_address).is_file():
-                self.linesDF = load_lines_log(output_log_address)
+
+            # Lines log address is provided and we read the DF from it
+            if Path(self.linesLogAddress).is_file():
+                self.linesDF = load_lines_log(self.linesLogAddress)
+
+            # Lines log not provide code ends
             else:
-                exit(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
-                     f' {output_log_address}')
+                print(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
+                      f' {lines_log_address}')
+                exit()
 
         # Figure grid
         n_lines = len(self.linesDF.index)
-        if nrows is None:
-            nrows = int(np.ceil(n_lines/ncols))
+        if n_lines > ncols:
+            if nrows is None:
+                nrows = int(np.ceil(n_lines/ncols))
+        else:
+            ncols = n_lines
+            nrows = 1
 
         defaultConf = STANDARD_PLOT.copy()
         plotConf = {'figure.figsize': (nrows * 2, 8)}
@@ -309,8 +319,13 @@ class MaskSelector(Spectrum):
         # Plot function
         self.plot_line_mask_selection(logscale='auto', grid_size = nrows*ncols)
         plt.gca().axes.yaxis.set_ticklabels([])
-        manager = plt.get_current_fig_manager()
-        manager.window.showMaximized()
+
+        try:
+            manager = plt.get_current_fig_manager()
+            manager.window.showMaximized()
+        except:
+            print('-- Window could not be maximized')
+
         plt.tight_layout()
         plt.show()
         plt.close(self.fig)
@@ -485,8 +500,6 @@ class MaskSelector(Spectrum):
             # Proceed to re-measurement if possible:
             if non_nans == 6:
 
-                self.linesDF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
-
                 # TODO add option to perform the measurement a new
                 # self.clear_fit()
                 # self.fit_from_wavelengths(self.lineLabel, self.lineWaves, user_cfg={})
@@ -494,8 +507,8 @@ class MaskSelector(Spectrum):
                 # Parse the line regions to the dataframe
                 self.results_to_database(self.lineLabel, self.linesDF, fit_conf={}, export_params=[])
 
-                # Store the data frame
-                save_line_log(self.linesDF, self.linesLogAddress, 'txt')
+                # Save the corrected mask to a file
+                self.store_measurement()
 
             # Redraw the line measurement
             self.in_ax.clear()
@@ -527,3 +540,30 @@ class MaskSelector(Spectrum):
         if event.dblclick:
             print(self.lineLabel)
             print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')
+
+    def store_measurement(self):
+
+        # Read file in the stored address
+        if self.linesLogAddress.is_file():
+            file_DF = load_lines_log(self.linesLogAddress)
+
+            # Add new line to the DF and sort it if it was new
+            if self.lineLabel in file_DF.index:
+                file_DF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
+            else:
+                file_DF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
+
+                # Sort the lines by theoretical wavelength
+                lineLabels = file_DF.index.values
+                ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels)
+                file_DF = file_DF.iloc[wavelength_array.argsort()]
+
+        # If the file does not exist (or it is the first time)
+        else:
+            file_DF = self.linesDF
+
+        # Save to a file
+        stem_adress = self.linesLogAddress.parent/self.linesLogAddress.resolve().stem
+        save_line_log(file_DF, stem_adress, file_type=self.linesLogAddress.suffix[1:])
+
+        return
