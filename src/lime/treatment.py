@@ -3,17 +3,21 @@ import pandas as pd
 from pathlib import Path
 from lmfit import fit_report
 from sys import exit
+from astropy.table import Table
+from astropy.io import fits
+from astropy.wcs import WCS
 
 from .model import EmissionFitting
-from .tools import label_decomposition
-from .plots import LiMePlots, STANDARD_PLOT
+from .tools import label_decomposition, LineFinder
+from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES
 from .io import _LOG_EXPORT, LOG_COLUMNS, load_lines_log, save_line_log
+from .model import gaussian_model
 
-from matplotlib import pyplot as plt, rcParams
+from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec
 from matplotlib.widgets import SpanSelector
 
 
-class Spectrum(EmissionFitting, LiMePlots):
+class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     """
     This class provides a set of tools to measure emission lines from ionized gas to study its chemistry and kinematics
@@ -25,11 +29,13 @@ class Spectrum(EmissionFitting, LiMePlots):
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
 
         # Load parent classes
+        LineFinder.__init__(self)
         EmissionFitting.__init__(self)
         LiMePlots.__init__(self)
 
         # Class attributes
         self.wave = None
+        self.wave_rest = None
         self.flux = None
         self.errFlux = None
         self.normFlux = norm_flux
@@ -267,7 +273,7 @@ class Spectrum(EmissionFitting, LiMePlots):
         return
 
 
-class MaskSelector(Spectrum):
+class MaskInspector(Spectrum):
 
     def __init__(self, lines_log_address, lines_DF, input_wave=None, input_flux=None, input_err=None, redshift=0,
                  norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
@@ -567,3 +573,209 @@ class MaskSelector(Spectrum):
         save_line_log(file_DF, stem_adress, file_type=self.linesLogAddress.suffix[1:])
 
         return
+
+
+class CubeFitsInspector(Spectrum):
+
+    def __init__(self, input_wave, input_cube_flux, image_bg, image_fg=None, contour_levels_fg=None, min_bg_percentil=60,
+                 redshift=0, norm_flux=0, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={}):
+
+        # Assign attributes to the parent class
+        super().__init__(input_wave, input_flux=None, redshift=redshift, norm_flux=norm_flux)
+
+        self.fig = None
+        self.ax0, self.ax1, self.in_ax = None, None, None
+        self.grid_mesh = None
+        self.cube_flux = input_cube_flux
+        self.wave = input_wave
+        self.header = fits_header
+        self.image_bg = image_bg
+        self.image_fg = image_fg
+        self.contour_levels_fg = contour_levels_fg
+        self.fig_conf = STANDARD_PLOT.copy()
+        self.axes_conf = {}
+        self.axlim_dict = {}
+        self.min_bg_percentil = min_bg_percentil
+        self.hdul_linelog = None
+
+        # Read the figure configuration
+        self.fig_conf = STANDARD_PLOT if fig_conf is None else fig_conf
+        rcParams.update(self.fig_conf)
+
+        # Read the axes format
+        if 'image' in axes_conf:
+            default_conf = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
+            default_conf.update(axes_conf['image'])
+            self.axes_conf['image'] = default_conf
+        else:
+            self.axes_conf['image'] = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
+
+        if 'spectrum' in axes_conf:
+            self.axes_conf['spectrum'] = STANDARD_AXES.update(axes_conf['spectrum'])
+        else:
+            self.axes_conf['spectrum'] = STANDARD_AXES
+
+        # Figure structure
+        self.fig = plt.figure(figsize=(18, 5))
+        gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
+        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+
+        # Axes configuration
+        if self.header is None:
+            self.ax0 = self.fig.add_subplot(gs[0])
+        else:
+            sky_wcs = WCS(self.header)
+            self.ax0 = self.fig.add_subplot(gs[0], projection=sky_wcs, slices=('x', 'y', 1))
+        self.ax1 = self.fig.add_subplot(gs[1])
+
+        # Image mesh grid
+        frame_size = self.cube_flux.shape
+        y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
+        self.grid_mesh = np.meshgrid(x, y)
+
+        # Use central voxels as initial coordinate
+        init_coord = int(self.cube_flux.shape[1] / 2), int(self.cube_flux.shape[2] / 2)
+
+        # Load the complete fits lines log if input
+        if lines_log_address is not None:
+            self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+
+        # Generate the plot
+        self.plot_map_voxel(self.image_bg, init_coord, self.image_fg, self.contour_levels_fg)
+        plt.show()
+
+        # Close the lins log if it has been opened
+        if isinstance(self.hdul_linelog, fits.hdu.HDUList):
+            self.hdul_linelog.close()
+
+        return
+
+    def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None):
+
+        frame = 'obs'
+        self.normFlux = 1e-20
+
+        min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
+        norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
+                                          vmin=min_flux,
+                                          base=10)
+        self.ax0.imshow(image_bg, cmap=cm.gray, norm=norm_color_bg)
+
+        # Emphasize input coordinate
+        idx_j, idx_i = voxel_coord
+        if voxel_coord is not None:
+            self.ax0.plot(idx_i, idx_j, '+', color='red')
+
+        # Plot contours image
+        if image_fg is not None:
+            self.ax0.contour(self.grid_mesh[0], self.grid_mesh[1], image_fg, cmap='viridis', levels=flux_levels,
+                             norm=colors.LogNorm())
+
+        # Voxel spectrum
+        if voxel_coord is not None:
+            flux_voxel = self.cube_flux[:, idx_j, idx_i]
+            self.ax1.step(self.wave, flux_voxel, where='mid')
+
+        # Plot the emission line fittings:
+        if self.hdul_linelog is not None:
+            ext_name = f'{idx_j}-{idx_i}_LINELOG'
+
+            if ext_name in self.hdul_linelog:
+                lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
+                lineslogDF.set_index('index', inplace=True)
+                self.linesDF = lineslogDF
+            else:
+                self.linesDF = None
+
+            # try:
+            #     self.linesDF = load_lines_log(self.lines_log_address, ext=ext_name)
+            # except:
+            #     self.linesDF = None
+
+            if self.linesDF is not None:
+
+                flux_corr = 1
+                self.redshift = 0.004691
+
+                for lineLabel in self.linesDF.index:
+
+                    w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
+                    m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
+                    amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
+                                         self.linesDF.loc[lineLabel, 'sigma']
+                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
+                        lineLabel, 'peak_flux'],
+
+                    # Rest frame
+                    if frame == 'rest':
+                        w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                        cont = (m_cont * wave_range + n_cont) * flux_corr
+                        wave_range = wave_range / (1 + self.redshift)
+                        center = center / (1 + self.redshift)
+                        wave_peak = wave_peak / (1 + self.redshift)
+                        flux_peak = flux_peak * flux_corr / self.normFlux
+
+                    # Observed frame
+                    else:
+                        w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                        cont = (m_cont * wave_range + n_cont) * flux_corr
+
+                    line_profile = gaussian_model(wave_range, amp, center, sigma) * flux_corr
+                    self.ax1.plot(wave_range, cont / self.normFlux, ':', color='tab:purple', linewidth=0.5)
+                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red', linewidth=0.5)
+
+        self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
+
+        # Update the axis
+        self.ax0.update(self.axes_conf['image'])
+        self.ax1.update(self.axes_conf['spectrum'])
+
+        return
+
+    def on_click(self, event, mouse_trigger_buttton=3):
+
+        """
+        This method defines launches the new plot selection once the user clicks on an image voxel. By default this is a
+        a right click on a minimum three button mouse
+        :param event: This variable represents the user action on the plot
+        :param mouse_trigger_buttton: Number-coded mouse button which defines the button launching the voxel selection
+        :return:
+        """
+
+        if self.in_ax == self.ax0:
+
+            if event.button == mouse_trigger_buttton:
+                # Save axes zoom
+                self.save_zoom()
+
+                # Save clicked coordinates for next plot
+                idx_j, idx_i = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
+                print(f'Current voxel: {idx_j}-{idx_i} (mouse button {event.button})')
+
+                # Remake the drawing
+                self.ax0.clear()
+                self.ax1.clear()
+                self.plot_map_voxel(self.image_bg, (idx_j, idx_i), self.image_fg, self.contour_levels_fg)
+
+                # Reset the image
+                self.reset_zoom()
+                self.fig.canvas.draw()
+
+    def on_enter_axes(self, event):
+        self.in_ax = event.inaxes
+
+    def save_zoom(self):
+        self.axlim_dict['image_xlim'] = self.ax0.get_xlim()
+        self.axlim_dict['image_ylim'] = self.ax0.get_ylim()
+        self.axlim_dict['spec_xlim'] = self.ax1.get_xlim()
+        self.axlim_dict['spec_ylim'] = self.ax1.get_ylim()
+
+    def reset_zoom(self):
+        self.ax0.set_xlim(self.axlim_dict['image_xlim'])
+        self.ax0.set_ylim(self.axlim_dict['image_ylim'])
+        self.ax1.set_xlim(self.axlim_dict['spec_xlim'])
+        self.ax1.set_ylim(self.axlim_dict['spec_ylim'])
+

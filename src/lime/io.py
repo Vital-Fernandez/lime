@@ -12,7 +12,7 @@ from collections import Sequence
 from distutils.util import strtobool
 
 from astropy.io import fits
-
+from astropy.table import Table
 
 # Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
 LOG_COLUMNS = {'wavelength': [False, False, True],
@@ -374,7 +374,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def load_lines_log(lineslog_address):
+def load_lines_log(lineslog_address, ext=None):
     """
     This function attemps several approaches to import a lines log from a sheet or text file lines as a pandas
     dataframe
@@ -382,16 +382,22 @@ def load_lines_log(lineslog_address):
     :return lineslogDF: Dataframe with line labels as index and default column headers (wavelength, w1 to w6)
     """
 
-    # Text file
-    try:
-        lineslogDF = pd.read_csv(lineslog_address, delim_whitespace=True, header=0, index_col=0)
-    except ValueError:
+    # Fits file:
+    if str(lineslog_address).endswith('.fits'):
+        lineslogDF = Table.read(lineslog_address, ext, character_as_bytes=False).to_pandas()
+        lineslogDF.set_index('index', inplace=True)
 
-        # Excel file
+    else:
+        # Text file # TODO add fits and excel formats
         try:
-            lineslogDF = pd.read_excel(lineslog_address, sheet_name=0, header=0, index_col=0)
+            lineslogDF = pd.read_csv(lineslog_address, delim_whitespace=True, header=0, index_col=0)
         except ValueError:
-            print(f'- ERROR: Could not open lines log at: {lineslog_address}')
+
+            # Excel file
+            try:
+                lineslogDF = pd.read_excel(lineslog_address, sheet_name=0, header=0, index_col=0)
+            except ValueError:
+                print(f'- ERROR: Could not open lines log at: {lineslog_address}')
 
     return lineslogDF
 

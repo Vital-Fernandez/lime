@@ -35,6 +35,6 @@ SII_contourLevels = np.nanpercentile(SII_image, percentil_array)
 # Labels for the axes
 ax_conf = {'image': {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'MANGA SHOC579'}}
 
-lime.CubeInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels,
-                  header=hdr, axes_conf=ax_conf)
-
+# Interactive plotter for IFU data cubes
+lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels,
+                  fits_header=hdr, axes_conf=ax_conf)

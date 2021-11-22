@@ -6,10 +6,9 @@ import os
 import sys
 import configparser
 
-from .treatment import Spectrum, MaskSelector
+from .treatment import Spectrum, MaskInspector, CubeFitsInspector
 from .io import load_fits, load_cfg, load_lines_log, save_line_log
-from .tools import label_decomposition, continuum_remover, line_finder, match_lines
-from .plots import CubeInspector
+from .tools import label_decomposition, LineFinder
 
 # Get python version being used
 __python_version__ = sys.version_info
