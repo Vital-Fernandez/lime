@@ -36,6 +36,7 @@ fit_cfg = sample_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
 for i, lineLabel in enumerate(matched_masks_DF.index.values):
+    print(lineLabel)
     wave_regions = matched_masks_DF.loc[lineLabel, 'w1':'w6'].values
     gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
     # gp_spec.display_results(show_fit_report=True, show_plot=True, log_scale=True, frame='obs')
@@ -44,12 +45,11 @@ for i, lineLabel in enumerate(matched_masks_DF.index.values):
 gp_spec.plot_line_grid(gp_spec.linesDF, frame=plots_frame)
 
 # Display fits in along the spectrum
-gp_spec.plot_spectrum(frame=plots_frame, profile_fittings=True)
+gp_spec.plot_spectrum(frame=plots_frame)
 
 # # Save the results
 lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'txt')
 lime.save_line_log(gp_spec.linesDF, 'gp121903_flux_table', 'pdf')
 lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'fits')
 lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'xls')
-
 

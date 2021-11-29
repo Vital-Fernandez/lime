@@ -91,33 +91,40 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self.lineLabel = label
         self.lineWaves = line_wavelengths
 
-        # Establish spectrum line and continua regions
-        idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.lineWaves)
+        # Check if the masks are within the range
+        if not np.any((self.lineWaves < self.wave_rest[0]) | (self.lineWaves > self.wave_rest[-1])):
 
-        # Integrated line properties
-        emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
-        contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
-        err_array = self.errFlux[idcsEmis] if self.errFlux is not None else None
-        self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
+            # Establish spectrum line and continua regions
+            idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.lineWaves)
 
-        # Check if blended line
-        if self.lineLabel in fit_conf:
-            self.blended_label = fit_conf[self.lineLabel]
-            if '_b' in self.lineLabel:
-                self.blended_check = True
+            # Integrated line properties
+            emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
+            contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
+            err_array = self.errFlux[idcsEmis] if self.errFlux is not None else None
+            self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
 
-        # Import kinematics if requested
-        self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
+            # Check if blended line
+            if self.lineLabel in fit_conf:
+                self.blended_label = fit_conf[self.lineLabel]
+                if '_b' in self.lineLabel:
+                    self.blended_check = True
 
-        # Gaussian fitting # TODO Add logic for very small lines
-        idcsLine = idcsEmis + idcsCont
-        x_array = self.wave[idcsLine]
-        y_array = self.flux[idcsLine]
-        w_array = 1.0/self.errFlux[idcsLine] if self.errFlux is not None else np.full(x_array.size, 1.0 / self.std_cont)
-        self.gauss_lmfit(self.lineLabel, x_array, y_array, w_array, fit_conf, self.linesDF, z_obj=self.redshift)
+            # Import kinematics if requested
+            self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
 
-        # Safe the results to log DF
-        self.results_to_database(self.lineLabel, self.linesDF, fit_conf)
+            # Gaussian fitting # TODO Add logic for very small lines
+            idcsLine = idcsEmis + idcsCont
+            x_array = self.wave[idcsLine]
+            y_array = self.flux[idcsLine]
+            w_array = 1.0/self.errFlux[idcsLine] if self.errFlux is not None else np.full(x_array.size, 1.0 / self.std_cont)
+            self.gauss_lmfit(self.lineLabel, x_array, y_array, w_array, fit_conf, self.linesDF, z_obj=self.redshift)
+
+            # Safe the results to log DF
+            self.results_to_database(self.lineLabel, self.linesDF, fit_conf)
+
+        else:
+            print(f'- {self.lineLabel} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
+            print(f' -- {self.lineWaves}')
 
         return
 
