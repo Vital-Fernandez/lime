@@ -45,7 +45,7 @@ for i, lineLabel in enumerate(matched_masks_DF.index.values):
 gp_spec.plot_line_grid(gp_spec.linesDF, frame=plots_frame)
 
 # Display fits in along the spectrum
-gp_spec.plot_spectrum(frame=plots_frame)
+gp_spec.plot_spectrum(frame=plots_frame, profile_fittings=True)
 
 # # Save the results
 lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'txt')

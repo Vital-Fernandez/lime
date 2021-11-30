@@ -658,10 +658,7 @@ class CubeFitsInspector(Spectrum):
 
         return
 
-    def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None):
-
-        frame = 'obs'
-        self.normFlux = 1e-20
+    def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None, frame='obs'):
 
         min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
         norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
@@ -702,8 +699,18 @@ class CubeFitsInspector(Spectrum):
 
             if self.linesDF is not None:
 
-                flux_corr = 1
-                self.redshift = 0.004691
+                # flux_corr = 1
+                # self.redshift = 0.004691
+                # Redshift correction for the flux
+
+                if frame == 'rest':
+                    z_corr = (1 + self.redshift)
+                    flux_plot = self.flux * z_corr
+                    wave_plot = self.wave_rest
+                else:
+                    z_corr = 1
+                    flux_plot = self.flux
+                    wave_plot = self.wave
 
                 for lineLabel in self.linesDF.index:
 
@@ -711,28 +718,83 @@ class CubeFitsInspector(Spectrum):
                     m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
                     amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
                                          self.linesDF.loc[lineLabel, 'sigma']
-                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
-                        lineLabel, 'peak_flux'],
+                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[lineLabel, 'peak_flux']
+                    blended_label = self.linesDF.loc[lineLabel, 'blended_label']
 
                     # Rest frame
                     if frame == 'rest':
                         w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
                         wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                        cont = (m_cont * wave_range + n_cont) * flux_corr
+                        cont = (m_cont * wave_range + n_cont)
                         wave_range = wave_range / (1 + self.redshift)
                         center = center / (1 + self.redshift)
-                        wave_peak = wave_peak / (1 + self.redshift)
-                        flux_peak = flux_peak * flux_corr / self.normFlux
 
                     # Observed frame
                     else:
                         w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                        cont = (m_cont * wave_range + n_cont) * flux_corr
+                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 4))
+                        cont = (m_cont * wave_range + n_cont) * z_corr
 
-                    line_profile = gaussian_model(wave_range, amp, center, sigma) * flux_corr
-                    self.ax1.plot(wave_range, cont / self.normFlux, ':', color='tab:purple', linewidth=0.5)
-                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red', linewidth=0.5)
+                    line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
+
+                    if blended_label == 'None':
+                        color_curve = 'tab:red'
+                        style_curve = '-'
+                        width_curve = 0.5
+                        self.ax1.plot(wave_range, cont / self.normFlux, ':', color='tab:purple', linewidth=0.5)
+
+                    else:
+                        style_curve = ':'
+                        width_curve = 2
+                        cmap = cm.get_cmap()
+                        list_comps = blended_label.split('-')
+                        idx_line = list_comps.index(lineLabel)
+                        color_curve = cmap(idx_line/len(list_comps))
+
+                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color=color_curve,
+                                  linestyle=style_curve, linewidth=width_curve)
+
+
+                # TODO we need a method just for this
+                idcs_blended = self.linesDF['blended_label'] != 'None'
+                blended_groups = self.linesDF.loc[idcs_blended, 'blended_label'].unique()
+                for lineGroup in blended_groups:
+                    list_comps = lineGroup.split('-')
+                    for i, lineLabel in enumerate(list_comps):
+
+                        w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
+                        m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
+                        amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
+                                             self.linesDF.loc[lineLabel, 'sigma']
+                        wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
+                            lineLabel, 'peak_flux']
+                        blended_label = self.linesDF.loc[lineLabel, 'blended_label']
+
+                        # Rest frame
+                        if frame == 'rest':
+                            w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                            if i == 0:
+                                wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                            cont = (m_cont * wave_range + n_cont)
+                            wave_range = wave_range / (1 + self.redshift)
+                            center = center / (1 + self.redshift)
+
+                        # Observed frame
+                        else:
+                            w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                            if i == 0:
+                                wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                            cont = (m_cont * wave_range + n_cont) * z_corr
+
+                        if i == 0:
+                            line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
+                        else:
+                            line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
+
+                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red',
+                                  linestyle='-', linewidth=0.5)
+
+
 
         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
 
