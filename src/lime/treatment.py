@@ -843,6 +843,7 @@ class CubeFitsInspector(Spectrum):
         self.axlim_dict['spec_ylim'] = self.ax1.get_ylim()
 
     def reset_zoom(self):
+
         self.ax0.set_xlim(self.axlim_dict['image_xlim'])
         self.ax0.set_ylim(self.axlim_dict['image_ylim'])
         self.ax1.set_xlim(self.axlim_dict['spec_xlim'])

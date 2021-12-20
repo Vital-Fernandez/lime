@@ -132,9 +132,6 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2):
     return i
 
 
-
-
-
 def kinematic_component_labelling(line_latex_label, comp_ref):
 
     if len(comp_ref) != 2:

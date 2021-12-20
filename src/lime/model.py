@@ -159,22 +159,32 @@ class EmissionFitting:
 
         # Velocity calculations
         if emisWave.size > 15:
+
             velocArray = c_KMpS * (emisWave - self.peak_wave)/self.peak_wave
             percentFluxArray = np.cumsum(emisFlux-lineLinearCont) * self.pixelWidth / self.intg_flux * 100
-            percentInterp = interp1d(percentFluxArray, velocArray, kind='slinear', fill_value='extrapolate')
-            velocPercent = percentInterp(TARGET_PERCENTILES)
-            vel_FWHM_blue = velocArray[:peakIdx][np.argmax(emisFlux[:peakIdx] > self.peak_flux/2)]
-            vel_FWHM_red = velocArray[peakIdx:][np.argmax(emisFlux[peakIdx:] < self.peak_flux/2)]
-            self.FWHM_int = vel_FWHM_red - vel_FWHM_blue
 
-            self.v_med, self.v_50 = np.median(velocArray), velocPercent[3]
-            self.v_5, self.v_10 = velocPercent[1], velocPercent[2]
-            self.v_90, self.v_95 = velocPercent[4], velocPercent[5]
+            blue_range = emisFlux[:peakIdx] > self.peak_flux/2
+            red_range = emisFlux[peakIdx:] < self.peak_flux/2
 
-            W_80 = self.v_90 - self.v_10
-            W_90 = self.v_95 - self.v_5
-            A = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
-            K = W_90 / (1.397 * self.FWHM_int)
+            # In case the peak is at the edge
+            if (blue_range.size > 2) and (red_range.size > 2):
+
+                vel_FWHM_blue = velocArray[:peakIdx][np.argmax(blue_range)]
+                vel_FWHM_red = velocArray[peakIdx:][np.argmax(red_range)]
+                self.FWHM_int = vel_FWHM_red - vel_FWHM_blue
+
+                # Interpolation for integrated kinematics
+                percentInterp = interp1d(percentFluxArray, velocArray, kind='slinear', fill_value='extrapolate')
+                velocPercent = percentInterp(TARGET_PERCENTILES)
+
+                self.v_med, self.v_50 = np.median(velocArray), velocPercent[3]
+                self.v_5, self.v_10 = velocPercent[1], velocPercent[2]
+                self.v_90, self.v_95 = velocPercent[4], velocPercent[5]
+
+                W_80 = self.v_90 - self.v_10
+                W_90 = self.v_95 - self.v_5
+                A = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
+                K = W_90 / (1.397 * self.FWHM_int)
 
         # TODO apply the redshift correction
         # Equivalent width computation
