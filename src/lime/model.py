@@ -95,6 +95,7 @@ class EmissionFitting:
         self.v_5, self.v_10 = None, None
         self.v_90, self.v_95 = None, None
         self.chisqr, self.redchi = None, None
+        self.aic, self.bic = None, None
 
         self.fit_params, self.fit_output = {}, None
         self.pixelWidth = None
@@ -259,8 +260,9 @@ class EmissionFitting:
         self.z_line = np.empty(n_comps)
         self.FWHM_g = np.empty(n_comps)
 
-        # Fit diagnostics
+        # Fitting diagnostics
         self.chisqr, self.redchi = self.fit_output.chisqr, self.fit_output.redchi
+        self.aic, self.bic = self.fit_output.aic, self.fit_output.bic
 
         # Store lmfit measurements
         for i, line in enumerate(mixtureComponents):

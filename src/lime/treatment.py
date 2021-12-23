@@ -692,16 +692,7 @@ class CubeFitsInspector(Spectrum):
             else:
                 self.linesDF = None
 
-            # try:
-            #     self.linesDF = load_lines_log(self.lines_log_address, ext=ext_name)
-            # except:
-            #     self.linesDF = None
-
             if self.linesDF is not None:
-
-                # flux_corr = 1
-                # self.redshift = 0.004691
-                # Redshift correction for the flux
 
                 if frame == 'rest':
                     z_corr = (1 + self.redshift)
