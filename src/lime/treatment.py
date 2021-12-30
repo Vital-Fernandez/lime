@@ -218,60 +218,67 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def display_results(self, label=None, show_fit_report=False, show_plot=False, log_scale=True, frame='obs'):
+    def display_results(self, label=None, show_fit_report=False, show_plot=False, log_scale=True, frame='obs',
+                        save_address=None):
 
         # Case no line as input: Show the current measurement
-        if label is None:
-            if self.lineLabel is not None:
-                label = self.lineLabel
-                output_ref = (f'\nLine label: {label}\n'
-                              f'- Line regions: {self.lineWaves}\n'
-                              f'- Normalization flux: {self.normFlux}\n'
-                              f'- Redshift: {self.redshift}\n'
-                              f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
-                              f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
-
-                if self.blended_check:
-                    mixtureComponents = np.array(self.blended_label.split('-'))
-                else:
-                    mixtureComponents = np.array([label], ndmin=1)
-
-                output_ref += f'\n- {label} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
-
-                if mixtureComponents.size == 1:
-                    output_ref += f'- {label} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
-
-                for i, lineRef in enumerate(mixtureComponents):
-                    output_ref += (f'\n- {lineRef} gaussian fitting:\n'
-                                   f'-- Gauss flux: {self.gauss_flux[i]:.3f} +/- {self.gauss_err[i]:.3f}\n'
-                                   # f'-- Amplitude: {self.amp[i]:.3f} +/- {self.amp_err[i]:.3f}\n'
-                                   f'-- Center: {self.center[i]:.2f} +/- {self.center_err[i]:.2f}\n'
-                                   f'-- Sigma (km/s): {self.sigma_vel[i]:.2f} +/- {self.sigma_vel_err[i]:.2f}\n')
-            else:
-                output_ref = f'- No measurement performed\n'
-
-        # Case with line input: search and show that measurement
-        elif self.linesDF is not None:
-            if label in self.linesDF.index:
-                output_ref = self.linesDF.loc[label].to_string
-            else:
-                output_ref = f'- WARNING: {label} not found in  lines table\n'
-        else:
-            output_ref = '- WARNING: Measurement lines log not defined\n'
-
-        # Display the print lmfit report if available
-        if show_fit_report:
-            if self.fit_output is not None:
-                output_ref += f'\n- LmFit output:\n{fit_report(self.fit_output)}\n'
-            else:
-                output_ref += f'\n- LmFit output not available\n'
-
         # Show the result
-        print(output_ref)
+        if show_fit_report:
+
+            if label is None:
+                if self.lineLabel is not None:
+                    label = self.lineLabel
+                    output_ref = (f'\nLine label: {label}\n'
+                                  f'- Line regions: {self.lineWaves}\n'
+                                  f'- Normalization flux: {self.normFlux}\n'
+                                  f'- Redshift: {self.redshift}\n'
+                                  f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
+                                  f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
+
+                    if self.blended_check:
+                        mixtureComponents = np.array(self.blended_label.split('-'))
+                    else:
+                        mixtureComponents = np.array([label], ndmin=1)
+
+                    output_ref += f'\n- {label} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
+
+                    if mixtureComponents.size == 1:
+                        output_ref += f'- {label} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
+
+                    for i, lineRef in enumerate(mixtureComponents):
+                        output_ref += (f'\n- {lineRef} gaussian fitting:\n'
+                                       f'-- Gauss flux: {self.gauss_flux[i]:.3f} +/- {self.gauss_err[i]:.3f}\n'
+                                       # f'-- Amplitude: {self.amp[i]:.3f} +/- {self.amp_err[i]:.3f}\n'
+                                       f'-- Center: {self.center[i]:.2f} +/- {self.center_err[i]:.2f}\n'
+                                       f'-- Sigma (km/s): {self.sigma_vel[i]:.2f} +/- {self.sigma_vel_err[i]:.2f}\n')
+                else:
+                    output_ref = f'- No measurement performed\n'
+
+            # Case with line input: search and show that measurement
+            elif self.linesDF is not None:
+                if label in self.linesDF.index:
+                    output_ref = self.linesDF.loc[label].to_string
+                else:
+                    output_ref = f'- WARNING: {label} not found in  lines table\n'
+            else:
+                output_ref = '- WARNING: Measurement lines log not defined\n'
+
+            # Display the print lmfit report if available
+            if show_fit_report:
+                if self.fit_output is not None:
+                    output_ref += f'\n- LmFit output:\n{fit_report(self.fit_output)}\n'
+                else:
+                    output_ref += f'\n- LmFit output not available\n'
+
+            print(output_ref)
 
         # Display plot
         if show_plot:
             self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
+
+        # Save the plot figure Dania feature
+        if save_address is not None:
+            self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=save_address)
 
         return
 
@@ -585,7 +592,7 @@ class MaskInspector(Spectrum):
 class CubeFitsInspector(Spectrum):
 
     def __init__(self, input_wave, input_cube_flux, image_bg, image_fg=None, contour_levels_fg=None, min_bg_percentil=60,
-                 redshift=0, norm_flux=0, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={}):
+                 redshift=0, norm_flux=1, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={}):
 
         # Assign attributes to the parent class
         super().__init__(input_wave, input_flux=None, redshift=redshift, norm_flux=norm_flux)

@@ -28,7 +28,7 @@ gp_spec.plot_spectrum()
 gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
 
 # Show the results
-gp_spec.display_results(show_fit_report=True, show_plot=True)
+gp_spec.display_results(show_fit_report=True, show_plot=True, save_address=f'./{lineLabel}.png')
 
 # Each fit is stored in the lines dataframe (linesDF) attribute
 print(gp_spec.linesDF)

@@ -307,6 +307,7 @@ class LiMePlots:
         if output_address is None:
             plt.tight_layout()
             plt.show()
+
         else:
             plt.savefig(output_address, bbox_inches='tight')
 
