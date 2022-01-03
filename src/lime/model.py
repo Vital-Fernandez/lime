@@ -215,7 +215,7 @@ class EmissionFitting:
         # Confirm the number of gaussian components
         mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
         n_comps = mixtureComponents.size
-        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, combined_dict=user_conf)
+        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, blended_dict=user_conf)
 
         # Compute the line redshift and reference wavelength
         if self.blended_check:

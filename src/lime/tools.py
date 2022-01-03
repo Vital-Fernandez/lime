@@ -23,8 +23,44 @@ def int_to_roman(num):
     return roman_num
 
 
-def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), combined_dict={}, scalar_output=False,
+def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_dict={}, scalar_output=False,
                         user_format={}):
+
+    """This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
+    For example:
+
+    :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
+    :type input_lines: str
+    :type input_lines: list
+
+    :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
+                        assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
+                        excited state
+    :type recomb_atom: list, optional
+
+    :param blended_dict: dictionary with the components of the blended lines. For blended lines, the function returns
+                         the ion and wavelength from the first component from the provided list while the scientific
+                         notation appears as the sum of the specified components
+    :type blended_dict: dict, optional
+
+    :param scalar_output: Boolean for an scalar results in case of a single input line input
+    :type scalar_output: bool, optional
+
+    :param user_format: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :type user_format: dict
+
+    :return: 3 arrays (or scalars) with the input line(s) transition wavelength, ion and scientific notation in latex
+    :rtype: np.array
+
+    :Example:
+    >>> import lime
+    >>> lime.label_decomposition('O3_5007A', scalar_output=True)
+    O3, 5007.0, '$5007\\AA\\,[OIII]$'
+    >>> lime.label_decomposition('H1_6563A_b', blended_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
+    ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
+    """
+
+    # TODO for blended lines it may be better to return all the blended components individually
 
     # Confirm input array has one dimension
     input_lines = np.array(input_lines, ndmin=1)
@@ -38,8 +74,8 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), combined_
             mixture_line = False
             if '_b' in lineLabel or '_m' in lineLabel:
                 mixture_line = True
-                if lineLabel in combined_dict:
-                    lineRef = combined_dict[lineLabel]
+                if lineLabel in blended_dict:
+                    lineRef = blended_dict[lineLabel]
                 else:
                     lineRef = lineLabel[:-2]
             else:
@@ -154,126 +190,6 @@ def kinematic_component_labelling(line_latex_label, comp_ref):
         lineEmisLabel = line_latex_label
 
     return comp_label, lineEmisLabel
-
-
-# def match_lines(wave_rest, flux,  obsLineTable, maskDF, lineType='emission', tol=5, blendedLineList=[],
-#                 detect_check=False, find_line_borders='Auto', include_unknown=False):
-#
-#     #TODO maybe we should remove not detected from output
-#     theoLineDF = pd.DataFrame.copy(maskDF)
-#
-#     # Query the lines from the astropy finder tables # TODO Expand technique for absorption lines
-#     idcsLineType = obsLineTable['line_type'] == lineType
-#     idcsLinePeak = np.array(obsLineTable[idcsLineType]['line_center_index'])
-#     waveObs = wave_rest[idcsLinePeak]
-#
-#     # Theoretical wave values
-#     ion_array, waveTheory, latexLabel_array = label_decomposition(theoLineDF.index.values)
-#     theoLineDF['wavelength'] = waveTheory
-#     # waveTheory = theoLineDF.wavelength.values
-#
-#     # Match the lines with the theoretical emission
-#     tolerance = np.diff(wave_rest).mean() * tol
-#     theoLineDF['observation'] = 'not detected'
-#     unidentifiedLine = dict.fromkeys(theoLineDF.columns.values, np.nan)
-#
-#     for i in np.arange(waveObs.size):
-#
-#         idx_array = np.where(np.isclose(a=waveTheory, b=waveObs[i], atol=tolerance))
-#
-#         if len(idx_array[0]) == 0:
-#             unknownLineLabel = 'xy_{:.0f}A'.format(np.round(waveObs[i]))
-#
-#             # Scheme to avoid repeated lines
-#             if (unknownLineLabel not in theoLineDF.index) and detect_check:
-#                 newRow = unidentifiedLine.copy()
-#                 newRow.update({'wavelength': waveObs[i], 'w3': waveObs[i] - 5, 'w4': waveObs[i] + 5,
-#                                'observation': 'not identified'})
-#                 theoLineDF.loc[unknownLineLabel] = newRow
-#
-#         else:
-#
-#             row_index = theoLineDF.index[theoLineDF.wavelength == waveTheory[idx_array[0][0]]]
-#             theoLineDF.loc[row_index, 'observation'] = 'detected'
-#             theoLineLabel = row_index[0]
-#
-#             # TODO lines like Halpha+[NII] this does not work, we should add exclusion
-#             if find_line_borders == True:
-#                 minSeparation = 4 if theoLineLabel in blendedLineList else 2
-#                 idx_min = compute_line_width(idcsLinePeak[i], flux, delta_i=-1, min_delta=minSeparation)
-#                 idx_max = compute_line_width(idcsLinePeak[i], flux, delta_i=1, min_delta=minSeparation)
-#                 theoLineDF.loc[row_index, 'w3'] = wave_rest[idx_min]
-#                 theoLineDF.loc[row_index, 'w4'] = wave_rest[idx_max]
-#             else:
-#                 if find_line_borders == 'Auto':
-#                     if '_b' not in theoLineLabel:
-#                         minSeparation = 4 if theoLineLabel in blendedLineList else 2
-#                         idx_min = compute_line_width(idcsLinePeak[i], flux, delta_i=-1, min_delta=minSeparation)
-#                         idx_max = compute_line_width(idcsLinePeak[i], flux, delta_i=1, min_delta=minSeparation)
-#                         theoLineDF.loc[row_index, 'w3'] = wave_rest[idx_min]
-#                         theoLineDF.loc[row_index, 'w4'] = wave_rest[idx_max]
-#
-#     if include_unknown is False:
-#         idcs_unknown = theoLineDF['observation'] == 'not detected'
-#         theoLineDF.drop(index=theoLineDF.loc[idcs_unknown].index.values, inplace=True)
-#
-#     # Sort by wavelength
-#     theoLineDF.sort_values('wavelength', inplace=True)
-#
-#     # Latex labels
-#     ion_array, wavelength_array, latexLabel_array = label_decomposition(theoLineDF.index.values)
-#     theoLineDF['latexLabel'] = latexLabel_array
-#     theoLineDF['blended_label'] = 'None'
-#
-#     return theoLineDF
-#
-#
-# def line_finder(wave_rest, flux, noiseWaveLim, intLineThreshold=3, verbose=False):
-#
-#     assert noiseWaveLim[0] > wave_rest[0] or noiseWaveLim[1] < wave_rest[-1]
-#
-#     # Establish noise values
-#     idcs_noiseRegion = (noiseWaveLim[0] <= wave_rest) & (wave_rest <= noiseWaveLim[1])
-#     noise_region = SpectralRegion(noiseWaveLim[0] * WAVE_UNITS_DEFAULT, noiseWaveLim[1] * WAVE_UNITS_DEFAULT)
-#     flux_threshold = intLineThreshold * flux[idcs_noiseRegion].std()
-#
-#     input_spectrum = Spectrum1D(flux * FLUX_UNITS_DEFAULT, wave_rest * WAVE_UNITS_DEFAULT)
-#     input_spectrum = noise_region_uncertainty(input_spectrum, noise_region)
-#     linesTable = find_lines_derivative(input_spectrum, flux_threshold)
-#
-#     if verbose:
-#         print(linesTable)
-#
-#     return linesTable
-#
-#
-# def continuum_remover(wave_rest, flux, noiseRegionLims, intLineThreshold=((4, 4), (1.5, 1.5)), degree=(3, 7)):
-#
-#     assert wave_rest[0] < noiseRegionLims[0] and noiseRegionLims[1] < wave_rest[-1], \
-#         f'Error noise region {wave_rest[0]} < {noiseRegionLims[0]} and {noiseRegionLims[1]} < {wave_rest[-1]}'
-#
-#     # Identify high flux regions
-#     idcs_noiseRegion = (noiseRegionLims[0] <= wave_rest) & (wave_rest <= noiseRegionLims[1])
-#     noise_mean, noise_std = flux[idcs_noiseRegion].mean(), flux[idcs_noiseRegion].std()
-#
-#     # Perform several continuum fits to improve the line detection
-#     input_wave, input_flux = wave_rest, flux
-#     for i in range(len(intLineThreshold)):
-#
-#         # Mask line regions
-#         emisLimit = intLineThreshold[i][0] * (noise_mean + noise_std)
-#         absoLimit = (noise_mean + noise_std) / intLineThreshold[i][1]
-#         idcsLineMask = np.where((input_flux >= absoLimit) & (input_flux <= emisLimit))
-#         wave_masked, flux_masked = input_wave[idcsLineMask], input_flux[idcsLineMask]
-#
-#         # Perform continuum fits iteratively
-#         poly3Mod = PolynomialModel(prefix=f'poly_{degree[i]}', degree=degree[i])
-#         poly3Params = poly3Mod.guess(flux_masked, x=wave_masked)
-#         poly3Out = poly3Mod.fit(flux_masked, poly3Params, x=wave_masked)
-#
-#         input_flux = input_flux - poly3Out.eval(x=wave_rest) + noise_mean
-#
-#     return input_flux - noise_mean
 
 
 class LineFinder:

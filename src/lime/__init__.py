@@ -7,7 +7,7 @@ import sys
 import configparser
 
 from .treatment import Spectrum, MaskInspector, CubeFitsInspector
-from .io import load_fits, load_cfg, load_lines_log, save_line_log
+from .io import *
 from .tools import label_decomposition, LineFinder
 
 # Get python version being used

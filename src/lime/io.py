@@ -1,3 +1,11 @@
+__all__ = [
+    'spatial_mask_generator',
+    'load_fits',
+    'load_cfg',
+    'load_lines_log',
+    'save_line_log'
+]
+
 import os
 import configparser
 import copy
@@ -13,6 +21,8 @@ from distutils.util import strtobool
 
 from astropy.io import fits
 from astropy.table import Table
+
+from matplotlib import pyplot as plt, colors, cm, patches
 
 # Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
 LOG_COLUMNS = {'wavelength': [False, False, True],
@@ -697,6 +707,158 @@ def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_
             string_DF = tableDF.to_string()
             string_DF = string_DF.replace('$', '')
             output_file.write(string_DF.encode('UTF-8'))
+
+    return
+
+
+def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref='', output_address=None,
+                           min_level=None, show_plot=False):
+
+    """
+    This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
+    Currently the only one implented is the percentil intensity. If an output address is provided, the mask is saved as a fits file
+    where each intensity level mask is stored in its corresponding page. The parameter calculation method, its intensity and mask
+    index are saved in the corresponding HDU header as PARAM, PARAMIDX and PARAMVAL.
+
+    :param image_flux: Matrix with the image flux to be spatially masked.
+    :type image_flux: np.array()
+
+    :param mask_param: Flux intensity model from which the masks are calculated. The options available are ['percentil'].
+    :type mask_param: str, optional
+
+    :param contour_levels: Vector in decreasing order with the parameter values for the mask_param chosen.
+    :type contour_levels: np.array()
+
+    :param mask_ref: String label for the mask. If none provided the masks will be named in cardinal order.
+    :type mask_ref: str, optional
+
+    :param output_address: Output address for the mask fits file.
+    :type output_address: str, optional
+
+    :param min_level: Minimum level for the masks calculation. If none is provided the minimum value from the contour_levels
+                      vector will be used.
+    :type min_level: float, optional
+
+    :param show_plot: If true a plot will be displayed with the mask calculation. Additionally if an output_address is
+                      provided the plot will be saved in the parent folder as image taking into consideration the
+                      mask_ref value.
+
+    :type show_plot: bool, optional
+    :return:
+    """
+
+    # Check the contour vector is in decreasing order
+    assert np.all(np.diff(contour_levels) < 0), '- ERROR contour_levels are not in decreasing order for spatial mask'
+
+    # Check the logic for the mask calculation
+    assert mask_param in ['percentil', 'SNR'], f'- ERROR {mask_param} is not recognise for the spatial mask calculation'
+
+    # Compute the mask diagnostic parameter form the provided flux
+    if mask_param == 'percentil':
+        param_image = image_flux
+        param_array = np.nanpercentile(image_flux, contour_levels)
+
+    # If minimum level not provided by user use lowest contour_level
+    min_level = param_array[-1] if min_level is None else min_level
+
+    # Containers for the mask parameters
+    mask_dict = {}
+    param_level = {}
+    boundary_dict = {}
+
+    # Loop throught the counter levels and compute the
+    for i, n_levels in enumerate(param_array):
+
+        # # Operation every element
+        if i == 0:
+            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                              (param_image >= min_level),
+                                               param_image)
+
+        else:
+            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                              (param_image < param_array[i - 1]) &
+                                              (param_image >= min_level),
+                                               param_image)
+
+        if np.sum(maParamImage.mask) > 0:
+            mask_dict[f'mask_{i}'] = maParamImage.mask
+            boundary_dict[f'mask_{i}'] = contour_levels[i]
+            param_level[f'mask_{i}'] = param_array[i]
+
+    # Plot the combined masks
+    if output_address is not None:
+        fits_folder = Path(output_address).parent
+    else:
+        fits_folder = None
+
+    if (fits_folder is not None) or show_plot:
+
+        fig, ax = plt.subplots(figsize=(12, 12))
+
+        cmap = cm.get_cmap('viridis_r', len(mask_dict))
+        legend_list = [None] * len(mask_dict)
+        # alpha_levels = np.linspace(0.1, 0.5, len(mask_dict))[::-1]
+
+        for idx_region, region_items in enumerate(mask_dict.items()):
+
+            region_label, region_mask = region_items
+
+            # Inverse the mask array for the plot
+            inv_mask_array = np.ma.masked_array(region_mask.data, ~region_mask)
+
+            # Prepare the labels for each mask to add to imshow
+            legend_text = f'mask_{idx_region}: {mask_param} = {boundary_dict[region_label]}'
+            legend_list[idx_region] = patches.Patch(color=cmap(idx_region),label=legend_text)
+
+            cm_i = colors.ListedColormap(['black', cmap(idx_region)])
+            ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
+
+        ax.legend(handles=legend_list, loc=2.)
+        plt.tight_layout()
+
+        if fits_folder is not None:
+
+            if mask_ref is None:
+                output_image = fits_folder/f'mask_contours.png'
+            else:
+                output_image = fits_folder/f'{mask_ref}_mask_contours.png'
+
+            plt.savefig(output_image)
+
+        if show_plot:
+            plt.show()
+
+        plt.close(fig)
+
+    # Save to a fits file:
+    if output_address is not None:
+
+        fits_address = Path(output_address)
+
+        for idx_region, region_items in enumerate(mask_dict.items()):
+            region_label, region_mask = region_items
+
+            # Metadata for the fits page
+            header_dict = {'PARAM': mask_param,
+                           'PARAMIDX': boundary_dict[region_label],
+                           'PARAMVAL': param_level[region_label]}
+            fits_hdr = fits.Header(header_dict)
+
+            # Extension for the mask
+            mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'
+
+            # Mask HDU
+            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=fits_hdr)
+
+            if fits_address.is_file():
+                try:
+                    fits.update(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext, verify=True)
+                except KeyError:
+                    fits.append(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext)
+            else:
+                hdul = fits.HDUList([fits.PrimaryHDU(), mask_hdu])
+                hdul.writeto(fits_address, overwrite=True, output_verify='fix')
 
     return
 
