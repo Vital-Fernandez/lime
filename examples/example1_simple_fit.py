@@ -22,7 +22,7 @@ fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot_spectrum()
+gp_spec.plot_spectrum(frame='rest')
 
 # Run the fit
 gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)

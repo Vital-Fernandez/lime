@@ -77,6 +77,12 @@ To display the spectrum you can use the function:
 
     gp_spec.plot_spectrum()
 
+.. image:: ../_static/plot_spectrum.png
+
 To fit a line we need to provide its location: Two wavelengths marking the spectrum region where the line is located.
 Additionally, you need to define two continuum regions on the left and right hand side of the line. Therefore, you need
 to provide a six value array ordered from lower to higher wavelengths:
+
+.. image:: ../_static/mask_selection.png
+
+To try something

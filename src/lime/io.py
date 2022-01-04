@@ -711,7 +711,7 @@ def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_
     return
 
 
-def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref='', output_address=None,
+def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", output_address=None,
                            min_level=None, show_plot=False):
 
     """
