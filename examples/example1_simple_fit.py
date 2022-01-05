@@ -25,10 +25,15 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
 gp_spec.plot_spectrum(frame='rest')
 
 # Run the fit
-gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
+gp_spec.fit_from_wavelengths(lineLabel, lineWaves)
 
 # Show the results
+gp_spec.display_results(show_fit_report=True, show_plot=True)
+
+# Second attempt including the fit configuration
+gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
 gp_spec.display_results(show_fit_report=True, show_plot=True, save_address=f'./{lineLabel}.png')
+
 
 # Each fit is stored in the lines dataframe (linesDF) attribute
 print(gp_spec.linesDF)
