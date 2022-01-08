@@ -27,7 +27,6 @@ The current version of LiMe has the following dependencies (please check their d
 The following libraries are not necessary but they provide a richer experience on the library inputs and outputs:
 
 * Astropy
-* PyNeb
 * PyLatex
 * Specutils
 
@@ -35,7 +34,7 @@ The following libraries are not necessary but they provide a richer experience o
 Development
 -----------
 
-LiMe is currently in a beta realese. Please check its github_ for the latest version news and tutorials.
+LiMe is currently in a beta release. Please check its github_ for the latest version news and tutorials.
 Any comment/issue/request can be added as an issue on the github_ page.
 
 

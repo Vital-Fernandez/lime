@@ -26,7 +26,8 @@ def int_to_roman(num):
 def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_dict={}, scalar_output=False,
                         user_format={}):
 
-    """This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
+    """
+    This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
     For example:
 
     :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
@@ -58,6 +59,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     O3, 5007.0, '$5007\\AA\\,[OIII]$'
     >>> lime.label_decomposition('H1_6563A_b', blended_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
     ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
+
     """
 
     # TODO for blended lines it may be better to return all the blended components individually

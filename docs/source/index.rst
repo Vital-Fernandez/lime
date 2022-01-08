@@ -42,6 +42,7 @@ These are some of the features currently available:
    :name: doc-tree
 
    documentation/installation
+   documentation/measurements
    documentation/api
 
 
@@ -51,5 +52,5 @@ These are some of the features currently available:
    :name: tutorial-tree
 
    tutorials/1_BasicFit
-
+   tutorials/2_Synthetic
 

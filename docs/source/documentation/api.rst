@@ -9,3 +9,12 @@ Inputs and outputs
 ------------------
 
 .. autofunction:: lime.io.spatial_mask_generator
+
+Tools
+-----
+
+.. autofunction:: lime.label_decomposition
+
+
+Convenience functions
+---------------------
