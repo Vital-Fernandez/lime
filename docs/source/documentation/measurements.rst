@@ -68,29 +68,30 @@ These parameters are not attributes of the ``lime.Spectrum`` class. Nonetheless,
 Integrated properties
 +++++++++++++++++++++
 
-These attributes are calculated by the ``lime.Spectrum.line_properties`` without any assumption of the emission line profile.
+These attributes are calculated by the ``lime.Spectrum.line_properties`` function. In these calculations, there is no
+assumption on the emission line profile shape.
 
 .. attention::
     In the output measurements log and the ``lime.Spectrum.linesDF``, these parameters have the same flux units as the
     input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the constant provided by the user
     ``lime.Spectrum.normFLux``
 
-* **peak_wave** (``.peak_wave``, ``float``): This is the wavelength of the highest pixel value in the line region.
+* **peak_wave** (``.peak_wave``, ``float``): This variable is the wavelength of the highest pixel value in the line region.
 
-* **peak_flux** (``.peak_flux``, ``float``): This is the flux of the highest pixel value in the line region.
+* **peak_flux** (``.peak_flux``, ``float``): This variable is the flux of the highest pixel value in the line region.
 
 * **m_cont**  (``.m_cont``, ``float``): Using the line adjacent continua regions LiMe fits a linear continuum.
-  This parameter represents is the gradient. :code:`y = m*x + n`
+  This variable represents is the gradient. :code:`y = m*x + n`
 
 * **n_cont** (``.n_cont``, ``float``): Using the line adjacent continua regions LiMe fits a linear continuum.
-  This parameter represents is the interception. :code:`y = m*x + n`
+  This variable represents is the interception. :code:`y = m*x + n`
 
-* **cont** (``.cont``, ``float``): This parameter is the flux of the linear continuum at the ``.peak_wave``.
+* **cont** (``.cont``, ``float``): This variable is the flux of the linear continuum at the ``.peak_wave``.
 
-* **std_cont**  (``.std_cont``, ``float``): This parameter is standard deviation of the adjacent continua flux. It is
+* **std_cont**  (``.std_cont``, ``float``): This variable is standard deviation of the adjacent continua flux. It is
   calculated from the observed continuum minus the linear model for both continua masks.
 
-* **intg_flux** (``.intg_flux``, ``float``): This attribute contains measurement of the integrated flux.
+* **intg_flux** (``.intg_flux``, ``float``): This variable contains measurement of the integrated flux.
   This value is calculated via a Monte Carlo algorithm:
 
   * If the pixel error spectrum is not provided by the user the algorithm takes the line ``.std_cont`` for all the pixels in the
@@ -126,7 +127,7 @@ These attributes are calculated by the ``lime.Spectrum.line_properties`` without
 * **eqw_err** (``.eqw``, ``float`` or ``np.array()``): This parameter is the uncertainty in the equivalent width. It is
   calculated from a Monte Carlo vector of the  ``.cont`` and its ``.std_cont`` and the uncertainty of the line flux.
 
-* **z_line** (``.z_line``, ``float``): This parameter is the emission line redshift:
+* **z_line** (``.z_line``, ``float``): This variable is the emission line redshift:
 
   .. math::
 
@@ -135,69 +136,164 @@ These attributes are calculated by the ``lime.Spectrum.line_properties`` without
   where :math:`\lambda_{obs}` is the ``.peak_wave`` for non-blended lines. Otherwise the gaussian profile ``.center`` is
   used. In all cases :math:`\lambda_{theo}` is the theoretical transition wavelength obtained from the input ``.lineLabel``
 
-* **FWHM_int** (``.FWHM_int``, ``float``): This parameter is the Full Width Half-Measure in :math:`km/s` computed from
+* **FWHM_int** (``.FWHM_int``, ``float``): This variable is the Full Width Half-Measure in :math:`km/s` computed from
   the integrated profile: The algorithm finds the pixel coordinates which are above half the line peak flux. The blue and and red
-  edge :math:`km/s` are subtracted (blue is negative). This operation is only available for lines whose width is above 15 pixels.
+  edge :math:`km/s` are subtracted (blue is negative).
 
-* **snr_line**  (``.FWHM_int``, ``float``): This parameter is the signal to noise ratio of the emission line region using the
+  .. attention::
+     This operation is only available for lines whose width is above 15 pixels.
+
+* **snr_line**  (``.FWHM_int``, ``float``): This variable is the signal to noise ratio of the emission line region using the
   `IRAF splot definition <https://github.com/joequant/iraf/blob/master/noao/onedspec/splot/avgsnr.x>`_:
 
    .. math::
 
       SNR = \frac{avg}{rms} = \frac{{\frac {1}{n}}\sum _{i=1}^{n}y_{i}}{\sqrt{(\frac{1}{n})\sum_{i=1}^{n}(y_{i} - y_{avg})^{2}}}
 
-* **snr_cont** This parameter is the signal to noise ratio of the emission line region using the `IRAF splot definition <https://github.com/joequant/iraf/blob/master/noao/onedspec/splot/avgsnr.x>`_
+* **snr_cont** (``.snr_cont``, ``float``): This variable is the signal to noise ratio of the emission line region using the `IRAF splot definition <https://github.com/joequant/iraf/blob/master/noao/onedspec/splot/avgsnr.x>`_
   as in the equation above.
 
-* **v_med** (``.v_med``, ``float``)
+* **v_med** (``.v_med``, ``float``): This variable is the median velocity of the emission line. The emission line wavelength
+  is converted to velocity units using the formula:
 
-* **v_50** (``.v_50``, ``float``)
+  .. math::
 
-* **v_5** (``.v_5``, ``float``)
+        V (Km/s) = c \cdot \frac{\lambda_{obs}}{\lambda_{peak}} - 1
 
-* **v_10** (``.v_10``, ``float``)
+  where :math:`c = 299792.458 km/s` is the speed of light, :math:`\lambda_{obs}` is the wavelength mask array selection
+  between :math:`w3` and :math:`w4` points and :math:`\lambda_{peak}` is the ``.peak_wave`` of the emission line.
 
-* **v_90** (``.v_90``, ``float``)
+* **v_50** (``.v_50``, ``float``): This variable is velocity corresponding to the 50th percentile of the emission line
+  flux in :math:`km/s`. A cumulative sum is performed in the line flux array.  Afterwards, this array is multiplied by the
+  ``.pixelWidth`` and divided by the ``.intg_flux``. The resulting vector quantifies the flux percentage corresponding to
+  each pixel in the :math:`w3` and :math:`w4` mask selection. Afterwards, this vector is interpolated with respect to the
+  velocity array (whose calculation is provided at ``.v_med``).  in order to compute velocity at the 50th flux percentile.
 
-* **v_95** (``.v_95``, ``float``)
+    .. attention::
+       This operation is only available for lines whose width is above 15 pixels.
+
+* **v_5** (``.v_5``, ``float``): This variable is the velocity corresponding to the 5th percentile of the emission line
+  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+
+* **v_10** (``.v_10``, ``float``): This variable is the velocity corresponding to the 10th percentile of the emission line
+  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+
+* **v_90** (``.v_90``, ``float``): This variable is the velocity corresponding to the 90th percentile of the emission line
+  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+
+* **v_95** (``.v_95``, ``float``): This variable is the velocity corresponding to the 95th percentile of the emission line
+  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
 
 
 Gaussian properties
 +++++++++++++++++++
 
-* **amp** (``.amp``, ``float`` or ``np.array()``)
-* **amp_err** (``.amp_err``, ``float`` or ``np.array()``)
+These attributes are calculated by the ``lime.Spectrum.gauss_lmfit`` function. These calculations assume a Gaussian or
+multi-Gaussian profile:
 
-* **center** (``.center``, ``float`` or ``np.array()``)
-* **center_err** (``.center_err``, ``float`` or ``np.array()``)
+  .. math::
 
-* **sigma** (``.sigma``, ``float`` or ``np.array()``)
-* **sigma_err** (``.sigma_err``, ``float`` or ``np.array()``)
+        F_{\lambda}=\sum_{i}A_{i}e^{-\left(\frac{\lambda-\mu_{i}}{2\sigma_{i}}\right)^{2}}
 
-* **v_r** (``.v_r``, ``float`` or ``np.array()``)
-* **v_r_err** (``.v_r_err``, ``float`` or ``np.array()``)
+where :math:`F_{\lambda}` is the combined flux profile of the emission line for the line wavelength range :math:`\lambda`.
+:math:`A_{i}` is the height of a gaussian component with respect to the line continuum (``.cont``), :math:`\mu_{i}` is the center
+of the of gaussian component and :math:`\sigma_{i}` is the standard deviation. The first parameters has the input
+flux units (``lime.Spectrum.flux``), while the later two have the input wavelength units (``lime.Spectrum.wave``).
 
-* **sigma_vel** (``.sigma_vel``, ``float`` or ``np.array()``)
-* **sigma_vel_err** (``sigma_vel_err``, ``float`` or ``np.array()``)
+The output uncertainty in these parameters corresponds to the `1σ error <https://lmfit.github.io/lmfit-py/fitting.html#uncertainties-in-variable-parameters-and-their-correlations>`_:
+This is the standard error which increases the magnitude of the :math:`\chi^2` calculated by the least squares algorithm.
 
-* **FWHM_g** (``.FWHM_g``, ``float`` or ``np.array()``)
+.. note::
+   The Gaussian built-in model in `LmFit <https://lmfit.github.io/lmfit-py/builtin_models.html#lmfit.models.GaussianModel>`_
+   defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. LiMe defines its own model where the
+   amplitude is defined as the height of the line with respect to the adjacent continuum.
 
-* **gauss_flux** (``.gauss_flux``, ``float`` or ``np.array()``)
+* **amp** (``.amp``, ``np.array()``): This array contains the amplitude of the Gaussian components. The parameter units
+  are those of the input spectrum flux (``lime.Spectrum.flux``).
+* **amp_err** (``.amp_err``, ``np.array()``): This array contains the uncertainty on the Gaussian profiles amplitude.
+  The parameter units are those of the input flux (``lime.Spectrum.flux``).
 
-* **gauss_err** (``.gauss_err``, ``float`` or ``np.array()``)
+* **center** (``.center``, ``np.array()``): This array contains the Gaussian components central wavelength. The parameter units
+  are those of the input spectrum wavelength (``lime.Spectrum.wave``).
+* **center_err** (``.center_err``, ``np.array()``): This array contains the uncertainty on the Gaussian profiles central
+  wavelength.
+
+* **sigma** (``.sigma``, ``np.array()``): This array contains the Gaussian components standard deviation. The parameter units
+  are those of the input spectrum wavelength.
+* **sigma_err** (``.sigma_err``, ``np.array()``): This array contains the uncertainty on the Gaussian profiles standard deviation.
+
+* **v_r** (``.v_r``, ``np.array()``): This array contains the Gaussian components radial velocity in :math:`km/s`. This
+  parameter is calculated using the expression:
+
+  .. math::
+
+        v_{r} = c \cdot \frac{\lambda_{center}}{\lambda_{ref}} - 1
+
+  where c :math:`c = 299792.458 km/s` is the speed of light, :math:`\lambda_{center}` is the Gaussian profile central wavelength
+  (``.center``) and :math:`\lambda_{ref}` is the reference wavelength. In non-blended lines :math:`\lambda_{ref}` is the
+  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the theoretical wavelength (``.wave``) of the
+  emission line transition (redshifted by the value provided by in the ``lime.Spectrum`` definition).
+
+* **v_r_err** (``.v_r_err``, ``np.array()``): This array contains the uncertainty of the Gaussian components radial velocity
+  in :math:`km/s`.
+
+* **sigma_vel** (``.sigma_vel``, ``np.array()``): This array contains the Gaussian components standard deviation in :math:`km/s`.
+  This parameter is calculated using the expression:
+
+  .. math::
+
+        \sigma_{v} (km/s) = c \cdot \frac{\sigma}{\lambda_{ref}}
+
+  where c :math:`c = 299792.458 km/s` is the speed of light, :math:`\sigma` is the Gaussian profile standard deviation
+  (``.sigma``) and :math:`\lambda_{ref}` is the reference wavelength. In non-blended lines :math:`\lambda_{ref}` is the
+  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the theoretical wavelength
+  (``.wave``) of the emission line transition (redshifted by the value provided by in the ``lime.Spectrum`` definition)
+
+* **sigma_vel_err** (``sigma_vel_err``, ``float`` or ``np.array()``) This array contains the uncertainty of the Gaussian
+  components standard deviation in :math:`km/s`.
+
+* **FWHM_g** (``.FWHM_g``, ``np.array()``): This array contains the Full Width Half Maximum of the Gaussian components in
+  in :math:`km/s`. This parameter is calculated as:
+
+  .. math::
+
+        FWHM_{g}=2\sqrt{2\,ln2}\sigma_{v}
+
+  where :math:`\sigma` is the velocity dispersion of the Gaussian components (``.sigma_vel``).
+
+* **gauss_flux** (``.gauss_flux``, ``np.array()``): This array contains the flux of the Gaussian components. It is calculated
+  using the expression:
+
+  .. math::
+        F_{i, g} = A_i \cdot 2.50663 \cdot \sigma_i
+
+  where :math:`A_i` is Gaussian component amplitude (``.amp``) and :math:`\sigma_{i}` gaussian component standard deviation (``.sigma``)
+
+* **gauss_err** (``.gauss_err``, ``np.array()``): This array contains the uncertainty of the Gaussian components flux.
 
 
-Measurement diagnostics
-+++++++++++++++++++++++
+Diagnostics
++++++++++++
 
-* **chisqr** (``.chisqr``, ``float``)
+These section contains the parameters which provide a qualitative or quantitative diagnostic on the line measurement.
 
-* **redchi** (``.redchi``, ``float``)
+* **chisqr** (``.chisqr``, ``float``): This variable contains the :math:`\chi^2` diagnostic `calculated by LmFit <https://lmfit.github.io/lmfit-py/fitting.html#goodness-of-fit-statistics>`_
 
-* **aic** (``.aic``, ``float``)
+* **redchi** (``.redchi``, ``float``): This variable contains the reduced :math:`\chi^2` diagnostic
+  `calculated by LmFit <https://lmfit.github.io/lmfit-py/fitting.html#goodness-of-fit-statistics>`_:
 
-* **bic** (``.bic``, ``float``)
+  .. math::
+        \chi_{\nu}^2 = \frac{\chi^2}{N-N_varys}
 
-* **observation** (``.observation``, ``str``)
+  where the :math:`\chi^2` diagnostic is divided by the number of data points, :math:`N`, minus the number of dimensions
+  :math:`N_{varys}`
 
-* **comments** (``.comments``, ``str``)
+* **aic** (``.aic``, ``float``): This variable contains the `Akaike information criteria <https://en.wikipedia.org/wiki/Akaike_information_criterion>`_
+  calculated by `LmFit <https://lmfit.github.io/lmfit-py/fitting.html#goodness-of-fit-statistics>`_
+
+* **bic** (``.bic``, ``float``): This variable contains the `Bayesian information criteria <https://en.wikipedia.org/wiki/Bayesian_information_criterion>`_
+  calculated by  `LmFit <https://lmfit.github.io/lmfit-py/fitting.html#goodness-of-fit-statistics>`_
+
+* **observation** (``.observation``, ``str``): This variable contains errors or warnings generated during the fitting of the line (not implemented).
+
+* **comments** (``.comments``, ``str``): This variable is left empty for the user to store comments.

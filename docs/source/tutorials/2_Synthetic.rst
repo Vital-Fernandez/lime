@@ -1,4 +1,4 @@
-Testing on a synthetic spectrum
+T on a synthetic spectrum
 ===============================
 
 
