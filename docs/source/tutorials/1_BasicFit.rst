@@ -5,6 +5,8 @@ In this example we perform single line fits on the emission spectrum of the Gree
 with the GTC (Gran Telescopio de Canarias). You can download this spectrum from the `github examples folder <https://github.com/Vital-Fernandez/lime/tree/master/examples>`_.
 You can read more about this data set in `Fernandez et al (2021) <https://arxiv.org/abs/2110.07741>`_.
 
+This tutorial can also be found as a python script in the `github 1st example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example1_simple_fit.py>`_.
+
 Loading the spectrum
 ------------------------
 
@@ -44,7 +46,7 @@ The spectrum wavelength can be reconstructed from the header:
     w_max = w_min + dw * pixels
     wave = np.linspace(w_min, w_max, pixels, endpoint=False)
 
-Most of LiMe functions are performed by the Spectrum class: This object stores your spectrum and performs the line
+Most of :math:`\textsc{LiMe}` functions are performed by the Spectrum class: This object stores your spectrum and performs the line
 fitting functions. Its obligatory inputs are the spectrum wavelength and flux. However, in order to identify and
 labeling lines a redshift value is necessary. Finally, many line fitting functions will fail in non-normalized CGS units
 commonly used in spectra. Consequently, it is recommended to introduce a normalization value. In the case of GP121903:
@@ -123,12 +125,15 @@ The dictionary above has three elements:
 * Second: The line labelled as 'N2_6548A' has an amplitude value fixed by the amplitude fitted in the line "N2_6584A"
 * Three: The line labelled as 'N2_6548A' has its kinematics (both radial and dispersion velocity) imported from those fit in the line N2_6548A.
 
+Now we include this information in the fitting:
+
 .. code-block:: python
 
+    gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
     gp_spec.display_results(show_plot=True)
 
 .. image:: ../_static/1_secondFitAttemp.png
 
-This time the fit better represents the observed lines profile
+This time the fitted profile better represents the observation.
 
 

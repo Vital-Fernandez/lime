@@ -4,7 +4,7 @@
 Measurements description
 ========================
 
-This section describes the parameters measured by LiMe. Unless otherwise noted, these parameters have the same notation
+This section describes the parameters measured by :math:`\textsc{LiMe}`. Unless otherwise noted, these parameters have the same notation
 in the output measurements log as the attributes in the programing objects generated with the ``lime.Spectrum`` class.
 These parameter references are also the column names of the ``pandas.DataFrame`` lines log (``lime.Spectrum.linesDF``).
 
@@ -14,7 +14,7 @@ Inputs
 This section includes 3 parameters which are actually provided by the user inputs. However, they are also included in
 the output log for consistency.
 
-* **lineLabel** (``.lineLabel``, ``str``): This attribute provides the LiMe label for an emission line flux. This label has the
+* **lineLabel** (``.lineLabel``, ``str``): This attribute provides the :math:`\textsc{LiMe}` label for an emission line. This label has the
   following format:
 
   .. image:: ../_static/line_notation.png
@@ -82,10 +82,10 @@ assumption on the emission line profile shape.
 
 * **peak_flux** (``.peak_flux``, ``float``): This variable is the flux of the highest pixel value in the line region.
 
-* **m_cont**  (``.m_cont``, ``float``): Using the line adjacent continua regions LiMe fits a linear continuum.
+* **m_cont**  (``.m_cont``, ``float``): Using the line adjacent continua regions :math:`\textsc{LiMe}` fits a linear continuum.
   This variable represents is the gradient. :code:`y = m*x + n`
 
-* **n_cont** (``.n_cont``, ``float``): Using the line adjacent continua regions LiMe fits a linear continuum.
+* **n_cont** (``.n_cont``, ``float``): Using the line adjacent continua regions :math:`\textsc{LiMe}` fits a linear continuum.
   This variable represents is the interception. :code:`y = m*x + n`
 
 * **cont** (``.cont``, ``float``): This variable is the flux of the linear continuum at the ``.peak_wave``.
@@ -112,7 +112,7 @@ assumption on the emission line profile shape.
   value is derived from the standard deviation of the Monte Carlo algorithm steps described above.
 
 .. attention::
-    Blended lines have the same ``.intg_flux`` and ``.intg_err`` values.
+    Blended components have the same ``.intg_flux`` and ``.intg_err`` values.
 
 * **eqw** (``.eqw``, ``float`` or ``np.array()``): This parameter is the equivalent of the emission line. It is calculated
   using the expression below:
@@ -207,7 +207,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
 .. note::
    The Gaussian built-in model in `LmFit <https://lmfit.github.io/lmfit-py/builtin_models.html#lmfit.models.GaussianModel>`__
-   defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. LiMe defines its own model where the
+   defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. :math:`\textsc{LiMe}` defines its own model where the
    amplitude is defined as the height of the line with respect to the adjacent continuum.
 
 * **amp** (``.amp``, ``np.array()``): This array contains the amplitude of the Gaussian components. The parameter units
@@ -231,7 +231,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
         v_{r} = c \cdot \frac{\lambda_{center}}{\lambda_{ref}} - 1
 
-  where c :math:`c = 299792.458 km/s` is the speed of light, :math:`\lambda_{center}` is the Gaussian profile central wavelength
+  where :math:`c = 299792.458 km/s` is the speed of light, :math:`\lambda_{center}` is the Gaussian profile central wavelength
   (``.center``) and :math:`\lambda_{ref}` is the reference wavelength. In non-blended lines :math:`\lambda_{ref}` is the
   observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the theoretical wavelength (``.wave``) of the
   emission line transition (redshifted by the value provided by in the ``lime.Spectrum`` definition).

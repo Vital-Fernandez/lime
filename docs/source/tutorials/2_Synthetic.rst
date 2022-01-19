@@ -1,8 +1,10 @@
-2) Fitting a synthetic spectrum
-===============================
+2) Tests on a synthetic spectrum
+================================
 
 In this tutorial we perform some fits on a synthetic spectrum. This is a good exercise to test the accuracy and precision
-of LiMe.
+of :math:`\textsc{LiMe}`.
+
+This tutorial can also be found as a python script in the `github 2nd example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example2_synthetic_spectrum_fit.py>`_.
 
 Let's start by defining the units, wavelength range and some lines for the synthetic spectrum:
 
@@ -76,8 +78,8 @@ We can plot the spectrum using the ``.plot_spectrum()`` attribute:
 
 .. image:: ../_static/2_synthSpec.png
 
-Before fitting the lines, however, LiMe needs you to provide the line location. LiMe masks consist in a 6 wavelengths
-array in increasing order:
+Before fitting the lines, however, :math:`\textsc{LiMe}` needs you to provide the line location. :math:`\textsc{LiMe}`
+masks consist in a 6 wavelengths array in increasing order:
 
 .. image:: ../_static/mask_selection.jpg
    :align: center
@@ -85,7 +87,7 @@ array in increasing order:
 These wavelengths must be in the rest frame. The :math:`w1-w2` and :math:`w5-w6` wavelength-pairs constrain the adjacent
 continua on the blue and red side respectively, while the :math:`w3-w4` wavelengths constrain the line location.
 
-In LiMe, the masks and line logs are stored by default as a `pandas dataframe <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html>`_
+In :math:`\textsc{LiMe}`, the masks and line logs are stored by default as a `pandas dataframe <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html>`_
 This object can be visualized a table with a certain number of columns and indices (rows). Let's create a pandas dataframe
 with the emission line masks:
 
@@ -288,13 +290,13 @@ vertical lines include the median velocity alongside velocity percentiles to dia
 .. image:: ../_static/2_Halpha_velocity.png
 
 At this point we can compare the Gaussian parameters measured against the true values. There are two ways to access the
-LiMe measurements after a fitting. The first one is directly from the inherited attributes of the ``lime.io.EmissionFitting``
+:math:`\textsc{LiMe}` measurements after a fitting. The first one is directly from the inherited attributes of the ``lime.io.EmissionFitting``
 class in the ``lime.Spectrum`` objects.
 
 .. note::
 
     The measurements in these attributes are normalized by the input ``.lime.Spectrum.normFlux``. Moreover, the measurements
-    in these attributes are just those from the last fitting. For security's sake, LiMe clears all the parameter values
+    in these attributes are just those from the last fitting. For security's sake, :math:`\textsc{LiMe}` clears all the parameter values
     prior to a measurement using the ``.lime.Spectrum.clear_fit()`` function.
 
 Hence, the comparison between the true values and those measured is:
@@ -332,5 +334,5 @@ Hence, the comparison between the true values and those measured is:
     True sigma: 5.615, sigma attribute 5.614700138194948, sigma dataframe 5.614700138194948
 
 At this point the reader is encouraged to check the :ref:`measurements documentation <measurements_page>`, where more
-details are provided on the measurements reported by LiMe and how they are stored.
+details are provided on the measurements reported by :math:`\textsc{LiMe}` and how they are stored.
 

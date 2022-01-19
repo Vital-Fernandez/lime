@@ -25,11 +25,12 @@ gp_spec.plot_spectrum()
 
 # Find lines
 peaks_table, matched_masks_DF = gp_spec.match_line_mask(maskDF, sample_cfg['sample_data']['noiseRegion_array'])
-gp_spec.plot_spectrum(obsLinesTable=peaks_table, matchedLinesDF=matched_masks_DF, specLabel=f'Emission line detection',
+gp_spec.plot_spectrum(obsLinesTable=peaks_table, matchedLinesDF=matched_masks_DF, specLabel=f'GP121903 spectrum',
                       frame=plots_frame)
 
 # Correct line region
 corrected_mask_file = './sample_data/gp121903_BR_mask_corrected'
+lime.save_line_log(matched_masks_DF, 'corrected_mask_file', 'txt')
 
 # Object line fitting configuration
 fit_cfg = sample_cfg['gp121903_line_fitting']

@@ -101,7 +101,7 @@ class LiMePlots:
         if obsLinesTable is not None:
             idcs_emission = obsLinesTable['line_type'] == 'emission'
             idcs_linePeaks = np.array(obsLinesTable[idcs_emission]['line_center_index'])
-            ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label='Detected lines', facecolors='none',
+            ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label='Emission peaks', facecolors='none',
                        edgecolors='tab:purple')
 
         if matchedLinesDF is not None:
@@ -118,16 +118,19 @@ class LiMePlots:
             w4 = matchedLinesDF.loc[idcs_foundLines].w4.values * w_cor
             observation = matchedLinesDF.loc[idcs_foundLines].observation.values
 
+            first_instance = True
             for i in np.arange(lineLatexLabel.size):
                 if observation[i] == 'detected':
                     color_area = 'tab:red' if observation[i] == 'not identified' else 'tab:green'
-                    ax.axvspan(w3[i], w4[i], alpha=0.25, color=color_area)
+                    ax.axvspan(w3[i], w4[i], alpha=0.25, color=color_area, label='Matched line' if first_instance else '_')
                     ax.text(lineWave[i] * w_cor, 0, lineLatexLabel[i], rotation=270)
+                    first_instance = False
 
         if noise_region is not None:
             ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
 
         if profile_fittings:
+            first_instance = True
             for lineLabel in self.linesDF.index:
 
                 w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
@@ -151,8 +154,9 @@ class LiMePlots:
 
                 line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
                 ax.plot(wave_range, cont/self.normFlux, ':', color='tab:purple', linewidth=0.5)
-                ax.plot(wave_range, (line_profile+cont)/self.normFlux, color='tab:red', linewidth=0.5)
+                ax.plot(wave_range, (line_profile+cont)/self.normFlux, color='tab:red', linewidth=0.5, label='Gaussian component' if first_instance else '_')
                 # ax.scatter(wave_peak, flux_peak, color='tab:blue')
+                first_instance = False
 
         if log_scale:
             ax.set_yscale('log')
@@ -249,11 +253,10 @@ class LiMePlots:
 
         # Axes formatting
         if self.normFlux != 1.0:
-            defaultConf['ylabel'] = defaultConf['ylabel'] + " ${{{0:.2g}}}$".format(self.normFlux)
+            defaultConf['ylabel'] = defaultConf['ylabel'] + " $/{{{0:.2g}}}$".format(self.normFlux)
 
         if log_scale:
             ax[0].set_yscale('log')
-
 
         # Plot the Gaussian fit if available
         if lmfit_output is not None:
