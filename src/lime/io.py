@@ -288,7 +288,7 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
 # Function to import SpecSyzer configuration file #TODO repeated
 def load_cfg(filepath, objList_check=False):
 
-    '''
+    """
 
     This function reads a configuration file with `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_.
 
@@ -303,7 +303,7 @@ def load_cfg(filepath, objList_check=False):
     :return: Dictionary with the configuration data. Each section is itself a dictionary with the options as keys
     :rtype: dict
 
-    '''
+    """
 
     # Open the file
     if Path(filepath).is_file():

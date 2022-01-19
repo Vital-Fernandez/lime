@@ -8,7 +8,10 @@ API
 Inputs and outputs
 ------------------
 
-.. autofunction:: lime.io.spatial_mask_generator
+.. autofunction:: lime.io.load_cfg
+
+.. autofunction:: lime.io.load_lines_log
+
 
 Core
 ----
@@ -16,9 +19,9 @@ Core
 .. autofunction:: lime.treatment.Spectrum
 
 
-Tools
------
-
 Convenience functions
 ---------------------
 
+.. autofunction:: lime.tools.label_decomposition
+
+.. autofunction:: lime.io.spatial_mask_generator

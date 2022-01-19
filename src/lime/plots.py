@@ -249,7 +249,7 @@ class LiMePlots:
 
         # Axes formatting
         if self.normFlux != 1.0:
-            defaultConf['ylabel'] = defaultConf['ylabel'] + " $\\times{{{0:.2g}}}$".format(self.normFlux)
+            defaultConf['ylabel'] = defaultConf['ylabel'] + " ${{{0:.2g}}}$".format(self.normFlux)
 
         if log_scale:
             ax[0].set_yscale('log')
