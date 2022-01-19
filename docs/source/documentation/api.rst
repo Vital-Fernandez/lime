@@ -13,13 +13,11 @@ Inputs and outputs
 Core
 ----
 
-.. autofunction:: lime.Spectrum
+.. autofunction:: lime.treatment.Spectrum
 
 
 Tools
 -----
-
-.. autofunction:: lime.label_decomposition
 
 Convenience functions
 ---------------------

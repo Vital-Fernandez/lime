@@ -26,16 +26,6 @@ def int_to_roman(num):
 def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_dict={}, scalar_output=False,
                         user_format={}):
 
-    """
-
-    :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
-    :param recomb_atom: An array with the ions producing photons from a recombination process.
-    :param blended_dict: Dictionary with the components of the blended lines.
-    :param scalar_output: Boolean for an scalar results in the case of a single input line input
-    :param user_format: Dictionary with the user notation for the lines
-    :return: 3 scalars or arrays transition wavelength, ion and scientific transition notation in latex format
-    """
-
     # Confirm input array has one dimension
     # TODO for blended lines it may be better to return all the blended components individually
     input_lines = np.array(input_lines, ndmin=1)
