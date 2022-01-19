@@ -1,5 +1,5 @@
-Simple fit
-==========
+1) Simple fit
+=============
 
 In this example we perform single line fits on the emission spectrum of the Green Pea galaxy GP121903 which was observed
 with the GTC (Gran Telescopio de Canarias). You can download this spectrum from the `github examples folder <https://github.com/Vital-Fernandez/lime/tree/master/examples>`_.

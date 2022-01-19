@@ -1,3 +1,5 @@
+.. _measurements_page:
+
 ========================
 Measurements description
 ========================
@@ -283,7 +285,7 @@ These section contains the parameters which provide a qualitative or quantitativ
   `calculated by LmFit <https://lmfit.github.io/lmfit-py/fitting.html#goodness-of-fit-statistics>`_:
 
   .. math::
-        \chi_{\nu}^2 = \frac{\chi^2}{N-N_varys}
+        \chi_{\nu}^2 = \frac{\chi^2}{N-N_{varys}}
 
   where the :math:`\chi^2` diagnostic is divided by the number of data points, :math:`N`, minus the number of dimensions
   :math:`N_{varys}`

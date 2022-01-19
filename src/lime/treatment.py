@@ -24,6 +24,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     :ivar wave: Wavelength array
     :ivar flux: Flux array
+
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
@@ -229,7 +230,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 if self.lineLabel is not None:
                     label = self.lineLabel
                     output_ref = (f'\nLine label: {label}\n'
-                                  f'- Line regions: {self.lineWaves}\n'
+                                  f'- Line mask: {self.lineWaves}\n'
                                   f'- Normalization flux: {self.normFlux}\n'
                                   f'- Redshift: {self.redshift}\n'
                                   f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'

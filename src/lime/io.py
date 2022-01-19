@@ -288,6 +288,23 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
 # Function to import SpecSyzer configuration file #TODO repeated
 def load_cfg(filepath, objList_check=False):
 
+    '''
+
+    This function reads a configuration file with `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_.
+
+    :param filepath: A address of the configuration file. The function will exit is the
+                     file is not found
+    :type filepath: str
+    :type filepath: Path
+
+    :param objList_check: If true this function will generate a line fitting entry for every object.
+    :type filepath: bool
+
+    :return: Dictionary with the configuration data. Each section is itself a dictionary with the options as keys
+    :rtype: dict
+
+    '''
+
     # Open the file
     if Path(filepath).is_file():
         cfg = importConfigFile(filepath)
@@ -387,14 +404,26 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
 
 
 def load_lines_log(lineslog_address, ext=None):
+
     """
-    This function attemps several approaches to import a lines log from a sheet or text file lines as a pandas
-    dataframe
-    :param lineslog_address: String with the location of the input lines log file
-    :return lineslogDF: Dataframe with line labels as index and default column headers (wavelength, w1 to w6)
+    This function reads a lines log file as a pandas dataframe. In the case of .fits or excel files the user must specify
+    the extension.
+
+    :param lineslog_address: Address of the configuration file. The function will stop if the file is not found
+    :type lineslog_address: str
+    :type lineslog_address: Path
+
+    :param ext: String with the extension name to read
+    :type ext: str
+
+    :return: Dataframe with line labels as index.
+    :rtype: pandas.DataFrame
+
     """
 
     # Fits file:
+    assert Path(lineslog_address).is_file(), f'- Error: lines log not found at {lineslog_address}'
+
     if str(lineslog_address).endswith('.fits'):
         lineslogDF = Table.read(lineslog_address, ext, character_as_bytes=False).to_pandas()
         lineslogDF.set_index('index', inplace=True)
@@ -407,7 +436,7 @@ def load_lines_log(lineslog_address, ext=None):
 
             # Excel file
             try:
-                lineslogDF = pd.read_excel(lineslog_address, sheet_name=0, header=0, index_col=0)
+                lineslogDF = pd.read_excel(lineslog_address, sheet_name=ext, header=0, index_col=0)
             except ValueError:
                 print(f'- ERROR: Could not open lines log at: {lineslog_address}')
 
