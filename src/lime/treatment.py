@@ -19,15 +19,22 @@ from matplotlib.widgets import SpanSelector
 
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
-    """
-    This class provides a set of tools to measure emission lines from ionized gas to study its chemistry and kinematics
-
-    :ivar wave: Wavelength array
-    :ivar flux: Flux array
-
-    """
-
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
+
+        """
+
+        This class provides a set of tools to measure emission lines from ionized gas to study its chemistry and kinematics
+        The user provides an spectrum object in the observed frame alongside the object redshift and normalization flux
+
+        :param input_wave: Wavelength array
+        :param input_flux: Flux array
+        :param input_err: Standard deviation array
+        :param redshift: Object redshift
+        :param norm_flux: Flux normalization
+        :param crop_waves: Wavelength limits for the analysis
+
+
+        """
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -56,9 +63,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             self.wave_rest = input_wave / (1 + self.redshift)
             if (input_wave is not None) and (input_flux is not None):
                 self.wave = input_wave
-                self.flux = input_flux # * (1 + self.redshift)
+                self.flux = input_flux  # * (1 + self.redshift)
                 if input_err is not None:
-                    self.errFlux = input_err # * (1 + self.redshift)
+                    self.errFlux = input_err  # * (1 + self.redshift)
 
         # Normalize the spectrum
         if input_flux is not None:
@@ -117,14 +124,16 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             idcsLine = idcsEmis + idcsCont
             x_array = self.wave[idcsLine]
             y_array = self.flux[idcsLine]
-            w_array = 1.0/self.errFlux[idcsLine] if self.errFlux is not None else np.full(x_array.size, 1.0 / self.std_cont)
+            w_array = 1.0 / self.errFlux[idcsLine] if self.errFlux is not None else np.full(x_array.size,
+                                                                                            1.0 / self.std_cont)
             self.gauss_lmfit(self.lineLabel, x_array, y_array, w_array, fit_conf, self.linesDF, z_obj=self.redshift)
 
             # Safe the results to log DF
             self.results_to_database(self.lineLabel, self.linesDF, fit_conf)
 
         else:
-            print(f'- {self.lineLabel} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
+            print(
+                f'- {self.lineLabel} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
             print(f' -- {self.lineWaves}')
 
         return
@@ -157,7 +166,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                         # Warning overwritten existing configuration
                         if param_label_child in user_conf:
-                            print(f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
+                            print(
+                                f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                         # Case where parent and child are in blended group
                         if parent_label in childs_list:
@@ -293,7 +303,6 @@ class MaskInspector(Spectrum):
     def __init__(self, lines_log_address, lines_DF, input_wave=None, input_flux=None, input_err=None, redshift=0,
                  norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
 
-
         # Output file address
         self.linesLogAddress = Path(lines_log_address)
 
@@ -321,7 +330,7 @@ class MaskInspector(Spectrum):
         n_lines = len(self.linesDF.index)
         if n_lines > ncols:
             if nrows is None:
-                nrows = int(np.ceil(n_lines/ncols))
+                nrows = int(np.ceil(n_lines / ncols))
         else:
             ncols = n_lines
             nrows = 1
@@ -338,7 +347,7 @@ class MaskInspector(Spectrum):
         self.axConf = {}
 
         # Plot function
-        self.plot_line_mask_selection(logscale='auto', grid_size = nrows*ncols)
+        self.plot_line_mask_selection(logscale='auto', grid_size=nrows * ncols)
         plt.gca().axes.yaxis.set_ticklabels([])
 
         try:
@@ -395,7 +404,8 @@ class MaskInspector(Spectrum):
             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
 
             # Plot region
-            idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (lineWave - limitPeak * 2 <= self.lineWaves[3])
+            idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (
+                        lineWave - limitPeak * 2 <= self.lineWaves[3])
             waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
 
             # Plot the line region
@@ -435,8 +445,10 @@ class MaskInspector(Spectrum):
 
             # Fill the user selections
             ax.fill_between(waveCentral, 0, fluxCentral, step="pre", alpha=0.4)
-            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor='tab:orange', step="pre", alpha=0.2)
-            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor='tab:orange', step="pre", alpha=0.2)
+            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor='tab:orange',
+                            step="pre", alpha=0.2)
+            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor='tab:orange',
+                            step="pre", alpha=0.2)
 
         # Plot format
         ax.yaxis.set_major_locator(plt.NullLocator())
@@ -520,7 +532,6 @@ class MaskInspector(Spectrum):
 
             # Proceed to re-measurement if possible:
             if non_nans == 6:
-
                 # TODO add option to perform the measurement a new
                 # self.clear_fit()
                 # self.fit_from_wavelengths(self.lineLabel, self.lineWaves, user_cfg={})
@@ -584,7 +595,7 @@ class MaskInspector(Spectrum):
             file_DF = self.linesDF
 
         # Save to a file
-        stem_adress = self.linesLogAddress.parent/self.linesLogAddress.resolve().stem
+        stem_adress = self.linesLogAddress.parent / self.linesLogAddress.resolve().stem
         save_line_log(file_DF, stem_adress, file_type=self.linesLogAddress.suffix[1:])
 
         return
@@ -592,7 +603,8 @@ class MaskInspector(Spectrum):
 
 class CubeFitsInspector(Spectrum):
 
-    def __init__(self, input_wave, input_cube_flux, image_bg, image_fg=None, contour_levels_fg=None, min_bg_percentil=60,
+    def __init__(self, input_wave, input_cube_flux, image_bg, image_fg=None, contour_levels_fg=None,
+                 min_bg_percentil=60,
                  redshift=0, norm_flux=1, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={}):
 
         # Assign attributes to the parent class
@@ -717,7 +729,8 @@ class CubeFitsInspector(Spectrum):
                     m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
                     amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
                                          self.linesDF.loc[lineLabel, 'sigma']
-                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[lineLabel, 'peak_flux']
+                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
+                        lineLabel, 'peak_flux']
                     blended_label = self.linesDF.loc[lineLabel, 'blended_label']
 
                     # Rest frame
@@ -748,11 +761,10 @@ class CubeFitsInspector(Spectrum):
                         cmap = cm.get_cmap()
                         list_comps = blended_label.split('-')
                         idx_line = list_comps.index(lineLabel)
-                        color_curve = cmap(idx_line/len(list_comps))
+                        color_curve = cmap(idx_line / len(list_comps))
 
                     self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color=color_curve,
                                   linestyle=style_curve, linewidth=width_curve)
-
 
                 # TODO we need a method just for this
                 idcs_blended = self.linesDF['blended_label'] != 'None'
@@ -792,8 +804,6 @@ class CubeFitsInspector(Spectrum):
 
                     self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red',
                                   linestyle='-', linewidth=0.5)
-
-
 
         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
 
@@ -847,4 +857,3 @@ class CubeFitsInspector(Spectrum):
         self.ax0.set_ylim(self.axlim_dict['image_ylim'])
         self.ax1.set_xlim(self.axlim_dict['spec_xlim'])
         self.ax1.set_ylim(self.axlim_dict['spec_ylim'])
-

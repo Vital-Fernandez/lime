@@ -206,7 +206,7 @@ The output uncertainty in these parameters corresponds to the `1σ error <https:
 This is the standard error which increases the magnitude of the :math:`\chi^2` calculated by the least squares algorithm.
 
 .. note::
-   The Gaussian built-in model in `LmFit <https://lmfit.github.io/lmfit-py/builtin_models.html#lmfit.models.GaussianModel>`_
+   The Gaussian built-in model in `LmFit <https://lmfit.github.io/lmfit-py/builtin_models.html#lmfit.models.GaussianModel>`__
    defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. LiMe defines its own model where the
    amplitude is defined as the height of the line with respect to the adjacent continuum.
 

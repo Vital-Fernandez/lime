@@ -13,6 +13,8 @@ Inputs and outputs
 Core
 ----
 
+.. autofunction:: lime.Spectrum
+
 
 Tools
 -----
