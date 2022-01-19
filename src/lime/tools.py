@@ -25,46 +25,18 @@ def int_to_roman(num):
 
 def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_dict={}, scalar_output=False,
                         user_format={}):
-
     """
-    This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
-    For example:
 
     :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
-    :type input_lines: str
-    :type input_lines: list
-
-    :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
-                        assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
-                        excited state
-    :type recomb_atom: list, optional
-
-    :param blended_dict: dictionary with the components of the blended lines. For blended lines, the function returns
-                         the ion and wavelength from the first component from the provided list while the scientific
-                         notation appears as the sum of the specified components
-    :type blended_dict: dict, optional
-
-    :param scalar_output: Boolean for an scalar results in case of a single input line input
-    :type scalar_output: bool, optional
-
-    :param user_format: Dictionary with the user latex format for the latex labels, overwritting the default notation.
-    :type user_format: dict
-
-    :return: 3 arrays (or scalars) with the input line(s) transition wavelength, ion and scientific notation in latex
-    :rtype: np.array
-
-    :Example:
-    >>> import lime
-    >>> lime.label_decomposition('O3_5007A', scalar_output=True)
-    O3, 5007.0, '$5007\\AA\\,[OIII]$'
-    >>> lime.label_decomposition('H1_6563A_b', blended_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
-    ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
-
+    :param recomb_atom: An array with the ions producing photons from a recombination process.
+    :param blended_dict: Dictionary with the components of the blended lines.
+    :param scalar_output: Boolean for an scalar results in the case of a single input line input
+    :param user_format: Dictionary with the user notation for the lines
+    :return: 3 scalars or arrays transition wavelength, ion and scientific transition notation in latex format
     """
 
-    # TODO for blended lines it may be better to return all the blended components individually
-
     # Confirm input array has one dimension
+    # TODO for blended lines it may be better to return all the blended components individually
     input_lines = np.array(input_lines, ndmin=1)
 
     # Containers for input data
@@ -171,7 +143,12 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2):
 
 
 def kinematic_component_labelling(line_latex_label, comp_ref):
+    """
 
+    :param line_latex_label:
+    :param comp_ref:
+    :return:
+    """
     if len(comp_ref) != 2:
         print(f'-- Warning: Components label for {line_latex_label} is {comp_ref}. Code only prepare for a 2 character description (ex. n1, w2...)')
 
@@ -202,7 +179,17 @@ class LineFinder:
 
     def match_line_mask(self, mask_df, noise_region, line_threshold=3, emis_abs_thresholds=((4, 4), (1.5, 1.5)),
                         cont_degree_list=(3, 7), width_tol=5, width_mode='auto'):
+        """
 
+        :param mask_df: pandas DataFrame with the line masks.
+        :param noise_region: This region describes the
+        :param line_threshold:
+        :param emis_abs_thresholds:
+        :param cont_degree_list:
+        :param width_tol:
+        :param width_mode:
+        :return:
+        """
         # Convert the observed region to the observed frame
         noise_region_obs = noise_region * (1 + self.redshift)
 

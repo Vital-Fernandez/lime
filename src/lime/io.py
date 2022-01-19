@@ -895,7 +895,9 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 class PdfMaker:
 
     def __init__(self):
+        """
 
+        """
         self.pdf_type = None
         self.pdf_geometry_options = {'right': '1cm',
                                      'left': '1cm',
@@ -907,7 +909,14 @@ class PdfMaker:
         # TODO add dictionary with numeric formats for tables depending on the variable
 
     def create_pdfDoc(self, pdf_type=None, geometry_options=None, document_class=u'article', theme='white'):
+        """
 
+        :param pdf_type:
+        :param geometry_options:
+        :param document_class:
+        :param theme:
+        :return:
+        """
         # TODO integrate this into the init
         # Case for a complete .pdf or .tex
         self.theme_table = theme

@@ -20,9 +20,9 @@ Dependencies
 The current version of LiMe has the following dependencies (please check their documentation if you need to install them):
 
 * Numpy
-* LmFit
 * Pandas
 * Matplotlib
+* LmFit
 
 The following libraries are not necessary but they provide a richer experience on the library inputs and outputs:
 
