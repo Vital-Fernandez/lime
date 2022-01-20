@@ -47,6 +47,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     :type user_format: dict, optional
 
     :return: 3 arrays (or scalars) with the input line(s) transition wavelength, ion and scientific notation in latex
+    :rtype: numpy.ndarray
 
     :Example:
         >>> import lime
