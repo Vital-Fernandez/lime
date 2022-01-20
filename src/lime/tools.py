@@ -35,13 +35,16 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
                         assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
                         excited state
-    :type input_lines: str, list
+    :type recomb_atom: str, list
 
-    :param blended_dict: Boolean for a scalar output in case of a single input line input
+    :param blended_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :type blended_dict: dict, optional
+
+    :param scalar_output: Boolean for a scalar output in case of a single input line input
     :type scalar_output: bool, optional
 
-    :param scalar_output: Dictionary with the user latex format for the latex labels, overwritting the default notation.
-    :param user_format: dict, optional
+    :param user_format: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :type user_format: dict, optional
 
     :return:
     """
