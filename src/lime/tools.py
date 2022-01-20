@@ -43,11 +43,21 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     :param scalar_output: Boolean for a scalar output in case of a single input line input
     :type scalar_output: bool, optional
 
-    :param user_format: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
     :type user_format: dict, optional
 
-    :return:
+    :return: 3 arrays (or scalars) with the input line(s) transition wavelength, ion and scientific notation in latex
+
+    :Example:
+        >>> import lime
+        >>> lime.label_decomposition('O3_5007A', scalar_output=True)
+        O3, 5007.0, '$5007\\AA\\,[OIII]$'
+        >>> lime.label_decomposition('H1_6563A_b', blended_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
+        ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
+
     """
+
+
 
     # Confirm input array has one dimension
     # TODO for blended lines it may be better to return all the blended components individually
