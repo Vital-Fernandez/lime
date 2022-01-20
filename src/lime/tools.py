@@ -37,9 +37,12 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
                         excited state
     :type input_lines: str, list
 
-    :param blended_dict:
-    :param scalar_output:
-    :param user_format:
+    :param blended_dict: Boolean for a scalar output in case of a single input line input
+    :type scalar_output: bool, optional
+
+    :param scalar_output: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :param user_format: dict, optional
+
     :return:
     """
 
