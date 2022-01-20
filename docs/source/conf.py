@@ -17,7 +17,7 @@
 import sys
 import os
 sys.path.append(os.path.join(os.path.abspath(os.pardir)))
-autodoc_mock_imports = ["lmfit", 'scipy']
+autodoc_mock_imports = ['lmfit', 'scipy', 'specutils']
 
 # -- Project information -----------------------------------------------------
 
