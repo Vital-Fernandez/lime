@@ -9,6 +9,8 @@ python:
   install:
     - method: pip
       path: .
+      extra_requirements:
+        - lmfit
 
 sphinx:
   fail_on_warning: true
