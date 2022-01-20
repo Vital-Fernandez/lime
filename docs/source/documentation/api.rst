@@ -22,6 +22,6 @@ Core
 Convenience functions
 ---------------------
 
-.. autofunction:: lime.tools.label_decomposition
+.. autofunction:: lime.label_decomposition
 
 .. autofunction:: lime.io.spatial_mask_generator

@@ -29,7 +29,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     """
     This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
 
-    :param input_lines:
+    :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
     :param recomb_atom:
     :param blended_dict:
     :param scalar_output:
