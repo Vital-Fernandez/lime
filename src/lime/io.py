@@ -188,21 +188,8 @@ def check_numeric_Value(s):
         return s
 
 
-# Function to import configparser
-def importConfigFile(config_path):
-    # Check if file exists
-    if os.path.isfile(config_path):
-        cfg = configparser.ConfigParser()
-        cfg.optionxform = str
-        cfg.read(config_path)
-    else:
-        exit(f"--WARNING: Configuration file {config_path} was not found. Exiting program")
-
-    return cfg
-
-
 # Function to map a string to its variable-type
-def formatStringEntry(entry_value, key_label, section_label='', float_format=None, nan_format='nan'):
+def format_option_value(entry_value, key_label, section_label='', float_format=None, nan_format='nan'):
     output_variable = None
 
     # None variable
@@ -231,7 +218,9 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
             else:
                 output_variable = check_numeric_Value(entry_value)
 
-    # Arrays (The last boolean overrides the parameters # TODO unstable in case of one item lists
+    # Arrays (The last boolean overrides the parameters
+    # TODO keys with array are always converted to numpy array even if just one
+
     elif ',' in entry_value:
 
         # Specia cases conversion
@@ -290,53 +279,72 @@ def load_cfg(file_address, obj_section=None, mask_section=None):
 
     """
 
-    This function reads a configuration file with `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_.
+    This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
+    check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
+
+    If the user provides a list of objects (via the ``obj_section``) this function will update object line fitting
+    configuration so that it includes the default configuration. The object configuration overwrites the default one.
+
+    If the user provides a list of masks (via the ``mask_section`` this function will update the spaxel line fitting
+    configuration so that it includes the default configuration. The spaxel configuration overwrites the default one.
+
+    .. attention::
+        For right formatting of the line configuration entries the user must include the "line_fitting" reference in the
+        file configuration. For example:
 
     :param file_address: configuration file location
     :type file_address: str or ~pathlib.Path
 
-    :param obj_section: If true this function will generate a line fitting entry for every object.
-    :type filepath: bool
+    :param obj_section: Dictionary with the section:option location for the list of objects.
+    :type filepath: dict, optional
 
-    :return: Dictionary with the configuration data. Each section is itself a dictionary with the options as keys
+    :param mask_section: Dictionary with the section:option location of the spatial masks
+    :type filepath: dict, optional
+
+    :return: Dictionary of dictionaries with the LiMe configuration file
     :rtype: dict
 
     """
 
-    #~astropy.time.Time or ~astropy.units.Quantity
+
 
     # Open the file
     if Path(file_address).is_file():
-        cfg = importConfigFile(file_address)
-        # TODO keys with array are always converted to numpy array even if just one
+        cfg = configparser.ConfigParser()
+        cfg.optionxform = str
+        cfg.read(file_address)
     else:
         exit(f'-ERROR Configuration file not found at:\n{file_address}')
 
+    # Convert the configuration entries from the string format if possible
     confDict = {}
-
     for section in cfg.sections():
         confDict[section] = {}
         for option_key in cfg.options(section):
             option_value = cfg[section][option_key]
-            confDict[section][option_key] = formatStringEntry(option_value, option_key, section)
+            confDict[section][option_key] = format_option_value(option_value, option_key, section)
 
-    if obj_section is True:
+    # Update the object line fitting sections if provided by user
+    if obj_section is not None:
 
-        assert 'file_information' in confDict, '- No file_information section in configuration file'
-        assert 'object_list' in confDict['file_information'], '- No object_list option in configuration file'
-        objList = confDict['file_information']['object_list']
+        for sec_objs, opt_objs in obj_section.items():
 
-        # Combine sample with obj properties if available
-        if objList is not None:
-            for key_group in GLOBAL_LOCAL_GROUPS:
-                global_group = f'default{key_group}'
-                if global_group in confDict:
-                    for objname in objList:
-                        local_group = f'{objname}{key_group}'
-                        dict_global = copy.deepcopy(confDict[global_group])
-                        if local_group in confDict:
-                            dict_global.update(confDict[local_group])
-                        confDict[local_group] = dict_global
+            assert sec_objs in confDict, f'- ERROR: No {sec_objs} section in file {file_address}'
+            assert opt_objs in confDict[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
+
+            objList = confDict[sec_objs][opt_objs]
+
+            # Combine sample with obj properties if available
+            if objList is not None:
+                for key_group in GLOBAL_LOCAL_GROUPS:
+                    global_group = f'default{key_group}'
+                    if global_group in confDict:
+                        for objname in objList:
+                            local_group = f'{objname}{key_group}'
+                            dict_global = copy.deepcopy(confDict[global_group])
+                            if local_group in confDict:
+                                dict_global.update(confDict[local_group])
+                            confDict[local_group] = dict_global
 
     return confDict
 
