@@ -286,18 +286,16 @@ def formatStringEntry(entry_value, key_label, section_label='', float_format=Non
 
 
 # Function to import SpecSyzer configuration file #TODO repeated
-def load_cfg(filepath, objList_check=False):
+def load_cfg(file_address, obj_section=None, mask_section=None):
 
     """
 
     This function reads a configuration file with `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_.
 
-    :param filepath: A address of the configuration file. The function will exit is the
-                     file is not found
-    :type filepath: str
-    :type filepath: Path
+    :param file_address: configuration file location
+    :type file_address: str or ~pathlib.Path
 
-    :param objList_check: If true this function will generate a line fitting entry for every object.
+    :param obj_section: If true this function will generate a line fitting entry for every object.
     :type filepath: bool
 
     :return: Dictionary with the configuration data. Each section is itself a dictionary with the options as keys
@@ -305,12 +303,14 @@ def load_cfg(filepath, objList_check=False):
 
     """
 
+    #~astropy.time.Time or ~astropy.units.Quantity
+
     # Open the file
-    if Path(filepath).is_file():
-        cfg = importConfigFile(filepath)
+    if Path(file_address).is_file():
+        cfg = importConfigFile(file_address)
         # TODO keys with array are always converted to numpy array even if just one
     else:
-        exit(f'-ERROR Configuration file not found at:\n{filepath}')
+        exit(f'-ERROR Configuration file not found at:\n{file_address}')
 
     confDict = {}
 
@@ -320,7 +320,7 @@ def load_cfg(filepath, objList_check=False):
             option_value = cfg[section][option_key]
             confDict[section][option_key] = formatStringEntry(option_value, option_key, section)
 
-    if objList_check is True:
+    if obj_section is True:
 
         assert 'file_information' in confDict, '- No file_information section in configuration file'
         assert 'object_list' in confDict['file_information'], '- No object_list option in configuration file'

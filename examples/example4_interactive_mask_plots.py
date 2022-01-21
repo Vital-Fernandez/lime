@@ -9,7 +9,7 @@ cfgFile = './sample_data/example_configuration_file.cfg'
 corrected_lineMaskFile = './sample_data/gp121903_BR_mask_corrected.txt'
 
 # Load configuration
-sample_cfg = lime.load_cfg(cfgFile, objList_check=True)
+sample_cfg = lime.load_cfg(cfgFile, obj_section=True)
 
 # Load mask
 maskDF = lime.load_lines_log(lineMaskFile)
