@@ -274,7 +274,7 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
     return output_variable
 
 
-# Function to import SpecSyzer configuration file #TODO repeated
+# Function to import SpecSyzer configuration file
 def load_cfg(file_address, obj_section=None, mask_section=None):
 
     """
@@ -289,24 +289,22 @@ def load_cfg(file_address, obj_section=None, mask_section=None):
     configuration so that it includes the default configuration. The spaxel configuration overwrites the default one.
 
     .. attention::
-        For right formatting of the line configuration entries the user must include the "line_fitting" reference in the
-        file configuration. For example:
+        For the right formatting of the line fitting configuration entries the user must include the "line_fitting" string
+        in the file configuration section name. For example:
 
     :param file_address: configuration file location
     :type file_address: str or ~pathlib.Path
 
     :param obj_section: Dictionary with the section:option location for the list of objects.
-    :type filepath: dict, optional
+    :type obj_section: dict, optional
 
     :param mask_section: Dictionary with the section:option location of the spatial masks
-    :type filepath: dict, optional
+    :type mask_section: dict, optional
 
     :return: Dictionary of dictionaries with the LiMe configuration file
     :rtype: dict
 
     """
-
-
 
     # Open the file
     if Path(file_address).is_file():
