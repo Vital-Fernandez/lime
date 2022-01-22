@@ -129,7 +129,7 @@ Now we include this information in the fitting:
 
 .. code-block:: python
 
-    gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
+    gp_spec.fit_from_wavelengths(line, lineWaves, fit_conf)
     gp_spec.display_results(show_plot=True)
 
 .. image:: ../_static/1_secondFitAttemp.png

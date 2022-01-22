@@ -74,7 +74,7 @@ class EmissionFitting:
 
     def __init__(self):
 
-        self.lineLabel, self.lineWaves = '', np.array([np.nan] * 6)
+        self.line, self.lineWaves = '', np.array([np.nan] * 6)
         self.blended_check, self.blended_label = False, 'None'
 
         self.intg_flux, self.intg_err = None, None

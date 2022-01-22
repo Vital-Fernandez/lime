@@ -6,7 +6,7 @@ Measurements description
 
 This section describes the parameters measured by :math:`\textsc{LiMe}`. Unless otherwise noted, these parameters have the same notation
 in the output measurements log as the attributes in the programing objects generated with the ``lime.Spectrum`` class.
-These parameter references are also the column names of the ``pandas.DataFrame`` lines log (``lime.Spectrum.linesDF``).
+These parameter references are also the column names of the ``pandas.DataFrame`` lines log (``lime.Spectrum.log``).
 
 Inputs
 ++++++
@@ -14,7 +14,7 @@ Inputs
 This section includes 3 parameters which are actually provided by the user inputs. However, they are also included in
 the output log for consistency.
 
-* **lineLabel** (``.lineLabel``, ``str``): This attribute provides the :math:`\textsc{LiMe}` label for an emission line. This label has the
+* **line** (``.line``, ``str``): This attribute provides the :math:`\textsc{LiMe}` label for an emission line. This label has the
   following format:
 
   .. image:: ../_static/line_notation.png
@@ -42,7 +42,7 @@ the output log for consistency.
   Finally, in the output measurements log these wavelengths are stored as  ``w1``, ``w2``, ``w3``, ``w4``, ``w5``, ``w6``.
 
 * **blended_label** (``.blended_label``, ``str``): This attribute consists in a dash separated string with the line components
-  in a blended or merged line. The individual components labels have the same notation as in the ``.lineLabel``. For example,
+  in a blended or merged line. The individual components labels have the same notation as in the ``.line``. For example,
   in the configuration file the blended labels are defined as:
 
   .. code-block::
@@ -54,14 +54,14 @@ the output log for consistency.
 Identification
 ++++++++++++++
 
-These parameters are not attributes of the ``lime.Spectrum`` class. Nonetheless, they are stored in the ``lime.Spectrum.linesDF``
+These parameters are not attributes of the ``lime.Spectrum`` class. Nonetheless, they are stored in the ``lime.Spectrum.log``
 ``pandas.DataFrame`` and the output measuring logs for chemical analysis of the emission fluxes.
 
   **wave**: This parameter contains the theoretical, rest-frame, wavelength for the emission line. This value is derived
-  from the ``.lineLabel`` provided by the user.
+  from the ``.line`` provided by the user.
 
   **ion**: This parameter contains the ion responsible for the emission line photons. This value is derived from the
-  ``.lineLabel`` provided by the user.
+  ``.line`` provided by the user.
 
   **latexLabel**: This parameter contains the transition classical notation in latex format. This string includes the
   blended and merged components if they were provided during the fitting.
@@ -74,7 +74,7 @@ These attributes are calculated by the ``lime.Spectrum.line_properties`` functio
 assumption on the emission line profile shape.
 
 .. attention::
-    In the output measurements log and the ``lime.Spectrum.linesDF``, these parameters have the same flux units as the
+    In the output measurements log and the ``lime.Spectrum.log``, these parameters have the same flux units as the
     input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the constant provided by the user
     ``lime.Spectrum.normFLux``
 
@@ -136,7 +136,7 @@ assumption on the emission line profile shape.
         z_{\lambda} = \frac{\lambda_{obs}}{\lambda_{theo}} - 1
 
   where :math:`\lambda_{obs}` is the ``.peak_wave`` for non-blended lines. Otherwise the gaussian profile ``.center`` is
-  used. In all cases :math:`\lambda_{theo}` is the theoretical transition wavelength obtained from the input ``.lineLabel``
+  used. In all cases :math:`\lambda_{theo}` is the theoretical transition wavelength obtained from the input ``.line``
 
 * **FWHM_int** (``.FWHM_int``, ``float``): This variable is the Full Width Half-Measure in :math:`km/s` computed from
   the integrated profile: The algorithm finds the pixel coordinates which are above half the line peak flux. The blue and and red

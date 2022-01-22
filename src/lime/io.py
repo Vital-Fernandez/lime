@@ -170,7 +170,7 @@ DARK_PLOT = {'figure.figsize': (14, 7),
 STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
 
 STRINGCONFKEYS = ['sampler', 'reddenig_curve', 'norm_line_label', 'norm_line_pynebCode']
-GLOBAL_LOCAL_GROUPS = ['_line_fitting', '_chemical_model']
+GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
 
 FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
 FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lambda)_error', 'I(lambda)', 'I(lambda)_error']
@@ -275,33 +275,51 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
 
 
 # Function to import SpecSyzer configuration file
-def load_cfg(file_address, obj_section=None, mask_section=None):
+def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='line_fitting'):
 
     """
 
     This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
     check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
 
-    If the user provides a list of objects (via the ``obj_section``) this function will update object line fitting
-    configuration so that it includes the default configuration. The object configuration overwrites the default one.
+    If the user provides a list of objects (via the ``obj_section`` parameter) this function will update the object line fitting
+    configuration to include the default configuration. If there are shared entries the object configuration takes preference.
+    The object section must have follow the "objectName_line_fitting" notation, where the "objectName" is obtained from
+    the object list.
 
-    If the user provides a list of masks (via the ``mask_section`` this function will update the spaxel line fitting
-    configuration so that it includes the default configuration. The spaxel configuration overwrites the default one.
+    If the user provides a list of masks (via the ``mask_section`` parameter) this function will update the spaxel line fitting
+    configuration to include the mask configuration. If there are shared entries the spaxel configuration takes preference.
+    The spaxel  section must have follow the "idxY-idxX_line_fitting" notation, where "idxY-idxX" are the y and x indices
+    of the masked spaxel obtained from the mask.
 
     .. attention::
         For the right formatting of the line fitting configuration entries the user must include the "line_fitting" string
         in the file configuration section name. For example:
 
+    .. code-block::
+
+        [default_line_fitting]
+        H1_6563A_b = H1_6563A-N1_6584A-N1_6548A
+
+        [IZwicky18_line_fitting]
+        O2_3726A_m = O2_3726A-O2_3729A
+
+        [123-84_line_fitting]
+        H1_6563A_b = H1_6563A-N1_6584A
+
     :param file_address: configuration file location
     :type file_address: str or ~pathlib.Path
 
-    :param obj_section: Dictionary with the section:option location for the list of objects.
+    :param obj_section: the section:option location for the list of objects, e.g. {'sample data': 'obj_list'}
     :type obj_section: dict, optional
 
-    :param mask_section: Dictionary with the section:option location of the spatial masks
+    :param mask_section: the section:option location of the spatial masks, e.g. {'sample data': 'obj_mask_list'}
     :type mask_section: dict, optional
 
-    :return: Dictionary of dictionaries with the LiMe configuration file
+    :param def_cfg_sec: the section(s) with the line fitting configuration, e.g. 'default_line_fitting'
+    :type def_cfg_sec: str or list, optional
+
+    :return: Parsed configuration data
     :rtype: dict
 
     """
@@ -315,39 +333,42 @@ def load_cfg(file_address, obj_section=None, mask_section=None):
         exit(f'-ERROR Configuration file not found at:\n{file_address}')
 
     # Convert the configuration entries from the string format if possible
-    confDict = {}
+    cfg_lime = {}
     for section in cfg.sections():
-        confDict[section] = {}
+        cfg_lime[section] = {}
         for option_key in cfg.options(section):
             option_value = cfg[section][option_key]
-            confDict[section][option_key] = format_option_value(option_value, option_key, section)
+            cfg_lime[section][option_key] = format_option_value(option_value, option_key, section)
 
     # Update the object line fitting sections if provided by user
     if obj_section is not None:
 
         for sec_objs, opt_objs in obj_section.items():
 
-            assert sec_objs in confDict, f'- ERROR: No {sec_objs} section in file {file_address}'
-            assert opt_objs in confDict[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
+            # Get the list of objects
+            assert sec_objs in cfg_lime, f'- ERROR: No {sec_objs} section in file {file_address}'
+            assert opt_objs in cfg_lime[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
+            objList = cfg_lime[sec_objs][opt_objs]
 
-            objList = confDict[sec_objs][opt_objs]
+            # Get the default configuration
+            assert def_cfg_sec in cfg_lime, f'- ERROR: No {def_cfg_sec} section in file {file_address}'
+            global_cfg = cfg_lime[def_cfg_sec]
 
-            # Combine sample with obj properties if available
-            if objList is not None:
-                for key_group in GLOBAL_LOCAL_GROUPS:
-                    global_group = f'default{key_group}'
-                    if global_group in confDict:
-                        for objname in objList:
-                            local_group = f'{objname}{key_group}'
-                            dict_global = copy.deepcopy(confDict[global_group])
-                            if local_group in confDict:
-                                dict_global.update(confDict[local_group])
-                            confDict[local_group] = dict_global
+            # Loop through the objects
+            for obj in objList:
+                global_dict = copy.deepcopy(global_cfg)
 
-    return confDict
+                local_label = f'{obj}_line_fitting'
+                local_dict = cfg_lime[local_label] if local_label in cfg_lime else {}
+
+                # Local configuration overwriting global
+                global_dict.update(local_dict)
+                cfg_lime[local_label] = global_dict
+
+    return cfg_lime
 
 
-def numberStringFormat(value, cifras = 4):
+def numberStringFormat(value, cifras=4):
     if value > 0.001:
         newFormat = f'{value:.{cifras}f}'
     else:
@@ -449,40 +470,44 @@ def load_lines_log(lineslog_address, ext=None):
     return lineslogDF
 
 
-def save_line_log(linelog, file_address, file_type='txt', ext=None, fits_header=None):
+def save_line_log(lines_log, file_address, ext='lineslog', fits_header=None):
+
+    # Confirm file path exits
+    log_path = Path(file_address)
+    assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
+    file_name, file_type = log_path.name, log_path.suffix
 
     # Default txt log with the complete information
-    if file_type == 'txt':
-        with open(f'{file_address}.{file_type}', 'wb') as output_file:
-            string_DF = linelog.to_string()
+    if file_type == '.txt':
+        with open(log_path, 'wb') as output_file:
+            string_DF = lines_log.to_string()
             output_file.write(string_DF.encode('UTF-8'))
 
     # Pdf fluxes table
-    elif file_type == 'pdf':
-        table_fluxes(linelog, file_address)
+    elif file_type == '.pdf':
+        table_fluxes(lines_log, log_path.parent/log_path.stem)
 
-    # Linelog in a fits file
-    elif file_type == 'fits':
-        if isinstance(linelog, pd.DataFrame):
-            lineLogHDU = lineslog_to_HDU(linelog, ext_name=ext, header_dict=fits_header)
+    # Lines log in a fits file
+    elif file_type == '.fits':
+        if isinstance(lines_log, pd.DataFrame):
+            lineLogHDU = lineslog_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
 
-            fits_address = Path(f'{file_address}.{file_type}')
-            if fits_address.is_file():
+            if log_path.is_file():
                 try:
-                    fits.update(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
+                    fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
                 except KeyError:
-                    fits.append(fits_address, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+                    fits.append(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
             else:
                 hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
-                hdul.writeto(fits_address, overwrite=True, output_verify='fix')
+                hdul.writeto(log_path, overwrite=True, output_verify='fix')
 
     # Default log in excel format
-    elif file_type == 'xlsx' or file_type == 'xls':
-        sheet_name = ext if ext is not None else 'Sheet1'
-        linelog.to_excel(f'{file_address}.{file_type}', sheet_name=sheet_name)
+    elif file_type == '.xlsx' or file_type == '.xls':
+        sheet_name = ext if ext is not None else 'lineslog'
+        lines_log.to_excel(log_path, sheet_name=ext)
 
     else:
-        print(f"--WARNING: output file extension {file_type} was not recognised. Exiting program")
+        print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
         exit()
 
     return

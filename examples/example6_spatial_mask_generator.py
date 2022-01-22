@@ -38,8 +38,7 @@ for lineLabel in lineList:
     lime.spatial_mask_generator(flux_image, 'percentil', percentil_array, mask_ref=lineLabel, output_address=fits_name,
                                  show_plot=True)
 
-
-    # Load masks from fits files
+    # Open the fits file and check the masked spaxels
     with fits.open(fits_name) as hdul:
         ext = f'{lineLabel}_mask_1'
         mask_frame = hdul[ext].data.astype('bool')
@@ -47,7 +46,6 @@ for lineLabel in lineList:
         for idx_voxel in np.arange(idcs_spaxels.shape[0]):
             idx_j, idx_i = idcs_spaxels[idx_voxel]
             print(idx_j, idx_i)
-
 
         print(f'True spaxels in {ext}: {np.sum(mask_frame.data)}')
 

@@ -45,10 +45,10 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self.wave = None
         self.wave_rest = None
         self.flux = None
-        self.errFlux = None
-        self.normFlux = norm_flux
+        self.err_flux = None
+        self.norm_flux = norm_flux
         self.redshift = redshift
-        self.linesDF = None
+        self.log = None
 
         # Start cropping the input spectrum if necessary
         if crop_waves is not None:
@@ -65,16 +65,16 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 self.wave = input_wave
                 self.flux = input_flux  # * (1 + self.redshift)
                 if input_err is not None:
-                    self.errFlux = input_err  # * (1 + self.redshift)
+                    self.err_flux = input_err  # * (1 + self.redshift)
 
         # Normalize the spectrum
         if input_flux is not None:
-            self.flux = self.flux / self.normFlux
+            self.flux = self.flux / self.norm_flux
             if input_err is not None:
-                self.errFlux = self.errFlux / self.normFlux
+                self.err_flux = self.err_flux / self.norm_flux
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
-        self.linesDF = pd.DataFrame(columns=LOG_COLUMNS.keys())
+        self.log = pd.DataFrame(columns=LOG_COLUMNS.keys())
 
         return
 
@@ -96,7 +96,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         fit_conf = user_cfg.copy()
 
         # Label the current measurement
-        self.lineLabel = label
+        self.line = label
         self.lineWaves = line_wavelengths
 
         # Check if the masks are within the range
@@ -108,13 +108,13 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             # Integrated line properties
             emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
             contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
-            err_array = self.errFlux[idcsEmis] if self.errFlux is not None else None
+            err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
             self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
 
             # Check if blended line
-            if self.lineLabel in fit_conf:
-                self.blended_label = fit_conf[self.lineLabel]
-                if '_b' in self.lineLabel:
+            if self.line in fit_conf:
+                self.blended_label = fit_conf[self.line]
+                if '_b' in self.line:
                     self.blended_check = True
 
             # Import kinematics if requested
@@ -124,16 +124,16 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             idcsLine = idcsEmis + idcsCont
             x_array = self.wave[idcsLine]
             y_array = self.flux[idcsLine]
-            w_array = 1.0 / self.errFlux[idcsLine] if self.errFlux is not None else np.full(x_array.size,
-                                                                                            1.0 / self.std_cont)
-            self.gauss_lmfit(self.lineLabel, x_array, y_array, w_array, fit_conf, self.linesDF, z_obj=self.redshift)
+            w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size,
+                                                                                              1.0 / self.std_cont)
+            self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, self.log, z_obj=self.redshift)
 
             # Safe the results to log DF
-            self.results_to_database(self.lineLabel, self.linesDF, fit_conf)
+            self.results_to_database(self.line, self.log, fit_conf)
 
         else:
             print(
-                f'- {self.lineLabel} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
+                f'- {self.line} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
             print(f' -- {self.lineWaves}')
 
         return
@@ -144,7 +144,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         if self.blended_label != 'None':
             childs_list = self.blended_label.split('-')
         else:
-            childs_list = np.array(self.lineLabel, ndmin=1)
+            childs_list = np.array(self.line, ndmin=1)
 
         for child_label in childs_list:
             parent_label = user_conf.get(f'{child_label}_kinem')
@@ -152,7 +152,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             if parent_label is not None:
 
                 # Case we want to copy from previous line and the data is not available
-                if (parent_label not in self.linesDF.index) and (not self.blended_check):
+                if (parent_label not in self.log.index) and (not self.blended_check):
                     print(
                         f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
@@ -178,8 +178,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                         # Case we want to copy from previously measured line
                         else:
-                            mu_parent = self.linesDF.loc[parent_label, ['center', 'center_err']].values
-                            sigma_parent = self.linesDF.loc[parent_label, ['sigma', 'sigma_err']].values
+                            mu_parent = self.log.loc[parent_label, ['center', 'center_err']].values
+                            sigma_parent = self.log.loc[parent_label, ['sigma', 'sigma_err']].values
 
                             if param_ext == 'center':
                                 param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
@@ -220,7 +220,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                 # De normalize
                 if LOG_COLUMNS[param][0]:
-                    param_value = param_value * self.normFlux
+                    param_value = param_value * self.norm_flux
 
                 line_log[param] = param_value
 
@@ -237,11 +237,11 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         if show_fit_report:
 
             if label is None:
-                if self.lineLabel is not None:
-                    label = self.lineLabel
+                if self.line is not None:
+                    label = self.line
                     output_ref = (f'\nLine label: {label}\n'
                                   f'- Line mask: {self.lineWaves}\n'
-                                  f'- Normalization flux: {self.normFlux}\n'
+                                  f'- Normalization flux: {self.norm_flux}\n'
                                   f'- Redshift: {self.redshift}\n'
                                   f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
                                   f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
@@ -266,9 +266,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                     output_ref = f'- No measurement performed\n'
 
             # Case with line input: search and show that measurement
-            elif self.linesDF is not None:
-                if label in self.linesDF.index:
-                    output_ref = self.linesDF.loc[label].to_string
+            elif self.log is not None:
+                if label in self.log.index:
+                    output_ref = self.log.loc[label].to_string
                 else:
                     output_ref = f'- WARNING: {label} not found in  lines table\n'
             else:
@@ -311,14 +311,14 @@ class MaskInspector(Spectrum):
 
         # DF is provided
         if lines_DF is not None:
-            self.linesDF = pd.DataFrame.copy(lines_DF)
+            self.log = pd.DataFrame.copy(lines_DF)
 
         # DF is not provided
         else:
 
             # Lines log address is provided and we read the DF from it
             if Path(self.linesLogAddress).is_file():
-                self.linesDF = load_lines_log(self.linesLogAddress)
+                self.log = load_lines_log(self.linesLogAddress)
 
             # Lines log not provide code ends
             else:
@@ -327,7 +327,7 @@ class MaskInspector(Spectrum):
                 exit()
 
         # Figure grid
-        n_lines = len(self.linesDF.index)
+        n_lines = len(self.log.index)
         if n_lines > ncols:
             if nrows is None:
                 nrows = int(np.ceil(n_lines / ncols))
@@ -365,13 +365,13 @@ class MaskInspector(Spectrum):
     def plot_line_mask_selection(self, logscale='auto', grid_size=None):
 
         # Plot data
-        lineLabels = self.linesDF.index.values
+        lineLabels = self.log.index.values
         n_lines = lineLabels.size
 
         # Generate plot
         for i in np.arange(grid_size):
             if i < n_lines:
-                self.lineWaves = self.linesDF.loc[lineLabels[i], 'w1':'w6'].values
+                self.lineWaves = self.log.loc[lineLabels[i], 'w1':'w6'].values
                 self.plot_line_region_i(self.ax[i], lineLabels[i], logscale=logscale)
                 self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
                                                                    self.on_select,
@@ -521,11 +521,11 @@ class MaskInspector(Spectrum):
 
                     # Clear the selections
                     # self.lineWaves = np.array([np.nan] * 6)
-                    print(f'\n-- The line {self.lineLabel} mask has been removed')
+                    print(f'\n-- The line {self.line} mask has been removed')
 
                 else:
                     print('- WARNING: Unsucessful line selection:')
-                    print(f'-- {self.lineLabel}: w_low: {w_low}, w_high: {w_high}')
+                    print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Check number of measurements after selection
             non_nans = (~pd.isnull(self.lineWaves)).sum()
@@ -534,10 +534,10 @@ class MaskInspector(Spectrum):
             if non_nans == 6:
                 # TODO add option to perform the measurement a new
                 # self.clear_fit()
-                # self.fit_from_wavelengths(self.lineLabel, self.lineWaves, user_cfg={})
+                # self.fit_from_wavelengths(self.line, self.lineWaves, user_cfg={})
 
                 # Parse the line regions to the dataframe
-                self.results_to_database(self.lineLabel, self.linesDF, fit_conf={}, export_params=[])
+                self.results_to_database(self.lineLabel, self.log, fit_conf={}, export_params=[])
 
                 # Save the corrected mask to a file
                 self.store_measurement()
@@ -557,9 +557,9 @@ class MaskInspector(Spectrum):
 
         # TODO we need a better way to index than the latex label
         # Recognise line label
-        idx_line = self.linesDF.index == self.in_ax.get_title()
-        self.lineLabel = self.linesDF.loc[idx_line].index.values[0]
-        self.lineWaves = self.linesDF.loc[idx_line, 'w1':'w6'].values[0]
+        idx_line = self.log.index == self.in_ax.get_title()
+        self.lineLabel = self.log.loc[idx_line].index.values[0]
+        self.lineWaves = self.log.loc[idx_line, 'w1':'w6'].values[0]
 
         # Restore measurements from log
         # self.database_to_attr()
@@ -592,11 +592,10 @@ class MaskInspector(Spectrum):
 
         # If the file does not exist (or it is the first time)
         else:
-            file_DF = self.linesDF
+            file_DF = self.log
 
         # Save to a file
-        stem_adress = self.linesLogAddress.parent / self.linesLogAddress.resolve().stem
-        save_line_log(file_DF, stem_adress, file_type=self.linesLogAddress.suffix[1:])
+        save_line_log(file_DF, self.linesLogAddress)
 
         return
 
@@ -708,11 +707,11 @@ class CubeFitsInspector(Spectrum):
             if ext_name in self.hdul_linelog:
                 lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
                 lineslogDF.set_index('index', inplace=True)
-                self.linesDF = lineslogDF
+                self.log = lineslogDF
             else:
-                self.linesDF = None
+                self.log = None
 
-            if self.linesDF is not None:
+            if self.log is not None:
 
                 if frame == 'rest':
                     z_corr = (1 + self.redshift)
@@ -723,15 +722,15 @@ class CubeFitsInspector(Spectrum):
                     flux_plot = self.flux
                     wave_plot = self.wave
 
-                for lineLabel in self.linesDF.index:
+                for lineLabel in self.log.index:
 
-                    w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
-                    m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
-                    amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
-                                         self.linesDF.loc[lineLabel, 'sigma']
-                    wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
+                    w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
+                    m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
+                    amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
+                                         self.log.loc[lineLabel, 'sigma']
+                    wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[
                         lineLabel, 'peak_flux']
-                    blended_label = self.linesDF.loc[lineLabel, 'blended_label']
+                    blended_label = self.log.loc[lineLabel, 'blended_label']
 
                     # Rest frame
                     if frame == 'rest':
@@ -753,7 +752,7 @@ class CubeFitsInspector(Spectrum):
                         color_curve = 'tab:red'
                         style_curve = '-'
                         width_curve = 0.5
-                        self.ax1.plot(wave_range, cont / self.normFlux, ':', color='tab:purple', linewidth=0.5)
+                        self.ax1.plot(wave_range, cont / self.norm_flux, ':', color='tab:purple', linewidth=0.5)
 
                     else:
                         style_curve = ':'
@@ -763,23 +762,23 @@ class CubeFitsInspector(Spectrum):
                         idx_line = list_comps.index(lineLabel)
                         color_curve = cmap(idx_line / len(list_comps))
 
-                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color=color_curve,
+                    self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color=color_curve,
                                   linestyle=style_curve, linewidth=width_curve)
 
                 # TODO we need a method just for this
-                idcs_blended = self.linesDF['blended_label'] != 'None'
-                blended_groups = self.linesDF.loc[idcs_blended, 'blended_label'].unique()
+                idcs_blended = self.log['blended_label'] != 'None'
+                blended_groups = self.log.loc[idcs_blended, 'blended_label'].unique()
                 for lineGroup in blended_groups:
                     list_comps = lineGroup.split('-')
                     for i, lineLabel in enumerate(list_comps):
 
-                        w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
-                        m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
-                        amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
-                                             self.linesDF.loc[lineLabel, 'sigma']
-                        wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
+                        w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
+                        m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
+                        amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
+                                             self.log.loc[lineLabel, 'sigma']
+                        wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[
                             lineLabel, 'peak_flux']
-                        blended_label = self.linesDF.loc[lineLabel, 'blended_label']
+                        blended_label = self.log.loc[lineLabel, 'blended_label']
 
                         # Rest frame
                         if frame == 'rest':
@@ -802,7 +801,7 @@ class CubeFitsInspector(Spectrum):
                         else:
                             line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
 
-                    self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red',
+                    self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color='tab:red',
                                   linestyle='-', linewidth=0.5)
 
         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'

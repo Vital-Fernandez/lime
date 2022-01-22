@@ -64,8 +64,8 @@ class LiMePlots:
 
         return
 
-    def plot_spectrum(self, continuumFlux=None, obsLinesTable=None, matchedLinesDF=None, noise_region=None,
-                      log_scale=False, plotConf={}, axConf={}, specLabel='Observed spectrum', output_address=None,
+    def plot_spectrum(self, cont_flux=None, peaks_table=None, matched_DF=None, noise_region=None,
+                      log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Observed spectrum', output_address=None,
                       dark_mode=False, profile_fittings=False, frame='obs'):
 
         # Plot Configuration # TODO implement better switch between white and black themes
@@ -76,7 +76,7 @@ class LiMePlots:
             defaultConf = STANDARD_PLOT.copy()
             foreground = 'tab:blue'
 
-        defaultConf.update(plotConf)
+        defaultConf.update(plt_cfg)
         rcParams.update(defaultConf)
         fig, ax = plt.subplots()
 
@@ -91,32 +91,32 @@ class LiMePlots:
             wave_plot = self.wave
 
         # Plot the spectrum
-        ax.step(wave_plot, flux_plot, label=specLabel, color=foreground, where='mid')
+        ax.step(wave_plot, flux_plot, label=spec_label, color=foreground, where='mid')
 
         # Plot the continuum if available
-        if continuumFlux is not None:
-            ax.step(wave_plot, continuumFlux, label='Sigma Continuum', linestyle=':')
+        if cont_flux is not None:
+            ax.step(wave_plot, cont_flux, label='Sigma Continuum', linestyle=':')
 
         # Plot astropy detected lines if available
-        if obsLinesTable is not None:
-            idcs_emission = obsLinesTable['line_type'] == 'emission'
-            idcs_linePeaks = np.array(obsLinesTable[idcs_emission]['line_center_index'])
+        if peaks_table is not None:
+            idcs_emission = peaks_table['line_type'] == 'emission'
+            idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
             ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label='Emission peaks', facecolors='none',
                        edgecolors='tab:purple')
 
-        if matchedLinesDF is not None:
-            idcs_foundLines = (matchedLinesDF.observation.isin(('detected', 'not identified'))) & \
-                              (matchedLinesDF.wavelength >= wave_plot[0]) & \
-                              (matchedLinesDF.wavelength <= wave_plot[-1])
-            if 'latexLabel' in matchedLinesDF:
-                lineLatexLabel = matchedLinesDF.loc[idcs_foundLines].latexLabel.values
+        if matched_DF is not None:
+            idcs_foundLines = (matched_DF.observation.isin(('detected', 'not identified'))) & \
+                              (matched_DF.wavelength >= wave_plot[0]) & \
+                              (matched_DF.wavelength <= wave_plot[-1])
+            if 'latexLabel' in matched_DF:
+                lineLatexLabel = matched_DF.loc[idcs_foundLines].latexLabel.values
             else:
-                lineLatexLabel = matchedLinesDF.loc[idcs_foundLines].index.values
-            lineWave = matchedLinesDF.loc[idcs_foundLines].wavelength.values
+                lineLatexLabel = matched_DF.loc[idcs_foundLines].index.values
+            lineWave = matched_DF.loc[idcs_foundLines].wavelength.values
             w_cor = 1 if frame == 'rest' else (1+self.redshift)
-            w3 = matchedLinesDF.loc[idcs_foundLines].w3.values * w_cor
-            w4 = matchedLinesDF.loc[idcs_foundLines].w4.values * w_cor
-            observation = matchedLinesDF.loc[idcs_foundLines].observation.values
+            w3 = matched_DF.loc[idcs_foundLines].w3.values * w_cor
+            w4 = matched_DF.loc[idcs_foundLines].w4.values * w_cor
+            observation = matched_DF.loc[idcs_foundLines].observation.values
 
             first_instance = True
             for i in np.arange(lineLatexLabel.size):
@@ -131,12 +131,12 @@ class LiMePlots:
 
         if profile_fittings:
             first_instance = True
-            for lineLabel in self.linesDF.index:
+            for lineLabel in self.log.index:
 
-                w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
-                m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
-                amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], self.linesDF.loc[lineLabel, 'sigma']
-                wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[lineLabel, 'peak_flux'],
+                w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
+                m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
+                amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], self.log.loc[lineLabel, 'sigma']
+                wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[lineLabel, 'peak_flux'],
 
                 # Rest frame
                 if frame == 'rest':
@@ -153,22 +153,22 @@ class LiMePlots:
                     cont = (m_cont * wave_range + n_cont) * z_corr
 
                 line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
-                ax.plot(wave_range, cont/self.normFlux, ':', color='tab:purple', linewidth=0.5)
-                ax.plot(wave_range, (line_profile+cont)/self.normFlux, color='tab:red', linewidth=0.5, label='Gaussian component' if first_instance else '_')
+                ax.plot(wave_range, cont/self.norm_flux, ':', color='tab:purple', linewidth=0.5)
+                ax.plot(wave_range, (line_profile+cont)/self.norm_flux, color='tab:red', linewidth=0.5, label='Gaussian component' if first_instance else '_')
                 # ax.scatter(wave_peak, flux_peak, color='tab:blue')
                 first_instance = False
 
         if log_scale:
             ax.set_yscale('log')
 
-        if self.normFlux != 1:
-            if 'ylabel' not in axConf:
+        if self.norm_flux != 1:
+            if 'ylabel' not in ax_cfg:
                 y_label = STANDARD_AXES['ylabel']
-                if self.normFlux != 1.0:
-                    norm_label = y_label + r' $\,/\,{}$'.format(latex_science_float(self.normFlux))
-                    axConf['ylabel'] = norm_label
+                if self.norm_flux != 1.0:
+                    norm_label = y_label + r' $\,/\,{}$'.format(latex_science_float(self.norm_flux))
+                    ax_cfg['ylabel'] = norm_label
 
-        ax.update({**STANDARD_AXES, **axConf})
+        ax.update({**STANDARD_AXES, **ax_cfg})
         ax.legend()
 
         if output_address is None:
@@ -189,7 +189,7 @@ class LiMePlots:
         # Determine line Label:
         # TODO this function should read from lines log
         # TODO this causes issues if vary is false... need a better way to get label
-        line_label = line_label if line_label is not None else self.lineLabel
+        line_label = line_label if line_label is not None else self.line
         ion, wave, latexLabel = label_decomposition(line_label, scalar_output=True)
 
         # Plot Configuration
@@ -252,8 +252,8 @@ class LiMePlots:
         ax[0].fill_between(wave_plot[idcsContRed], 0, flux_plot[idcsContRed], facecolor='tab:orange', step='mid', alpha=0.07)
 
         # Axes formatting
-        if self.normFlux != 1.0:
-            defaultConf['ylabel'] = defaultConf['ylabel'] + " $/{{{0:.2g}}}$".format(self.normFlux)
+        if self.norm_flux != 1.0:
+            defaultConf['ylabel'] = defaultConf['ylabel'] + " $/{{{0:.2g}}}$".format(self.norm_flux)
 
         if log_scale:
             ax[0].set_yscale('log')
@@ -288,9 +288,9 @@ class LiMePlots:
             ax[1].step(x_in/z_cor, residual*z_cor, where='mid', color=foreground)
 
             # Err residual plot if available:
-            if self.errFlux is not None:
+            if self.err_flux is not None:
                 label = r'$\sigma_{Error}/\overline{F(cont)}$'
-                err_norm = np.sqrt(self.errFlux[idcs_plot])/self.cont
+                err_norm = np.sqrt(self.err_flux[idcs_plot])/self.cont
                 ax[1].fill_between(wave_plot[idcs_plot], -err_norm*z_cor, err_norm*z_cor, facecolor='tab:red', alpha=0.5, label=label)
 
             label = r'$\sigma_{Continuum}/\overline{F(cont)}$'
@@ -324,7 +324,7 @@ class LiMePlots:
         # Determine line Label:
         # TODO this function should read from lines log
         # TODO this causes issues if vary is false... need a better way to get label
-        line_label = line_label if line_label is not None else self.lineLabel
+        line_label = line_label if line_label is not None else self.line
         ion, wave, latexLabel = label_decomposition(line_label, scalar_output=True)
 
         # Plot Configuration
@@ -402,8 +402,8 @@ class LiMePlots:
 
         # Axes formatting
         defaultConf['xlabel'] = 'Velocity (Km/s)'
-        if self.normFlux != 1.0:
-            defaultConf['ylabel'] = defaultConf['ylabel'] + " $/{{{0:.2g}}}$".format(self.normFlux)
+        if self.norm_flux != 1.0:
+            defaultConf['ylabel'] = defaultConf['ylabel'] + " $/{{{0:.2g}}}$".format(self.norm_flux)
 
         defaultConf['title'] = plot_title
         if log_scale:
@@ -422,10 +422,10 @@ class LiMePlots:
 
         return
 
-    def plot_line_grid(self, linesDF, plotConf={}, ncols=10, nrows=None, output_address=None, log_scale=True, frame='obs'):
+    def plot_line_grid(self, log, plotConf={}, ncols=10, nrows=None, output_address=None, log_scale=True, frame='obs'):
 
         # Line labels to plot
-        lineLabels = linesDF.index.values
+        lineLabels = log.index.values
 
         # Define plot axes grid size
         if nrows is None:
@@ -461,8 +461,8 @@ class LiMePlots:
 
                 # Line data
                 lineLabel = lineLabels[i]
-                lineWaves = linesDF.loc[lineLabel, 'w1':'w6'].values
-                latexLabel = linesDF.loc[lineLabel, 'latexLabel']
+                lineWaves = log.loc[lineLabel, 'w1':'w6'].values
+                latexLabel = log.loc[lineLabel, 'latexLabel']
 
                 # Establish spectrum line and continua regions
                 idcsEmis, idcsContBlue, idcsContRed = self.define_masks(self.wave_rest,
@@ -479,21 +479,21 @@ class LiMePlots:
                 ax_i.fill_between(wave_plot[idcsEmis], 0, flux_plot[idcsEmis], facecolor='tab:blue', step="mid", alpha=0.2)
                 ax_i.fill_between(wave_plot[idcsContRed], 0, flux_plot[idcsContRed], facecolor='tab:orange', step="mid", alpha=0.2)
 
-                if set(['m_cont', 'n_cont', 'amp', 'center', 'sigma']).issubset(linesDF.columns):
+                if set(['m_cont', 'n_cont', 'amp', 'center', 'sigma']).issubset(log.columns):
 
-                    line_params = linesDF.loc[lineLabel, ['m_cont', 'n_cont']].values
-                    gaus_params = linesDF.loc[lineLabel, ['amp', 'center', 'sigma']].values
+                    line_params = log.loc[lineLabel, ['m_cont', 'n_cont']].values
+                    gaus_params = log.loc[lineLabel, ['amp', 'center', 'sigma']].values
 
                     # Plot curve fitting
                     if (not pd.isnull(line_params).any()) and (not pd.isnull(gaus_params).any()):
 
                         wave_resample = np.linspace(self.wave[idcs_plot][0], self.wave[idcs_plot][-1], 500)
 
-                        m_cont, n_cont = line_params /self.normFlux
+                        m_cont, n_cont = line_params /self.norm_flux
                         line_resample = linear_model(wave_resample, m_cont, n_cont)
 
                         amp, mu, sigma = gaus_params
-                        amp = amp/self.normFlux
+                        amp = amp/self.norm_flux
                         gauss_resample = gaussian_model(wave_resample, amp, mu, sigma) + line_resample
                         ax_i.plot(wave_resample/z_cor, gauss_resample*z_cor, '--', color='tab:purple', linewidth=1.50)
 
@@ -702,7 +702,7 @@ class LiMePlots:
 #     def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None):
 #
 #         frame = 'obs'
-#         self.normFlux = 1e-20
+#         self.norm_flux = 1e-20
 #
 #         min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
 #         norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
@@ -733,30 +733,30 @@ class LiMePlots:
 #                 start = time.time()
 #                 lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
 #                 lineslogDF.set_index('index', inplace=True)
-#                 self.linesDF = lineslogDF
+#                 self.log = lineslogDF
 #                 end = time.time()
 #                 print(end-start)
 #             else:
-#                 self.linesDF = None
+#                 self.log = None
 #             print(f'Cargar el pendejo {end-start}')
 #             # try:
-#             #     self.linesDF = load_lines_log(self.lines_log_address, ext=ext_name)
+#             #     self.log = load_lines_log(self.lines_log_address, ext=ext_name)
 #             # except:
-#             #     self.linesDF = None
+#             #     self.log = None
 #
-#             if self.linesDF is not None:
+#             if self.log is not None:
 #
 #                 flux_corr = 1
 #                 self.redshift = 0.004691
 #
-#                 for lineLabel in self.linesDF.index:
+#                 for line in self.log.index:
 #
-#                     w3, w4 = self.linesDF.loc[lineLabel, 'w3'], self.linesDF.loc[lineLabel, 'w4']
-#                     m_cont, n_cont = self.linesDF.loc[lineLabel, 'm_cont'], self.linesDF.loc[lineLabel, 'n_cont']
-#                     amp, center, sigma = self.linesDF.loc[lineLabel, 'amp'], self.linesDF.loc[lineLabel, 'center'], \
-#                                          self.linesDF.loc[lineLabel, 'sigma']
-#                     wave_peak, flux_peak = self.linesDF.loc[lineLabel, 'peak_wave'], self.linesDF.loc[
-#                         lineLabel, 'peak_flux'],
+#                     w3, w4 = self.log.loc[line, 'w3'], self.log.loc[line, 'w4']
+#                     m_cont, n_cont = self.log.loc[line, 'm_cont'], self.log.loc[line, 'n_cont']
+#                     amp, center, sigma = self.log.loc[line, 'amp'], self.log.loc[line, 'center'], \
+#                                          self.log.loc[line, 'sigma']
+#                     wave_peak, flux_peak = self.log.loc[line, 'peak_wave'], self.log.loc[
+#                         line, 'peak_flux'],
 #
 #                     # Rest frame
 #                     if frame == 'rest':
@@ -766,7 +766,7 @@ class LiMePlots:
 #                         wave_range = wave_range / (1 + self.redshift)
 #                         center = center / (1 + self.redshift)
 #                         wave_peak = wave_peak / (1 + self.redshift)
-#                         flux_peak = flux_peak * flux_corr / self.normFlux
+#                         flux_peak = flux_peak * flux_corr / self.norm_flux
 #
 #                     # Observed frame
 #                     else:
@@ -775,8 +775,8 @@ class LiMePlots:
 #                         cont = (m_cont * wave_range + n_cont) * flux_corr
 #
 #                     line_profile = gaussian_model(wave_range, amp, center, sigma) * flux_corr
-#                     self.ax1.plot(wave_range, cont / self.normFlux, ':', color='tab:purple', linewidth=0.5)
-#                     self.ax1.plot(wave_range, (line_profile + cont) / self.normFlux, color='tab:red', linewidth=0.5)
+#                     self.ax1.plot(wave_range, cont / self.norm_flux, ':', color='tab:purple', linewidth=0.5)
+#                     self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color='tab:red', linewidth=0.5)
 #
 #         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
 #

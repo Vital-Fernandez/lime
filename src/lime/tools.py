@@ -288,7 +288,6 @@ class LineFinder:
         # Theoretical wave values
         ion_array, waveTheory, latexLabel_array = label_decomposition(matched_DF.index.values)
         matched_DF['wavelength'] = waveTheory
-        # waveTheory = theoLineDF.wavelength.values
 
         # Match the lines with the theoretical emission
         tolerance = np.diff(self.wave_rest).mean() * width_tol
@@ -332,7 +331,6 @@ class LineFinder:
                     idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
                     matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
                     matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
-
 
         # if include_unknown is False:
         #     idcs_unknown = theoLineDF['observation'] == 'not detected'

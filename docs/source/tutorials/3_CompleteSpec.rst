@@ -109,15 +109,15 @@ This conversion is done by the ``.load_cfg`` function:
 .. code-block:: python
 
     # Load mask
-    sample_cfg = lime.load_cfg(cfgFile, objList_check=True)
+    obs_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
 
 
-The ``sample_cfg`` variable is a dictionary of dictionaries, where each section and option names are keys of the parent and
+The ``obs_cfg`` variable is a dictionary of dictionaries, where each section and option names are keys of the parent and
 child dictionaries respectively:
 
 .. code-block:: python
 
-    print(sample_cfg['sample_data']['z_array'])
+    print(obs_cfg['sample_data']['z_array'])
 
 .. code-block::
 
@@ -127,11 +127,11 @@ Using the data on this file, we are going to define the ``lime.Spectrum`` object
 
 .. code-block:: python
 
-    print(sample_cfg['sample_data']['z_array'])
+    print(obs_cfg['sample_data']['z_array'])
 
     # Declare line measuring object
-    z_obj = sample_cfg['sample_data']['z_array'][2]
-    norm_flux = sample_cfg['sample_data']['norm_flux']
+    z_obj = obs_cfg['sample_data']['z_array'][2]
+    norm_flux = obs_cfg['sample_data']['norm_flux']
     gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
     gp_spec.plot_spectrum()
 
@@ -142,7 +142,7 @@ that is using the ``.match_line_mask`` function:
 
 .. code-block:: python
 
-    peaks_table, matched_masks_DF = gp_spec.match_line_mask(maskDF, sample_cfg['sample_data']['noiseRegion_array'])
+    peaks_table, matched_masks_DF = gp_spec.match_line_mask(maskDF, obs_cfg['sample_data']['noiseRegion_array'])
 
 This function uses the ``.find_lines_derivative`` from the `specutils library <https://specutils.readthedocs.io/en/stable/fitting.html>`_
 to find the peaks of flux on the spectrum. Afterwards, these peaks location are matched against the line mask location
@@ -176,7 +176,7 @@ To save the new mask you can use the ``.save_line_log`` function:
 
 .. code-block:: python
 
-    lime.save_line_log(matched_masks_DF, 'corrected_mask_file', 'txt')
+    lime.save_line_log(matched_masks_DF, 'gp121903_BR_mask_corrected', 'txt')
 
 
 Using the GP121903 specific line mask we can start fitting the lines:
@@ -184,7 +184,7 @@ Using the GP121903 specific line mask we can start fitting the lines:
 .. code-block:: python
 
     # Object line fitting configuration
-    fit_cfg = sample_cfg['gp121903_line_fitting']
+    fit_cfg = obs_cfg['gp121903_line_fitting']
 
     # Measure the emission lines
     for i, lineLabel in enumerate(matched_masks_DF.index.values):
@@ -218,7 +218,8 @@ the Gaussian parameters.
    As you analyse a line using the ``.fit_from_wavelengths`` function you can introduce the fitting configuration
    for all the lines. :math:`\textsc{LiMe}` will known which settings apply at each case.
 
-The fitted profiles can be overplotted on the input spectrum using the ``profile_fittings=True`` attribute on the ``plot_spectrum``
+The fitted profiles can be over-plotted on the input spectrum using the ``profile_fittings=True`` parameter on the ``plot_spectrum``
+function
 
 .. code-block:: python
 
@@ -231,7 +232,7 @@ Or they can be plotted as a grid, including the mask selection, using the ``.plo
 
 .. code-block:: python
 
-    gp_spec.plot_line_grid(gp_spec.linesDF)
+    gp_spec.plot_line_grid(gp_spec.log)
 
 .. image:: ../_static/3_lineGrid.png
 
@@ -239,10 +240,10 @@ As a final step, we can use the ``.save_line_log`` function to save your measure
 
 .. code-block:: python
 
-    lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'txt')
-    lime.save_line_log(gp_spec.linesDF, 'gp121903_flux_table', 'pdf')
-    lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'fits')
-    lime.save_line_log(gp_spec.linesDF, 'gp121903_linelog', 'xls')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xls')
 
 .. note::
    The file extension determines file type the line log will be save as. In the case of ``.fits`` and ``.xlsx`` files if you

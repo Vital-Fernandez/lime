@@ -88,18 +88,11 @@ for lineLabel in mask_df.index.values:
     for i, comp in enumerate(gaus_comps):
         amp_true, center_true, sigma_true = emission_lines_dict[comp]
         amp_attr, center_attr, sigma_attr = synth_spec.amp, synth_spec.center/(1 + z_obj), synth_spec.sigma
-        amp_df, center_df, sigma_df = synth_spec.linesDF.loc[comp, 'amp']/flux_norm, synth_spec.linesDF.loc[comp, 'center']/(1 + z_obj), synth_spec.linesDF.loc[comp, 'sigma']
+        amp_df, center_df, sigma_df = synth_spec.log.loc[comp, 'amp'] / flux_norm, synth_spec.log.loc[comp, 'center'] / (1 + z_obj), synth_spec.log.loc[comp, 'sigma']
 
         print(f'\n- {comp}')
         print(f'True amplitude: {amp_true}, amplitude attribute {amp_attr[i]}, amplitude dataframe {amp_df}')
         print(f'True center: {center_true}, center attribute {center_attr[i]}, center log dataframe {center_df}')
         print(f'True sigma: {sigma_true}, sigma attribute {sigma_attr[i]}, sigma dataframe {sigma_df}')
-
-
-
-
-# Save to a txt file
-lime.save_line_log(synth_spec.linesDF, 'example2_linelog', 'txt')
-
 
 

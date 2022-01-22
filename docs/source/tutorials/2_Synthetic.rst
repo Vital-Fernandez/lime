@@ -189,7 +189,7 @@ Finally, we perform the line fitting looping through the line masks:
         for i, comp in enumerate(gaus_comps):
             amp_true, center_true, sigma_true = emission_lines_dict[comp]
             amp_attr, center_attr, sigma_attr = synth_spec.amp, synth_spec.center/(1 + z_obj), synth_spec.sigma
-            amp_df, center_df, sigma_df = synth_spec.linesDF.loc[comp, 'amp']/flux_norm, synth_spec.linesDF.loc[comp, 'center']/(1 + z_obj), synth_spec.linesDF.loc[comp, 'sigma']
+            amp_df, center_df, sigma_df = synth_spec.log.loc[comp, 'amp']/flux_norm, synth_spec.log.loc[comp, 'center']/(1 + z_obj), synth_spec.log.loc[comp, 'sigma']
 
             print(f'\n- {comp}')
             print(f'True amplitude: {amp_true}, amplitude attribute {amp_attr[i]}, amplitude dataframe {amp_df}')
@@ -295,7 +295,7 @@ class in the ``lime.Spectrum`` objects.
 
 .. note::
 
-    The measurements in these attributes are normalized by the input ``.lime.Spectrum.normFlux``. Moreover, the measurements
+    The measurements in these attributes are normalized by the input ``.lime.Spectrum.norm_flux``. Moreover, the measurements
     in these attributes are just those from the last fitting. For security's sake, :math:`\textsc{LiMe}` clears all the parameter values
     prior to a measurement using the ``.lime.Spectrum.clear_fit()`` function.
 
