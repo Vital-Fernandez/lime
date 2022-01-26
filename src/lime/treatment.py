@@ -300,8 +300,10 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
 class MaskInspector(Spectrum):
 
-    def __init__(self, lines_log_address, lines_DF, input_wave=None, input_flux=None, input_err=None, redshift=0,
+    def __init__(self, lines_log_address, log, input_wave=None, input_flux=None, input_err=None, redshift=0,
                  norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
+
+        # TODO modified lines are changed in the output file. Need to update.
 
         # Output file address
         self.linesLogAddress = Path(lines_log_address)
@@ -310,8 +312,8 @@ class MaskInspector(Spectrum):
         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
 
         # DF is provided
-        if lines_DF is not None:
-            self.log = pd.DataFrame.copy(lines_DF)
+        if log is not None:
+            self.log = pd.DataFrame.copy(log)
 
         # DF is not provided
         else:

@@ -106,8 +106,8 @@ class LiMePlots:
 
         if matched_DF is not None:
             idcs_foundLines = (matched_DF.observation.isin(('detected', 'not identified'))) & \
-                              (matched_DF.wavelength >= wave_plot[0]) & \
-                              (matched_DF.wavelength <= wave_plot[-1])
+                              (matched_DF.wavelength >= self.wave_rest[0]) & \
+                              (matched_DF.wavelength <= self.wave_rest[-1])
             if 'latexLabel' in matched_DF:
                 lineLatexLabel = matched_DF.loc[idcs_foundLines].latexLabel.values
             else:

@@ -151,7 +151,7 @@ to find the peaks of flux on the spectrum. Afterwards, these peaks location are 
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum(obsLinesTable=peaks_table, matchedLinesDF=matched_masks_DF, specLabel=f'Emission line detection',
+    gp_spec.plot_spectrum(obsLinesTable=peaks_table, matchedLinesDF=matched_masks_DF, specLabel=f'GP121903 spectrum',
                           frame=plots_frame)
 
 
