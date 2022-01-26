@@ -35,7 +35,11 @@ In the recommended workflow, the user will move through three mask files:
    inspected and adjusted to match the line width and to avoid uneven features on the adjacent continua.
 
 In large observations, however, a compromise might be necessary for the last step. To make the task easier, lime includes
-the ``.MaskInspector`` class. Let's try tested with the example Green Pea spectrum:
+the ``.MaskInspector`` class.
+
+This tutorial can also be found as a python script in the `github 4th example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example4_interactive_mask_plots.py>`_.
+
+Let's start by importing the data files from the Green Pea sample:
 
 .. code-block:: python
 
@@ -63,6 +67,10 @@ the ``.MaskInspector`` class. Let's try tested with the example Green Pea spectr
 
     wave = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
+Now we can prepare the data for the ``.MaskInspector`` class:
+
+.. code-block:: python
+
     # Object properties
     z_obj = sample_cfg['sample_data']['z_array'][2]
     norm_flux = sample_cfg['sample_data']['norm_flux']
@@ -72,7 +80,7 @@ the ``.MaskInspector`` class. Let's try tested with the example Green Pea spectr
     lime.MaskInspector(lines_log_address=objMaskFile, lines_DF=maskDF,
                        input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
 
-The ``.MaskInspector`` plot generates an interactive grid plot with the line masks provided by the ``log`` parameter:
+This class generates an interactive grid plot with the line masks provided by the ``log`` parameter:
 
 .. image:: ../_static/4_mask_selection_grid.png
 
