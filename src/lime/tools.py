@@ -64,6 +64,10 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
     # TODO for blended lines it may be better to return all the blended components individually
     input_lines = np.array(input_lines, ndmin=1)
 
+    # TODO current workflow breaks if repeated labels
+    uniq, count = np.unique(input_lines, return_counts=True)
+    assert not np.any(count > 1), '- ERROR: The input line labels in lime.label_decomposition includes repeated entries, please remove them'
+
     # Containers for input data
     ion_dict, wave_dict, latexLabel_dict = {}, {}, {}
 

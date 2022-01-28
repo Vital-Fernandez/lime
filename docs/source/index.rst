@@ -22,7 +22,7 @@ These are some of the features currently available:
 .. admonition:: Where to find what you need
    :class: hint
 
-   💻 To install or update the library go the `installation page <documentation/installation>`_. The source code is
+   💻 To install or update the library go the `installation page <documentation/installation.html>`_. The source code is
    available in `github <https://github.com/Vital-Fernandez/lime>`_ for those who want to review/fork it.
 
    🚀 For a quick start go to the **Tutorials** section. These are organized by increasing complexity and they

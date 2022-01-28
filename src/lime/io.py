@@ -922,6 +922,13 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
     return
 
+def log_map_generator(default_value=np.nan):
+
+    keys = {line_parameter : ()}
+
+
+
+    return
 
 class PdfMaker:
 
