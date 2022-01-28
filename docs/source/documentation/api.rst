@@ -12,6 +12,8 @@ Inputs and outputs
 
 .. autofunction:: lime.io.load_lines_log
 
+.. autofunction:: lime.io.save_param_maps
+
 
 Core
 ----

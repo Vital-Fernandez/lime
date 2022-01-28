@@ -3,8 +3,8 @@ __all__ = [
     'load_fits',
     'load_cfg',
     'load_lines_log',
-    'save_line_log'
-]
+    'save_line_log',
+    'save_param_maps']
 
 import os
 import configparser
@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pylatex
 
-from sys import exit
+from sys import exit, stdout
 from pathlib import Path
 from functools import partial
 from collections import Sequence
@@ -922,13 +922,179 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
     return
 
-def log_map_generator(default_value=np.nan):
 
-    keys = {line_parameter : ()}
+def progress_bar(i, i_max, post_text, n_bar=10):
 
-
+    #size of progress bar
+    j = i/i_max
+    stdout.write('\r')
+    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}%  {post_text}"
+    stdout.write(message)
+    stdout.flush()
 
     return
+
+
+def save_param_maps(log_file_address, param_dict, output_folder, mask_file_address=None, ext_mask='all', image_shape=None,
+                   ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None, page_hdr={}):
+    """
+
+    This function loads a ``.fits`` file with the line log measurements and generates a set of spatial images from a dictionary
+    of parameters and lines provided by the user. For every parameter, the function generates a .fits file with multiple
+    pages (`HDUs <https://docs.astropy.org/en/stable/io/fits/api/hdus.html>`_), one per input line.
+
+    The ``.fits`` log pages will be queried by voxel coordinates (the default format is ``{idx_j}-{idx_i}_LINESLOG``).
+    The user can provide a spatial mask address with the spaxels for which to recover the line log measurements. If the mask
+    ``.fits`` file contains several extensions, the user can provide a list of which ones to use. Otherwise, all will be used.
+
+    .. attention::
+        The user can provide an ``image_shape`` array to generate the output image size. However, in big images attempting this
+        approach, instead of providing a spatial mask with the science data location, can require a long time to inspect
+        the log measurements.
+
+    The output ``.fits`` image maps include a header with the ``PARAM`` and ``LINE`` with the line and parameter labels
+    respectively (see `measurements <documentation/measurements.html>`_).
+
+    :param log_file_address: fits file address location with the line logs
+    :type log_file_address: str
+
+    :param param_dict: Dictionary with the lists of lines to map for every parameter, e.g. ``{'intg_flux': ['O3_5007A', 'H1_6563A']}``
+    :type param_dict: dict
+
+    :param output_folder: Output address for the fits maps
+    :type output_folder: str
+
+    :param mask_file_address: fits file address of the spatial mask images
+    :type mask_file_address: str, optional
+
+    :param ext_mask: Extension or list of extensions in the mask file to determine the list of spaxels to treat. 
+                     By default uses all extensions (special keyword "all") 
+    :type ext_mask: str or list, optional
+
+    :param image_shape: Array with the image spatial size. The unis are the 2D array indices, e.g. (idx_j_max, idx_i_max)
+    :type image_shape: list or array, optional
+
+    :param ext_log: Suffix of the line logs extensions. The default value is "_LINESLOG". In this case the .fits file HDUs
+                    will be queried as ``{idx_j}-{idx_i}_LINESLOG``, where ``idx_j`` and ``idx_i`` are the spaxel Y and X coordinates
+                    respectively
+    :type ext_log: str, optional
+
+    :param default_spaxel_value: Default value for the output image spaxels, where no measurement was obtained from the logs.
+                                 By default this value is numpy.nan
+    :type default_spaxel_value: float, optional
+
+    :param output_files_prefix: Prefix for the output image fits file. e.g. ``f'{output_files_prefix}{parameter}.fits'``. The
+                                default value is None
+    :type output_files_prefix: str, optional
+    
+    :param page_hdr: Dictionary with entries to include in the output parameter HDUs headers
+    :type page_hdr: dict
+
+    :return:
+    """
+
+    assert Path(log_file_address).is_file(), f'- ERROR: lines log at {log_file_address} not found'
+    assert Path(output_folder).is_dir(), f'- ERROR: Output parameter maps folder {output_folder} not found'
+
+    # Compile the list of voxels to recover the provided masks
+    if mask_file_address is not None:
+
+        assert Path(mask_file_address).is_file(), f'- ERROR: mask file at {mask_file_address} not found'
+
+        with fits.open(mask_file_address) as maskHDUs:
+
+            # Get the list of mask extensions
+            if ext_mask == 'all':
+                if ('PRIMARY' in maskHDUs) and (len(maskHDUs) > 1):
+                    mask_list = []
+                    for i, HDU in enumerate(maskHDUs):
+                        mask_name = HDU.name
+                        if mask_name != 'PRIMARY':
+                            mask_list.append(mask_name)
+                    mask_list = np.array(mask_list)
+                else:
+                    mask_list = np.array(['PRIMARY'])
+            else:
+                mask_list = np.array(ext_mask, ndmin=1)
+
+            # Combine all the mask voxels into one
+            for i, mask_name in enumerate(mask_list):
+                if i == 0:
+                    mask_array = maskHDUs[mask_name].data
+                    image_shape = mask_array.shape
+                else:
+                    assert image_shape == maskHDUs[mask_name].data.shape, '- ERROR: Input masks do not have the same dimensions'
+                    mask_array += maskHDUs[mask_name].data
+
+            # Convert to boolean
+            mask_array = mask_array.astype(bool)
+
+            # List of spaxels in list [(idx_j, idx_i), ...] format
+            spaxel_list = np.argwhere(mask_array)
+
+    # No mask file is provided and the user just defines an image size tupple (nY, nX)
+    else:
+        mask_array = np.ones(image_shape).astype(bool)
+        spaxel_list = np.argwhere(mask_array)
+
+    # Generate containers for the data:
+    images_dict = {}
+    for param, line_list in param_dict.items():
+
+        # Make sure is an array and loop throuh them
+        line_list = np.array(line_list, ndmin=1)
+        for line in line_list:
+            images_dict[f'{param}-{line}'] = np.full(image_shape, default_spaxel_value)
+
+    # Loop through the spaxels and fill the parameter images
+    n_spaxels = spaxel_list.shape[0]
+    spaxel_range = np.arange(n_spaxels)
+
+    with fits.open(log_file_address) as logHDUs:
+
+        for i_spaxel in spaxel_range:
+            idx_j, idx_i = spaxel_list[i_spaxel]
+            spaxel_ref = f'{idx_j}-{idx_i}{ext_log}'
+
+            progress_bar(i_spaxel, n_spaxels, postText=f'spaxels treated ({n_spaxels})')
+
+            # Confirm log extension exists
+            if spaxel_ref in logHDUs:
+
+                # Recover extension data
+                log_data = logHDUs[spaxel_ref].data
+                log_lines = log_data['index']
+
+                # Loop through the parameters and the lines:
+                for param, user_lines in param_dict.items():
+                    idcs_log = np.argwhere(np.in1d(log_lines, user_lines))
+                    for i_line in idcs_log:
+                        images_dict[f'{param}-{log_lines[i_line][0]}'][idx_j, idx_i] = log_data[param][i_line][0]
+
+    # New line after the rustic progress bar
+    print()
+
+    # Save the parameter maps as individual fits files with one line per page
+    output_files_prefix = '' if output_files_prefix is None else output_files_prefix
+    for param, user_lines in param_dict.items():
+
+        # Primary header
+        paramHDUs = fits.HDUList()
+        paramHDUs.append(fits.PrimaryHDU())
+
+        # ImageHDU for the parameter maps
+        for line in user_lines:
+            hdr = fits.Header({'PARAM': param, 'LINE': param})
+            hdr.update(page_hdr)
+            data = images_dict[f'{param}-{line}']
+            paramHDUs.append(fits.ImageHDU(name=line, data=data, header=hdr, ver=1))
+
+        # Write to new file
+        output_file = Path(output_folder)/f'{output_files_prefix}{param}.fits'
+        paramHDUs.writeto(output_file, overwrite=True, output_verify='fix')
+
+    return
+
 
 class PdfMaker:
 
