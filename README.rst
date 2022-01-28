@@ -18,7 +18,7 @@ The library can be installed directly from its pip_ project page running the com
 Development
 ===========
 
-:math:`\textsc{LiMe}` is currently in a beta release. Please check its github_ for the latest version news and tutorials.
+LiMe is currently in a beta release. Please check its github_ for the latest version news and tutorials.
 Any comment/issue/request can be added as an issue on the github_ page.
 
 .. _pip: https://pypi.org/project/lime-stable/
