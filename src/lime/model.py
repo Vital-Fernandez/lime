@@ -72,6 +72,9 @@ class EmissionFitting:
     _SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
     _INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
 
+    # Switch for emission and absorption lines
+    _emission_check = True
+
     def __init__(self):
 
         self.line, self.lineWaves = '', np.array([np.nan] * 6)
@@ -142,7 +145,7 @@ class EmissionFitting:
         lineLinearCont = emisWave * self.m_cont + self.n_cont
 
         # Line Characteristics
-        peakIdx = np.argmax(emisFlux)
+        peakIdx = np.argmax(emisFlux) if self._emission_check else np.argmin(emisFlux)
         self.peak_wave, self.peak_flux = emisWave[peakIdx], emisFlux[peakIdx]
         self.pixelWidth = np.diff(emisWave).mean()
         self.std_cont = np.std(contFlux - continuaFit)
@@ -164,8 +167,12 @@ class EmissionFitting:
             velocArray = c_KMpS * (emisWave - self.peak_wave)/self.peak_wave
             percentFluxArray = np.cumsum(emisFlux-lineLinearCont) * self.pixelWidth / self.intg_flux * 100
 
-            blue_range = emisFlux[:peakIdx] > self.peak_flux/2
-            red_range = emisFlux[peakIdx:] < self.peak_flux/2
+            if self._emission_check:
+                blue_range = emisFlux[:peakIdx] > self.peak_flux/2
+                red_range = emisFlux[peakIdx:] < self.peak_flux/2
+            else:
+                blue_range = emisFlux[:peakIdx] < self.peak_flux/2
+                red_range = emisFlux[peakIdx:] > self.peak_flux/2
 
             # In case the peak is at the edge
             if (blue_range.size > 2) and (red_range.size > 2):
