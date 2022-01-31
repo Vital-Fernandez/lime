@@ -207,7 +207,7 @@ class LineFinder:
         return
 
     def match_line_mask(self, mask_df, noise_region, line_threshold=3, emis_abs_thresholds=((4, 4), (1.5, 1.5)),
-                        cont_degree_list=(3, 7), width_tol=5, width_mode='auto'):
+                        cont_degree_list=(3, 7), width_tol=5, line_type='emission', width_mode='auto'):
         """
 
         :param mask_df: pandas DataFrame with the line masks.
@@ -216,6 +216,7 @@ class LineFinder:
         :param emis_abs_thresholds:
         :param cont_degree_list:
         :param width_tol:
+        :param line_type:
         :param width_mode:
         :return:
         """
@@ -229,7 +230,8 @@ class LineFinder:
         peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, line_threshold)
 
         # Match peaks with theoretical lines
-        matched_DF = self.label_peaks(peaks_table, mask_df, width_tol=width_tol, width_mode=width_mode)
+        matched_DF = self.label_peaks(peaks_table, mask_df, width_tol=width_tol, width_mode=width_mode,
+                                      line_type=line_type)
 
         return peaks_table, matched_DF
 

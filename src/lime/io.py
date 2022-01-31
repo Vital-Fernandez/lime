@@ -925,7 +925,7 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
 def progress_bar(i, i_max, post_text, n_bar=10):
 
-    #size of progress bar
+    # Size of progress bar
     j = i/i_max
     stdout.write('\r')
     message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}%  {post_text}"
@@ -1056,7 +1056,7 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
             idx_j, idx_i = spaxel_list[i_spaxel]
             spaxel_ref = f'{idx_j}-{idx_i}{ext_log}'
 
-            progress_bar(i_spaxel, n_spaxels, postText=f'spaxels treated ({n_spaxels})')
+            progress_bar(i_spaxel, n_spaxels, post_text=f'spaxels treated ({n_spaxels})')
 
             # Confirm log extension exists
             if spaxel_ref in logHDUs:

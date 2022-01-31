@@ -99,10 +99,14 @@ class LiMePlots:
 
         # Plot astropy detected lines if available
         if peaks_table is not None:
-            idcs_emission = peaks_table['line_type'] == 'emission'
-            idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
-            ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label='Emission peaks', facecolors='none',
-                       edgecolors='tab:purple')
+            color_peaks = ('tab:purple', 'tab:green')
+            line_types = ('emission', 'absorption')
+            labels = ('Emission peaks', 'Absorption peaks')
+            for i in range(2):
+                idcs_emission = peaks_table['line_type'] == line_types[i]
+                idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
+                ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label=labels[i], facecolors='none',
+                           edgecolors=color_peaks[i])
 
         if matched_DF is not None:
             idcs_foundLines = (matched_DF.observation.isin(('detected', 'not identified'))) & \

@@ -28,13 +28,10 @@ norm_flux = sample_cfg['sample_data']['norm_flux']
 
 # Run the interative plot
 objMaskFile = './sample_data/gp121903_BR_mask_corrected.txt'
-# lime.MaskInspector(lines_log_address=objMaskFile, log=maskDF,
-#                    input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
+lime.MaskInspector(lines_log_address=objMaskFile, log=maskDF,
+                   input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
 
 # To treat just a a few of the lines at a time given, we may slice the log attribute.
-lines_log_section = maskDF[:5]
-lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section,
-                   input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
 lines_log_section = maskDF[6:10]
 lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section,
                    input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
