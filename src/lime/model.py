@@ -157,10 +157,6 @@ class EmissionFitting:
             f2, f3 = emisFlux[0], emisFlux[-1]
             self.m_cont = (f3 - f2) / (w3 - w2)
             self.n_cont = f3 - self.m_cont * w3
-            print('HOOOOOOOOOOOOOOOOLLLLLLLLLLLLLLLAAAAAAAAA')
-            print(self.m_cont)
-            print(self.n_cont)
-            print()
 
         # Compute continuum
         continuaFit = contWave * self.m_cont + self.n_cont
