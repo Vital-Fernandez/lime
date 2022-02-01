@@ -170,7 +170,6 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check
         while (spec_flux[i] > spec_flux[i + delta_i]) or (np.abs(idx_peak - (i + delta_i)) <= min_delta):
             i += delta_i
     else:
-        print('HOOOOLLLLAAAA')
         while (spec_flux[i] < spec_flux[i + delta_i]) or (np.abs(idx_peak - (i + delta_i)) <= min_delta):
             i += delta_i
 
