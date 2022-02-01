@@ -154,7 +154,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
         return ion_array, wavelength_array, latexLabel_array
 
 
-def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2):
+def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):
     """
     Algororithm to measure emision line width given its peak location
     :param idx_peak:
@@ -165,8 +165,14 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2):
     """
 
     i = idx_peak
-    while (spec_flux[i] > spec_flux[i + delta_i]) or (np.abs(idx_peak - (i + delta_i)) <= min_delta):
-        i += delta_i
+
+    if emission_check:
+        while (spec_flux[i] > spec_flux[i + delta_i]) or (np.abs(idx_peak - (i + delta_i)) <= min_delta):
+            i += delta_i
+    else:
+        print('HOOOOLLLLAAAA')
+        while (spec_flux[i] < spec_flux[i + delta_i]) or (np.abs(idx_peak - (i + delta_i)) <= min_delta):
+            i += delta_i
 
     return i
 
@@ -286,7 +292,9 @@ class LineFinder:
 
         matched_DF = pd.DataFrame.copy(mask_df)
 
-        # Query the lines from the astropy finder tables # TODO Expand technique for absorption lines
+        # TODO auto param should be changed to boolean
+
+        # Query the lines from the astropy finder tables #
         idcsLineType = peak_table['line_type'] == line_type
         idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
         wave_peaks = self.wave_rest[idcsLinePeak]
@@ -326,17 +334,18 @@ class LineFinder:
                 # Width is only computed for blended lines
                 if width_mode == 'auto':
                     if blended_check is False:
-                        idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation)
-                        idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
+                        emission_check = True if line_type == 'emission' else False
+                        idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation, emission_check=emission_check)
+                        idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation, emission_check=emission_check)
                         matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
                         matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
-                # Width is computed for every line
-                else:
-                    idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation)
-                    idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
-                    matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
-                    matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
+                # Else leave the values already there
+                # else:
+                #     idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation)
+                #     idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
+                #     matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
+                #     matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
         # if include_unknown is False:
         #     idcs_unknown = theoLineDF['observation'] == 'not detected'

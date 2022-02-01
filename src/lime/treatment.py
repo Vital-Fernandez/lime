@@ -78,13 +78,15 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def fit_from_wavelengths(self, label, line_wavelengths, user_cfg={}, algorithm='lmfit'):
+    def fit_from_wavelengths(self, label, line_wavelengths, user_cfg={}, algorithm='lmfit', emission=True,
+                             adjacent_cont=True):
 
         """
         This function fits an emission line by providing its label, location and an optional fit configuration. The
         algorithm accounts for the object redshift if it was provided by the user and corrects the input
         line_wavelengths
 
+        :param emission_check:
         :param str label: Line reference incluiding the ion and wavelength. Example: O3_5007A
         :param np.ndarray line_wavelengths: Array with 6 wavelength values defining an emision line left continuum,  emission region and right continuum
         :param dict user_cfg: Dictionary with the user configuration for the fitting
@@ -98,6 +100,10 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         # Label the current measurement
         self.line = label
         self.lineWaves = line_wavelengths
+
+        # Global fit parameters
+        self._emission_check = emission
+        self._cont_from_adjacent = adjacent_cont
 
         # Check if the masks are within the range
         if not np.any((self.lineWaves < self.wave_rest[0]) | (self.lineWaves > self.wave_rest[-1])):

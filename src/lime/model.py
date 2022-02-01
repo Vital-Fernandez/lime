@@ -68,12 +68,18 @@ class EmissionFitting:
     _AMP_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
     _CENTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
     _SIG_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
-    _AREA_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+    _AREA_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
+    # _AREA_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+
+    _AMP_ABS_PAR = dict(value=None, min=-np.inf, max=0, vary=True, expr=None)
+
     _SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
     _INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
 
+    _SLOPE_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+    _INTER_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+
     # Switch for emission and absorption lines
-    _emission_check = True
 
     def __init__(self):
 
@@ -102,6 +108,8 @@ class EmissionFitting:
 
         self.fit_params, self.fit_output = {}, None
         self.pixelWidth = None
+        self._emission_check = True
+        self._cont_from_adjacent = True
 
         return
 
@@ -139,8 +147,22 @@ class EmissionFitting:
 
     def line_properties(self, emisWave, emisFlux, contWave, contFlux, emisErr = None, bootstrap_size=500):
 
-        # Linear continuum linear fit
-        self.m_cont, self.n_cont, r_value, p_value, std_err = stats.linregress(contWave, contFlux)
+        # Gradient and interception of linear continuum using adjacent regions
+        if self._cont_from_adjacent:
+            self.m_cont, self.n_cont, r_value, p_value, std_err = stats.linregress(contWave, contFlux)
+
+        # Using line first and last point
+        else:
+            w2, w3 = emisWave[0], emisWave[-1]
+            f2, f3 = emisFlux[0], emisFlux[-1]
+            self.m_cont = (f3 - f2) / (w3 - w2)
+            self.n_cont = f3 - self.m_cont * w3
+            print('HOOOOOOOOOOOOOOOOLLLLLLLLLLLLLLLAAAAAAAAA')
+            print(self.m_cont)
+            print(self.n_cont)
+            print()
+
+        # Compute continuum
         continuaFit = contWave * self.m_cont + self.n_cont
         lineLinearCont = emisWave * self.m_cont + self.n_cont
 
@@ -237,12 +259,21 @@ class EmissionFitting:
             # Linear
             if idx_comp == 0:
                 fit_model.prefix = f'{comp}_cont_' # For a blended line the continuum conf is defined by first line
-                self.define_param(fit_model, comp, 'cont_slope', self.m_cont, self._SLOPE_PAR, user_conf)
-                self.define_param(fit_model, comp, 'cont_intercept', self.n_cont, self._INTER_PAR, user_conf)
+
+                SLOPE_PAR = self._SLOPE_PAR if self._cont_from_adjacent else self._SLOPE_FIX_PAR
+                INTER_PAR = self._INTER_PAR if self._cont_from_adjacent else self._INTER_FIX_PAR
+
+                self.define_param(fit_model, comp, 'cont_slope', self.m_cont, SLOPE_PAR, user_conf)
+                self.define_param(fit_model, comp, 'cont_intercept', self.n_cont, INTER_PAR, user_conf)
 
             # Gaussian
             fit_model += Model(gaussian_model, prefix=f'{comp}_')
-            self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, self._AMP_PAR, user_conf)
+
+            # Amplitude default configuration changes according and emission or absorption feature
+            AMP_PAR = self._AMP_PAR if self._emission_check else self._AMP_ABS_PAR
+
+            # Define the curve parameters
+            self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
             self.define_param(fit_model, comp, 'center', ref_wave[idx_comp], self._CENTER_PAR, user_conf, z_cor=(1+z_obj))
             self.define_param(fit_model, comp, 'sigma', 1.0, self._SIG_PAR, user_conf)
             self.define_param(fit_model, comp, 'area', comp, self._AREA_PAR, user_conf)
