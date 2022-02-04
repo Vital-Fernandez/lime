@@ -19,22 +19,45 @@ from matplotlib.widgets import SpanSelector
 
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
+    """
+    This class provides a set of tools to measure lines from the spectra of ionized gas. The user provides a spectrum
+    with input arrays for the observation wavelength and flux.
+
+    |
+
+    Optionally, the user can provide the sigma spectrum with the pixel uncertainty. This array must be in the same
+    units as the ``input_flux``.
+
+    |
+
+    It is recommended to provide the object redshift and a flux normalization. This guarantees the functionality of
+    the class functions.
+
+    |
+
+    Finally, the user can also provide a two value array with the same wavelength limits. This array must be in the
+    same units and frame of reference as the ``.input_wave``.
+
+    :param input_wave: wavelength array
+    :type input_wave: numpy.array
+
+    :param input_flux: flux array
+    :type input_flux: numpy.array
+
+    :param input_err: sigma array of the ``input_flux``
+    :type input_err: numpy.array, optional
+
+    :param redshift: spectrum redshift
+    :type redshift: float, optional
+
+    :param norm_flux: spectrum flux normalization
+    :type norm_flux: float, optional
+
+    :param crop_waves: wavelength array crop values
+    :type norm_flux: float, optional
+    """
+
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
-
-        """
-
-        This class provides a set of tools to measure emission lines from ionized gas to study its chemistry and kinematics
-        The user provides an spectrum object in the observed frame alongside the object redshift and normalization flux
-
-        :param input_wave: Wavelength array
-        :param input_flux: Flux array
-        :param input_err: Standard deviation array
-        :param redshift: Object redshift
-        :param norm_flux: Flux normalization
-        :param crop_waves: Wavelength limits for the analysis
-
-
-        """
 
         # Load parent classes
         LineFinder.__init__(self)

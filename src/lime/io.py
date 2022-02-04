@@ -278,13 +278,12 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
 def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='line_fitting'):
 
     """
-
     This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
     check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
 
-    If the user provides a list of objects (via the ``obj_section`` parameter) this function will update the object line fitting
-    configuration to include the default configuration. If there are shared entries the object configuration takes preference.
-    The object section must have follow the "objectName_line_fitting" notation, where the "objectName" is obtained from
+    If the user provides a list of objects (via the ``obj_section`` parameter) this function will update each object fitting
+    configuration to include the default configuration. If there are shared entries, the object configuration takes precedence.
+    The object section must have have the "objectName_line_fitting" notation, where the "objectName" is obtained from
     the object list.
 
     If the user provides a list of masks (via the ``mask_section`` parameter) this function will update the spaxel line fitting
