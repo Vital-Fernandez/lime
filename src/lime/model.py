@@ -79,6 +79,8 @@ class EmissionFitting:
     _SLOPE_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
     _INTER_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
 
+    _minimize_method = 'leastsq'
+
     # Switch for emission and absorption lines
 
     def __init__(self):
@@ -276,7 +278,7 @@ class EmissionFitting:
 
         # Fit the line
         self.fit_params = fit_model.make_params()
-        self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights)
+        self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights, method=self._minimize_method)
 
         if not self.fit_output.errorbars:
             print(f'-- WARNING: Parameter(s) uncertainty could not be measured for line {line_label}')

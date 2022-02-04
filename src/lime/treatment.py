@@ -23,17 +23,11 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     This class provides a set of tools to measure lines from the spectra of ionized gas. The user provides a spectrum
     with input arrays for the observation wavelength and flux.
 
-    |
-
     Optionally, the user can provide the sigma spectrum with the pixel uncertainty. This array must be in the same
     units as the ``input_flux``.
 
-    |
-
     It is recommended to provide the object redshift and a flux normalization. This guarantees the functionality of
     the class functions.
-
-    |
 
     Finally, the user can also provide a two value array with the same wavelength limits. This array must be in the
     same units and frame of reference as the ``.input_wave``.
@@ -101,28 +95,61 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def fit_from_wavelengths(self, label, line_wavelengths, user_cfg={}, algorithm='lmfit', emission=True,
-                             adjacent_cont=True):
+    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True):
 
         """
-        This function fits an emission line by providing its label, location and an optional fit configuration. The
-        algorithm accounts for the object redshift if it was provided by the user and corrects the input
-        line_wavelengths
 
-        :param emission_check:
-        :param str label: Line reference incluiding the ion and wavelength. Example: O3_5007A
-        :param np.ndarray line_wavelengths: Array with 6 wavelength values defining an emision line left continuum,  emission region and right continuum
-        :param dict user_cfg: Dictionary with the user configuration for the fitting
-        :param algorithm: Algorithm for the line profile fitting (Not implemented)
+        This function fits a line given its label and spectral mask. The label notation consists in the transition
+        ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
+
+        The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
+        adjacent continua. These wavelengths must be sorted by increasing order and in the rest frame.
+
+        The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
+        the documentation for the complete details.
+
+        The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+
+        By default, the algorithm assumes an emission line. The user can set the parameter ``emission=False`` for an
+        absorption.
+
+        If the sigma spectrum was not provided, the fitting estimates the pixel uncertainty from the adjacent continua flux
+        standard deviation assuming a linear profile. If the parameter ``adjacent_cont=True`` the adjacent continua is also
+        use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
+        first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
+
+        :param line: line label in the ``LiMe`` notation, i.e. H1_6563A_b
+        :type line: string
+
+        :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
+        :type mask: numpy.ndarray
+
+        :param user_cfg: Dictionary with the fitting configuration.
+        :type user_cfg: dict, optional
+
+        :param algorithm: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
+        :type algorithm: str, optional
+
+        :param emission: Boolean check for the line type. The default is ``True`` for an emission line
+        :type emission: bool, optional
+
+        :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
+                              adjacent continuaarray
+        :type adjacent_cont: bool, optional
+
         """
 
         # For security previous measurement is cleared and a copy of the user configuration is used
         self.clear_fit()
         fit_conf = user_cfg.copy()
 
+        # Estate the minimizing method for the fitting (this parameter is not restored to default by the self.clear_fit function)
+        self._minimize_method = fit_method
+
+
         # Label the current measurement
-        self.line = label
-        self.lineWaves = line_wavelengths
+        self.line = line
+        self.lineWaves = mask
 
         # Global fit parameters
         self._emission_check = emission
