@@ -39,7 +39,7 @@ fit_cfg = obs_cfg['gp121903_line_fitting']
 for i, lineLabel in enumerate(matched_masks_DF.index.values):
     wave_regions = matched_masks_DF.loc[lineLabel, 'w1':'w6'].values
     gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
-    # gp_spec.display_results(show_fit_report=True, show_plot=True, log_scale=True, frame='obs')
+    # gp_spec.display_results(fit_report=True, plot=True, log_scale=True, frame='obs')
 
 # Display fits in grid
 gp_spec.plot_line_grid(gp_spec.log, frame=plots_frame)

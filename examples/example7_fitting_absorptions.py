@@ -24,5 +24,5 @@ obsLines = matched_DF.loc[idcsObsLines].index.values
 for j, lineLabel in enumerate(obsLines):
     wave_regions = matched_DF.loc[lineLabel, 'w1':'w6'].values
     star_spec.fit_from_wavelengths(lineLabel, wave_regions, emission=False, adjacent_cont=False)
-    star_spec.display_results(show_fit_report=True)
+    star_spec.display_results(fit_report=True)
     star_spec.plot_fit_components(star_spec.fit_output, lineLabel, frame='rest', log_scale=True)

@@ -23,7 +23,7 @@ gp_spec.plot_spectrum()
 gp_spec.fit_from_wavelengths(lineLabel, lineWaves)
 
 # Show the results
-gp_spec.display_results(show_fit_report=True, show_plot=True)
+gp_spec.display_results()
 
 # Fit configuration
 fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
@@ -32,7 +32,8 @@ fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
 
 # Second attempt including the fit configuration
 gp_spec.fit_from_wavelengths(lineLabel, lineWaves, fit_conf)
-gp_spec.display_results(show_fit_report=True, show_plot=True, save_address=f'./sample_data/{lineLabel}.png')
+gp_spec.display_results(fit_report=True)
+gp_spec.display_results(fit_report=True, plot=True, output_address=f'./sample_data/{lineLabel}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
 print(gp_spec.log)

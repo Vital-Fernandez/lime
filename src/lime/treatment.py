@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from lmfit import fit_report
+from lmfit import fit_report as lmfit_fit_report
 from sys import exit
 from astropy.table import Table
 from astropy.io import fits
@@ -99,7 +99,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         """
 
-        This function fits a line given its label and spectral mask. The label notation consists in the transition
+        This function fits a line given its line and spectral mask. The line notation consists in the transition
         ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
 
         The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
@@ -118,7 +118,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
         first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
 
-        :param line: line label in the ``LiMe`` notation, i.e. H1_6563A_b
+        :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
         :type line: string
 
         :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
@@ -134,7 +134,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         :type emission: bool, optional
 
         :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
-                              adjacent continuaarray
+                              adjacent continua array
         :type adjacent_cont: bool, optional
 
         """
@@ -249,7 +249,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     def results_to_database(self, lineLabel, linesDF, fit_conf, export_params=_LOG_EXPORT):
 
-        # Recover label data
+        # Recover line data
         if self.blended_check:
             line_components = self.blended_label.split('-')
         else:
@@ -285,17 +285,51 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def display_results(self, label=None, show_fit_report=False, show_plot=False, log_scale=True, frame='obs',
-                        save_address=None):
+    def display_results(self, line=None, fit_report=False, plot=True, log_scale=True, frame='obs',
+                        output_address=None):
 
-        # Case no line as input: Show the current measurement
-        # Show the result
-        if show_fit_report:
+        """
 
-            if label is None:
+        This function plots or prints the fitting of a line. If no line specified, the values used are those from the
+        last fitting.
+
+        The ``fit_report=True`` includes the `the LmFit log <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_.
+
+        If an ``output_address`` is provided, the outputs will be saved to a file instead of displayed on the terminal/window.
+        The text file will have the address output file extension changed to .txt, while the plot will use the one provided
+        by the user.
+
+        :param line: line fitting to query. If none is provided, the one from the last fitting is considered
+        :type line: str, optional
+
+        :param fit_report: Summary of the fitting inputs and outputs. The default value is ``False``
+        :type fit_report: bool, optional
+
+        :param plot: Plot of the fitting inputs and outputs. The default value is ``True``
+        :type plot: bool, optional
+
+        :param log_scale: Check for the scale of the flux (vertical) axis in the plot. The default value is ``True``
+        :type log_scale: bool, optional
+
+        :param frame: Frame of reference for the plot. The default value is the observation frame ``frame='obs'``
+        :type frame: str, optional
+
+        :param output_address: Output address for the measurement report and/or plot. If provided the results will be stored
+        instead of displayed on screen.
+
+        """
+
+        # Check if the user provided an output file address
+        if output_address is not None:
+            output_path = Path(output_address)
+
+        # Fitting report
+        if fit_report:
+
+            if line is None:
                 if self.line is not None:
-                    label = self.line
-                    output_ref = (f'\nLine label: {label}\n'
+                    line = self.line
+                    output_ref = (f'\nLine line: {line}\n'
                                   f'- Line mask: {self.lineWaves}\n'
                                   f'- Normalization flux: {self.norm_flux}\n'
                                   f'- Redshift: {self.redshift}\n'
@@ -305,12 +339,12 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                     if self.blended_check:
                         mixtureComponents = np.array(self.blended_label.split('-'))
                     else:
-                        mixtureComponents = np.array([label], ndmin=1)
+                        mixtureComponents = np.array([line], ndmin=1)
 
-                    output_ref += f'\n- {label} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
+                    output_ref += f'\n- {line} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
 
                     if mixtureComponents.size == 1:
-                        output_ref += f'- {label} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
+                        output_ref += f'- {line} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
 
                     for i, lineRef in enumerate(mixtureComponents):
                         output_ref += (f'\n- {lineRef} gaussian fitting:\n'
@@ -323,29 +357,36 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
             # Case with line input: search and show that measurement
             elif self.log is not None:
-                if label in self.log.index:
-                    output_ref = self.log.loc[label].to_string
+                if line in self.log.index:
+                    output_ref = self.log.loc[line].to_string
                 else:
-                    output_ref = f'- WARNING: {label} not found in  lines table\n'
+                    output_ref = f'- WARNING: {line} not found in  lines table\n'
             else:
                 output_ref = '- WARNING: Measurement lines log not defined\n'
 
             # Display the print lmfit report if available
-            if show_fit_report:
+            if fit_report:
                 if self.fit_output is not None:
-                    output_ref += f'\n- LmFit output:\n{fit_report(self.fit_output)}\n'
+                    output_ref += f'\n- LmFit output:\n{lmfit_fit_report(self.fit_output)}\n'
                 else:
                     output_ref += f'\n- LmFit output not available\n'
 
-            print(output_ref)
+            # Display the report
+            if output_address is None:
+                print(output_ref)
+            else:
+                output_txt = f'{output_path.parent/output_path.stem}.txt'
+                with open(output_txt, 'w+') as fh:
+                    fh.write(output_ref)
 
-        # Display plot
-        if show_plot:
-            self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
+        # Fitting plot
+        if plot:
 
-        # Save the plot figure Dania feature
-        if save_address is not None:
-            self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=save_address)
+            if output_address is None:
+                self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
+
+            else:
+                self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=output_address)
 
         return
 
@@ -613,8 +654,8 @@ class MaskInspector(Spectrum):
         self.in_fig = event.canvas.figure
         self.in_ax = event.inaxes
 
-        # TODO we need a better way to index than the latex label
-        # Recognise line label
+        # TODO we need a better way to index than the latex line
+        # Recognise line line
         idx_line = self.log.index == self.in_ax.get_title()
         self.lineLabel = self.log.loc[idx_line].index.values[0]
         self.lineWaves = self.log.loc[idx_line, 'w1':'w6'].values[0]

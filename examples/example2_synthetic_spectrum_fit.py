@@ -76,7 +76,7 @@ for lineLabel in mask_df.index.values:
     synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
 
     # Displays the results
-    synth_spec.display_results(show_plot=True, show_fit_report=True)
+    synth_spec.display_results(plot=True, fit_report=True)
     synth_spec.plot_line_velocity()
 
     # Compare the measurements with the true values
