@@ -18,7 +18,8 @@ Inputs and outputs
 Core
 ----
 
-.. autofunction:: lime.treatment.Spectrum
+.. autoclass:: lime.treatment.Spectrum
+   :inherited-members:
 
 Convenience functions
 ---------------------
