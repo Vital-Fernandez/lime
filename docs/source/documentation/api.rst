@@ -19,7 +19,6 @@ Core
 ----
 
 .. autofunction:: lime.treatment.Spectrum
-    :inherited-members:
 
 Convenience functions
 ---------------------
