@@ -224,18 +224,6 @@ class EmissionFitting:
 
     def gauss_lmfit(self, line_label, x, y, weights, user_conf={}, lines_df=None, z_obj=0):
 
-        """
-        :param line_label:
-        :param x:
-        :param y:
-        :param weights:
-        :param user_conf: Input dictionary with specific fit configuration {name , value, vary, min, max, expr,
-        brute_step}. The model parameters ['slope', 'intercept', 'amp', 'center', 'sigma', 'fwhm', 'height'].
-        The configuration of each parameter (NAME VALUE VARY MIN  MAX  EXPR  BRUTE_STEP)
-        :param lines_df:
-        :return:
-        """
-
         # Check if line is in a blended group
         line_ref = self.blended_label if self.blended_check else line_label
 
