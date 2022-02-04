@@ -315,7 +315,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         :type frame: str, optional
 
         :param output_address: Output address for the measurement report and/or plot. If provided the results will be stored
-        instead of displayed on screen.
+                               instead of displayed on screen.
+        :type output_address: str, optional
 
         """
 
