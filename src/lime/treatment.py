@@ -294,7 +294,6 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
             if output_address is None:
                 self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
-
             else:
                 self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=output_address)
 

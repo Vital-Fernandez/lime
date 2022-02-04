@@ -95,7 +95,7 @@ class LiMePlots:
 
         # Plot the continuum if available
         if cont_flux is not None:
-            ax.step(wave_plot, cont_flux, label='Sigma Continuum', linestyle=':')
+            ax.step(wave_plot, cont_flux, label='Sigma Continuum', linestyle=':', where='mid', color='black')
 
         # Plot astropy detected lines if available
         if peaks_table is not None:

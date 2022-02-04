@@ -100,7 +100,7 @@ class EmissionFitting:
         self.v_r, self.v_r_err = None, None
         self.sigma_vel, self.sigma_vel_err = None, None
         self.snr_line, self.snr_cont = None, None
-        self.comments = 'None'
+        self.observations, self.comments = '', 'None'
         self.FWHM_int, self.FWHM_g = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
@@ -269,6 +269,7 @@ class EmissionFitting:
         self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights, method=self._minimize_method)
 
         if not self.fit_output.errorbars:
+            self.observations += 'No_errorbars'
             print(f'-- WARNING: Parameter(s) uncertainty could not be measured for line {line_label}')
 
         # Generate containers for the results

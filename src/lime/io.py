@@ -72,7 +72,7 @@ LOG_COLUMNS = {'wavelength': [False, False, True],
                'redchi': [False, False, False],
                'aic':  [False, False, False],
                'bic':  [False, False, False],
-               'observation': [False, False, False],
+               'observations': [False, False, False],
                'comments': [False, False, False]}
 
 LINELOG_TYPES = {'index': '<U50',
@@ -123,7 +123,7 @@ LINELOG_TYPES = {'index': '<U50',
                  'v_95': '<f8',
                  'chisqr': '<f8',
                  'redchi': '<f8',
-                 'observation': '<U50',
+                 'observations': '<U50',
                  'comments': '<U50',
                  'obsFlux': '<f8',
                  'obsFluxErr': '<f8',
@@ -135,7 +135,7 @@ _LOG_EXPORT = list(set(LOG_COLUMNS.keys()) - set(['ion', 'wavelength',
                                                  'latexLabel',
                                                  'w1', 'w2',
                                                  'w3', 'w4',
-                                                 'w5', 'w6', 'observation']))
+                                                 'w5', 'w6']))
 
 _MASK_EXPORT = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'observation']
 
