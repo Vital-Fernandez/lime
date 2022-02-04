@@ -279,7 +279,7 @@ class EmissionFitting:
         self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights)
 
         if not self.fit_output.errorbars:
-            print(f'-- WARNING: Line measuring error at {line_label}')
+            print(f'-- WARNING: Parameter(s) uncertainty could not be measured for line {line_label}')
 
         # Generate containers for the results
         eqw_g, eqwErr_g = np.empty(n_comps), np.empty(n_comps)

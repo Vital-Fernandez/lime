@@ -430,47 +430,50 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def load_lines_log(lineslog_address, ext=None):
+def load_lines_log(log_address, ext='LINESLOG'):
 
     """
-    This function reads a lines log file as a pandas dataframe. In the case of .fits or excel files the user must specify
-    the extension.
+    This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
+    text file a ``.fits`` file and an excel file (``.xls`` or ``.xlsx``). In the case of ``.fits`` or ``.xlsx`` files the user
+    should specify the target page/sheet (the default value is ``LINESLOG``).
 
-    :param lineslog_address: Address of the configuration file. The function will stop if the file is not found
-    :type lineslog_address: str
-    :type lineslog_address: Path
+    :param log_address: Address of the configuration file. The function stops if the file is not found
+    :type log_address: str
 
-    :param ext: String with the extension name to read
-    :type ext: str
+    :param ext: Name of the ``.fits`` file or ``.xlsx`` file extension with the extension name to read
+    :type ext: str, optional
 
-    :return: Dataframe with line labels as index.
+    :return: lines log table
     :rtype: pandas.DataFrame
-
     """
 
-    # Fits file:
-    assert Path(lineslog_address).is_file(), f'- Error: lines log not found at {lineslog_address}'
+    # Check file is at path
+    log_path = Path(log_address)
+    assert log_path.is_file(), f'- Error: lines log not found at {log_address}'
+    file_name, file_type = log_path.name, log_path.suffix
 
-    if str(lineslog_address).endswith('.fits'):
-        lineslogDF = Table.read(lineslog_address, ext, character_as_bytes=False).to_pandas()
-        lineslogDF.set_index('index', inplace=True)
+    try:
 
-    else:
-        # Text file # TODO add fits and excel formats
-        try:
-            lineslogDF = pd.read_csv(lineslog_address, delim_whitespace=True, header=0, index_col=0)
-        except ValueError:
+        # Fits file:
+        if file_type == '.fits':
+            log = Table.read(log_address, ext, character_as_bytes=False).to_pandas()
+            log.set_index('index', inplace=True)
 
-            # Excel file
-            try:
-                lineslogDF = pd.read_excel(lineslog_address, sheet_name=ext, header=0, index_col=0)
-            except ValueError:
-                print(f'- ERROR: Could not open lines log at: {lineslog_address}')
+        # Excel table
+        elif file_type in ['.xlsx' or '.xls']:
+            log = pd.read_excel(log_address, sheet_name=ext, header=0, index_col=0)
 
-    return lineslogDF
+        # Text file
+        else:
+            log = pd.read_csv(log_address, delim_whitespace=True, header=0, index_col=0)
+
+    except ValueError as e:
+        exit(f'\nERROR: LiMe could not open {file_type} file at {log_address}\n{e}')
+
+    return log
 
 
-def save_line_log(lines_log, file_address, ext='lineslog', fits_header=None):
+def save_line_log(lines_log, file_address, ext='LINESLOG', fits_header=None):
 
     # Confirm file path exits
     log_path = Path(file_address)
@@ -515,21 +518,28 @@ def save_line_log(lines_log, file_address, ext='lineslog', fits_header=None):
 
 def lineslog_to_HDU(log_DF, ext_name=None, column_types={}, header_dict={}):
 
-    if len(column_types) == 0:
-        params_dtype = LINELOG_TYPES
+    # For non empty logs
+    if not log_DF.empty:
+
+        if len(column_types) == 0:
+            params_dtype = LINELOG_TYPES
+        else:
+            params_dtype = LINELOG_TYPES.copy()
+            user_dtype = column_types.copy()
+            params_dtype.update(user_dtype)
+
+        linesSA = log_DF.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
+        linesCol = fits.ColDefs(linesSA)
+        linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name)
+
+        if header_dict is not None:
+            if len(header_dict) != 0:
+                for key, value in header_dict.items():
+                    linesHDU.header[key] = value
+
+    # Empty log
     else:
-        params_dtype = LINELOG_TYPES.copy()
-        user_dtype = column_types.copy()
-        params_dtype.update(user_dtype)
-
-    linesSA = log_DF.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
-    linesCol = fits.ColDefs(linesSA)
-    linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name)
-
-    if header_dict is not None:
-        if len(header_dict) != 0:
-            for key, value in header_dict.items():
-                linesHDU.header[key] = value
+        linesHDU = None
 
     return linesHDU
 
