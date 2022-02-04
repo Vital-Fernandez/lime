@@ -194,97 +194,6 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def import_line_kinematics(self, user_conf, z_cor):
-
-        # Check if imported kinematics come from blended component
-        if self.blended_label != 'None':
-            childs_list = self.blended_label.split('-')
-        else:
-            childs_list = np.array(self.line, ndmin=1)
-
-        for child_label in childs_list:
-            parent_label = user_conf.get(f'{child_label}_kinem')
-
-            if parent_label is not None:
-
-                # Case we want to copy from previous line and the data is not available
-                if (parent_label not in self.log.index) and (not self.blended_check):
-                    print(
-                        f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}')
-
-                else:
-                    ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True)
-                    ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True)
-
-                    # Copy v_r and sigma_vel in wavelength units
-                    for param_ext in ('center', 'sigma'):
-                        param_label_child = f'{child_label}_{param_ext}'
-
-                        # Warning overwritten existing configuration
-                        if param_label_child in user_conf:
-                            print(
-                                f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
-
-                        # Case where parent and child are in blended group
-                        if parent_label in childs_list:
-                            param_label_parent = f'{parent_label}_{param_ext}'
-                            param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
-
-                            user_conf[param_label_child] = {'expr': param_expr_parent}
-
-                        # Case we want to copy from previously measured line
-                        else:
-                            mu_parent = self.log.loc[parent_label, ['center', 'center_err']].values
-                            sigma_parent = self.log.loc[parent_label, ['sigma', 'sigma_err']].values
-
-                            if param_ext == 'center':
-                                param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
-                            else:
-                                param_value = wtheo_child / wtheo_parent * sigma_parent
-
-                            user_conf[param_label_child] = {'value': param_value[0], 'vary': False}
-                            user_conf[f'{param_label_child}_err'] = param_value[1]
-
-        return
-
-    def results_to_database(self, lineLabel, linesDF, fit_conf, export_params=_LOG_EXPORT):
-
-        # Recover line data
-        if self.blended_check:
-            line_components = self.blended_label.split('-')
-        else:
-            line_components = np.array([lineLabel], ndmin=1)
-
-        ion, waveRef, latexLabel = label_decomposition(line_components, blended_dict=fit_conf)
-
-        # Loop through the line components
-        for i, line in enumerate(line_components):
-
-            # Convert current measurement to a pandas series container
-            line_log = pd.Series(index=LOG_COLUMNS.keys())
-            line_log['ion', 'wavelength', 'latexLabel'] = ion[i], waveRef[i], latexLabel[i]
-            line_log['w1': 'w6'] = self.lineWaves
-
-            # Treat every line
-            for param in export_params:
-
-                # Get component parameter
-                if LOG_COLUMNS[param][2]:
-                    param_value = self.__getattribute__(param)[i]
-                else:
-                    param_value = self.__getattribute__(param)
-
-                # De normalize
-                if LOG_COLUMNS[param][0]:
-                    param_value = param_value * self.norm_flux
-
-                line_log[param] = param_value
-
-            # Assign line series to dataframe
-            linesDF.loc[line] = line_log
-
-        return
-
     def display_results(self, line=None, fit_report=False, plot=True, log_scale=True, frame='obs',
                         output_address=None):
 
@@ -388,6 +297,97 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
             else:
                 self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=output_address)
+
+        return
+
+    def import_line_kinematics(self, user_conf, z_cor):
+
+        # Check if imported kinematics come from blended component
+        if self.blended_label != 'None':
+            childs_list = self.blended_label.split('-')
+        else:
+            childs_list = np.array(self.line, ndmin=1)
+
+        for child_label in childs_list:
+            parent_label = user_conf.get(f'{child_label}_kinem')
+
+            if parent_label is not None:
+
+                # Case we want to copy from previous line and the data is not available
+                if (parent_label not in self.log.index) and (not self.blended_check):
+                    print(
+                        f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}')
+
+                else:
+                    ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True)
+                    ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True)
+
+                    # Copy v_r and sigma_vel in wavelength units
+                    for param_ext in ('center', 'sigma'):
+                        param_label_child = f'{child_label}_{param_ext}'
+
+                        # Warning overwritten existing configuration
+                        if param_label_child in user_conf:
+                            print(
+                                f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
+
+                        # Case where parent and child are in blended group
+                        if parent_label in childs_list:
+                            param_label_parent = f'{parent_label}_{param_ext}'
+                            param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
+
+                            user_conf[param_label_child] = {'expr': param_expr_parent}
+
+                        # Case we want to copy from previously measured line
+                        else:
+                            mu_parent = self.log.loc[parent_label, ['center', 'center_err']].values
+                            sigma_parent = self.log.loc[parent_label, ['sigma', 'sigma_err']].values
+
+                            if param_ext == 'center':
+                                param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
+                            else:
+                                param_value = wtheo_child / wtheo_parent * sigma_parent
+
+                            user_conf[param_label_child] = {'value': param_value[0], 'vary': False}
+                            user_conf[f'{param_label_child}_err'] = param_value[1]
+
+        return
+
+    def results_to_database(self, lineLabel, linesDF, fit_conf, export_params=_LOG_EXPORT):
+
+        # Recover line data
+        if self.blended_check:
+            line_components = self.blended_label.split('-')
+        else:
+            line_components = np.array([lineLabel], ndmin=1)
+
+        ion, waveRef, latexLabel = label_decomposition(line_components, blended_dict=fit_conf)
+
+        # Loop through the line components
+        for i, line in enumerate(line_components):
+
+            # Convert current measurement to a pandas series container
+            line_log = pd.Series(index=LOG_COLUMNS.keys())
+            line_log['ion', 'wavelength', 'latexLabel'] = ion[i], waveRef[i], latexLabel[i]
+            line_log['w1': 'w6'] = self.lineWaves
+
+            # Treat every line
+            for param in export_params:
+
+                # Get component parameter
+                if LOG_COLUMNS[param][2]:
+                    param_value = self.__getattribute__(param)[i]
+                else:
+                    param_value = self.__getattribute__(param)
+
+                # De normalize
+                if LOG_COLUMNS[param][0]:
+                    param_value = param_value * self.norm_flux
+
+                line_log[param] = param_value
+
+            # Assign line series to dataframe
+            linesDF.loc[line] = line_log
 
         return
 
