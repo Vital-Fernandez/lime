@@ -549,7 +549,7 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
 
     The function takes into consideration the extension of the output address for the log file format.
 
-    The valid output formats are .txt, .pdf, .fits, .xlsx and .xls
+    The valid output formats are .txt, .pdf, .fits and .xlsx
 
     For .fits and excel files the user can provide an ``ext`` name for the HDU/sheet.
 
@@ -610,11 +610,16 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
             # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
             #     log.to_excel(writer, sheet_name=ext)
 
-            book = openpyxl.load_workbook(log_path)
-            with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                writer.book = book
-                writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                log.to_excel(writer, sheet_name=ext)
+            if file_type == '.xlsx':
+                book = openpyxl.load_workbook(log_path)
+                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                    writer.book = book
+                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    log.to_excel(writer, sheet_name=ext)
+            else:
+                # TODO this does not write to a xlsx file
+                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                    log.to_excel(writer, sheet_name=ext)
 
     else:
         print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")

@@ -164,26 +164,17 @@ class LiMePlots:
                            edgecolors=color_peaks[i])
 
         if match_log is not None:
-            idcs_foundLines = (match_log.observation.isin(('detected', 'not identified'))) & \
-                              (match_log.wavelength >= self.wave_rest[0]) & \
-                              (match_log.wavelength <= self.wave_rest[-1])
-            if 'latexLabel' in match_log:
-                lineLatexLabel = match_log.loc[idcs_foundLines].latexLabel.values
-            else:
-                lineLatexLabel = match_log.loc[idcs_foundLines].index.values
-            lineWave = match_log.loc[idcs_foundLines].wavelength.values
+            ion_array, wave_array, latex_array = label_decomposition(match_log.index.values)
             w_cor = 1 if frame == 'rest' else (1+self.redshift)
-            w3 = match_log.loc[idcs_foundLines].w3.values * w_cor
-            w4 = match_log.loc[idcs_foundLines].w4.values * w_cor
-            observation = match_log.loc[idcs_foundLines].observation.values
+            w3 = match_log.w3.values * w_cor
+            w4 = match_log.w4.values * w_cor
 
             first_instance = True
-            for i in np.arange(lineLatexLabel.size):
-                if observation[i] == 'detected':
-                    color_area = 'tab:red' if observation[i] == 'not identified' else 'tab:green'
-                    ax.axvspan(w3[i], w4[i], alpha=0.25, color=color_area, label='Matched line' if first_instance else '_')
-                    ax.text(lineWave[i] * w_cor, 0, lineLatexLabel[i], rotation=270)
-                    first_instance = False
+            for i in np.arange(latex_array.size):
+                color_area = 'tab:green'
+                ax.axvspan(w3[i], w4[i], alpha=0.25, color=color_area, label='Matched line' if first_instance else '_')
+                ax.text(wave_array[i] * w_cor, 0, latex_array[i], rotation=270)
+                first_instance = False
 
         if noise_region is not None:
             ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
@@ -195,7 +186,6 @@ class LiMePlots:
                 w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
                 m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
                 amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], self.log.loc[lineLabel, 'sigma']
-                wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[lineLabel, 'peak_flux'],
 
                 # Rest frame
                 if frame == 'rest':
@@ -277,7 +267,7 @@ class LiMePlots:
             fig, ax = plt.subplots()
             ax = [ax]
         else:
-            # fig, ax = plt.subplots(nrows=2)
+            # fig, ax = plt.subplots(n_rows=2)
             gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
             spec_ax = plt.subplot(gs[0])
             grid_ax = plt.subplot(gs[1], sharex=spec_ax)
@@ -674,7 +664,7 @@ class LiMePlots:
 #     """
 #
 #     def __init__(self, wavelength_array, cube_flux, image_bg, image_fg=None, contour_levels_fg=None,
-#                  init_coord=None, header=None, fig_conf=None, axes_conf={}, min_bg_percentil=60, lines_log_address=None):
+#                  init_coord=None, header=None, fig_conf=None, axes_conf={}, min_bg_percentil=60, log_address=None):
 #
 #
 #
@@ -712,7 +702,7 @@ class LiMePlots:
 #
 #         # Figure structure
 #         self.fig = plt.figure(figsize=(18, 5))
-#         gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
+#         gs = gridspec.GridSpec(n_rows=1, n_cols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
 #         self.fig.canvas.mpl_connect('button_press_event', self.on_click)
 #         self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
 #
@@ -734,19 +724,19 @@ class LiMePlots:
 #             init_coord = int(self.cube_flux.shape[1]/2), int(self.cube_flux.shape[2]/2)
 #
 #         # Load the complete fits lines log if input
-#         if lines_log_address is not None:
+#         if log_address is not None:
 #             # start = time.time()
 #             # linesLog_dict = {}
-#             # with fits.open(lines_log_address) as hdul:
+#             # with fits.open(log_address) as hdul:
 #             #     for i in np.arange(len(hdul)):
 #             #         linesLog_dict[hdul[i].name] = hdul[i].data
 #             # end = time.time()
 #             # print(end-start)
 #
 #             start = time.time()
-#             # with fits.open(lines_log_address, lazy_load_hdus=False) as hdul:
-#             #     self.hdu_list = fits.open(lines_log_address, lazy_load_hdus=False)
-#             self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+#             # with fits.open(log_address, lazy_load_hdus=False) as hdul:
+#             #     self.hdu_list = fits.open(log_address, lazy_load_hdus=False)
+#             self.hdul_linelog = fits.open(log_address, lazy_load_hdus=False)
 #             end = time.time()
 #             print(end-start)
 #
@@ -801,7 +791,7 @@ class LiMePlots:
 #                 self.log = None
 #             print(f'Cargar el pendejo {end-start}')
 #             # try:
-#             #     self.log = load_lines_log(self.lines_log_address, ext=ext_name)
+#             #     self.log = load_lines_log(self.log_address, ext=ext_name)
 #             # except:
 #             #     self.log = None
 #

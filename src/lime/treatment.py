@@ -48,7 +48,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     :type norm_flux: float, optional
 
     :param crop_waves: wavelength array crop values
-    :type norm_flux: float, optional
+    :type norm_flux: np.array, optional
+
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
@@ -397,56 +398,118 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
 class MaskInspector(Spectrum):
 
-    def __init__(self, lines_log_address, log, input_wave=None, input_flux=None, input_err=None, redshift=0,
-                 norm_flux=1.0, crop_waves=None, ncols=10, nrows=None):
+    def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
+                 norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None):
 
-        # TODO modified lines are changed in the output file. Need to update.
+        """
+        This class plots the masks from the ``log_address`` as a grid for the input spectrum as a grid. Clicking and
+        dragging the mouse within a line cell will update the line band region, both in the plot and the ``log_address``
+        file provided.
+
+        Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
+        wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
+        the interactive selection has the following rules:
+
+        * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
+          mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
+          original mask limits.
+
+        * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
+          `w3` and `w4` values.
+
+        * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
+          between `w1` and `w3` or `w4` and `w6` respectively.
+
+        The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
+        parameter can be an array of strings with the labels of the target lines or a two value integer array with the
+        interval of lines to plot.
+
+        :param log_address: Address for the lines log mask file.
+        :type log_address: str
+
+        :param input_wave: Wavelength array of the input spectrum.
+        :type input_wave: numpy.array
+
+        :param input_flux: Flux array for the input spectrum.
+        :type input_flux: numpy.array
+
+        :param input_err: Sigma array of the `input_flux`
+        :type input_err: numpy.array, optional
+
+        :param redshift: Spectrum redshift
+        :type redshift: float, optional
+
+        :param norm_flux: Spectrum flux normalization
+        :type norm_flux: float, optional
+
+        :param crop_waves: Wavelength limits in a two value array
+        :type crop_waves: np.array, optional
+
+        :param n_cols: Number of columns of the grid plot
+        :type n_cols: integer
+
+        :param n_rows: Number of columns of the grid plot
+        :type n_rows: integer
+
+        :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
+                               this interval must be a two value array.
+        :type lines_interval: list
+        """
 
         # Output file address
-        self.linesLogAddress = Path(lines_log_address)
+        self.linesLogAddress = Path(log_address)
 
         # Assign attributes to the parent class
         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
 
-        # DF is provided
-        if log is not None:
-            self.log = pd.DataFrame.copy(log)
+        # Lines log address is provided and we read the DF from it
+        if Path(self.linesLogAddress).is_file():
+            self.log = load_lines_log(self.linesLogAddress)
 
-        # DF is not provided
+        # Lines log not provide code ends
         else:
+            print(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
+                  f' {log_address}')
+            exit()
 
-            # Lines log address is provided and we read the DF from it
-            if Path(self.linesLogAddress).is_file():
-                self.log = load_lines_log(self.linesLogAddress)
+        # Only plotting the lines in the lines interval
+        self.line_inter = lines_interval
+        if lines_interval is None:
+            n_lines = len(self.log.index)
+            self.target_lines = self.log.index.values
 
-            # Lines log not provide code ends
+        else:
+            # Array of strings
+            if isinstance(lines_interval[0], str):
+                n_lines = len(lines_interval)
+                self.target_lines = np.array(lines_interval, ndmin=1)
+
+            # Array of integers
             else:
-                print(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
-                      f' {lines_log_address}')
-                exit()
+                n_lines = lines_interval[1] - lines_interval[0]
+                self.target_lines = self.log[lines_interval[0]:lines_interval[1]].index.values
 
-        # Figure grid
-        n_lines = len(self.log.index)
-        if n_lines > ncols:
-            if nrows is None:
-                nrows = int(np.ceil(n_lines / ncols))
+        # Establish the grid shape
+        if n_lines > n_cols:
+            if n_rows is None:
+                n_rows = int(np.ceil(n_lines / n_cols))
         else:
-            ncols = n_lines
-            nrows = 1
+            n_cols = n_lines
+            n_rows = 1
 
         defaultConf = STANDARD_PLOT.copy()
-        plotConf = {'figure.figsize': (nrows * 2, 8)}
+        plotConf = {'figure.figsize': (n_rows * 2, 8)}
         defaultConf.update(plotConf)
         rcParams.update(defaultConf)
 
-        self.fig, ax = plt.subplots(nrows=nrows, ncols=ncols)
+        self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
         self.ax = ax.flatten()
         self.in_ax = None
         self.dict_spanSelec = {}
         self.axConf = {}
 
         # Plot function
-        self.plot_line_mask_selection(logscale='auto', grid_size=nrows * ncols)
+        self.plot_line_mask_selection(logscale='auto', grid_size=n_rows * n_cols)
         plt.gca().axes.yaxis.set_ticklabels([])
 
         try:
@@ -468,10 +531,12 @@ class MaskInspector(Spectrum):
         n_lines = lineLabels.size
 
         # Generate plot
-        for i in np.arange(grid_size):
+        # for i, line in enumerate(self.target_lines):
+        for i in range(grid_size):
             if i < n_lines:
-                self.lineWaves = self.log.loc[lineLabels[i], 'w1':'w6'].values
-                self.plot_line_region_i(self.ax[i], lineLabels[i], logscale=logscale)
+                line = self.target_lines[i]
+                self.lineWaves = self.log.loc[line, 'w1':'w6'].values
+                self.plot_line_region_i(self.ax[i], line, logscale=logscale)
                 self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
                                                                    self.on_select,
                                                                    'horizontal',

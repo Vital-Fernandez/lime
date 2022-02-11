@@ -55,9 +55,6 @@ Let's start by importing the data files from the Green Pea sample:
     # Load configuration
     sample_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
 
-    # Load mask
-    maskDF = lime.load_lines_log(instrMaskFile)
-
     # Load spectrum
     ext = 0
     with fits.open('./sample_data/gp121903_BR.fits') as hdul:
@@ -75,17 +72,20 @@ Now we can prepare the data for the ``.MaskInspector`` class:
     z_obj = sample_cfg['sample_data']['z_array'][2]
     norm_flux = sample_cfg['sample_data']['norm_flux']
 
-    # Run the interative plot
-    objMaskFile = './sample_data/gp121903_BR_mask_corrected.txt'
-    lime.MaskInspector(lines_log_address=objMaskFile, lines_DF=maskDF,
-                       input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
+    # Create a new mask file for the galaxy
+    objMaskFile = './sample_data/GP121903_mask.txt'
+    shutil.copy(instrMaskFile, objMaskFile)
 
-This class generates an interactive grid plot with the line masks provided by the ``log`` parameter:
+    # Run the interative plot
+    lime.MaskInspector(lines_log_address=objMaskFile, input_wave=wave, input_flux=flux,
+                       redshift=z_obj, norm_flux=norm_flux)
+
+This class generates an interactive grid plot with the line masks in the ``lines_log_address`` file:
 
 .. image:: ../_static/4_mask_selection_grid.png
 
-Clicking and dragging the mouse within a line plot cell will update the line band region, both in the plot and the output
-file in the ``lines_log_address`` parameter. There are some caveat in the window selection:
+Clicking and dragging the mouse within a line plot cell will update the line band region, both in the plot and the
+``lines_log_address`` file. There are some caveat in the window selection:
 
 * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the mask limits
   (below :math:`w1` or above :math:`w6`) will change the displayed range. This can be used to move beyond the original
@@ -94,17 +94,25 @@ file in the ``lines_log_address`` parameter. There are some caveat in the window
   math:`w3` and :math:`w4` values.
 * Due to the previous point, to increase the :math:`w2` value or to decrease :math:`w5` value the user must select a region
   between :math:`w1` and :math:`w3` or :math:`w4` and :math:`w6` respectively.
-* The text file is updated with each new selection but only for the corrected line.
+* The text file is updated with each new selection.
 
-In the case where the input spectrum has many lines or the user display is not sufficiently big. The user can apply the
-``.MaskInspector`` mask in several steps. Each time the function will update the output object mask with the corrected
-values.
+In the case, where the input spectrum has too many lines for the user monitor. It is possible to constrain the number of
+lines via the ``lines_interval`` parameter. For example the user can specify an interval of lines to display in the
+grid plot:
 
 .. code-block:: python
 
-    lines_log_section = maskDF[:5]
-    lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section,
-                       input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
-
+    lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section, input_wave=wave, input_flux=flux,
+    redshift=z_obj, norm_flux=norm_flux, lines_interval=(0, 5))
 
 .. image:: ../_static/4_mask_selection_grid_Detail.png
+
+Or the user can provide a list of lines with the same notation as in the mask file:
+
+.. code-block:: python
+
+    lines_interval = ['He2_4686A', 'S3_6312A', 'O3_4363A']
+    lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
+                       lines_interval=lines_interval)
+
+.. image:: ../_static/4_mask_selection_grid_lines.png

@@ -18,7 +18,7 @@ def import_osiris_fits(file_address, ext=0):
 
 # State the data files
 obsFitsFile = './sample_data/gp121903_BR.fits'
-lineMaskFile = './sample_data/gp121903_BR_mask.txt'
+lineMaskFile = './sample_data/osiris_mask.txt'
 cfgFile = './sample_data/config_file.cfg'
 
 # Selection of reference for the plots
@@ -67,5 +67,5 @@ gp_spec.plot_spectrum(frame=plots_frame, include_fits=True)
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf')
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xls')
+lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='otro')
 

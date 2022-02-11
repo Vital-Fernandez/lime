@@ -88,8 +88,8 @@ These wavelengths must be in the rest frame. The :math:`w1-w2` and :math:`w5-w6`
 continua on the blue and red side respectively, while the :math:`w3-w4` wavelengths constrain the line location.
 
 In :math:`\textsc{LiMe}`, the masks and line logs are stored by default as a `pandas dataframe <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html>`_
-This object can be visualized a table with a certain number of columns and indices (rows). Let's create a pandas dataframe
-with the emission line masks:
+This object can be visualized as a table with a certain number of columns and indices (rows). Let's create a pandas dataframe
+with the emission lines masks:
 
 .. code-block:: python
 
@@ -159,6 +159,7 @@ Finally, we need to state the components of the blended and/or merged lines so t
    # Getting a cell
    cfg_dict = {'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
                'H1_6563A_b': 'H1_6563A-H1_6563A_w1',
+               'H1_4861A_w1_sigma': {'expr': '>1*H1_4861A_sigma'},
                'H1_6563A_w1_sigma': {'expr': '>1*H1_6563A_sigma'}}
 
 The last entry in the configuration dict provides one constrain on the fitting of the wide component of Hα line: It must be

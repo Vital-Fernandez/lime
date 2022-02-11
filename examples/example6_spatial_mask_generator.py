@@ -4,7 +4,7 @@ from astropy.io import fits
 
 # Input the data files
 obsFitsFile = './sample_data/manga-8626-12704-LOGCUBE.fits'
-linesMaskFile = './sample_data/gp121903_BR_mask.txt'
+linesMaskFile = './sample_data/osiris_mask.txt'
 z_obj = 0.047232
 
 # Open the cube fits file

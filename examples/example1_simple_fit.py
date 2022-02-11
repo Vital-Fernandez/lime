@@ -9,7 +9,7 @@ def import_osiris_fits(file_address, ext=0):
     with fits.open(file_address) as hdul:
         data, header = hdul[ext].data, hdul[ext].header
 
-    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'], header['NAXIS1']
     w_max = w_min + dw * n_pix
     wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
 

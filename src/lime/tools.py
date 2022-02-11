@@ -371,7 +371,7 @@ class LineFinder:
                 if (unknownLineLabel not in matched_DF.index) and detect_check:
                     newRow = unidentifiedLine.copy()
                     newRow.update({'wavelength': wave_peaks[i], 'w3': wave_peaks[i] - 5, 'w4': wave_peaks[i] + 5,
-                                   'observation': 'not identified'})
+                                   'observation': 'not_identified'})
                     matched_DF.loc[unknownLineLabel] = newRow
 
             else:
@@ -399,15 +399,16 @@ class LineFinder:
                 #     match_log.loc[row_index, 'w3'] = self.wave_rest[idx_min]
                 #     match_log.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
-        # if include_unknown is False:
-        #     idcs_unknown = theoLineDF['observation'] == 'not detected'
-        #     theoLineDF.drop(index=theoLineDF.loc[idcs_unknown].index.values, inplace=True)
+        # Include_only_detected
+        idcs_unknown = matched_DF['observation'] == 'not detected'
+        matched_DF.drop(index=matched_DF.loc[idcs_unknown].index.values, inplace=True)
 
         # Sort by wavelength
         matched_DF.sort_values('wavelength', inplace=True)
+        matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
 
         # Latex labels
-        ion_array, wavelength_array, latexLabel_array = label_decomposition(matched_DF.index.values)
-        matched_DF['latexLabel'] = latexLabel_array
+        # ion_array, wavelength_array, latexLabel_array = label_decomposition(matched_DF.index.values)
+        # matched_DF['latexLabel'] = latexLabel_array
 
         return matched_DF
