@@ -247,5 +247,5 @@ As a final step, we can use the ``.save_line_log`` function to save your measure
 
 .. note::
    The file extension determines file type the line log will be save as. In the case of ``.fits`` and ``.xlsx`` files if you
-   do not specify the page name, the default value is 'linelog'. This will overwrite the data if the 'linelog' page is already
+   do not specify the page name, the default value is 'LINESLOG'. This will overwrite the data if the 'LINESLOG' page is already
    on the file.

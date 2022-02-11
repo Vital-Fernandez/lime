@@ -64,9 +64,63 @@ class LiMePlots:
 
         return
 
-    def plot_spectrum(self, cont_flux=None, peaks_table=None, matched_DF=None, noise_region=None,
+    def plot_spectrum(self, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
                       log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Observed spectrum', output_address=None,
-                      dark_mode=False, profile_fittings=False, frame='obs'):
+                      dark_mode=False, include_fits=False, frame='observed'):
+
+        """
+
+        This function plots the spectrum defined by the `Spectrum class <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum>`_
+
+        The user can include an additional flux array (for example the uncertainty spectrum) to be plotted.
+
+        Additionally, the user can include the outputs from the `.match_line_mask <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
+        function to plot the emission peaks and the matched lines. Moreover, if the parameter ``include_fits=True`` the plot
+        will include the gaussian profiles stored in the lines ``.log``.
+
+        The user can specify the plot frame of reference via the ``frame='obs'`` or ``frame='rest'`` parameter. Moreover,
+        the user can provide dictionaries for the matplotlib `figure <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams>`_
+        and `axis <https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set.html#matplotlib.axes.Axes.set>`_ styles.
+
+        Finally, if the user provides an ``output_address``, the spectrum will be saved as an image instead of being displayed.
+
+        :param comp_array: Additional flux array to be plotted alongside the spectrum flux.
+        :type comp_array: numpy.array, optional
+
+        :param peaks_table: Table with the emission and absorptions detected by the `.match_line_mask function <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
+        :type peaks_table: astropy.Table, optional
+
+        :param match_log: Lines log with the emission/absorptions which have matched the peaks/trough by the .match_line_mask.
+        :type match_log: pandas.Dataframe, optional
+
+        :param noise_region: 2 value array with the wavelength limits. This region will be shaded in the output plot.
+        :type noise_region: np.array, optional
+
+        :param log_scale: Set to True for a vertical (flux) axis logarithmic scale. The default value is False
+        :type log_scale: bool, optional
+
+        :param plt_cfg: Dictionary with the configuration for the matplotlib rcParams style.
+        :type plt_cfg: bool, optional
+
+        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
+        :type ax_cfg: bool, optional
+
+        :param spec_label: Label for the spectrum plot legend
+        :type spec_label: str, optional
+
+        :param output_address: File location to store the plot as an image. If provided, the plot won't be displayed on the screen.
+        :type output_address: str, optional
+
+        :param dark_mode: Check for the dark plot theme. The default value is False.
+        :type dark_mode: bool, optional
+
+        :param include_fits: Check to include the gaussian profile fittings in the plot. The default value is False.
+        :type include_fits: Check to include the gaussian profile fittings in the plot.
+
+        :param frame: Frame of reference for the spectrum plot: "observed" or "rest". The default value is observed.
+        :param frame: str, optional
+
+        """
 
         # Plot Configuration # TODO implement better switch between white and black themes
         if dark_mode:
@@ -94,8 +148,9 @@ class LiMePlots:
         ax.step(wave_plot, flux_plot, label=spec_label, color=foreground, where='mid')
 
         # Plot the continuum if available
-        if cont_flux is not None:
-            ax.step(wave_plot, cont_flux, label='Sigma Continuum', linestyle=':', where='mid', color='black')
+        if comp_array is not None:
+            assert len(comp_array) == len(wave_plot), '- ERROR: The input comp_array length does not match the spectrum wavelength array length'
+            ax.step(wave_plot, comp_array, label='Sigma Continuum', linestyle=':', where='mid', color='black')
 
         # Plot astropy detected lines if available
         if peaks_table is not None:
@@ -108,19 +163,19 @@ class LiMePlots:
                 ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label=labels[i], facecolors='none',
                            edgecolors=color_peaks[i])
 
-        if matched_DF is not None:
-            idcs_foundLines = (matched_DF.observation.isin(('detected', 'not identified'))) & \
-                              (matched_DF.wavelength >= self.wave_rest[0]) & \
-                              (matched_DF.wavelength <= self.wave_rest[-1])
-            if 'latexLabel' in matched_DF:
-                lineLatexLabel = matched_DF.loc[idcs_foundLines].latexLabel.values
+        if match_log is not None:
+            idcs_foundLines = (match_log.observation.isin(('detected', 'not identified'))) & \
+                              (match_log.wavelength >= self.wave_rest[0]) & \
+                              (match_log.wavelength <= self.wave_rest[-1])
+            if 'latexLabel' in match_log:
+                lineLatexLabel = match_log.loc[idcs_foundLines].latexLabel.values
             else:
-                lineLatexLabel = matched_DF.loc[idcs_foundLines].index.values
-            lineWave = matched_DF.loc[idcs_foundLines].wavelength.values
+                lineLatexLabel = match_log.loc[idcs_foundLines].index.values
+            lineWave = match_log.loc[idcs_foundLines].wavelength.values
             w_cor = 1 if frame == 'rest' else (1+self.redshift)
-            w3 = matched_DF.loc[idcs_foundLines].w3.values * w_cor
-            w4 = matched_DF.loc[idcs_foundLines].w4.values * w_cor
-            observation = matched_DF.loc[idcs_foundLines].observation.values
+            w3 = match_log.loc[idcs_foundLines].w3.values * w_cor
+            w4 = match_log.loc[idcs_foundLines].w4.values * w_cor
+            observation = match_log.loc[idcs_foundLines].observation.values
 
             first_instance = True
             for i in np.arange(lineLatexLabel.size):
@@ -133,7 +188,7 @@ class LiMePlots:
         if noise_region is not None:
             ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
 
-        if profile_fittings:
+        if include_fits:
             first_instance = True
             for lineLabel in self.log.index:
 
@@ -172,7 +227,9 @@ class LiMePlots:
                     norm_label = y_label + r' $\,/\,{}$'.format(latex_science_float(self.norm_flux))
                     ax_cfg['ylabel'] = norm_label
 
-        ax.update({**STANDARD_AXES, **ax_cfg})
+        ax_dict = {**STANDARD_AXES, **ax_cfg}
+        ax.set(**ax_dict)
+        # ax.update({**STANDARD_AXES, **ax_cfg})
         ax.legend()
 
         if output_address is None:

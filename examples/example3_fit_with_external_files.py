@@ -1,4 +1,20 @@
+import numpy as np
+from astropy.io import fits
 import lime
+
+
+def import_osiris_fits(file_address, ext=0):
+
+    # Open fits file
+    with fits.open(file_address) as hdul:
+        data, header = hdul[ext].data, hdul[ext].header
+
+    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+    w_max = w_min + dw * n_pix
+    wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+    return wavelength, data, header
+
 
 # State the data files
 obsFitsFile = './sample_data/gp121903_BR.fits'
@@ -15,7 +31,7 @@ obs_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
 maskDF = lime.load_lines_log(lineMaskFile)
 
 # Load spectrum
-wave, flux, header = lime.load_fits(obsFitsFile, instrument='OSIRIS')
+wave, flux, header = import_osiris_fits(obsFitsFile)
 
 # Declare line measuring object
 z_obj = obs_cfg['sample_data']['z_array'][2]
@@ -25,7 +41,7 @@ gp_spec.plot_spectrum()
 
 # Find lines
 peaks_table, matched_masks_DF = gp_spec.match_line_mask(maskDF, obs_cfg['sample_data']['noiseRegion_array'])
-gp_spec.plot_spectrum(peaks_table=peaks_table, matched_DF=matched_masks_DF, spec_label=f'GP121903 spectrum',
+gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum',
                       frame=plots_frame)
 
 # Correct line region
@@ -45,7 +61,7 @@ for i, lineLabel in enumerate(matched_masks_DF.index.values):
 gp_spec.plot_line_grid(gp_spec.log, frame=plots_frame)
 
 # Display fits in along the spectrum
-gp_spec.plot_spectrum(frame=plots_frame, profile_fittings=True)
+gp_spec.plot_spectrum(frame=plots_frame, include_fits=True)
 
 # Save the results
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')

@@ -14,7 +14,7 @@ star_spec = lime.Spectrum(wave, flux, norm_flux=1e-4, crop_waves=(4515, 9500))
 
 # Locate the line fluxes
 peaks_table, matched_DF = star_spec.match_line_mask(mask_log, noise_region, line_type='absorption')
-star_spec.plot_spectrum(peaks_table=peaks_table, matched_DF=matched_DF)
+star_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_DF)
 
 # Index of emission lines
 idcsObsLines = (matched_DF.observation == 'detected')

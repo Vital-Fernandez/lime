@@ -23,7 +23,7 @@ def int_to_roman(num):
     return roman_num
 
 
-def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_dict={}, scalar_output=False,
+def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
                         user_format={}):
 
     """
@@ -37,8 +37,8 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
                         excited state
     :type recomb_atom: str, list
 
-    :param blended_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
-    :type blended_dict: dict, optional
+    :param comp_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :type comp_dict: dict, optional
 
     :param scalar_output: Boolean for a scalar output in case of a single input line input
     :type scalar_output: bool, optional
@@ -53,7 +53,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
         >>> import lime
         >>> lime.label_decomposition('O3_5007A', scalar_output=True)
         O3, 5007.0, '$5007\\AA\\,[OIII]$'
-        >>> lime.label_decomposition('H1_6563A_b', blended_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
+        >>> lime.label_decomposition('H1_6563A_b', comp_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
         ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
 
     """
@@ -77,8 +77,8 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), blended_d
             mixture_line = False
             if '_b' in lineLabel or '_m' in lineLabel:
                 mixture_line = True
-                if lineLabel in blended_dict:
-                    lineRef = blended_dict[lineLabel]
+                if lineLabel in comp_dict:
+                    lineRef = comp_dict[lineLabel]
                 else:
                     lineRef = lineLabel[:-2]
             else:
@@ -211,36 +211,86 @@ class LineFinder:
 
         return
 
-    def match_line_mask(self, mask_df, noise_region, line_threshold=3, emis_abs_thresholds=((4, 4), (1.5, 1.5)),
-                        cont_degree_list=(3, 7), width_tol=5, line_type='emission', width_mode='auto'):
+    def match_line_mask(self, log, noise_region, detect_threshold=3, emis_threshold=(4, 4), abs_threshold=(1.5, 1.5),
+                        poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='auto'):
+
+        """
+        This function compares a spectrum flux peaks and troughs with the lines mask in a log to confirm the presence of
+        emission or absorption lines. The user can specify the line type with the ``line_type='emission'`` or ``line_type='absorption'``
+        parameter.
+
+        The user must specify a wavelength range (in the rest frame) to establish the noise standard deviation in the
+        spectrum continuum. This region must not have absorptions or emissions.
+
+        The treatment requires a normalized spectrum (continuum at zero). This is done by fitting the spectrum
+        as a polynomial function in an iterative process. The user can specify in the ``poly_degree`` parameter as an
+        an array with values in increasing magnitude for the polynomial order. The user should specify ``emis_threshold``
+        and ``abs_threshold`` for the emission and absorptions intensity threshold. This masking is necessary to avoid
+        intense emission/absorptions affecting the continuum normalization.
+
+        Afterwards, the task runs the `find_lines_derivative <https://specutils.readthedocs.io/en/stable/api/specutils.fitting.find_lines_derivative.html>`_
+        function to find peaks and troughs in the normalized spectrum. The intensity threshold in this detection is read
+        from the ``detect_threshold`` parameter. The output table from this function is the first return of this task.
+
+        In the next step, the task compares the input lines ``log`` bands with the peaks/troughs location from the `find_lines_derivative <https://specutils.readthedocs.io/en/stable/api/specutils.fitting.find_lines_derivative.html>`_
+        output. Those matching the line band limits (w3, w4 in the ``log``) plus the tolerance in the ``width_tol``
+        parameter (in the spectrum wavelength units) count as a positive detection. These lines are the second return
+        as a new log.
+
+        Finally, the task can attempt to adjust the line band width to the width of the emission/absorption feature.
+        In the ``width_mode='auto'`` the non-blended lines w3, w4 values in the output log band will be changed to the
+        first pixel wavelength, starting from the maximum/minimum at which there is an increase/decrease in flux intensity
+        for emission and absorption lines respectively. In blended lines, the w3, w4 values are not modified.
+        In the ``width_mode='fix'`` setting the line masks wavelengths are not modified.
+
+        :param log: Lines log with the masks. The required columns are: line (DF index), w1, w2, w3, w4, w5 and w6.
+        :type log: pandas.DataFrame
+
+        :param noise_region: 2 value array with the wavelength limits for the noise region (in rest frame).
+        :type noise_region: numpy.array
+
+        :param detect_threshold: Intensity factor for the continuum signal for an emission/absorption detection.
+        :type detect_threshold: float, optional
+
+        :param emis_threshold: Array with the intensity factor for the emission features masking during the continuum normalization.
+        :type emis_threshold: numpy.array, optional
+
+        :param abs_threshold: Array with the intensity factor for the absorption features masking during the continuum normalization.
+        :type abs_threshold: numpy.array, optional
+
+        :param poly_degree: Array with the polynomial order for the iterative fitting for the continuum normalization in increasing order.
+        :type poly_degree: numpy.array, optional
+
+        :param width_tol: Tolerance for the peak/trough detection with respect to the input line masks w3 and w4 values.
+        :type width_tol: float, optional
+
+        :param line_type: Type of lines matched in the output lines log. Accepted values are 'emission' and 'absorption'
+        :type line_type: str, optional
+
+        :param width_mode: Scheme for the line band mask detection. If set to "fix" the input w3 and w4 values won't be modified.
+        :type width_tol: str, optional
+
+        :return: Table with the peaks/trough detected and log with the matched lines.
+        :rtype: astropy.Table and pandas.DataFrame
+
         """
 
-        :param mask_df: pandas DataFrame with the line masks.
-        :param noise_region: This region describes the
-        :param line_threshold:
-        :param emis_abs_thresholds:
-        :param cont_degree_list:
-        :param width_tol:
-        :param line_type:
-        :param width_mode:
-        :return:
-        """
         # Convert the observed region to the observed frame
         noise_region_obs = noise_region * (1 + self.redshift)
 
         # Remove the continuum
-        flux_no_continuum = self.remove_continuum(noise_region_obs, emis_abs_thresholds, cont_degree_list)
+        flux_no_continuum = self.remove_continuum(noise_region_obs, emis_threshold, abs_threshold, poly_degree)
 
         # Find the emission, absorption peaks
-        peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, line_threshold)
+        peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, detect_threshold)
 
         # Match peaks with theoretical lines
-        matched_DF = self.label_peaks(peaks_table, mask_df, width_tol=width_tol, width_mode=width_mode,
+        matched_DF = self.label_peaks(peaks_table, log, width_tol=width_tol, width_mode=width_mode,
                                       line_type=line_type)
 
         return peaks_table, matched_DF
 
-    def remove_continuum(self, noise_region, emis_abs_threshold, cont_degree_list):
+    def remove_continuum(self, noise_region, emis_threshold, abs_threshold, cont_degree_list):
 
         assert self.wave[0] < noise_region[0] and noise_region[1] < self.wave[-1], \
             f'Error noise region {self.wave[0]/(1+self.redshift)} < {noise_region[0]/(1+self.redshift)} ' \
@@ -254,10 +304,13 @@ class LineFinder:
         noise_mean, noise_std = input_flux[idcs_noiseRegion].mean(), input_flux[idcs_noiseRegion].std()
 
         # Perform several continuum fits to improve the line detection
-        for i in range(len(emis_abs_threshold)):
+        for i in range(len(emis_threshold)):
+
             # Mask line regions
-            emisLimit = emis_abs_threshold[i][0] * (noise_mean + noise_std)
-            absoLimit = (noise_mean + noise_std) / emis_abs_threshold[i][1]
+            emisLimit = emis_threshold[i] * (noise_mean + noise_std)
+            absoLimit = (noise_mean + noise_std) / abs_threshold[i]
+            # emisLimit = emis_threshold[i][0] * (noise_mean + noise_std)
+            # absoLimit = (noise_mean + noise_std) / emis_abs_threshold[i][1]
             idcsLineMask = np.where((input_flux >= absoLimit) & (input_flux <= emisLimit))
             wave_masked, flux_masked = input_wave[idcsLineMask], input_flux[idcsLineMask]
 
@@ -343,8 +396,8 @@ class LineFinder:
                 # else:
                 #     idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation)
                 #     idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
-                #     matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
-                #     matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
+                #     match_log.loc[row_index, 'w3'] = self.wave_rest[idx_min]
+                #     match_log.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
         # if include_unknown is False:
         #     idcs_unknown = theoLineDF['observation'] == 'not detected'

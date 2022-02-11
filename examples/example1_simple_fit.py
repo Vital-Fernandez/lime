@@ -1,11 +1,26 @@
 import numpy as np
 import lime
+from astropy.io import fits
+
+
+def import_osiris_fits(file_address, ext=0):
+
+    # Open fits file
+    with fits.open(file_address) as hdul:
+        data, header = hdul[ext].data, hdul[ext].header
+
+    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+    w_max = w_min + dw * n_pix
+    wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+    return wavelength, data, header
+
 
 # Address of the Green Pea galaxy spectrum
 gp_fits = './sample_data/gp121903_BR.fits'
 
 # Load spectrum
-wave, flux, header = lime.load_fits(gp_fits, instrument='OSIRIS')
+wave, flux, header = import_osiris_fits(gp_fits)
 
 # Galaxy redshift and the flux normalization
 z_gp = 0.19531
@@ -43,5 +58,3 @@ lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx')
-
-

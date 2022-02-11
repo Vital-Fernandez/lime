@@ -12,6 +12,7 @@ import copy
 import numpy as np
 import pandas as pd
 import pylatex
+import openpyxl
 
 from sys import exit, stdout
 from pathlib import Path
@@ -274,7 +275,7 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
     return output_variable
 
 
-# Function to import SpecSyzer configuration file
+# Function to load SpecSyzer configuration file
 def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='line_fitting'):
 
     """
@@ -365,6 +366,75 @@ def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='lin
                 cfg_lime[local_label] = global_dict
 
     return cfg_lime
+
+
+# Function to save SpecSyzer configuration file
+def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
+
+    """
+    This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
+    overwrites the data
+
+    """
+    # TODO add mechanic for commented conf lines. Currently they are being erased in the load/safe process
+
+    # Creating a new file (overwritting old if existing)
+    if section_name == None:
+
+        # Check all entries are dictionaries
+        values_list = [*param_dict.values()]
+        section_check = all(isinstance(x, dict) for x in values_list)
+        assert section_check, f'ERROR: Dictionary for {output_file} cannot be converted to configuration file. Confirm all its values are dictionaries'
+
+        output_cfg = configparser.ConfigParser()
+        output_cfg.optionxform = str
+
+        # Loop throught he sections and options to create the files
+        for section_name, options_dict in param_dict.items():
+            output_cfg.add_section(section_name)
+            for option_name, option_value in options_dict.items():
+                option_formatted = format_option_value(option_value, option_name, section_name)
+                output_cfg.set(section_name, option_name, option_formatted)
+
+        # Save to a text format
+        with open(output_file, 'w') as f:
+            output_cfg.write(f)
+
+    # Updating old file
+    else:
+
+        # Confirm file exists
+        file_check = os.path.isfile(output_file)
+
+        # Load original cfg
+        if file_check:
+            output_cfg = configparser.ConfigParser()
+            output_cfg.optionxform = str
+            output_cfg.read(output_file)
+        # Create empty cfg
+        else:
+            output_cfg = configparser.ConfigParser()
+            output_cfg.optionxform = str
+
+        # Clear section upon request
+        if clear_section:
+            if output_cfg.has_section(section_name):
+                output_cfg.remove_section(section_name)
+
+        # Add new section if it is not there
+        if not output_cfg.has_section(section_name):
+            output_cfg.add_section(section_name)
+
+        # Map key values to the expected format and store them
+        for option_name, option_value in param_dict.items():
+            option_formatted = format_option_value(option_value, option_name, section_name)
+            output_cfg.set(section_name, option_name, option_formatted)
+
+        # Save to a text file
+        with open(output_file, 'w') as f:
+            output_cfg.write(f)
+
+    return
 
 
 def numberStringFormat(value, cifras=4):
@@ -472,27 +542,53 @@ def load_lines_log(log_address, ext='LINESLOG'):
     return log
 
 
-def save_line_log(lines_log, file_address, ext='LINESLOG', fits_header=None):
+def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
+
+    """
+    This function saves the input lines log at the location provided by the user.
+
+    The function takes into consideration the extension of the output address for the log file format.
+
+    The valid output formats are .txt, .pdf, .fits, .xlsx and .xls
+
+    For .fits and excel files the user can provide an ``ext`` name for the HDU/sheet.
+
+    For .fits files the user can provide a dictionary so that its keys-values are stored in the header.
+
+    :param log: Lines log with the measurements
+    :type log: pandas.DataFrame
+
+    :param log_address: Address for the output lines log file.
+    :type log_address: str
+
+    :param ext: Name for the HDU/sheet in output .fits and excel files. If the target file already has this extension it
+                will be overwritten. The default value is LINESLOG.
+    :type ext: str, optional
+
+    :param fits_header: Dictionary with key-values to be included in the output .fits file header.
+    :type fits_header: dict, optional
+
+    """
 
     # Confirm file path exits
-    log_path = Path(file_address)
+    log_path = Path(log_address)
     assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
     file_name, file_type = log_path.name, log_path.suffix
 
     # Default txt log with the complete information
     if file_type == '.txt':
         with open(log_path, 'wb') as output_file:
-            string_DF = lines_log.to_string()
+            string_DF = log.to_string()
             output_file.write(string_DF.encode('UTF-8'))
 
     # Pdf fluxes table
     elif file_type == '.pdf':
-        table_fluxes(lines_log, log_path.parent/log_path.stem)
+        table_fluxes(log, log_path.parent / log_path.stem)
 
     # Lines log in a fits file
     elif file_type == '.fits':
-        if isinstance(lines_log, pd.DataFrame):
-            lineLogHDU = lineslog_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
+        if isinstance(log, pd.DataFrame):
+            lineLogHDU = lineslog_to_HDU(log, ext_name=ext, header_dict=fits_header)
 
             if log_path.is_file():
                 try:
@@ -505,8 +601,20 @@ def save_line_log(lines_log, file_address, ext='LINESLOG', fits_header=None):
 
     # Default log in excel format
     elif file_type == '.xlsx' or file_type == '.xls':
-        sheet_name = ext if ext is not None else 'lineslog'
-        lines_log.to_excel(log_path, sheet_name=ext)
+
+        if not log_path.is_file():
+            with pd.ExcelWriter(log_path) as writer:
+                log.to_excel(writer, sheet_name=ext)
+        else:
+            # THIS WORKS IN WINDOWS BUT NOT IN LINUX
+            # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+            #     log.to_excel(writer, sheet_name=ext)
+
+            book = openpyxl.load_workbook(log_path)
+            with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                writer.book = book
+                writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                log.to_excel(writer, sheet_name=ext)
 
     else:
         print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")

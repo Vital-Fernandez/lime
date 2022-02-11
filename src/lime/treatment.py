@@ -360,7 +360,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         else:
             line_components = np.array([lineLabel], ndmin=1)
 
-        ion, waveRef, latexLabel = label_decomposition(line_components, blended_dict=fit_conf)
+        ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=fit_conf)
 
         # Loop through the line components
         for i, line in enumerate(line_components):
