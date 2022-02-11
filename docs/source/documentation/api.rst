@@ -21,11 +21,12 @@ Core
 .. autoclass:: lime.treatment.Spectrum
    :inherited-members:
 
+.. autofunction:: lime.treatment.MaskInspector
+
+
 Convenience functions
 ---------------------
 
 .. autofunction:: lime.label_decomposition
-
-.. autofunction:: lime.treatment.MaskInspector
 
 .. autofunction:: lime.io.spatial_mask_generator
