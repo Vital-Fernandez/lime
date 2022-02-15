@@ -11,19 +11,25 @@ import configparser
 import copy
 import numpy as np
 import pandas as pd
-import pylatex
-import openpyxl
 
 from sys import exit, stdout
 from pathlib import Path
-from functools import partial
-from collections import Sequence
 from distutils.util import strtobool
 
 from astropy.io import fits
 from astropy.table import Table
 
 from matplotlib import pyplot as plt, colors, cm, patches
+from .plots import table_fluxes
+
+
+try:
+    import openpyxl
+    openpyxl_check = True
+
+except ImportError:
+    openpyxl_check = False
+
 
 # Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
 LOG_COLUMNS = {'wavelength': [False, False, True],
@@ -437,68 +443,6 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
     return
 
 
-def numberStringFormat(value, cifras=4):
-    if value > 0.001:
-        newFormat = f'{value:.{cifras}f}'
-    else:
-        newFormat = f'{value:.{cifras}e}'
-
-    return newFormat
-
-
-def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='-'):
-
-    if rounddig_er == None: #TODO declare a universal tool
-        rounddig_er = rounddig
-
-    # Check None entry
-    if entry != None:
-
-        # Check string entry
-        if isinstance(entry, (str, bytes)):
-            formatted_entry = entry
-
-        elif isinstance(entry, (pylatex.MultiColumn, pylatex.MultiRow, pylatex.utils.NoEscape)):
-            formatted_entry = entry
-
-        # Case of Numerical entry
-        else:
-
-            # Case of an array
-            scalarVariable = True
-            if isinstance(entry, (Sequence, np.ndarray)):
-
-                # Confirm is not a single value array
-                if len(entry) == 1:
-                    entry = entry[0]
-                # Case of an array
-                else:
-                    scalarVariable = False
-                    formatted_entry = '_'.join(entry)  # we just put all together in a "_' joined string
-
-            # Case single scalar
-            if scalarVariable:
-
-                # Case with error quantified # TODO add uncertainty protocol for table
-                # if isinstance(entry, UFloat):
-                #     formatted_entry = round_sig(nominal_values(entry), rounddig,
-                #                                 scien_notation=scientific_notation) + r'$\pm$' + round_sig(
-                #         std_devs(entry), rounddig_er, scien_notation=scientific_notation)
-
-                # Case single float
-                if np.isnan(entry):
-                    formatted_entry = nan_format
-
-                # Case single float
-                else:
-                    formatted_entry = numberStringFormat(entry, rounddig)
-    else:
-        # None entry is converted to None
-        formatted_entry = 'None'
-
-    return formatted_entry
-
-
 def load_lines_log(log_address, ext='LINESLOG'):
 
     """
@@ -601,6 +545,13 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
 
     # Default log in excel format
     elif file_type == '.xlsx' or file_type == '.xls':
+
+        # Check openpyxl is installed else leave
+        if openpyxl:
+            pass
+        else:
+            print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
+            return
 
         if not log_path.is_file():
             with pd.ExcelWriter(log_path) as writer:
@@ -784,113 +735,6 @@ def load_fits(file_address, instrument, frame_idx=None):
         return data, header
 
 
-def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_type='pdf'):
-
-    if table_type == 'pdf':
-        output_address = f'{table_address}'
-    if table_type == 'txt-ascii':
-        output_address = f'{table_address}.txt'
-
-    # Measure line fluxes
-    pdf = PdfMaker()
-    pdf.create_pdfDoc(pdf_type='table')
-    pdf.pdf_insert_table(FLUX_TEX_TABLE_HEADERS)
-
-    # Dataframe as container as a txt file
-    tableDF = pd.DataFrame(columns=FLUX_TXT_TABLE_HEADERS[1:])
-
-    # Normalization line
-    if 'H1_4861A' in lines_df.index:
-        flux_Hbeta = lines_df.loc['H1_4861A', 'intg_flux']
-    else:
-        flux_Hbeta = scaleTable
-
-    obsLines = lines_df.index.values
-    for lineLabel in obsLines:
-
-        label_entry = lines_df.loc[lineLabel, 'latexLabel']
-        wavelength = lines_df.loc[lineLabel, 'wavelength']
-        eqw, eqwErr = lines_df.loc[lineLabel, 'eqw'], lines_df.loc[lineLabel, 'eqw_err']
-
-        flux_intg = lines_df.loc[lineLabel, 'intg_flux'] / flux_Hbeta * scaleTable
-        flux_intgErr = lines_df.loc[lineLabel, 'intg_err'] / flux_Hbeta * scaleTable
-        flux_gauss = lines_df.loc[lineLabel, 'gauss_flux'] / flux_Hbeta * scaleTable
-        flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err'] / flux_Hbeta * scaleTable
-
-        if (lines_df.loc[lineLabel, 'blended_label'] != 'None') and ('_m' not in lineLabel):
-            flux, fluxErr = flux_gauss, flux_gaussErr
-            label_entry = label_entry + '$_{gauss}$'
-        else:
-            flux, fluxErr = flux_intg, flux_intgErr
-
-        # Correct the flux
-        if pyneb_rc is not None:
-            corr = pyneb_rc.getCorrHb(wavelength)
-            intensity, intensityErr = flux * corr, fluxErr * corr
-            intensity_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(intensity, intensityErr)
-        else:
-            intensity, intensityErr = '-', '-'
-            intensity_entry = '-'
-
-        eqw_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(eqw, eqwErr)
-        flux_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(flux, fluxErr)
-
-        # Add row of data
-        tex_row_i = [label_entry, eqw_entry, flux_entry, intensity_entry]
-        txt_row_i = [label_entry, eqw, eqwErr, flux, fluxErr, intensity, intensityErr]
-
-        lastRow_check = True if lineLabel == obsLines[-1] else False
-        pdf.addTableRow(tex_row_i, last_row=lastRow_check)
-        tableDF.loc[lineLabel] = txt_row_i[1:]
-
-    if pyneb_rc is not None:
-
-        # Data last rows
-        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
-                         '',
-                         flux_Hbeta,
-                         flux_Hbeta * pyneb_rc.getCorr(4861)]
-
-        row_cHbeta = [r'$c(H\beta)$',
-                      '',
-                      float(pyneb_rc.cHbeta),
-                      '']
-    else:
-        # Data last rows
-        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
-                         '',
-                         flux_Hbeta,
-                         '-']
-
-        row_cHbeta = [r'$c(H\beta)$',
-                      '',
-                      '-',
-                      '']
-
-    pdf.addTableRow(row_Hbetaflux, last_row=False)
-    pdf.addTableRow(row_cHbeta, last_row=False)
-    tableDF.loc[row_Hbetaflux[0]] = row_Hbetaflux[1:] + [''] * 3
-    tableDF.loc[row_cHbeta[0]] = row_cHbeta[1:] + [''] * 3
-
-    # Format last rows
-    pdf.table.add_hline()
-    pdf.table.add_hline()
-
-    # Save the pdf table
-    if table_type == 'pdf':
-        try:
-            pdf.generate_pdf(table_address, clean_tex=True)
-        except:
-            print('-- PDF compilation failure')
-
-    # Save the txt table
-    if table_type == 'txt-ascii':
-        with open(output_address, 'wb') as output_file:
-            string_DF = tableDF.to_string()
-            string_DF = string_DF.replace('$', '')
-            output_file.write(string_DF.encode('UTF-8'))
-
-    return
 
 
 def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", output_address=None,
@@ -1218,240 +1062,3 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
     return
 
 
-class PdfMaker:
-
-    def __init__(self):
-        """
-
-        """
-        self.pdf_type = None
-        self.pdf_geometry_options = {'right': '1cm',
-                                     'left': '1cm',
-                                     'top': '1cm',
-                                     'bottom': '2cm'}
-        self.table = None
-        self.theme_table = None
-
-        # TODO add dictionary with numeric formats for tables depending on the variable
-
-    def create_pdfDoc(self, pdf_type=None, geometry_options=None, document_class=u'article', theme='white'):
-        """
-
-        :param pdf_type:
-        :param geometry_options:
-        :param document_class:
-        :param theme:
-        :return:
-        """
-        # TODO integrate this into the init
-        # Case for a complete .pdf or .tex
-        self.theme_table = theme
-
-        if pdf_type is not None:
-
-            self.pdf_type = pdf_type
-
-            # Update the geometry if necessary (we coud define a dictionary distinction)
-            if pdf_type == 'graphs':
-                pdf_format = {'landscape': 'true'}
-                self.pdf_geometry_options.update(pdf_format)
-
-            elif pdf_type == 'table':
-                pdf_format = {'landscape': 'true',
-                              'paperwidth': '30in',
-                              'paperheight': '30in'}
-                self.pdf_geometry_options.update(pdf_format)
-
-            if geometry_options is not None:
-                self.pdf_geometry_options.update(geometry_options)
-
-            # Generate the doc
-            self.pdfDoc = pylatex.Document(documentclass=document_class, geometry_options=self.pdf_geometry_options)
-
-            if theme == 'dark':
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{background}{rgb}{0.169, 0.169, 0.169}'))
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{foreground}{rgb}{0.702, 0.780, 0.847}'))
-                self.pdfDoc.append(pylatex.NoEscape(r'\arrayrulecolor{foreground}'))
-
-            if pdf_type == 'table':
-                self.pdfDoc.packages.append(pylatex.Package('preview', options=['active', 'tightpage', ]))
-                self.pdfDoc.packages.append(pylatex.Package('hyperref', options=['unicode=true', ]))
-                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
-                self.pdfDoc.packages.append(pylatex.Package('nicefrac'))
-                self.pdfDoc.packages.append(pylatex.Package('siunitx'))
-                self.pdfDoc.packages.append(pylatex.Package('makecell'))
-                # self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
-                self.pdfDoc.packages.append(pylatex.Package('colortbl', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
-                self.pdfDoc.packages.append(pylatex.Package('xcolor', options=['table']))
-
-            elif pdf_type == 'longtable':
-                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
-
-        return
-
-    def pdf_create_section(self, caption, add_page=False):
-
-        with self.pdfDoc.create(pylatex.Section(caption)):
-            if add_page:
-                self.pdfDoc.append(pylatex.NewPage())
-
-    def add_page(self):
-
-        self.pdfDoc.append(pylatex.NewPage())
-
-        return
-
-    def pdf_insert_image(self, image_address, fig_loc='htbp', width=r'1\textwidth'):
-
-        with self.pdfDoc.create(pylatex.Figure(position='h!')) as fig_pdf:
-            fig_pdf.add_image(image_address, pylatex.NoEscape(width))
-
-        return
-
-    def pdf_insert_table(self, column_headers=None, table_format=None, addfinalLine=True, color_font=None,
-                         color_background=None):
-
-        # Set the table format
-        if table_format is None:
-            table_format = 'l' + 'c' * (len(column_headers) - 1)
-
-        # Case we want to insert the table in a pdf
-        if self.pdf_type != None:
-
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
-
-                # Initiate the table
-                with self.pdfDoc.create(pylatex.Tabular(table_format)) as self.table:
-                    if column_headers != None:
-                        self.table.add_hline()
-                        # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
-                        output_row = list(map(partial(format_for_table), column_headers))
-
-                        # if color_font is not None:
-                        #     for i, item in enumerate(output_row):
-                        #         output_row[i] = NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-                        #
-                        # if color_background is not None:
-                        #     for i, item in enumerate(output_row):
-                        #         output_row[i] = NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-                        if (color_font is not None) or (self.theme_table != 'white'):
-                            if self.theme_table == 'dark' and color_font is None:
-                                color_font = 'foreground'
-
-                            for i, item in enumerate(output_row):
-                                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-
-                        if (color_background is not None) or (self.theme_table != 'white'):
-                            if self.theme_table == 'dark' and color_background is None:
-                                color_background = 'background'
-
-                            for i, item in enumerate(output_row):
-                                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-                        self.table.add_row(output_row, escape=False, strict=False)
-                        if addfinalLine:
-                            self.table.add_hline()
-
-            elif self.pdf_type == 'longtable':
-
-                # Initiate the table
-                with self.pdfDoc.create(pylatex.LongTable(table_format)) as self.table:
-                    if column_headers != None:
-                        self.table.add_hline()
-                        self.table.add_row(list(map(str, column_headers)), escape=False)
-                        if addfinalLine:
-                            self.table.add_hline()
-
-        # Table .tex without preamble
-        else:
-            self.table = pylatex.Tabu(table_format)
-            if column_headers != None:
-                self.table.add_hline()
-                # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
-                output_row = list(map(partial(format_for_table), column_headers))
-                self.table.add_row(output_row, escape=False, strict=False)
-                if addfinalLine:
-                    self.table.add_hline()
-
-        return
-
-    def pdf_insert_longtable(self, column_headers=None, table_format=None):
-
-        # Set the table format
-        if table_format is None:
-            table_format = 'l' + 'c' * (len(column_headers) - 1)
-
-        # Case we want to insert the table in a pdf
-        if self.pdf_type != None:
-
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
-
-                # Initiate the table
-            with self.pdfDoc.create(pylatex.Tabu(table_format)) as self.table:
-                if column_headers != None:
-                    self.table.add_hline()
-                    self.table.add_row(map(str, column_headers), escape=False)
-                    self.table.add_hline()
-
-                    # Table .tex without preamble
-        else:
-            self.table = pylatex.LongTable(table_format)
-            if column_headers != None:
-                self.table.add_hline()
-                self.table.add_row(list(map(str, column_headers)), escape=False)
-                self.table.add_hline()
-
-    def addTableRow(self, input_row, row_format='auto', rounddig=4, rounddig_er=None, last_row=False, color_font=None,
-                    color_background=None):
-
-        # Default formatting
-        if row_format == 'auto':
-            output_row = list(map(partial(format_for_table, rounddig=rounddig), input_row))
-
-        # TODO clean this theming to default values
-        if (color_font is not None) or (self.theme_table != 'white'):
-            if self.theme_table == 'dark' and color_font is None:
-                color_font = 'foreground'
-
-            for i, item in enumerate(output_row):
-                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-
-        if (color_background is not None) or (self.theme_table != 'white'):
-            if self.theme_table == 'dark' and color_background is None:
-                color_background = 'background'
-
-            for i, item in enumerate(output_row):
-                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-        # Append the row
-        self.table.add_row(output_row, escape=False, strict=False)
-
-        # Case of the final row just add one line
-        if last_row:
-            self.table.add_hline()
-
-    def fig_to_pdf(self, label=None, fig_loc='htbp', width=r'1\textwidth', add_page=False, *args, **kwargs):
-
-        with self.pdfDoc.create(pylatex.Figure(position=fig_loc)) as plot:
-            plot.add_plot(width=pylatex.NoEscape(width), placement='h', *args, **kwargs)
-
-            if label is not None:
-                plot.add_caption(label)
-
-        if add_page:
-            self.pdfDoc.append(pylatex.NewPage())
-
-    def generate_pdf(self, output_address, clean_tex=True):
-
-        if self.pdf_type is None:
-            self.table.generate_tex(str(output_address))
-
-        else:
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\end{preview}'))
-            self.pdfDoc.generate_pdf(filepath=str(output_address), clean_tex=clean_tex, compiler='pdflatex')
-
-        return

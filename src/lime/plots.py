@@ -1,16 +1,20 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, rcParams, rcParamsDefault, spines, gridspec, patches, colors, cm
+from matplotlib import pyplot as plt, rcParams, rcParamsDefault, spines, gridspec, patches
 from scipy.interpolate import interp1d
 from sys import exit
-from astropy.io import fits
-from astropy.table import Table
+from functools import partial
+from collections import Sequence
+
 from .tools import label_decomposition, kinematic_component_labelling
 from .model import c_KMpS, gaussian_model, linear_model
-from .io import PdfMaker, load_lines_log
-from astropy.wcs import WCS
-import time
-import copy
+
+try:
+    import pylatex
+    pylatex_check = True
+except ImportError:
+    pylatex_check = False
+
 
 STANDARD_PLOT = {'figure.figsize': (12, 5),
                  'axes.titlesize': 12,
@@ -56,6 +60,184 @@ def latex_science_float(f):
         return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
     else:
         return float_str
+
+
+def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='-'):
+
+    if rounddig_er == None: #TODO declare a universal tool
+        rounddig_er = rounddig
+
+    # Check None entry
+    if entry != None:
+
+        # Check string entry
+        if isinstance(entry, (str, bytes)):
+            formatted_entry = entry
+
+        elif isinstance(entry, (pylatex.MultiColumn, pylatex.MultiRow, pylatex.utils.NoEscape)):
+            formatted_entry = entry
+
+        # Case of Numerical entry
+        else:
+
+            # Case of an array
+            scalarVariable = True
+            if isinstance(entry, (Sequence, np.ndarray)):
+
+                # Confirm is not a single value array
+                if len(entry) == 1:
+                    entry = entry[0]
+                # Case of an array
+                else:
+                    scalarVariable = False
+                    formatted_entry = '_'.join(entry)  # we just put all together in a "_' joined string
+
+            # Case single scalar
+            if scalarVariable:
+
+                # Case with error quantified # TODO add uncertainty protocol for table
+                # if isinstance(entry, UFloat):
+                #     formatted_entry = round_sig(nominal_values(entry), rounddig,
+                #                                 scien_notation=scientific_notation) + r'$\pm$' + round_sig(
+                #         std_devs(entry), rounddig_er, scien_notation=scientific_notation)
+
+                # Case single float
+                if np.isnan(entry):
+                    formatted_entry = nan_format
+
+                # Case single float
+                else:
+                    formatted_entry = numberStringFormat(entry, rounddig)
+    else:
+        # None entry is converted to None
+        formatted_entry = 'None'
+
+    return formatted_entry
+
+
+def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_type='pdf'):
+
+    # Check pylatex is install else leave
+    if pylatex_check:
+        pass
+    else:
+        print('\n- WARNING: pylatex is not installed. Flux table could not be generated')
+        return
+
+    if table_type == 'pdf':
+        output_address = f'{table_address}'
+    if table_type == 'txt-ascii':
+        output_address = f'{table_address}.txt'
+
+    # Measure line fluxes
+    pdf = PdfMaker()
+    pdf.create_pdfDoc(pdf_type='table')
+    pdf.pdf_insert_table(FLUX_TEX_TABLE_HEADERS)
+
+    # Dataframe as container as a txt file
+    tableDF = pd.DataFrame(columns=FLUX_TXT_TABLE_HEADERS[1:])
+
+    # Normalization line
+    if 'H1_4861A' in lines_df.index:
+        flux_Hbeta = lines_df.loc['H1_4861A', 'intg_flux']
+    else:
+        flux_Hbeta = scaleTable
+
+    obsLines = lines_df.index.values
+    for lineLabel in obsLines:
+
+        label_entry = lines_df.loc[lineLabel, 'latexLabel']
+        wavelength = lines_df.loc[lineLabel, 'wavelength']
+        eqw, eqwErr = lines_df.loc[lineLabel, 'eqw'], lines_df.loc[lineLabel, 'eqw_err']
+
+        flux_intg = lines_df.loc[lineLabel, 'intg_flux'] / flux_Hbeta * scaleTable
+        flux_intgErr = lines_df.loc[lineLabel, 'intg_err'] / flux_Hbeta * scaleTable
+        flux_gauss = lines_df.loc[lineLabel, 'gauss_flux'] / flux_Hbeta * scaleTable
+        flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err'] / flux_Hbeta * scaleTable
+
+        if (lines_df.loc[lineLabel, 'blended_label'] != 'None') and ('_m' not in lineLabel):
+            flux, fluxErr = flux_gauss, flux_gaussErr
+            label_entry = label_entry + '$_{gauss}$'
+        else:
+            flux, fluxErr = flux_intg, flux_intgErr
+
+        # Correct the flux
+        if pyneb_rc is not None:
+            corr = pyneb_rc.getCorrHb(wavelength)
+            intensity, intensityErr = flux * corr, fluxErr * corr
+            intensity_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(intensity, intensityErr)
+        else:
+            intensity, intensityErr = '-', '-'
+            intensity_entry = '-'
+
+        eqw_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(eqw, eqwErr)
+        flux_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(flux, fluxErr)
+
+        # Add row of data
+        tex_row_i = [label_entry, eqw_entry, flux_entry, intensity_entry]
+        txt_row_i = [label_entry, eqw, eqwErr, flux, fluxErr, intensity, intensityErr]
+
+        lastRow_check = True if lineLabel == obsLines[-1] else False
+        pdf.addTableRow(tex_row_i, last_row=lastRow_check)
+        tableDF.loc[lineLabel] = txt_row_i[1:]
+
+    if pyneb_rc is not None:
+
+        # Data last rows
+        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
+                         '',
+                         flux_Hbeta,
+                         flux_Hbeta * pyneb_rc.getCorr(4861)]
+
+        row_cHbeta = [r'$c(H\beta)$',
+                      '',
+                      float(pyneb_rc.cHbeta),
+                      '']
+    else:
+        # Data last rows
+        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
+                         '',
+                         flux_Hbeta,
+                         '-']
+
+        row_cHbeta = [r'$c(H\beta)$',
+                      '',
+                      '-',
+                      '']
+
+    pdf.addTableRow(row_Hbetaflux, last_row=False)
+    pdf.addTableRow(row_cHbeta, last_row=False)
+    tableDF.loc[row_Hbetaflux[0]] = row_Hbetaflux[1:] + [''] * 3
+    tableDF.loc[row_cHbeta[0]] = row_cHbeta[1:] + [''] * 3
+
+    # Format last rows
+    pdf.table.add_hline()
+    pdf.table.add_hline()
+
+    # Save the pdf table
+    if table_type == 'pdf':
+        try:
+            pdf.generate_pdf(table_address, clean_tex=True)
+        except:
+            print('-- PDF compilation failure')
+
+    # Save the txt table
+    if table_type == 'txt-ascii':
+        with open(output_address, 'wb') as output_file:
+            string_DF = tableDF.to_string()
+            string_DF = string_DF.replace('$', '')
+            output_file.write(string_DF.encode('UTF-8'))
+
+    return
+
+
+def numberStringFormat(value, cifras=4):
+    if value > 0.001:
+        newFormat = f'{value:.{cifras}f}'
+    else:
+        newFormat = f'{value:.{cifras}e}'
+
+    return newFormat
 
 
 class LiMePlots:
@@ -186,6 +368,8 @@ class LiMePlots:
                 w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
                 m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
                 amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], self.log.loc[lineLabel, 'sigma']
+                observations = self.log.loc[lineLabel, 'observations']
+
 
                 # Rest frame
                 if frame == 'rest':
@@ -201,9 +385,17 @@ class LiMePlots:
                     wave_range = np.linspace(w3, w4, int((w4-w3)*3))
                     cont = (m_cont * wave_range + n_cont) * z_corr
 
+                width_curve = 0.5
+                color_fit = 'tab:red'
+
+                # Check if the measurement had an error:
+                if observations != '':
+                    color_fit = 'black'
+                    width_curve = 2.5
+
                 line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
                 ax.plot(wave_range, cont/self.norm_flux, ':', color='tab:purple', linewidth=0.5)
-                ax.plot(wave_range, (line_profile+cont)/self.norm_flux, color='tab:red', linewidth=0.5, label='Gaussian component' if first_instance else '_')
+                ax.plot(wave_range, (line_profile+cont)/self.norm_flux, color=color_fit, linewidth=width_curve, label='Gaussian component' if first_instance else '_')
                 # ax.scatter(wave_peak, flux_peak, color='tab:blue')
                 first_instance = False
 
@@ -254,6 +446,7 @@ class LiMePlots:
             foreground = 'black'
             color_fit = 'tab:blue'
             err_shade = 'tab:blue'
+        width_curve = 0.7
 
         # Plot Configuration
         defaultConf.update(fig_conf)
@@ -319,9 +512,14 @@ class LiMePlots:
             wave_resample = np.linspace(x_in[0], x_in[-1], 200)
             flux_resample = lmfit_output.eval_components(x=wave_resample)
 
+            # Check if the measurement had an error:
+            if self.observations != '':
+                color_fit = 'black'
+                width_curve = 3
+
             # Plot input data
             # ax[0].scatter(x_in/z_cor, y_in*z_cor, color='tab:red', label='Input data', alpha=0.4)
-            ax[0].plot(x_in/z_cor, lmfit_output.best_fit*z_cor, label='Gaussian fit', color=color_fit, linewidth=0.7)
+            ax[0].plot(x_in/z_cor, lmfit_output.best_fit*z_cor, label='Gaussian fit', color=color_fit, linewidth=width_curve)
 
             # Plot individual components
             if not self.blended_check:
@@ -579,7 +777,6 @@ class LiMePlots:
 
         return
 
-
     def table_kinematics(self, lines_df, table_address, flux_normalization=1.0):
 
         # TODO this could be included in sr.print
@@ -656,229 +853,240 @@ class LiMePlots:
         return
 
 
-# class CubeInspector(Spectrum):
-#
-#     """
-#     This class produces an interative matplotlib window for the muse data cubes. On the left axis with the cube slice
-#     image you can right click a voxel for its corresponding spectrum to be plotted on the right axis.
-#     """
-#
-#     def __init__(self, wavelength_array, cube_flux, image_bg, image_fg=None, contour_levels_fg=None,
-#                  init_coord=None, header=None, fig_conf=None, axes_conf={}, min_bg_percentil=60, log_address=None):
-#
-#
-#
-#         self.fig = None
-#         self.ax0, self.ax1, self.in_ax = None, None, None
-#         self.grid_mesh = None
-#         self.cube_flux = cube_flux
-#         self.wave = wavelength_array
-#         self.header = header
-#         self.image_bg = image_bg
-#         self.image_fg = image_fg
-#         self.contour_levels_fg = contour_levels_fg
-#         self.fig_conf = STANDARD_PLOT.copy()
-#         self.axes_conf = {}
-#         self.axlim_dict = {}
-#         self.min_bg_percentil = min_bg_percentil
-#         self.hdul_linelog = None
-#
-#         # Read the figure configuration
-#         self.fig_conf = STANDARD_PLOT if fig_conf is None else fig_conf
-#         rcParams.update(self.fig_conf)
-#
-#         # Read the axes format
-#         if 'image' in axes_conf:
-#             default_conf = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
-#             default_conf.update(axes_conf['image'])
-#             self.axes_conf['image'] = default_conf
-#         else:
-#             self.axes_conf['image'] = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
-#
-#         if 'spectrum' in axes_conf:
-#             self.axes_conf['spectrum'] = STANDARD_AXES.update(axes_conf['spectrum'])
-#         else:
-#             self.axes_conf['spectrum'] = STANDARD_AXES
-#
-#         # Figure structure
-#         self.fig = plt.figure(figsize=(18, 5))
-#         gs = gridspec.GridSpec(n_rows=1, n_cols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
-#         self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-#         self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
-#
-#         # Axes configuration
-#         if self.header is None:
-#             self.ax0 = self.fig.add_subplot(gs[0])
-#         else:
-#             sky_wcs = WCS(self.header)
-#             self.ax0 = self.fig.add_subplot(gs[0], projection=sky_wcs, slices=('x', 'y', 1))
-#         self.ax1 = self.fig.add_subplot(gs[1])
-#
-#         # Image mesh grid
-#         frame_size = self.cube_flux.shape
-#         y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
-#         self.grid_mesh = np.meshgrid(x, y)
-#
-#         # If not central coord is provided use the middle point
-#         if init_coord is None:
-#             init_coord = int(self.cube_flux.shape[1]/2), int(self.cube_flux.shape[2]/2)
-#
-#         # Load the complete fits lines log if input
-#         if log_address is not None:
-#             # start = time.time()
-#             # linesLog_dict = {}
-#             # with fits.open(log_address) as hdul:
-#             #     for i in np.arange(len(hdul)):
-#             #         linesLog_dict[hdul[i].name] = hdul[i].data
-#             # end = time.time()
-#             # print(end-start)
-#
-#             start = time.time()
-#             # with fits.open(log_address, lazy_load_hdus=False) as hdul:
-#             #     self.hdu_list = fits.open(log_address, lazy_load_hdus=False)
-#             self.hdul_linelog = fits.open(log_address, lazy_load_hdus=False)
-#             end = time.time()
-#             print(end-start)
-#
-#         # Generate the plot
-#         self.plot_map_voxel(self.image_bg, init_coord, self.image_fg, self.contour_levels_fg)
-#         plt.show()
-#
-#         # Close the lins log if it has been opened
-#         if isinstance(self.hdul_linelog, fits.hdu.HDUList):
-#             self.hdul_linelog.close()
-#
-#         return
-#
-#     def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None):
-#
-#         frame = 'obs'
-#         self.norm_flux = 1e-20
-#
-#         min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
-#         norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
-#                                           vmin=min_flux,
-#                                           base=10)
-#         self.ax0.imshow(image_bg, cmap=cm.gray, norm=norm_color_bg)
-#
-#         # Emphasize input coordinate
-#         idx_j, idx_i = voxel_coord
-#         if voxel_coord is not None:
-#             self.ax0.plot(idx_i, idx_j, '+', color='red')
-#
-#         # Plot contours image
-#         if image_fg is not None:
-#             self.ax0.contour(self.grid_mesh[0], self.grid_mesh[1], image_fg, cmap='viridis', levels=flux_levels,
-#                              norm=colors.LogNorm())
-#
-#         # Voxel spectrum
-#         if voxel_coord is not None:
-#             flux_voxel = self.cube_flux[:, idx_j, idx_i]
-#             self.ax1.step(self.wave, flux_voxel, where='mid')
-#
-#         # Plot the emission line fittings:
-#         if self.hdul_linelog is not None:
-#             ext_name = f'{idx_j}-{idx_i}_LINELOG'
-#
-#             if ext_name in self.hdul_linelog:
-#                 start = time.time()
-#                 lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
-#                 lineslogDF.set_index('index', inplace=True)
-#                 self.log = lineslogDF
-#                 end = time.time()
-#                 print(end-start)
-#             else:
-#                 self.log = None
-#             print(f'Cargar el pendejo {end-start}')
-#             # try:
-#             #     self.log = load_lines_log(self.log_address, ext=ext_name)
-#             # except:
-#             #     self.log = None
-#
-#             if self.log is not None:
-#
-#                 flux_corr = 1
-#                 self.redshift = 0.004691
-#
-#                 for line in self.log.index:
-#
-#                     w3, w4 = self.log.loc[line, 'w3'], self.log.loc[line, 'w4']
-#                     m_cont, n_cont = self.log.loc[line, 'm_cont'], self.log.loc[line, 'n_cont']
-#                     amp, center, sigma = self.log.loc[line, 'amp'], self.log.loc[line, 'center'], \
-#                                          self.log.loc[line, 'sigma']
-#                     wave_peak, flux_peak = self.log.loc[line, 'peak_wave'], self.log.loc[
-#                         line, 'peak_flux'],
-#
-#                     # Rest frame
-#                     if frame == 'rest':
-#                         w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-#                         wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-#                         cont = (m_cont * wave_range + n_cont) * flux_corr
-#                         wave_range = wave_range / (1 + self.redshift)
-#                         center = center / (1 + self.redshift)
-#                         wave_peak = wave_peak / (1 + self.redshift)
-#                         flux_peak = flux_peak * flux_corr / self.norm_flux
-#
-#                     # Observed frame
-#                     else:
-#                         w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-#                         wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-#                         cont = (m_cont * wave_range + n_cont) * flux_corr
-#
-#                     line_profile = gaussian_model(wave_range, amp, center, sigma) * flux_corr
-#                     self.ax1.plot(wave_range, cont / self.norm_flux, ':', color='tab:purple', linewidth=0.5)
-#                     self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color='tab:red', linewidth=0.5)
-#
-#         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
-#
-#         # Update the axis
-#         self.ax0.update(self.axes_conf['image'])
-#         self.ax1.update(self.axes_conf['spectrum'])
-#
-#         return
-#
-#     def on_click(self, event, mouse_trigger_buttton=3):
-#
-#         """
-#         This method defines launches the new plot selection once the user clicks on an image voxel. By default this is a
-#         a right click on a minimum three button mouse
-#         :param event: This variable represents the user action on the plot
-#         :param mouse_trigger_buttton: Number-coded mouse button which defines the button launching the voxel selection
-#         :return:
-#         """
-#
-#         if self.in_ax == self.ax0:
-#
-#             if event.button == mouse_trigger_buttton:
-#
-#                 # Save axes zoom
-#                 self.save_zoom()
-#
-#                 # Save clicked coordinates for next plot
-#                 idx_j, idx_i = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
-#                 print(f'Current voxel: {idx_j}-{idx_i} (mouse button {event.button})')
-#
-#                 # Remake the drawing
-#                 self.ax0.clear()
-#                 self.ax1.clear()
-#                 self.plot_map_voxel(self.image_bg, (idx_j, idx_i), self.image_fg, self.contour_levels_fg)
-#
-#                 # Reset the image
-#                 self.reset_zoom()
-#                 self.fig.canvas.draw()
-#
-#     def on_enter_axes(self, event):
-#         self.in_ax = event.inaxes
-#
-#     def save_zoom(self):
-#         self.axlim_dict['image_xlim'] = self.ax0.get_xlim()
-#         self.axlim_dict['image_ylim'] = self.ax0.get_ylim()
-#         self.axlim_dict['spec_xlim'] = self.ax1.get_xlim()
-#         self.axlim_dict['spec_ylim'] = self.ax1.get_ylim()
-#
-#     def reset_zoom(self):
-#         self.ax0.set_xlim(self.axlim_dict['image_xlim'])
-#         self.ax0.set_ylim(self.axlim_dict['image_ylim'])
-#         self.ax1.set_xlim(self.axlim_dict['spec_xlim'])
-#         self.ax1.set_ylim(self.axlim_dict['spec_ylim'])
-#
+class PdfMaker:
+
+    def __init__(self):
+        """
+
+        """
+        self.pdf_type = None
+        self.pdf_geometry_options = {'right': '1cm',
+                                     'left': '1cm',
+                                     'top': '1cm',
+                                     'bottom': '2cm'}
+        self.table = None
+        self.theme_table = None
+
+        # TODO add dictionary with numeric formats for tables depending on the variable
+
+    def create_pdfDoc(self, pdf_type=None, geometry_options=None, document_class=u'article', theme='white'):
+        """
+
+        :param pdf_type:
+        :param geometry_options:
+        :param document_class:
+        :param theme:
+        :return:
+        """
+        # TODO integrate this into the init
+        # Case for a complete .pdf or .tex
+        self.theme_table = theme
+
+        if pdf_type is not None:
+
+            self.pdf_type = pdf_type
+
+            # Update the geometry if necessary (we coud define a dictionary distinction)
+            if pdf_type == 'graphs':
+                pdf_format = {'landscape': 'true'}
+                self.pdf_geometry_options.update(pdf_format)
+
+            elif pdf_type == 'table':
+                pdf_format = {'landscape': 'true',
+                              'paperwidth': '30in',
+                              'paperheight': '30in'}
+                self.pdf_geometry_options.update(pdf_format)
+
+            if geometry_options is not None:
+                self.pdf_geometry_options.update(geometry_options)
+
+            # Generate the doc
+            self.pdfDoc = pylatex.Document(documentclass=document_class, geometry_options=self.pdf_geometry_options)
+
+            if theme == 'dark':
+                self.pdfDoc.append(pylatex.NoEscape('\definecolor{background}{rgb}{0.169, 0.169, 0.169}'))
+                self.pdfDoc.append(pylatex.NoEscape('\definecolor{foreground}{rgb}{0.702, 0.780, 0.847}'))
+                self.pdfDoc.append(pylatex.NoEscape(r'\arrayrulecolor{foreground}'))
+
+            if pdf_type == 'table':
+                self.pdfDoc.packages.append(pylatex.Package('preview', options=['active', 'tightpage', ]))
+                self.pdfDoc.packages.append(pylatex.Package('hyperref', options=['unicode=true', ]))
+                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
+                self.pdfDoc.packages.append(pylatex.Package('nicefrac'))
+                self.pdfDoc.packages.append(pylatex.Package('siunitx'))
+                self.pdfDoc.packages.append(pylatex.Package('makecell'))
+                # self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
+                self.pdfDoc.packages.append(pylatex.Package('colortbl', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
+                self.pdfDoc.packages.append(pylatex.Package('xcolor', options=['table']))
+
+            elif pdf_type == 'longtable':
+                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
+
+        return
+
+    def pdf_create_section(self, caption, add_page=False):
+
+        with self.pdfDoc.create(pylatex.Section(caption)):
+            if add_page:
+                self.pdfDoc.append(pylatex.NewPage())
+
+    def add_page(self):
+
+        self.pdfDoc.append(pylatex.NewPage())
+
+        return
+
+    def pdf_insert_image(self, image_address, fig_loc='htbp', width=r'1\textwidth'):
+
+        with self.pdfDoc.create(pylatex.Figure(position='h!')) as fig_pdf:
+            fig_pdf.add_image(image_address, pylatex.NoEscape(width))
+
+        return
+
+    def pdf_insert_table(self, column_headers=None, table_format=None, addfinalLine=True, color_font=None,
+                         color_background=None):
+
+        # Set the table format
+        if table_format is None:
+            table_format = 'l' + 'c' * (len(column_headers) - 1)
+
+        # Case we want to insert the table in a pdf
+        if self.pdf_type != None:
+
+            if self.pdf_type == 'table':
+                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
+
+                # Initiate the table
+                with self.pdfDoc.create(pylatex.Tabular(table_format)) as self.table:
+                    if column_headers != None:
+                        self.table.add_hline()
+                        # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
+                        output_row = list(map(partial(format_for_table), column_headers))
+
+                        # if color_font is not None:
+                        #     for i, item in enumerate(output_row):
+                        #         output_row[i] = NoEscape(r'\color{{{}}}{}'.format(color_font, item))
+                        #
+                        # if color_background is not None:
+                        #     for i, item in enumerate(output_row):
+                        #         output_row[i] = NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
+
+                        if (color_font is not None) or (self.theme_table != 'white'):
+                            if self.theme_table == 'dark' and color_font is None:
+                                color_font = 'foreground'
+
+                            for i, item in enumerate(output_row):
+                                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
+
+                        if (color_background is not None) or (self.theme_table != 'white'):
+                            if self.theme_table == 'dark' and color_background is None:
+                                color_background = 'background'
+
+                            for i, item in enumerate(output_row):
+                                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
+
+                        self.table.add_row(output_row, escape=False, strict=False)
+                        if addfinalLine:
+                            self.table.add_hline()
+
+            elif self.pdf_type == 'longtable':
+
+                # Initiate the table
+                with self.pdfDoc.create(pylatex.LongTable(table_format)) as self.table:
+                    if column_headers != None:
+                        self.table.add_hline()
+                        self.table.add_row(list(map(str, column_headers)), escape=False)
+                        if addfinalLine:
+                            self.table.add_hline()
+
+        # Table .tex without preamble
+        else:
+            self.table = pylatex.Tabu(table_format)
+            if column_headers != None:
+                self.table.add_hline()
+                # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
+                output_row = list(map(partial(format_for_table), column_headers))
+                self.table.add_row(output_row, escape=False, strict=False)
+                if addfinalLine:
+                    self.table.add_hline()
+
+        return
+
+    def pdf_insert_longtable(self, column_headers=None, table_format=None):
+
+        # Set the table format
+        if table_format is None:
+            table_format = 'l' + 'c' * (len(column_headers) - 1)
+
+        # Case we want to insert the table in a pdf
+        if self.pdf_type != None:
+
+            if self.pdf_type == 'table':
+                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
+
+                # Initiate the table
+            with self.pdfDoc.create(pylatex.Tabu(table_format)) as self.table:
+                if column_headers != None:
+                    self.table.add_hline()
+                    self.table.add_row(map(str, column_headers), escape=False)
+                    self.table.add_hline()
+
+                    # Table .tex without preamble
+        else:
+            self.table = pylatex.LongTable(table_format)
+            if column_headers != None:
+                self.table.add_hline()
+                self.table.add_row(list(map(str, column_headers)), escape=False)
+                self.table.add_hline()
+
+    def addTableRow(self, input_row, row_format='auto', rounddig=4, rounddig_er=None, last_row=False, color_font=None,
+                    color_background=None):
+
+        # Default formatting
+        if row_format == 'auto':
+            output_row = list(map(partial(format_for_table, rounddig=rounddig), input_row))
+
+        # TODO clean this theming to default values
+        if (color_font is not None) or (self.theme_table != 'white'):
+            if self.theme_table == 'dark' and color_font is None:
+                color_font = 'foreground'
+
+            for i, item in enumerate(output_row):
+                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
+
+        if (color_background is not None) or (self.theme_table != 'white'):
+            if self.theme_table == 'dark' and color_background is None:
+                color_background = 'background'
+
+            for i, item in enumerate(output_row):
+                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
+
+        # Append the row
+        self.table.add_row(output_row, escape=False, strict=False)
+
+        # Case of the final row just add one line
+        if last_row:
+            self.table.add_hline()
+
+    def fig_to_pdf(self, label=None, fig_loc='htbp', width=r'1\textwidth', add_page=False, *args, **kwargs):
+
+        with self.pdfDoc.create(pylatex.Figure(position=fig_loc)) as plot:
+            plot.add_plot(width=pylatex.NoEscape(width), placement='h', *args, **kwargs)
+
+            if label is not None:
+                plot.add_caption(label)
+
+        if add_page:
+            self.pdfDoc.append(pylatex.NewPage())
+
+    def generate_pdf(self, output_address, clean_tex=True):
+
+        if self.pdf_type is None:
+            self.table.generate_tex(str(output_address))
+
+        else:
+            if self.pdf_type == 'table':
+                self.pdfDoc.append(pylatex.NoEscape(r'\end{preview}'))
+            self.pdfDoc.generate_pdf(filepath=str(output_address), clean_tex=clean_tex, compiler='pdflatex')
+
+        return

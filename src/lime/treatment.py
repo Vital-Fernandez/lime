@@ -16,6 +16,8 @@ from .model import gaussian_model
 from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec
 from matplotlib.widgets import SpanSelector
 
+# import mplcursors
+
 
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
@@ -843,6 +845,7 @@ class CubeFitsInspector(Spectrum):
 
     def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None, frame='obs'):
 
+
         min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
         norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
                                           vmin=min_flux,
@@ -862,7 +865,7 @@ class CubeFitsInspector(Spectrum):
         # Voxel spectrum
         if voxel_coord is not None:
             flux_voxel = self.cube_flux[:, idx_j, idx_i]
-            self.ax1.step(self.wave, flux_voxel, where='mid')
+            self.ax1.step(self.wave, flux_voxel, where='mid', label='')
 
         # Plot the emission line fittings:
         if self.hdul_linelog is not None:
@@ -886,15 +889,17 @@ class CubeFitsInspector(Spectrum):
                     flux_plot = self.flux
                     wave_plot = self.wave
 
-                for lineLabel in self.log.index:
+                ion_array, wave_array, latex_array = label_decomposition(self.log.index.values)
+
+                for i_line, lineLabel in enumerate(self.log.index):
 
                     w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
                     m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
                     amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
                                          self.log.loc[lineLabel, 'sigma']
-                    wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[
-                        lineLabel, 'peak_flux']
+                    observations = self.log.loc[lineLabel, 'observations']
                     blended_label = self.log.loc[lineLabel, 'blended_label']
+                    # print(lineLabel, observations, type(observations))
 
                     # Rest frame
                     if frame == 'rest':
@@ -926,8 +931,19 @@ class CubeFitsInspector(Spectrum):
                         idx_line = list_comps.index(lineLabel)
                         color_curve = cmap(idx_line / len(list_comps))
 
+                    # Check if the measurement had an error:
+                    if observations != '':
+                        color_curve = 'black'
+                        width_curve = 3
+
                     self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color=color_curve,
-                                  linestyle=style_curve, linewidth=width_curve)
+                                  linestyle=style_curve, linewidth=width_curve, label=latex_array[i_line])
+
+                # mplcursors.cursor().connect(
+                #     "add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+                # mplcursors.cursor(bindings={"toggle_visible": "h", "toggle_enabled": "e"}).connect(
+                #      "add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+                # mplcursors.cursor(hover=True)
 
                 # TODO we need a method just for this
                 idcs_blended = self.log['blended_label'] != 'None'
@@ -940,9 +956,8 @@ class CubeFitsInspector(Spectrum):
                         m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
                         amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
                                              self.log.loc[lineLabel, 'sigma']
-                        wave_peak, flux_peak = self.log.loc[lineLabel, 'peak_wave'], self.log.loc[
-                            lineLabel, 'peak_flux']
                         blended_label = self.log.loc[lineLabel, 'blended_label']
+                        observations = self.log.loc[lineLabel, 'observations']
 
                         # Rest frame
                         if frame == 'rest':

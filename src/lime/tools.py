@@ -3,9 +3,15 @@ import pandas as pd
 from lmfit.models import PolynomialModel
 
 import astropy.units as au
-from specutils import Spectrum1D, SpectralRegion
-from specutils.manipulation import noise_region_uncertainty
-from specutils.fitting import find_lines_derivative
+
+try:
+    from specutils import Spectrum1D, SpectralRegion
+    from specutils.manipulation import noise_region_uncertainty
+    from specutils.fitting import find_lines_derivative
+    specutils_check = True
+
+except ImportError:
+    specutils_check = False
 
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
@@ -275,20 +281,27 @@ class LineFinder:
 
         """
 
-        # Convert the observed region to the observed frame
-        noise_region_obs = noise_region * (1 + self.redshift)
-
         # Remove the continuum
-        flux_no_continuum = self.remove_continuum(noise_region_obs, emis_threshold, abs_threshold, poly_degree)
+        if specutils_check:
 
-        # Find the emission, absorption peaks
-        peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, detect_threshold)
+            # Convert the noise region to the the observed frame
+            noise_region_obs = noise_region * (1 + self.redshift)
 
-        # Match peaks with theoretical lines
-        matched_DF = self.label_peaks(peaks_table, log, width_tol=width_tol, width_mode=width_mode,
-                                      line_type=line_type)
+            # Normalize the continuum to zero
+            flux_no_continuum = self.remove_continuum(noise_region_obs, emis_threshold, abs_threshold, poly_degree)
 
-        return peaks_table, matched_DF
+            # Find the emission, absorption peaks
+            peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, detect_threshold)
+
+            # Match peaks with theoretical lines
+            matched_DF = self.label_peaks(peaks_table, log, width_tol=width_tol, width_mode=width_mode,
+                                          line_type=line_type)
+
+            return peaks_table, matched_DF
+
+        else:
+            exit(f'\n- WARNING: specutils is not installed')
+            return None, None
 
     def remove_continuum(self, noise_region, emis_threshold, abs_threshold, cont_degree_list):
 
