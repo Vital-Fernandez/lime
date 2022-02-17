@@ -4,7 +4,8 @@ __all__ = [
     'load_cfg',
     'load_lines_log',
     'save_line_log',
-    'save_param_maps']
+    'save_param_maps',
+    'COORD_ENTRIES']
 
 import os
 import configparser
@@ -18,6 +19,7 @@ from distutils.util import strtobool
 
 from astropy.io import fits
 from astropy.table import Table
+from astropy.wcs import WCS
 
 from matplotlib import pyplot as plt, colors, cm, patches
 from .plots import table_fluxes
@@ -137,6 +139,8 @@ LINELOG_TYPES = {'index': '<U50',
                  'f_lambda': '<f8',
                  'obsInt': '<f8',
                  'obsIntErr': '<f8'}
+
+COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2', 'CTYPE1', 'CTYPE2']
 
 _LOG_EXPORT = list(set(LOG_COLUMNS.keys()) - set(['ion', 'wavelength',
                                                  'latexLabel',
@@ -735,14 +739,12 @@ def load_fits(file_address, instrument, frame_idx=None):
         return data, header
 
 
-
-
 def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", output_address=None,
-                           min_level=None, show_plot=False):
+                           min_level=None, show_plot=False, fits_header=None):
 
     """
     This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
-    Currently the only one implented is the percentil intensity. If an output address is provided, the mask is saved as a fits file
+    Currently, the only one implemented is the percentile intensity. If an output address is provided, the mask is saved as a fits file
     where each intensity level mask is stored in its corresponding page. The parameter calculation method, its intensity and mask
     index are saved in the corresponding HDU header as PARAM, PARAMIDX and PARAMVAL.
 
@@ -765,24 +767,28 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
                       vector will be used.
     :type min_level: float, optional
 
-    :param show_plot: If true a plot will be displayed with the mask calculation. Additionally if an output_address is
+    :param show_plot: If true a plot will be displayed with the mask calculation. Additionally, if an output_address is
                       provided the plot will be saved in the parent folder as image taking into consideration the
                       mask_ref value.
-
     :type show_plot: bool, optional
+
+    :param fits_header: Dictionary with key-values to be included in the output .fits file header.
+    :type fits_header: dict, optional
+
     :return:
     """
 
     # Check the contour vector is in decreasing order
-    assert np.all(np.diff(contour_levels) < 0), '- ERROR contour_levels are not in decreasing order for spatial mask'
+    assert np.all(np.diff(contour_levels) > 0), '- ERROR contour_levels are not in increasing order for spatial mask'
+    contour_levels_r = np.flip(contour_levels)
 
     # Check the logic for the mask calculation
-    assert mask_param in ['percentil', 'SNR'], f'- ERROR {mask_param} is not recognise for the spatial mask calculation'
+    assert mask_param in ['percentile', 'SNR'], f'- ERROR {mask_param} is not recognise for the spatial mask calculation'
 
     # Compute the mask diagnostic parameter form the provided flux
-    if mask_param == 'percentil':
+    if mask_param == 'percentile':
         param_image = image_flux
-        param_array = np.nanpercentile(image_flux, contour_levels)
+        param_array = np.nanpercentile(image_flux, contour_levels_r)
 
     # If minimum level not provided by user use lowest contour_level
     min_level = param_array[-1] if min_level is None else min_level
@@ -809,7 +815,7 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
         if np.sum(maParamImage.mask) > 0:
             mask_dict[f'mask_{i}'] = maParamImage.mask
-            boundary_dict[f'mask_{i}'] = contour_levels[i]
+            boundary_dict[f'mask_{i}'] = contour_levels_r[i]
             param_level[f'mask_{i}'] = param_array[i]
 
     # Plot the combined masks
@@ -820,7 +826,11 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
     if (fits_folder is not None) or show_plot:
 
-        fig, ax = plt.subplots(figsize=(12, 12))
+        if fits_header is None:
+            fig, ax = plt.subplots(figsize=(12, 12))
+        else:
+            fig = plt.figure(figsize=(10, 10))
+            ax = fig.add_subplot(projection=WCS(fits_header), slices=('x', 'y'))
 
         cmap = cm.get_cmap('viridis_r', len(mask_dict))
         legend_list = [None] * len(mask_dict)
@@ -841,7 +851,6 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
             ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
 
         ax.legend(handles=legend_list, loc=2.)
-        plt.tight_layout()
 
         if fits_folder is not None:
 
@@ -857,6 +866,7 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
 
         plt.close(fig)
 
+
     # Save to a fits file:
     if output_address is not None:
 
@@ -870,6 +880,9 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
                            'PARAMIDX': boundary_dict[region_label],
                            'PARAMVAL': param_level[region_label]}
             fits_hdr = fits.Header(header_dict)
+
+            if fits_header is not None:
+                fits_hdr.update(fits_header)
 
             # Extension for the mask
             mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'

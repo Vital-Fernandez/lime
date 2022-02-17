@@ -30,3 +30,5 @@ Convenience functions
 .. autofunction:: lime.label_decomposition
 
 .. autofunction:: lime.io.spatial_mask_generator
+
+.. autofunction:: lime.treatment.CubeFitsInspector

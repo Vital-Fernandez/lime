@@ -29,7 +29,7 @@ the output log for consistency.
 
   .. note::
      Even with the blended **'_b'** and merged **'_m'** suffices the user still needs to include the line components in
-     the fit configuration. Otherwise, the lines shall be treated as single lines during the analysis.
+     the fit configuration. Otherwise, the lines will be treated with a single component during the fitting.
 
 
 * **lineWaves** (``.lineWaves``, ``np.array()``): This attribute consists in a six-value vector with the emission line

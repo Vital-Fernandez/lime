@@ -355,9 +355,13 @@ class LineFinder:
 
     def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, width_mode='auto', detect_check=False):
 
+        # TODO auto param should be changed to boolean
+
         matched_DF = pd.DataFrame.copy(mask_df)
 
-        # TODO auto param should be changed to boolean
+        # Security check for case no lines detected
+        if len(peak_table) == 0:
+            return pd.DataFrame(columns=matched_DF.columns)
 
         # Query the lines from the astropy finder tables #
         idcsLineType = peak_table['line_type'] == line_type

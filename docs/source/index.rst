@@ -55,4 +55,5 @@ These are some of the features currently available:
    tutorials/2_Synthetic
    tutorials/3_CompleteSpec
    tutorials/4_Mask_selection
+   tutorials/5_IFU_masks
 

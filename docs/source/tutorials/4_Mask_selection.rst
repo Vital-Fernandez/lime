@@ -1,5 +1,5 @@
-4) Mask selection
-=================
+4) Spectral mask selection
+==========================
 
 An important step in the spectra analysis is the proper definition of the wavelength masks. :math:`\textsc{LiMe}` follows
 a mask design based on the Lick indices `(see Zhang et al. 2005) <https://arxiv.org/abs/astro-ph/0508634v1>`_. These spectral

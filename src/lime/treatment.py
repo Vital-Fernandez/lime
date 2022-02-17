@@ -32,7 +32,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     the class functions.
 
     Finally, the user can also provide a two value array with the same wavelength limits. This array must be in the
-    same units and frame of reference as the ``.input_wave``.
+    same units and frame of reference as the ``.wave``.
 
     :param input_wave: wavelength array
     :type input_wave: numpy.array
@@ -384,6 +384,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                 # De normalize
                 if LOG_COLUMNS[param][0]:
+                    print(param, param_value, '->', param_value * self.norm_flux)
                     param_value = param_value * self.norm_flux
 
                 line_log[param] = param_value
@@ -768,27 +769,87 @@ class MaskInspector(Spectrum):
 
 class CubeFitsInspector(Spectrum):
 
-    def __init__(self, input_wave, input_cube_flux, image_bg, image_fg=None, contour_levels_fg=None,
-                 min_bg_percentil=60,
-                 redshift=0, norm_flux=1, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={}):
+    def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None,
+                 color_norm=None, redshift=0, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={},
+                 ext_suffix='_LINESLOG', ):
+
+        """
+        This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
+        On the left-hand side, a 2D image of the cube read from the ``image_bg`` parameter. This plot can include
+        intensity contours from the ``contour_levels`` parameter. By default, the intensity contours are calculated from
+        the ``image_bg`` matrix array unless an optional foreground ``image_fg`` array is provided. The spaxel selection
+        is accomplished with a mouse right click.
+
+        On the right-hand side, the selected spaxel spectrum is plotted. The user can select either window region using
+        the matplotlib window *zoom* or *span* tools. As a new spaxel is selected the plotting limits in either figure
+        should not change. To restore the plot axes limits you can click the *reset* (house icon).
+
+        The user can provide a ``lines_log_address`` with the line measurements of the plotted object. In this case,
+        the plot will include the fitted line profiles. The *.fits* file HDUs will be queried by the spaxel coordinates.
+        The default format is ``{idx_j}-{idx_i}_LINESLOG)`` where idx_j and idx_i are the spaxel Y and X coordinates
+        respectively
+
+        :param wave: One dimensional array with the spectra wavelength range.
+        :type wave: numpy.array
+
+        :param cube_flux: Three dimensional array with the IFU cube flux
+        :type cube_flux: numpy.array
+
+        :param image_bg Two dimensional array with the flux band image for the plot background
+        :type image_bg: numpy.array
+
+        :param image_fg: Two dimensional array with the flux band image to plot foreground contours
+        :type image_fg: numpy.array, optional
+
+        :param contour_levels: One dimensional array with the flux contour levels in increasing order.
+        :type contour_levels: numpy.array, optional
+
+        :param color_norm: `Color normalization <https://matplotlib.org/stable/tutorials/colors/colormapnorms.html#sphx-glr-tutorials-colors-colormapnorms-py>`_
+                            form the galaxy image plot
+        :type color_norm: matplotlib.colors.Normalize, optional
+
+        :param redshift: Object astronomical redshift
+        :type redshift: float, optional
+
+        :param lines_log_address: Address of the *.fits* file with the object line measurements.
+        :type lines_log_address: str, optional
+
+        :param fits_header: *.fits* header with the entries for the astronomical coordinates plot conversion.
+        :type fits_header: dict, optional
+
+        :param fig_conf: Dictionary with the configuration for the matplotlib rcParams style.
+        :type fig_conf: dict, optional
+
+        :param axes_conf: Dictionary with the configuration for the matplotlib axes style.
+        :type axes_conf: dict, optional
+
+        :param ext_suffix: Suffix of the line logs extensions. The default value is “_LINESLOG”.
+        :type ext_suffix: str, optional
+
+        """
 
         # Assign attributes to the parent class
-        super().__init__(input_wave, input_flux=None, redshift=redshift, norm_flux=norm_flux)
+        super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1)
 
         self.fig = None
         self.ax0, self.ax1, self.in_ax = None, None, None
         self.grid_mesh = None
-        self.cube_flux = input_cube_flux
-        self.wave = input_wave
+        self.cube_flux = cube_flux
+        self.wave = wave
         self.header = fits_header
         self.image_bg = image_bg
         self.image_fg = image_fg
-        self.contour_levels_fg = contour_levels_fg
+        self.contour_levels_fg = contour_levels
         self.fig_conf = STANDARD_PLOT.copy()
         self.axes_conf = {}
         self.axlim_dict = {}
-        self.min_bg_percentil = min_bg_percentil
+        self.color_norm = color_norm
         self.hdul_linelog = None
+        self.ext_log = ext_suffix
+
+        # Scenario we use the background image also for the contours
+        if (image_fg is None) and (contour_levels is not None):
+            self.image_fg = image_bg
 
         # Read the figure configuration
         self.fig_conf = STANDARD_PLOT if fig_conf is None else fig_conf
@@ -837,7 +898,7 @@ class CubeFitsInspector(Spectrum):
         self.plot_map_voxel(self.image_bg, init_coord, self.image_fg, self.contour_levels_fg)
         plt.show()
 
-        # Close the lins log if it has been opened
+        # Close the lines log if it has been opened
         if isinstance(self.hdul_linelog, fits.hdu.HDUList):
             self.hdul_linelog.close()
 
@@ -846,11 +907,11 @@ class CubeFitsInspector(Spectrum):
     def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None, frame='obs'):
 
 
-        min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
-        norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
-                                          vmin=min_flux,
-                                          base=10)
-        self.ax0.imshow(image_bg, cmap=cm.gray, norm=norm_color_bg)
+        # min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
+        # norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
+        #                                   vmin=min_flux,
+        #                                   base=10)
+        self.ax0.imshow(image_bg, cmap=cm.gray, norm=self.color_norm)
 
         # Emphasize input coordinate
         idx_j, idx_i = voxel_coord
@@ -869,7 +930,7 @@ class CubeFitsInspector(Spectrum):
 
         # Plot the emission line fittings:
         if self.hdul_linelog is not None:
-            ext_name = f'{idx_j}-{idx_i}_LINELOG'
+            ext_name = f'{idx_j}-{idx_i}{self.ext_log}'
 
             if ext_name in self.hdul_linelog:
                 lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
@@ -921,7 +982,7 @@ class CubeFitsInspector(Spectrum):
                         color_curve = 'tab:red'
                         style_curve = '-'
                         width_curve = 0.5
-                        self.ax1.plot(wave_range, cont / self.norm_flux, ':', color='tab:purple', linewidth=0.5)
+                        self.ax1.plot(wave_range, cont, ':', color='tab:purple', linewidth=0.5)
 
                     else:
                         style_curve = ':'
@@ -936,7 +997,7 @@ class CubeFitsInspector(Spectrum):
                         color_curve = 'black'
                         width_curve = 3
 
-                    self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color=color_curve,
+                    self.ax1.plot(wave_range, (line_profile + cont), color=color_curve,
                                   linestyle=style_curve, linewidth=width_curve, label=latex_array[i_line])
 
                 # mplcursors.cursor().connect(
@@ -980,7 +1041,7 @@ class CubeFitsInspector(Spectrum):
                         else:
                             line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
 
-                    self.ax1.plot(wave_range, (line_profile + cont) / self.norm_flux, color='tab:red',
+                    self.ax1.plot(wave_range, (line_profile + cont), color='tab:red',
                                   linestyle='-', linewidth=0.5)
 
         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
