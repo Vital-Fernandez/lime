@@ -16,6 +16,7 @@ import pandas as pd
 from sys import exit, stdout
 from pathlib import Path
 from distutils.util import strtobool
+from collections import Sequence
 
 from astropy.io import fits
 from astropy.table import Table
@@ -403,7 +404,7 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
         for section_name, options_dict in param_dict.items():
             output_cfg.add_section(section_name)
             for option_name, option_value in options_dict.items():
-                option_formatted = format_option_value(option_value, option_name, section_name)
+                option_formatted = formatStringOutput(option_value, option_name, section_name)
                 output_cfg.set(section_name, option_name, option_formatted)
 
         # Save to a text format
@@ -900,6 +901,49 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
                 hdul.writeto(fits_address, overwrite=True, output_verify='fix')
 
     return
+
+
+def formatStringOutput(value, key, section_label=None, float_format=None, nan_format='nan'):
+
+    # TODO this one should be the default option
+    # TODO add more cases for dicts
+    # Check None entry
+    if value is not None:
+
+        # Check string entry
+        if isinstance(value, str):
+            formatted_value = value
+
+        else:
+
+            # Case of an array
+            scalarVariable = True
+            if isinstance(value, (Sequence, np.ndarray)):
+
+                # Confirm is not a single value array
+                if len(value) == 1:
+                    value = value[0]
+
+                # Case of an array
+                else:
+                    scalarVariable = False
+                    formatted_value = ','.join([str(item) for item in value])
+
+            if scalarVariable:
+
+                # Case single float
+                if isinstance(value, str):
+                    formatted_value = value
+                else:
+                    if np.isnan(value):
+                        formatted_value = nan_format
+                    else:
+                        formatted_value = str(value)
+
+    else:
+        formatted_value = 'None'
+
+    return formatted_value
 
 
 def progress_bar(i, i_max, post_text, n_bar=10):
