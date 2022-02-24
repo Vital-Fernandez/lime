@@ -5,7 +5,9 @@ import shutil
 import numpy as np
 from astropy.io import fits
 from pathlib import Path
-from matplotlib import colors
+from matplotlib import pyplot as plt, cm, colors, patches
+from astropy.wcs import WCS
+
 
 # Function to download the cube if not done already
 def fetch_spec(save_address, cube_url):
@@ -36,16 +38,16 @@ extract_gz_file(SHOC579_gz_address, SHOC579_cube_address)
 
 # Open the cube fits file
 with fits.open(SHOC579_cube_address) as hdul:
-    hdr = hdul['FLUX'].header
     wave = hdul['WAVE'].data
-    flux = hdul['FLUX'].data
+    flux = hdul['FLUX'].data * 1e-17
+    hdr = hdul['FLUX'].header
 
-# Load the configuration file and the line masks:
+# Load the configuration file:
 cfgFile = './sample_data/config_file.cfg'
 obs_cfg = lime.load_cfg(cfgFile)
 z_SHOC579 = obs_cfg['SHOC579_data']['redshift']
 
-# and the masks file
+# and the masks file:
 mask_file = './sample_data/osiris_mask.txt'
 mask_log = lime.load_lines_log(mask_file)
 
@@ -85,4 +87,58 @@ for key in lime.COORD_ENTRIES:
 
 # Run the task
 lime.spatial_mask_generator(SII_image, 'percentile', percentile_array, mask_ref='S2_6716A_b', output_address=mask_file,
-                            show_plot=True, fits_header=hdr_coords)
+                            fits_header=hdr_coords, show_plot=True)
+
+# Parameters for the new masks
+coord_lower_limit = 22
+mask_list = ['S2_6716A_B_MASK_1', 'S2_6716A_B_MASK_2', 'S2_6716A_B_MASK_3']
+
+# New HDUs for the modified mask
+hdul_new = fits.HDUList([fits.PrimaryHDU()])
+
+# Open the mask file, loop through the target masks and set voxels below row 22 outside the mask (False)
+with fits.open(mask_file) as hdul:
+    for i, mask_ext in enumerate(mask_list):
+        mask_frame = hdul[mask_ext].data.astype('bool')
+        mask_frame[:coord_lower_limit, :] = False
+        hdul_new.append(fits.ImageHDU(name=f'S2_6716A_B_MASK_{i}', data=mask_frame.astype(int),
+                                  ver=1, header=fits.Header(hdr_coords)))
+
+# Save the modified mask
+hdul_new.writeto(mask_file, overwrite=True)
+
+# Load one of the masks headers to get the WCS for the plot
+masks_hdr = fits.getheader(mask_file, extname='S2_6716A_B_MASK_0')
+
+# Plot the Halpha image of the cube with the new masks
+fig = plt.figure(figsize=(14, 10))
+ax = fig.add_subplot(projection=WCS(masks_hdr), slices=('x', 'y'))
+im = ax.imshow(Halpha_image, cmap=cm.gray, norm=log_norm_bg)
+
+# Color map for the contours
+cmap_contours = cm.get_cmap('viridis', len(mask_list))
+
+legend_list = [None] * len(mask_list)
+
+# Open the mask .fits file and plot the masks as numpy masked array
+with fits.open(mask_file) as hdul:
+    for i, HDU in enumerate(hdul):
+        if i > 0:
+            mask_name, mask_frame = HDU.name, HDU.data
+            mask_frame = hdul[i].data.astype('bool')
+            n_voxels = np.sum(mask_frame)
+
+            inv_masked_array = np.ma.masked_where(~mask_frame, Halpha_image)
+
+            cm_i = colors.ListedColormap([cmap_contours(i - 1)])
+            ax.imshow(inv_masked_array, cmap=cm_i, vmin=0, vmax=1, alpha=0.3)
+            legend_list[i - 1] = patches.Patch(color=cm_i(i - 1), label=f'{mask_name} ({n_voxels} spaxels)')
+
+# Define the legend for the imshow plot
+ax.legend(handles=legend_list, bbox_to_anchor=(1.025, 1), loc=2, borderaxespad=0.)
+ax.update({'title': r'SHOC579 Mask regions', 'xlabel': r'RA', 'ylabel': r'DEC'})
+plt.tight_layout()
+plt.show()
+
+
+

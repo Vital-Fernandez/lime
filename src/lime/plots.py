@@ -673,6 +673,8 @@ class LiMePlots:
 
     def plot_line_grid(self, log, plotConf={}, ncols=10, nrows=None, output_address=None, log_scale=True, frame='obs'):
 
+        # TODO put black lines for error in plotting
+
         # Line labels to plot
         lineLabels = log.index.values
 

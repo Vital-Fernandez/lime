@@ -1,3 +1,5 @@
+.. _example3:
+
 3) Fitting a complete spectrum
 ==============================
 

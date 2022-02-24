@@ -1,6 +1,6 @@
 import numpy as np
 from astropy.io import fits
-import lime
+import lime.io
 
 
 def import_osiris_fits(file_address, ext=0):

@@ -4,6 +4,7 @@ __all__ = [
     'load_cfg',
     'load_lines_log',
     'save_line_log',
+    'log_to_HDU',
     'save_param_maps',
     'COORD_ENTRIES']
 
@@ -141,7 +142,7 @@ LINELOG_TYPES = {'index': '<U50',
                  'obsInt': '<f8',
                  'obsIntErr': '<f8'}
 
-COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2', 'CTYPE1', 'CTYPE2']
+COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2', 'CTYPE1', 'CTYPE2']
 
 _LOG_EXPORT = list(set(LOG_COLUMNS.keys()) - set(['ion', 'wavelength',
                                                  'latexLabel',
@@ -438,7 +439,7 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
 
         # Map key values to the expected format and store them
         for option_name, option_value in param_dict.items():
-            option_formatted = format_option_value(option_value, option_name, section_name)
+            option_formatted = formatStringOutput(option_value, option_name, section_name)
             output_cfg.set(section_name, option_name, option_formatted)
 
         # Save to a text file
@@ -537,7 +538,7 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
     # Lines log in a fits file
     elif file_type == '.fits':
         if isinstance(log, pd.DataFrame):
-            lineLogHDU = lineslog_to_HDU(log, ext_name=ext, header_dict=fits_header)
+            lineLogHDU = log_to_HDU(log, ext_name=ext, header_dict=fits_header)
 
             if log_path.is_file():
                 try:
@@ -584,10 +585,11 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
     return
 
 
-def lineslog_to_HDU(log_DF, ext_name=None, column_types={}, header_dict={}):
+def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
+
 
     # For non empty logs
-    if not log_DF.empty:
+    if not log.empty:
 
         if len(column_types) == 0:
             params_dtype = LINELOG_TYPES
@@ -596,7 +598,7 @@ def lineslog_to_HDU(log_DF, ext_name=None, column_types={}, header_dict={}):
             user_dtype = column_types.copy()
             params_dtype.update(user_dtype)
 
-        linesSA = log_DF.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
+        linesSA = log.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
         linesCol = fits.ColDefs(linesSA)
         linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name)
 
@@ -607,6 +609,7 @@ def lineslog_to_HDU(log_DF, ext_name=None, column_types={}, header_dict={}):
 
     # Empty log
     else:
+        # TODO create and empty HDU
         linesHDU = None
 
     return linesHDU

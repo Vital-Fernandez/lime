@@ -384,7 +384,6 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                 # De normalize
                 if LOG_COLUMNS[param][0]:
-                    print(param, param_value, '->', param_value * self.norm_flux)
                     param_value = param_value * self.norm_flux
 
                 line_log[param] = param_value
