@@ -961,8 +961,9 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     return
 
 
-def save_param_maps(log_file_address, param_dict, output_folder, mask_file_address=None, ext_mask='all', image_shape=None,
-                   ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None, page_hdr={}):
+def save_param_maps(log_file_address, params_list, lines_list, output_folder, spatial_mask_file=None, ext_mask='all',
+                    image_shape=None, ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None,
+                    page_hdr={}):
     """
 
     This function loads a ``.fits`` file with the line log measurements and generates a set of spatial images from a dictionary
@@ -984,14 +985,17 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
     :param log_file_address: fits file address location with the line logs
     :type log_file_address: str
 
-    :param param_dict: Dictionary with the lists of lines to map for every parameter, e.g. ``{'intg_flux': ['O3_5007A', 'H1_6563A']}``
-    :type param_dict: dict
+    :param params_list: Array with the parameters to map from log measurements, e.g. np.array([intg_flux, v_r])
+    :type params_list: np.array
+
+    :param lines_list: Array with the lines to map from log measurements, e.g. np.array(['H1_6563A', 'O3_5007A'])
+    :type lines_list: np.array
 
     :param output_folder: Output address for the fits maps
     :type output_folder: str
 
-    :param mask_file_address: fits file address of the spatial mask images
-    :type mask_file_address: str, optional
+    :param spatial_mask_file: fits file address of the spatial mask images
+    :type spatial_mask_file: str, optional
 
     :param ext_mask: Extension or list of extensions in the mask file to determine the list of spaxels to treat. 
                      By default uses all extensions (special keyword "all") 
@@ -1023,11 +1027,11 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
     assert Path(output_folder).is_dir(), f'- ERROR: Output parameter maps folder {output_folder} not found'
 
     # Compile the list of voxels to recover the provided masks
-    if mask_file_address is not None:
+    if spatial_mask_file is not None:
 
-        assert Path(mask_file_address).is_file(), f'- ERROR: mask file at {mask_file_address} not found'
+        assert Path(spatial_mask_file).is_file(), f'- ERROR: mask file at {spatial_mask_file} not found'
 
-        with fits.open(mask_file_address) as maskHDUs:
+        with fits.open(spatial_mask_file) as maskHDUs:
 
             # Get the list of mask extensions
             if ext_mask == 'all':
@@ -1065,16 +1069,17 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
 
     # Generate containers for the data:
     images_dict = {}
-    for param, line_list in param_dict.items():
+    # for param, line_list in param_dict.items():
+    for param in params_list:
 
         # Make sure is an array and loop throuh them
-        line_list = np.array(line_list, ndmin=1)
-        for line in line_list:
+        for line in lines_list:
             images_dict[f'{param}-{line}'] = np.full(image_shape, default_spaxel_value)
 
     # Loop through the spaxels and fill the parameter images
     n_spaxels = spaxel_list.shape[0]
     spaxel_range = np.arange(n_spaxels)
+    headers_dict = {}
 
     with fits.open(log_file_address) as logHDUs:
 
@@ -1092,8 +1097,8 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
                 log_lines = log_data['index']
 
                 # Loop through the parameters and the lines:
-                for param, user_lines in param_dict.items():
-                    idcs_log = np.argwhere(np.in1d(log_lines, user_lines))
+                for param in params_list:
+                    idcs_log = np.argwhere(np.in1d(log_lines, lines_list))
                     for i_line in idcs_log:
                         images_dict[f'{param}-{log_lines[i_line][0]}'][idx_j, idx_i] = log_data[param][i_line][0]
 
@@ -1102,14 +1107,14 @@ def save_param_maps(log_file_address, param_dict, output_folder, mask_file_addre
 
     # Save the parameter maps as individual fits files with one line per page
     output_files_prefix = '' if output_files_prefix is None else output_files_prefix
-    for param, user_lines in param_dict.items():
+    for param in params_list:
 
         # Primary header
         paramHDUs = fits.HDUList()
         paramHDUs.append(fits.PrimaryHDU())
 
         # ImageHDU for the parameter maps
-        for line in user_lines:
+        for line in lines_list:
             hdr = fits.Header({'PARAM': param, 'LINE': param})
             hdr.update(page_hdr)
             data = images_dict[f'{param}-{line}']

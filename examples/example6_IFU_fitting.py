@@ -51,7 +51,7 @@ with fits.open(SHOC579_cube_address) as hdul:
     hdr = hdul['FLUX'].header
 
 # Output data declaration:
-log_address = f'./sample_data/SHOC579_log.fits'
+log_address = './sample_data/SHOC579_log.fits'
 hdul_log = fits.HDUList([fits.PrimaryHDU()])
 
 # WCS header data

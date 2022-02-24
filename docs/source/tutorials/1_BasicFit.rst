@@ -93,7 +93,7 @@ For this Green Pea spectrum the Hα mask is:
 
    lineWaves = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
-In this array the first two values correspond to the left continuum, the third and fifth values correspond to the line
+In this array the first two values correspond to the left continuum, the third and fourth values correspond to the line
 region and the the final two values correspond to the right hand side continuum. These values must be in the rest frame.
 
 Let's fit the Hα line using the function fit_from_wavelengths

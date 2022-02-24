@@ -36,19 +36,24 @@ fetch_spec(SHOC579_gz_address, SHOC579_url)
 SHOC579_cube_address = './sample_data/manga-8626-12704-LOGCUBE.fits'
 extract_gz_file(SHOC579_gz_address, SHOC579_cube_address)
 
+# State the data location (including the spatial mask and lines log from the previous tutorials)
+spatial_mask = './sample_data/SHOC579_mask.fits'
+cfgFile = './sample_data/config_file.cfg'
+log_file = './sample_data/SHOC579_log.fits'
+
+# Get the galaxy data
+obs_cfg = lime.load_cfg(cfgFile)
+z_SHOC579 = obs_cfg['SHOC579_data']['redshift']
+norm_flux = obs_cfg['SHOC579_data']['norm_flux']
+
 # Open the cube fits file
 with fits.open(SHOC579_cube_address) as hdul:
     wave = hdul['WAVE'].data
-    flux = hdul['FLUX'].data
+    flux = hdul['FLUX'].data * norm_flux
     hdr = hdul['FLUX'].header
 
-# Load the configuration file:
-cfgFile = './sample_data/config_file.cfg'
-obs_cfg = lime.load_cfg(cfgFile)
-z_SHOC579 = obs_cfg['SHOC579_data']['redshift']
-
 # and the masks file:
-mask_file = './sample_data/osiris_mask.txt'
+mask_file = './sample_data/SHOC579_region0_maskLog.txt'
 mask_log = lime.load_lines_log(mask_file)
 
 # Establish the band image for the plot bacground using Halpha
@@ -57,7 +62,7 @@ idcs_Halpha = np.searchsorted(wave, Halpha_band)
 Halpha_image = flux[idcs_Halpha[0]:idcs_Halpha[1], :, :].sum(axis=0)
 
 # Use SII lines as the foreground image contours
-SII_band = mask_log.loc['S2_6716A_b', 'w3':'w4'].values * (1 + z_SHOC579)
+SII_band = mask_log.loc['S2_6716A', 'w3':'w4'].values * (1 + z_SHOC579)
 idcs_SII = np.searchsorted(wave, SII_band)
 SII_image = flux[idcs_SII[0]:idcs_SII[1], :, :].sum(axis=0)
 
@@ -73,63 +78,45 @@ min_flux = np.nanpercentile(Halpha_image, 60)
 log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
 # Interactive plotter for IFU data cubes
-lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels,
-                       fits_header=hdr, axes_conf=ax_conf, color_norm=log_norm_bg)
+lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
+                       fits_header=hdr, axes_conf=ax_conf, color_norm=log_norm_bg,
+                       lines_log_address=log_file)
+
+# WCS header data
+hdr_coords = {}
+for key in lime.COORD_ENTRIES:
+    if key in hdr:
+        hdr_coords[key] = hdr[key]
+hdr_coords = fits.Header(hdr_coords)
 
 # Plot the log results as maps
-lime.save_param_maps(fitsLog_address, param_images, objFolder, maskFits_address, ext_mask=masks, ext_log='_LINELOG',
-                     page_hdr=plot_dict)
+param_list = ['intg_flux', 'intg_err', 'gauss_flux', 'gauss_err', 'v_r', 'v_r_err']
+lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A', 'S3_6312A', 'S3_9069A', 'S3_9531A']
+lime.save_param_maps(log_file, param_list, lines_list, output_folder='./sample_data/', spatial_mask_file=spatial_mask,
+                     output_files_prefix='SHOC579_', page_hdr=hdr_coords)
 
-# fits_file = Path(objFolder) / f'{param}.fits'
-# with fits.open(fits_file):
-#     for line in user_lines:
-#         param_image = fits.getdata(fits_file, line)
-#         param_hdr = fits.getheader(fits_file, line)
-#
-#         fig = plt.figure(figsize=(10, 10))
-#         ax = fig.add_subplot(projection=WCS(fits.Header(param_hdr)), slices=('x', 'y'))
-#         im = ax.imshow(param_image)
-#         ax.update({'title': f'Galaxy {obj}: {param}-{line}', 'xlabel': r'RA', 'ylabel': r'DEC'})
-#         plt.show()
+# State line ratios for the plots
+lines_ratio = {'H1': ['H1_6563A', 'H1_4861A'],
+               'O3': ['O3_5007A', 'O3_4959A'],
+               'S3': ['S3_9531A', 'S3_9069A']}
 
-# for i, obj in enumerate(objList):
-#
-#     # Data location
-#     cube_address = fitsFolder/fileList[i]
-#     objFolder = resultsFolder/obj
-#     db_address = objFolder / f'{obj}_database.fits'
-#     maskFits_address = objFolder/f'{obj}_masks.fits'
-#
-#     parameter_fits = objFolder/'intg_flux.fits'
-#     O3_4959A = fits.getdata(parameter_fits, 'O3_4959A')
-#     O3_5007A = fits.getdata(parameter_fits, 'O3_5007A')
-#     hdr_plot = fits.getheader(parameter_fits, 'O3_5007A')
-#
-#     ion_array, wave_array, latex_array = lime.label_decomposition(['O3_4959A', 'O3_5007A'])
-#
-#     # coeff_im = O3_5007A/O3_4959A
-#     #
-#     # divnorm = colors.TwoSlopeNorm(vmin=2.0,
-#     #                               vcenter=2.984,
-#     #                               vmax=4.0)
-#     # cbar_label = f'Line ratio, theoretical value ({2.984}) white'
-#
-#     coeff_im = (O3_5007A/O3_4959A - 2.984) * 100
-#
-#     divnorm = colors.TwoSlopeNorm(vmin=-75.0,
-#                                   vcenter=0,
-#                                   vmax=75.0)
-#
-#     cbar_label = f'Line ratio discrepancy %'
-#
-#     fig = plt.figure(figsize=(10, 10))
-#     ax = fig.add_subplot(projection=WCS(hdr_plot), slices=('x', 'y'))
-#     im = ax.imshow(coeff_im, cmap='RdBu', norm=divnorm)
-#     cbar = fig.colorbar(im, ax=ax)
-#     cbar.set_label(cbar_label, rotation=270, labelpad=50, fontsize=15)
-#     ratio_label = r'$\frac{{{}}}{{{}}}$'.format(latex_array[1].replace('$', ''), latex_array[0].replace('$', ''))
-#     ax.update({'title': r'Galaxy {}: {}'.format(obj, ratio_label), 'xlabel': r'RA', 'ylabel': r'DEC'})
-#     ax.set_xlim(95, 205)
-#     ax.set_ylim(75, 225)
-#     # plt.show()
-#     plt.savefig(objFolder/'line_ratios'/f'map_{obj}_OIII_ratio.png')
+# State the parameter map file
+fits_file = f'./sample_data/SHOC579_gauss_flux.fits'
+
+# Loop through the line ratios
+for ion, lines in lines_ratio.items():
+
+    # Recover the parameter measurements
+    ion_array, wave_array, latex_array = lime.label_decomposition(lines)
+    ratio_map = fits.getdata(fits_file, lines[0]) / fits.getdata(fits_file, lines[1])
+
+    # Header for the astronomical coordinates plotting
+    hdr = fits.getheader(fits_file, lines[0])
+
+    # Create the plot
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(projection=WCS(hdr), slices=('x', 'y'))
+    im = ax.imshow(ratio_map)
+    cbar = fig.colorbar(im, ax=ax)
+    ax.update({'title': f'SHOC579 flux ratio: {latex_array[0]} / {latex_array[1]}', 'xlabel': r'RA', 'ylabel': r'DEC'})
+    plt.show()

@@ -977,6 +977,7 @@ class CubeFitsInspector(Spectrum):
 
                     line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
 
+                    # Check if single Gaussian
                     if blended_label == 'None':
                         color_curve = 'tab:red'
                         style_curve = '-'
@@ -984,12 +985,21 @@ class CubeFitsInspector(Spectrum):
                         self.ax1.plot(wave_range, cont, ':', color='tab:purple', linewidth=0.5)
 
                     else:
-                        style_curve = ':'
-                        width_curve = 2
-                        cmap = cm.get_cmap()
                         list_comps = blended_label.split('-')
-                        idx_line = list_comps.index(lineLabel)
-                        color_curve = cmap(idx_line / len(list_comps))
+
+                        # Blended
+                        if not np.sum(self.log.index.isin(list_comps)) == len(list_comps):
+                            color_curve = 'tab:red'
+                            style_curve = '-'
+                            width_curve = 0.5
+
+                        # Merged
+                        else:
+                            cmap = cm.get_cmap()
+                            idx_line = list_comps.index(lineLabel)
+                            color_curve = cmap(idx_line / len(list_comps))
+                            style_curve = ':'
+                            width_curve = 2
 
                     # Check if the measurement had an error:
                     if observations != '':
@@ -1005,43 +1015,46 @@ class CubeFitsInspector(Spectrum):
                 #      "add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
                 # mplcursors.cursor(hover=True)
 
+                # Plot the sum flux of the blended components:
                 # TODO we need a method just for this
-                idcs_blended = self.log['blended_label'] != 'None'
+                idcs_blended = (self.log['blended_label'] != 'None')
                 blended_groups = self.log.loc[idcs_blended, 'blended_label'].unique()
                 for lineGroup in blended_groups:
+
                     list_comps = lineGroup.split('-')
-                    for i, lineLabel in enumerate(list_comps):
 
-                        w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
-                        m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
-                        amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
-                                             self.log.loc[lineLabel, 'sigma']
-                        blended_label = self.log.loc[lineLabel, 'blended_label']
-                        observations = self.log.loc[lineLabel, 'observations']
+                    if np.sum(self.log.index.isin(list_comps)) == len(list_comps):
 
-                        # Rest frame
-                        if frame == 'rest':
-                            w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                        for i, lineLabel in enumerate(list_comps):
+
+                            w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
+                            m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
+                            amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
+                                                 self.log.loc[lineLabel, 'sigma']
+
+                            # Rest frame
+                            if frame == 'rest':
+                                w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                                if i == 0:
+                                    wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                                cont = (m_cont * wave_range + n_cont)
+                                wave_range = wave_range / (1 + self.redshift)
+                                center = center / (1 + self.redshift)
+
+                            # Observed frame
+                            else:
+                                w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
+                                if i == 0:
+                                    wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
+                                cont = (m_cont * wave_range + n_cont) * z_corr
+
                             if i == 0:
-                                wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                            cont = (m_cont * wave_range + n_cont)
-                            wave_range = wave_range / (1 + self.redshift)
-                            center = center / (1 + self.redshift)
+                                line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
+                            else:
+                                line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
 
-                        # Observed frame
-                        else:
-                            w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                            if i == 0:
-                                wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                            cont = (m_cont * wave_range + n_cont) * z_corr
-
-                        if i == 0:
-                            line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
-                        else:
-                            line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
-
-                    self.ax1.plot(wave_range, (line_profile + cont), color='tab:red',
-                                  linestyle='-', linewidth=0.5)
+                        self.ax1.plot(wave_range, (line_profile + cont), color='tab:red',
+                                      linestyle='-', linewidth=0.5)
 
         self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
 
