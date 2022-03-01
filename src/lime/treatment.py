@@ -98,7 +98,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True):
+    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='least_squares', emission=True, adjacent_cont=True):
 
         """
 
@@ -152,17 +152,17 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Label the current measurement
         self.line = line
-        self.lineWaves = mask
+        self.mask = mask
 
         # Global fit parameters
         self._emission_check = emission
         self._cont_from_adjacent = adjacent_cont
 
         # Check if the masks are within the range
-        if not np.any((self.lineWaves < self.wave_rest[0]) | (self.lineWaves > self.wave_rest[-1])):
+        if not np.any((self.mask < self.wave_rest[0]) | (self.mask > self.wave_rest[-1])):
 
             # Establish spectrum line and continua regions
-            idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.lineWaves)
+            idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.mask)
 
             # Integrated line properties
             emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
@@ -172,7 +172,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
             # Check if blended line
             if self.line in fit_conf:
-                self.blended_label = fit_conf[self.line]
+                self.profile_label = fit_conf[self.line]
                 if '_b' in self.line:
                     self.blended_check = True
 
@@ -193,7 +193,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         else:
             print(
                 f'- {self.line} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
-            print(f' -- {self.lineWaves}')
+            print(f' -- {self.mask}')
 
         return
 
@@ -243,14 +243,14 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 if self.line is not None:
                     line = self.line
                     output_ref = (f'\nLine line: {line}\n'
-                                  f'- Line mask: {self.lineWaves}\n'
+                                  f'- Line mask: {self.mask}\n'
                                   f'- Normalization flux: {self.norm_flux}\n'
                                   f'- Redshift: {self.redshift}\n'
                                   f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
                                   f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
 
                     if self.blended_check:
-                        mixtureComponents = np.array(self.blended_label.split('-'))
+                        mixtureComponents = np.array(self.profile_label.split('-'))
                     else:
                         mixtureComponents = np.array([line], ndmin=1)
 
@@ -305,8 +305,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     def import_line_kinematics(self, user_conf, z_cor):
 
         # Check if imported kinematics come from blended component
-        if self.blended_label != 'None':
-            childs_list = self.blended_label.split('-')
+        if self.profile_label != 'None':
+            childs_list = self.profile_label.split('-')
         else:
             childs_list = np.array(self.line, ndmin=1)
 
@@ -359,7 +359,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Recover line data
         if self.blended_check:
-            line_components = self.blended_label.split('-')
+            line_components = self.profile_label.split('-')
         else:
             line_components = np.array([lineLabel], ndmin=1)
 
@@ -370,8 +370,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
             # Convert current measurement to a pandas series container
             line_log = pd.Series(index=LOG_COLUMNS.keys())
-            line_log['ion', 'wavelength', 'latexLabel'] = ion[i], waveRef[i], latexLabel[i]
-            line_log['w1': 'w6'] = self.lineWaves
+            line_log['ion', 'wavelength', 'latex_label'] = ion[i], waveRef[i], latexLabel[i]
+            line_log['w1': 'w6'] = self.mask
 
             # Treat every line
             for param in export_params:
@@ -537,7 +537,7 @@ class MaskInspector(Spectrum):
         for i in range(grid_size):
             if i < n_lines:
                 line = self.target_lines[i]
-                self.lineWaves = self.log.loc[line, 'w1':'w6'].values
+                self.mask = self.log.loc[line, 'w1':'w6'].values
                 self.plot_line_region_i(self.ax[i], line, logscale=logscale)
                 self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
                                                                    self.on_select,
@@ -560,7 +560,7 @@ class MaskInspector(Spectrum):
         ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True)
 
         # Decide type of plot
-        non_nan = (~pd.isnull(self.lineWaves)).sum()
+        non_nan = (~pd.isnull(self.mask)).sum()
 
         # Incomplete selections
         if non_nan < 6:  # selections
@@ -571,7 +571,7 @@ class MaskInspector(Spectrum):
 
             # Plot region
             idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (
-                        lineWave - limitPeak * 2 <= self.lineWaves[3])
+                        lineWave - limitPeak * 2 <= self.mask[3])
             waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
 
             # Plot the line region
@@ -579,12 +579,12 @@ class MaskInspector(Spectrum):
 
             # Fill the user selections
             if non_nan == 2:
-                idx1, idx2 = np.searchsorted(self.wave_rest, self.lineWaves[0:2])
+                idx1, idx2 = np.searchsorted(self.wave_rest, self.mask[0:2])
                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
                                 step='mid', alpha=0.5)
 
             if non_nan == 4:
-                idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.lineWaves[0:4])
+                idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.mask[0:4])
                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
                                 step='mid', alpha=0.5)
                 ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor='tab:green',
@@ -594,16 +594,16 @@ class MaskInspector(Spectrum):
         else:
 
             # Get line regions
-            idcsContLeft = (self.lineWaves[0] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[1])
-            idcsContRight = (self.lineWaves[4] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[5])
+            idcsContLeft = (self.mask[0] <= self.wave_rest) & (self.wave_rest <= self.mask[1])
+            idcsContRight = (self.mask[4] <= self.wave_rest) & (self.wave_rest <= self.mask[5])
 
             idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
-            idcsLineArea = (self.lineWaves[2] <= self.wave_rest) & (self.wave_rest <= self.lineWaves[3])
+            idcsLineArea = (self.mask[2] <= self.wave_rest) & (self.wave_rest <= self.mask[3])
 
             waveCentral, fluxCentral = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
 
-            idcsLinePlot = (self.lineWaves[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.lineWaves[5] + 5)
+            idcsLinePlot = (self.mask[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.mask[5] + 5)
             waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
 
             # Plot the line
@@ -639,45 +639,45 @@ class MaskInspector(Spectrum):
         if w_low != w_high:
 
             # Count number of empty entries to determine next step
-            non_nans = (~pd.isnull(self.lineWaves)).sum()
+            non_nans = (~pd.isnull(self.mask)).sum()
 
             # Case selecting 1/3 region
             if non_nans == 0:
-                self.lineWaves[0] = w_low
-                self.lineWaves[1] = w_high
+                self.mask[0] = w_low
+                self.mask[1] = w_high
 
             # Case selecting 2/3 region
             elif non_nans == 2:
-                self.lineWaves[2] = w_low
-                self.lineWaves[3] = w_high
-                self.lineWaves = np.sort(self.lineWaves)
+                self.mask[2] = w_low
+                self.mask[3] = w_high
+                self.mask = np.sort(self.mask)
 
             # Case selecting 3/3 region
             elif non_nans == 4:
-                self.lineWaves[4] = w_low
-                self.lineWaves[5] = w_high
-                self.lineWaves = np.sort(self.lineWaves)
+                self.mask[4] = w_low
+                self.mask[5] = w_high
+                self.mask = np.sort(self.mask)
 
             elif non_nans == 6:
-                self.lineWaves = np.sort(self.lineWaves)
+                self.mask = np.sort(self.mask)
 
                 # Caso que se corrija la region de la linea
-                if w_low > self.lineWaves[1] and w_high < self.lineWaves[4]:
-                    self.lineWaves[2] = w_low
-                    self.lineWaves[3] = w_high
+                if w_low > self.mask[1] and w_high < self.mask[4]:
+                    self.mask[2] = w_low
+                    self.mask[3] = w_high
 
                 # Caso que se corrija el continuum izquierdo
-                elif w_low < self.lineWaves[2] and w_high < self.lineWaves[2]:
-                    self.lineWaves[0] = w_low
-                    self.lineWaves[1] = w_high
+                elif w_low < self.mask[2] and w_high < self.mask[2]:
+                    self.mask[0] = w_low
+                    self.mask[1] = w_high
 
                 # Caso que se corrija el continuum derecho
-                elif w_low > self.lineWaves[3] and w_high > self.lineWaves[3]:
-                    self.lineWaves[4] = w_low
-                    self.lineWaves[5] = w_high
+                elif w_low > self.mask[3] and w_high > self.mask[3]:
+                    self.mask[4] = w_low
+                    self.mask[5] = w_high
 
                 # Case we want to select the complete region
-                elif w_low < self.lineWaves[0] and w_high > self.lineWaves[5]:
+                elif w_low < self.mask[0] and w_high > self.mask[5]:
 
                     # # Remove line from dataframe and save it
                     # self.remove_lines_df(self.current_df, self.Current_Label)
@@ -686,7 +686,7 @@ class MaskInspector(Spectrum):
                     # self.save_lineslog_dataframe(self.current_df, self.lineslog_df_address)
 
                     # Clear the selections
-                    # self.lineWaves = np.array([np.nan] * 6)
+                    # self.mask = np.array([np.nan] * 6)
                     print(f'\n-- The line {self.line} mask has been removed')
 
                 else:
@@ -694,23 +694,23 @@ class MaskInspector(Spectrum):
                     print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Check number of measurements after selection
-            non_nans = (~pd.isnull(self.lineWaves)).sum()
+            non_nans = (~pd.isnull(self.mask)).sum()
 
             # Proceed to re-measurement if possible:
             if non_nans == 6:
                 # TODO add option to perform the measurement a new
                 # self.clear_fit()
-                # self.fit_from_wavelengths(self.line, self.lineWaves, user_cfg={})
+                # self.fit_from_wavelengths(self.line, self.mask, user_cfg={})
 
                 # Parse the line regions to the dataframe
-                self.results_to_database(self.lineLabel, self.log, fit_conf={}, export_params=[])
+                self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
 
                 # Save the corrected mask to a file
                 self.store_measurement()
 
             # Redraw the line measurement
             self.in_ax.clear()
-            self.plot_line_region_i(self.in_ax, self.lineLabel, logscale='auto')
+            self.plot_line_region_i(self.in_ax, self.line, logscale='auto')
             self.in_fig.canvas.draw()
 
         return
@@ -724,8 +724,8 @@ class MaskInspector(Spectrum):
         # TODO we need a better way to index than the latex line
         # Recognise line line
         idx_line = self.log.index == self.in_ax.get_title()
-        self.lineLabel = self.log.loc[idx_line].index.values[0]
-        self.lineWaves = self.log.loc[idx_line, 'w1':'w6'].values[0]
+        self.line = self.log.loc[idx_line].index.values[0]
+        self.mask = self.log.loc[idx_line, 'w1':'w6'].values[0]
 
         # Restore measurements from log
         # self.database_to_attr()
@@ -736,7 +736,7 @@ class MaskInspector(Spectrum):
     def on_click(self, event):
 
         if event.dblclick:
-            print(self.lineLabel)
+            print(self.line)
             print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')
 
     def store_measurement(self):
@@ -746,10 +746,10 @@ class MaskInspector(Spectrum):
             file_DF = load_lines_log(self.linesLogAddress)
 
             # Add new line to the DF and sort it if it was new
-            if self.lineLabel in file_DF.index:
-                file_DF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
+            if self.line in file_DF.index:
+                file_DF.loc[self.line, 'w1':'w6'] = self.mask
             else:
-                file_DF.loc[self.lineLabel, 'w1':'w6'] = self.lineWaves
+                file_DF.loc[self.line, 'w1':'w6'] = self.mask
 
                 # Sort the lines by theoretical wavelength
                 lineLabels = file_DF.index.values
@@ -958,8 +958,8 @@ class CubeFitsInspector(Spectrum):
                     amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
                                          self.log.loc[lineLabel, 'sigma']
                     observations = self.log.loc[lineLabel, 'observations']
-                    blended_label = self.log.loc[lineLabel, 'blended_label']
-                    # print(lineLabel, observations, type(observations))
+                    blended_label = self.log.loc[lineLabel, 'profile_label']
+                    # print(line, observations, type(observations))
 
                     # Rest frame
                     if frame == 'rest':
@@ -1017,8 +1017,8 @@ class CubeFitsInspector(Spectrum):
 
                 # Plot the sum flux of the blended components:
                 # TODO we need a method just for this
-                idcs_blended = (self.log['blended_label'] != 'None')
-                blended_groups = self.log.loc[idcs_blended, 'blended_label'].unique()
+                idcs_blended = (self.log['profile_label'] != 'None')
+                blended_groups = self.log.loc[idcs_blended, 'profile_label'].unique()
                 for lineGroup in blended_groups:
 
                     list_comps = lineGroup.split('-')

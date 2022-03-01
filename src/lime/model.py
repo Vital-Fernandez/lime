@@ -63,13 +63,12 @@ def is_digit(x):
 
 class EmissionFitting:
 
-    """Class to to measure emission line fluxes and fit them as gaussian curves"""
+    """Class to measure emission line fluxes and fit them as gaussian curves"""
 
     _AMP_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
     _CENTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
     _SIG_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
     _AREA_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
-    # _AREA_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
 
     _AMP_ABS_PAR = dict(value=None, min=-np.inf, max=0, vary=True, expr=None)
 
@@ -85,8 +84,8 @@ class EmissionFitting:
 
     def __init__(self):
 
-        self.line, self.lineWaves = '', np.array([np.nan] * 6)
-        self.blended_check, self.blended_label = False, 'None'
+        self.line, self.mask = '', np.array([np.nan] * 6)
+        self.blended_check, self.profile_label = False, 'None'
 
         self.intg_flux, self.intg_err = None, None
         self.peak_wave, self.peak_flux = None, None
@@ -225,7 +224,7 @@ class EmissionFitting:
     def gauss_lmfit(self, line_label, x, y, weights, user_conf={}, lines_df=None, z_obj=0):
 
         # Check if line is in a blended group
-        line_ref = self.blended_label if self.blended_check else line_label
+        line_ref = self.profile_label if self.blended_check else line_label
 
         # Confirm the number of gaussian components
         mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
@@ -259,6 +258,7 @@ class EmissionFitting:
             AMP_PAR = self._AMP_PAR if self._emission_check else self._AMP_ABS_PAR
 
             # Define the curve parameters
+            #TODO include the normalization here
             self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
             self.define_param(fit_model, comp, 'center', ref_wave[idx_comp], self._CENTER_PAR, user_conf, z_cor=(1+z_obj))
             self.define_param(fit_model, comp, 'sigma', 1.0, self._SIG_PAR, user_conf)

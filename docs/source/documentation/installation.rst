@@ -1,13 +1,13 @@
 Installation
 ============
 
-:math:`\textsc{LiMe}` can be installed from its pip_ project page. You may run the following command for its current version:
+:math:`\textsc{LiMe}` can be installed from its pip_ project page by running this terminal command:
 
 .. code-block:: console
 
    pip install lime-stable
 
-If you need to update it to the latest version you can run the command:
+To update the library to the latest version you can run the command:
 
 .. code-block:: console
 
@@ -24,7 +24,7 @@ The current version of LiMe has the following dependencies (please check their d
 * LmFit (profile fitting library)
 * Astropy (loading and saving *.fits* files)
 
-The following libraries are not necessary but they provide a richer experience on the library inputs and outputs:
+The following libraries are not necessary but they provide a richer experience for the library inputs and outputs:
 
 * Specutils (Functions to detect line peaks and troughs)
 * PyLatex (Saving data as *.pdf* files)

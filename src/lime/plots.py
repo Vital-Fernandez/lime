@@ -146,7 +146,7 @@ def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_
     obsLines = lines_df.index.values
     for lineLabel in obsLines:
 
-        label_entry = lines_df.loc[lineLabel, 'latexLabel']
+        label_entry = lines_df.loc[lineLabel, 'latex_label']
         wavelength = lines_df.loc[lineLabel, 'wavelength']
         eqw, eqwErr = lines_df.loc[lineLabel, 'eqw'], lines_df.loc[lineLabel, 'eqw_err']
 
@@ -155,7 +155,7 @@ def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_
         flux_gauss = lines_df.loc[lineLabel, 'gauss_flux'] / flux_Hbeta * scaleTable
         flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err'] / flux_Hbeta * scaleTable
 
-        if (lines_df.loc[lineLabel, 'blended_label'] != 'None') and ('_m' not in lineLabel):
+        if (lines_df.loc[lineLabel, 'profile_label'] != 'None') and ('_m' not in lineLabel):
             flux, fluxErr = flux_gauss, flux_gaussErr
             label_entry = label_entry + '$_{gauss}$'
         else:
@@ -481,7 +481,7 @@ class LiMePlots:
         # Establish spectrum line and continua regions
         idcsEmis, idcsContBlue, idcsContRed = self.define_masks(self.wave_rest,
                                                                 self.flux,
-                                                                self.lineWaves,
+                                                                self.mask,
                                                                 merge_continua=False)
         idcs_plot = (wave_plot[idcsContBlue][0] - 5 <= wave_plot) & (wave_plot <= wave_plot[idcsContRed][-1] + 5)
 
@@ -525,7 +525,7 @@ class LiMePlots:
             if not self.blended_check:
                 contLabel = f'{line_label}_cont_'
             else:
-                contLabel = f'{self.blended_label.split("-")[0]}_cont_'
+                contLabel = f'{self.profile_label.split("-")[0]}_cont_'
 
             cont_flux = flux_resample.get(contLabel, 0.0)
             for comp_label, comp_flux in flux_resample.items():
@@ -598,7 +598,7 @@ class LiMePlots:
         # Establish spectrum line and continua regions
         idcsEmis, idcsContBlue, idcsContRed = self.define_masks(self.wave_rest,
                                                                 self.flux,
-                                                                self.lineWaves,
+                                                                self.mask,
                                                                 merge_continua=False)
 
         z_cor = 1
@@ -713,7 +713,7 @@ class LiMePlots:
                 # Line data
                 lineLabel = lineLabels[i]
                 lineWaves = log.loc[lineLabel, 'w1':'w6'].values
-                latexLabel = log.loc[lineLabel, 'latexLabel']
+                latexLabel = log.loc[lineLabel, 'latex_label']
 
                 # Establish spectrum line and continua regions
                 idcsEmis, idcsContBlue, idcsContRed = self.define_masks(self.wave_rest,
@@ -800,9 +800,9 @@ class LiMePlots:
                 label_entry = lines_df.loc[lineLabel, 'latexLabel']
 
                 # Establish component:
-                blended_check = (lines_df.loc[lineLabel, 'blended_label'] != 'None') and ('_m' not in lineLabel)
+                blended_check = (lines_df.loc[lineLabel, 'profile_label'] != 'None') and ('_m' not in lineLabel)
                 if blended_check:
-                    blended_group = lines_df.loc[lineLabel, 'blended_label']
+                    blended_group = lines_df.loc[lineLabel, 'profile_label']
                     comp = 'n1' if lineLabel.count('_') == 1 else lineLabel[lineLabel.rfind('_')+1:]
                 else:
                     comp = 'n1'

@@ -14,58 +14,39 @@ Inputs
 This section includes 3 parameters which are actually provided by the user inputs. However, they are also included in
 the output log for consistency.
 
-* **line** (``.line``, ``str``): This attribute provides the :math:`\textsc{LiMe}` label for an emission line. This label has the
-  following format:
+* **line** (``.line``, ``str``): This attribute is name of the line the measurements belong to. It has the :ref:`LiMe notation <lineLabel>`:
+  format.
 
-  .. image:: ../_static/line_notation.png
-    :scale: 40%
-    :align: center
+* **mask** (``.mask``, ``np.array()``): This attribute consists in a six-value vector with the :ref:`line mask <lineMask>`:
+  In the ``lime.Spectrum`` object, the mask is stored as a vector under the ``lime.Spectrum.mask`` attribute. In the ``.log``
+  the wavelengths are stored in individual columns with the headers: ``w1``, ``w2``, ``w3``, ``w4``, ``w5`` and ``w6``.
 
-  Single lines are those whose profile can be characterised with a single Gaussian component (default). In contrast,
-  blended and merged lines need at least to Gaussian components. The discrepancy between both categories is that the
-  blended lines the spectral resolution is high enough for a mathematical fitting of the individual components. Merged lines,
-  can still be used in the chemical analysis, and hence, it is importat to preserve the components into the output measurements
-  log.
-
-  .. note::
-     Even with the blended **'_b'** and merged **'_m'** suffices the user still needs to include the line components in
-     the fit configuration. Otherwise, the lines will be treated with a single component during the fitting.
-
-
-* **lineWaves** (``.lineWaves``, ``np.array()``): This attribute consists in a six-value vector with the emission line
-  location and adjacent continua:
-
-  .. image:: ../_static/mask_selection.jpg
-    :align: center
-
-  This mask values must be supplied in increasing order. The units must be the same as the spectrum wavelength array.
-  Finally, in the output measurements log these wavelengths are stored as  ``w1``, ``w2``, ``w3``, ``w4``, ``w5``, ``w6``.
-
-* **blended_label** (``.blended_label``, ``str``): This attribute consists in a dash separated string with the line components
-  in a blended or merged line. The individual components labels have the same notation as in the ``.line``. For example,
-  in the configuration file the blended labels are defined as:
+* **profile_label** (``.profile_label``, ``str``): This attribute consists in a string with the line components separated
+  by dashes (-). The individual components labels have the :ref:`LiMe notation <lineLabel>`: but they may also have a
+  suffix for the kinematic component. In single lines, the default value for this attribute is ``None`` (string variable).
+  As an example, two profile labels are included below:
 
   .. code-block::
 
-        H1_6563A_b = H1_6563A_b-N2_6584A-N2_6548A
+        H1_6563A_b = H1_6563A-H1_6563A_b1-N2_6584A-N2_6548A
         O2_3727A_m = O2_3727A-O2_3729A
-
 
 Identification
 ++++++++++++++
 
 These parameters are not attributes of the ``lime.Spectrum`` class. Nonetheless, they are stored in the ``lime.Spectrum.log``
-``pandas.DataFrame`` and the output measuring logs for chemical analysis of the emission fluxes.
+``pandas.DataFrame`` and the output measuring logs for their convenience in posterior treatments.
 
-  **wave**: This parameter contains the theoretical, rest-frame, wavelength for the emission line. This value is derived
-  from the ``.line`` provided by the user.
+* **wave**: This parameter contains the theoretical, rest-frame, wavelength for the emission line. This value is derived
+  from the :ref:`line entry <lineLabel>`: provided by the user.
 
-  **ion**: This parameter contains the ion responsible for the emission line photons. This value is derived from the
-  ``.line`` provided by the user.
+* **ion**: This parameter contains the ion responsible for the emission line photons. This value is derived from the
+  :ref:`line entry <lineLabel>`: provided by the user.
 
-  **latexLabel**: This parameter contains the transition classical notation in latex format. This string includes the
-  blended and merged components if they were provided during the fitting.
+* **latex_label**: This parameter contains the transition classical notation in latex format. This string includes the
+  profile components if they were provided during the fitting.
 
+.. _intgreatedProperties:
 
 Integrated properties
 +++++++++++++++++++++
@@ -75,8 +56,8 @@ assumption on the emission line profile shape.
 
 .. attention::
     In the output measurements log and the ``lime.Spectrum.log``, these parameters have the same flux units as the
-    input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the constant provided by the user
-    ``lime.Spectrum.normFLux``
+    input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the constant provided at the
+    ``lime.Spectrum`` definition.
 
 * **peak_wave** (``.peak_wave``, ``float``): This variable is the wavelength of the highest pixel value in the line region.
 
@@ -107,7 +88,6 @@ assumption on the emission line profile shape.
   * The previous two steps are repeated in a 500 loop. The mean flux value from the resulting array is taken as the integrated
     flux value.
 
-
 * **intg_err** (``.intg_err``, ``float``): This attribute contains the integrated flux uncertainty. This
   value is derived from the standard deviation of the Monte Carlo algorithm steps described above.
 
@@ -120,8 +100,6 @@ assumption on the emission line profile shape.
     .. math::
 
         Eqw = \frac{F_{\lambda}}{F_{cont}}
-
-
 
   In blended lines the ``.gauss_flux`` is used otherwise the ``.intg_flux`` is used. In all cases the ``.cont`` is used
   as denominator.

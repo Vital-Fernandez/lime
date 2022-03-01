@@ -1,3 +1,5 @@
+.. _example6:
+
 6) IFU treatment: Line measurement
 ==================================
 
