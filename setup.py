@@ -34,7 +34,7 @@ setup(
                 ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
-    package_data={'': ['lime.cfg']},
+    package_data={'': ['lime.cfg', 'types_params.txt']},
     include_package_data=True,
     install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'specutils', 'pylatex', 'openpyxl'],
     )
