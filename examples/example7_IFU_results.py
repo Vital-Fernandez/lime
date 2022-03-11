@@ -101,7 +101,7 @@ lines_ratio = {'H1': ['H1_6563A', 'H1_4861A'],
                'S3': ['S3_9531A', 'S3_9069A']}
 
 # State the parameter map file
-fits_file = f'./sample_data/SHOC579_gauss_flux.fits'
+fits_file = f'./sample_data/SHOC579_intg_flux.fits'
 
 # Loop through the line ratios
 for ion, lines in lines_ratio.items():

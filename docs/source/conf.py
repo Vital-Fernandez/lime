@@ -26,7 +26,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '0.5.0'
+release = '0.5.5'
 
 
 # -- General configuration ---------------------------------------------------

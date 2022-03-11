@@ -164,7 +164,7 @@ Finally, we need to state the components of the blended and/or merged lines so t
 
 The last entry in the configuration dict provides one constrain on the fitting of the wide component of Hα line: It must be
 wider than the narrow component (H1_6563A). This is a common constrain in order to make sure that the component with the larger
-velocity dispersion keeps the same label suffix (_w1) across different lines and spectra.
+velocity dispersion keeps the same label suffix (w1) across different lines and spectra.
 
 Finally, we perform the line fitting looping through the line masks:
 
@@ -178,7 +178,7 @@ Finally, we perform the line fitting looping through the line masks:
         synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
 
         # Displays the results
-        synth_spec.display_results(show_plot=True, show_fit_report=True)
+        synth_spec.display_results(show_fit_report=True)
         synth_spec.plot_line_velocity()
 
         # Compare the measurements with the true values
@@ -201,7 +201,7 @@ In the code above, after the measurements we have two functions to plot the resu
 
 .. code-block:: python
 
-    synth_spec.display_results(show_plot=True)
+    synth_spec.display_results()
 
 This function provides several options. The attribute ``show_plot`` brings a windows with the
 plot of the current fitting:

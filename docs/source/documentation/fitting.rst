@@ -4,8 +4,8 @@
 Inputs
 ======
 
-In this chapter, we describe the main inputs for :math:`\textsc{LiMe}` measurements: There are the line label, mask
-and profile fitting configuration. The first two are compulsory while the third is optional:
+In this chapter, we describe the main inputs for :math:`\textsc{LiMe}` measurements: The line name, mask
+and fitting configuration. The first two are compulsory while the third is optional:
 
 .. _lineLabel:
 
@@ -168,8 +168,8 @@ configurations in the :ref:`6th tutorial <example6>`:
 The following sections include a few examples and guidelines on how to personalise your profile fittings and improve the
 quality of the measurements.
 
-Line components labels
-++++++++++++++++++++++
+Line components label
++++++++++++++++++++++
 
 The profile components in blended and merged lines are specified as a string where the components are separated by a
 dash (-) and have the :ref:`LiMe notation <lineLabel>`:
@@ -318,4 +318,4 @@ initial values for the Gaussian profile width and location are fixed prior to th
 
    In the fitting above, you can see that the continuum parameters are fixed. This is usually a good practice in cases,
    where the continuum masks are small or there is a weak broad component. Moreover, this also removes two dimensions
-   from the fitting so it is a good practice for multi-Gaussian fittings.
+   from the fitting which should make easier the fitting of the Gaussian components.

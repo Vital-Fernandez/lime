@@ -253,7 +253,7 @@ In the final loop, we measure the detected lines:
     The ``try:... except:`` syntax in the code above is a mechanism for `Python error handling <https://docs.python.org/3/tutorial/errors.html>`_.
     This means that if a computational error occurs in the ``fit_from_wavelengths`` the algorithm will continue to work. In
     the current beta version, :math:`\textsc{LiMe}` can only detect/handle a few errors. Consequently, once the user has
-    confirmed that their scripts work in a many spectra, this syntax can avoid avoid abrupt stops in large data set
+    confirmed that their scripts work in an small sample, this syntax can be used to avoid abrupt stops in large data set
     analysis from a single line measurement error.
 
 Once the lines have been measured we could save them into a *.fits* extension. However, in large data sets appending

@@ -65,7 +65,7 @@ Using this information, the Spectrum object is defined as:
 
 .. code-block:: python
 
-    gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, normFlux=normFlux_gp)
+    gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, norm_flux=normFlux_gp)
 
 
 
@@ -107,7 +107,7 @@ You can plot the fit using:
 
 .. code-block:: python
 
-    gp_spec.display_results(show_plot=True)
+    gp_spec.display_results()
 
 .. image:: ../_static/1_firstFitAttemp.png
 
@@ -130,7 +130,7 @@ Now we include this information in the fitting:
 .. code-block:: python
 
     gp_spec.fit_from_wavelengths(line, lineWaves, fit_conf)
-    gp_spec.display_results(show_plot=True)
+    gp_spec.display_results()
 
 .. image:: ../_static/1_secondFitAttemp.png
 

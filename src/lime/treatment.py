@@ -10,7 +10,7 @@ from astropy.wcs import WCS
 from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder
 from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES
-from .io import _LOG_EXPORT, LOG_COLUMNS, load_lines_log, save_line_log
+from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_model
 
 from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec
@@ -94,11 +94,11 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 self.err_flux = self.err_flux / self.norm_flux
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
-        self.log = pd.DataFrame(columns=LOG_COLUMNS.keys())
+        self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
 
         return
 
-    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='least_squares', emission=True, adjacent_cont=True):
+    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True):
 
         """
 
@@ -369,27 +369,27 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         for i, line in enumerate(line_components):
 
             # Convert current measurement to a pandas series container
-            line_log = pd.Series(index=LOG_COLUMNS.keys())
-            line_log['ion', 'wavelength', 'latex_label'] = ion[i], waveRef[i], latexLabel[i]
-            line_log['w1': 'w6'] = self.mask
+            linesDF.loc[line, ['ion', 'wavelength', 'latex_label']] = ion[i], waveRef[i], latexLabel[i]
+            linesDF.loc[line, 'w1':'w6'] = self.mask
+
+            # line_log = pd.Series(index=LOG_COLUMNS.keys())
+            # line_log['ion', 'wavelength', 'latex_label'] = ion[i], waveRef[i], latexLabel[i]
+            # line_log['w1': 'w6'] = self.mask
 
             # Treat every line
             for param in export_params:
 
                 # Get component parameter
-                if LOG_COLUMNS[param][2]:
+                if _LOG_COLUMNS[param][2]:
                     param_value = self.__getattribute__(param)[i]
                 else:
                     param_value = self.__getattribute__(param)
 
                 # De normalize
-                if LOG_COLUMNS[param][0]:
+                if _LOG_COLUMNS[param][0]:
                     param_value = param_value * self.norm_flux
 
-                line_log[param] = param_value
-
-            # Assign line series to dataframe
-            linesDF.loc[line] = line_log
+                linesDF.loc[line, param] = param_value
 
         return
 
@@ -537,13 +537,16 @@ class MaskInspector(Spectrum):
         for i in range(grid_size):
             if i < n_lines:
                 line = self.target_lines[i]
-                self.mask = self.log.loc[line, 'w1':'w6'].values
-                self.plot_line_region_i(self.ax[i], line, logscale=logscale)
-                self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
-                                                                   self.on_select,
-                                                                   'horizontal',
-                                                                   useblit=True,
-                                                                   rectprops=dict(alpha=0.5, facecolor='tab:blue'))
+                if line in self.log.index:
+                    self.mask = self.log.loc[line, 'w1':'w6'].values
+                    self.plot_line_region_i(self.ax[i], line, logscale=logscale)
+                    self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
+                                                                       self.on_select,
+                                                                       'horizontal',
+                                                                       useblit=True,
+                                                                       rectprops=dict(alpha=0.5, facecolor='tab:blue'))
+                else:
+                    print(f'- WARNING: line {line} not found in the input mask')
 
             # Clear not filled axes
             else:
@@ -721,7 +724,7 @@ class MaskInspector(Spectrum):
         self.in_fig = event.canvas.figure
         self.in_ax = event.inaxes
 
-        # TODO we need a better way to index than the latex line
+        # TODO we need a better way to index than the latex label
         # Recognise line line
         idx_line = self.log.index == self.in_ax.get_title()
         self.line = self.log.loc[idx_line].index.values[0]

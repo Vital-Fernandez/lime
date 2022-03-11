@@ -3,22 +3,29 @@ from astropy.io import fits
 import lime
 import shutil
 
-# Input files
+
+def import_osiris_fits(file_address, ext=0):
+
+    # Open fits file
+    with fits.open(file_address) as hdul:
+        data, header = hdul[ext].data, hdul[ext].header
+
+    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+    w_max = w_min + dw * n_pix
+    wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+    return wavelength, data, header
+
+# State the data files
 obsFitsFile = './sample_data/gp121903_BR.fits'
 instrMaskFile = './sample_data/osiris_mask.txt'
 cfgFile = './sample_data/config_file.cfg'
 
+# Load the spectrum
+wave, flux, header = import_osiris_fits(obsFitsFile)
+
 # Load configuration
 sample_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
-
-# Load spectrum
-ext = 0
-with fits.open('./sample_data/gp121903_BR.fits') as hdul:
-    flux, header = hdul[ext].data, hdul[ext].header
-w_min, dw, n_pix = header['CRVAL1'], header['CD1_1'], header['NAXIS1']
-w_max = w_min + dw * n_pix
-
-wave = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
 # Object properties
 z_obj = sample_cfg['sample_data']['z_array'][2]
@@ -37,7 +44,7 @@ lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj
                    n_cols=2, lines_interval=lines_interval)
 
 # You can also specify the lines you are interested in inspecting the mask
-lines_interval = ['He2_4686A', 'S3_6312A', 'O3_4363A']
+lines_interval = ['He2_4686A', 'S2_6716A_b', 'O3_4363A']
 lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
                    lines_interval=lines_interval)
 

@@ -39,34 +39,42 @@ the ``.MaskInspector`` class.
 
 This tutorial can also be found as a python script in the `github 4th example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example4_interactive_mask_plots.py>`_.
 
-Let's start by importing the data files from the Green Pea sample:
+Let's start by stating the sample data location and how to read it:
 
 .. code-block:: python
 
     import numpy as np
     from astropy.io import fits
     import lime
+    import shutil
 
-    # Input files
+
+    def import_osiris_fits(file_address, ext=0):
+
+        # Open fits file
+        with fits.open(file_address) as hdul:
+            data, header = hdul[ext].data, hdul[ext].header
+
+        w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+        w_max = w_min + dw * n_pix
+        wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+        return wavelength, data, header
+
+    # State the data files
     obsFitsFile = './sample_data/gp121903_BR.fits'
-    instrMaskFile = './sample_data/gp121903_BR_mask.txt'
+    instrMaskFile = './sample_data/osiris_mask.txt'
     cfgFile = './sample_data/config_file.cfg'
-
-    # Load configuration
-    sample_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
-
-    # Load spectrum
-    ext = 0
-    with fits.open('./sample_data/gp121903_BR.fits') as hdul:
-        flux, header = hdul[ext].data, hdul[ext].header
-    w_min, dw, n_pix = header['CRVAL1'], header['CD1_1'], header['NAXIS1']
-    w_max = w_min + dw * n_pix
-
-    wave = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
 Now we can prepare the data for the ``.MaskInspector`` class:
 
 .. code-block:: python
+
+    # Load the spectrum
+    wave, flux, header = import_osiris_fits(obsFitsFile)
+
+    # Load configuration
+    sample_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
 
     # Object properties
     z_obj = sample_cfg['sample_data']['z_array'][2]
@@ -76,16 +84,21 @@ Now we can prepare the data for the ``.MaskInspector`` class:
     objMaskFile = './sample_data/GP121903_mask.txt'
     shutil.copy(instrMaskFile, objMaskFile)
 
+In the last couple of lines we created a copy of the original mask. It is in this new file where will be writting the new
+values. Once you run
+
+.. code-block:: python
+
     # Run the interative plot
     lime.MaskInspector(lines_log_address=objMaskFile, input_wave=wave, input_flux=flux,
                        redshift=z_obj, norm_flux=norm_flux)
 
-This class generates an interactive grid plot with the line masks in the ``lines_log_address`` file:
+An interactive grid plot is displayed:
 
 .. image:: ../_static/4_mask_selection_grid.png
 
-Clicking and dragging the mouse within a line plot cell will update the line band region, both in the plot and the
-``lines_log_address`` file. There are some caveat in the window selection:
+Clicking and dragging the mouse within a line plot cell will update the line band region (both in the plot and the
+``lines_log_address`` file). There are some caveats in the window selection:
 
 * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the mask limits
   (below :math:`w1` or above :math:`w6`) will change the displayed range. This can be used to move beyond the original
@@ -102,8 +115,9 @@ grid plot:
 
 .. code-block:: python
 
+    lines_interval = (6, 10)
     lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section, input_wave=wave, input_flux=flux,
-    redshift=z_obj, norm_flux=norm_flux, lines_interval=(0, 5))
+    redshift=z_obj, norm_flux=norm_flux, lines_interval=lines_interval)
 
 .. image:: ../_static/4_mask_selection_grid_Detail.png
 

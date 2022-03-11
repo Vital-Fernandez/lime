@@ -30,128 +30,32 @@ from .plots import table_fluxes
 try:
     import openpyxl
     openpyxl_check = True
-
 except ImportError:
     openpyxl_check = False
 
+# Reading file with the format and export status for the measurements
+_params_table_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'types_params.txt')
+_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
 
-# Parameters configuration: 0) Normalized by flux, 1) Regions wavelengths, 2) Array variable
-LOG_COLUMNS = {'wavelength': [False, False, True],
-               'intg_flux': [True, False, False],
-               'intg_err': [True, False, False],
-               'gauss_flux': [True, False, True],
-               'gauss_err': [True, False, True],
-               'eqw': [False, False, True],
-               'eqw_err': [False, False, True],
-               'ion': [False, False, True],
-               'latex_label': [False, False, True],
-               'profile_label': [False, False, False],
-               'w1': [False, True, False],
-               'w2': [False, True, False],
-               'w3': [False, True, False],
-               'w4': [False, True, False],
-               'w5': [False, True, False],
-               'w6': [False, True, False],
-               'peak_wave': [False, False, False],
-               'peak_flux': [True, False, False],
-               'cont': [True, False, False],
-               'std_cont': [True, False, False],
-               'm_cont': [True, False, False],
-               'n_cont': [True, False, False],
-               'snr_line': [False, False, False],
-               'snr_cont': [False, False, False],
-               'z_line': [False, False, True],
-               'amp': [True, False, True],
-               'center': [False, False, True],
-               'sigma': [False, False, True],
-               'amp_err': [True, False, True],
-               'center_err': [False, False, True],
-               'sigma_err': [False, False, True],
-               'v_r': [False, False, True],
-               'v_r_err': [False, False, True],
-               'sigma_vel': [False, False, True],
-               'sigma_vel_err': [False, False, True],
-               'FWHM_int': [False, False, False],
-               'FWHM_g': [False, False, True],
-               'v_med': [False, False, False],
-               'v_50': [False, False, False],
-               'v_5': [False, False, False],
-               'v_10': [False, False, False],
-               'v_90': [False, False, False],
-               'v_95': [False, False, False],
-               'chisqr': [False, False, False],
-               'redchi': [False, False, False],
-               'aic':  [False, False, False],
-               'bic':  [False, False, False],
-               'observations': [False, False, False],
-               'comments': [False, False, False]}
+# Dictionary with the parameter formart
+_LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
+                        _PARAMS_CONF_TABLE.loc[:, 'Norm_by_flux':'dtype'].values))
 
-LINELOG_TYPES = {'index': '<U50',
-                 'wavelength': '<f8',
-                 'intg_flux': '<f8',
-                 'intg_err': '<f8',
-                 'gauss_flux': '<f8',
-                 'gauss_err': '<f8',
-                 'eqw': '<f8',
-                 'eqw_err': '<f8',
-                 'ion': '<U50',
-                 'pynebCode': '<f8',
-                 'pynebLabel': '<f8',
-                 'lineType': '<f8',
-                 'latex_label': '<U100',
-                 'profile_label': '<U120',
-                 'w1': '<f8',
-                 'w2': '<f8',
-                 'w3': '<f8',
-                 'w4': '<f8',
-                 'w5': '<f8',
-                 'w6': '<f8',
-                 'm_cont': '<f8',
-                 'n_cont': '<f8',
-                 'cont': '<f8',
-                 'std_cont': '<f8',
-                 'peak_flux': '<f8',
-                 'peak_wave': '<f8',
-                 'snr_line': '<f8',
-                 'snr_cont': '<f8',
-                 'amp': '<f8',
-                 'mu': '<f8',
-                 'sigma': '<f8',
-                 'amp_err': '<f8',
-                 'mu_err': '<f8',
-                 'sigma_err': '<f8',
-                 'v_r': '<f8',
-                 'v_r_err': '<f8',
-                 'sigma_vel': '<f8',
-                 'sigma_err_vel': '<f8',
-                 'FWHM_int': '<f8',
-                 'FWHM_g': '<f8',
-                 'v_med': '<f8',
-                 'v_50': '<f8',
-                 'v_5': '<f8',
-                 'v_10': '<f8',
-                 'v_90': '<f8',
-                 'v_95': '<f8',
-                 'chisqr': '<f8',
-                 'redchi': '<f8',
-                 'observations': '<U50',
-                 'comments': '<U50',
-                 'obsFlux': '<f8',
-                 'obsFluxErr': '<f8',
-                 'f_lambda': '<f8',
-                 'obsInt': '<f8',
-                 'obsIntErr': '<f8'}
+# Array with the parameters to be included in the output log
+_LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log].index.values
 
-COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2', 'CTYPE1', 'CTYPE2']
+# Dictionary with the parameter dtypes
+_LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.values,
+                           _PARAMS_CONF_TABLE.dtype.values))
 
-_LOG_EXPORT = list(set(LOG_COLUMNS.keys()) - set(['ion', 'wavelength',
-                                                 'latex_label',
-                                                 'w1', 'w2',
-                                                 'w3', 'w4',
-                                                 'w5', 'w6']))
+# Numpy recarray dtype for the pandas dataframe creation
+_LOG_DTYPES_REC = np.dtype(list(_LOG_TYPES_DICT.items()))
 
-_MASK_EXPORT = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'observation']
+# Variables with the astronomical coordinate information for the creation of new .fits files
+COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
+                 'CTYPE1', 'CTYPE2']
 
+# Plots style and themes
 STANDARD_PLOT = {'figure.figsize': (14, 7),
                  'axes.titlesize': 14,
                  'axes.labelsize': 14,
@@ -592,9 +496,9 @@ def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
     if not log.empty:
 
         if len(column_types) == 0:
-            params_dtype = LINELOG_TYPES
+            params_dtype = _LOG_TYPES_DICT
         else:
-            params_dtype = LINELOG_TYPES.copy()
+            params_dtype = _LOG_TYPES_DICT.copy()
             user_dtype = column_types.copy()
             params_dtype.update(user_dtype)
 

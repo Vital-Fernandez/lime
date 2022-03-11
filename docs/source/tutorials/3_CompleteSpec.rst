@@ -14,19 +14,36 @@ and the fitting configuration. Let's start by specifying the data location:
 
 .. code-block:: python
 
+    import numpy as np
+    from astropy.io import fits
     import lime
+
+    def import_osiris_fits(file_address, ext=0):
+
+        # Open fits file
+        with fits.open(file_address) as hdul:
+            data, header = hdul[ext].data, hdul[ext].header
+
+        w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+        w_max = w_min + dw * n_pix
+        wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+        return wavelength, data, header
 
     # State the data files
     obsFitsFile = './sample_data/gp121903_BR.fits'
-    lineMaskFile = './sample_data/gp121903_BR_mask.txt'
-    cfgFile = './sample_data/example_configuration_file.cfg'
+    lineMaskFile = './sample_data/osiris_mask.txt'
+    cfgFile = './sample_data/config_file.cfg'
+
+    # Load spectrum
+    wave, flux, header = import_osiris_fits(obsFitsFile)
 
 The mask file consists in a text file where the line masks are stored as table where each row is an emission line and the
 columns represent the wavelengths (in the rest frame) marking the regions of the adjacent continua and the line region:
 
 .. image:: ../_static/mask_selection.jpg
 
-To read this file you can use the ``.load_cfg`` function:
+To read this file you can use the ``.load_lines_log`` function:
 
 .. code-block:: python
 
@@ -248,6 +265,6 @@ As a final step, we can use the ``.save_line_log`` function to save your measure
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xls')
 
 .. note::
-   The file extension determines file type the line log will be save as. In the case of ``.fits`` and ``.xlsx`` files if you
-   do not specify the page name, the default value is 'LINESLOG'. This will overwrite the data if the 'LINESLOG' page is already
-   on the file.
+   The file extension determines the output file type. In the case of ``.fits`` and ``.xlsx`` files if you do not
+   specify the page name, the default value is 'LINESLOG'. This will overwrite the data if the 'LINESLOG' page is
+   already on the file.
