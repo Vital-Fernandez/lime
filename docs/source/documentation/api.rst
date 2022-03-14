@@ -1,5 +1,3 @@
-.. module:: lime
-
 .. _api:
 
 API
@@ -8,20 +6,20 @@ API
 Inputs and outputs
 ------------------
 
-.. autofunction:: lime.io.load_cfg
+.. autofunction:: lime.load_cfg
 
-.. autofunction:: lime.io.load_lines_log
+.. autofunction:: lime.load_lines_log
 
-.. autofunction:: lime.io.save_param_maps
+.. autofunction:: lime.save_param_maps
 
 
 Core
 ----
 
-.. autoclass:: lime.treatment.Spectrum
-   :inherited-members:
+.. autoclass:: lime.Spectrum
+   :members: fit_from_wavelengths, match_line_mask, display_results
 
-.. autofunction:: lime.treatment.MaskInspector
+.. autofunction:: lime.MaskInspector
 
 
 Convenience functions
@@ -29,6 +27,6 @@ Convenience functions
 
 .. autofunction:: lime.label_decomposition
 
-.. autofunction:: lime.io.spatial_mask_generator
+.. autofunction:: lime.spatial_mask_generator
 
-.. autofunction:: lime.treatment.CubeFitsInspector
+.. autofunction:: lime.CubeFitsInspector

@@ -14,10 +14,11 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-# import sys
-# import os
-# sys.path.append(os.path.join(os.path.abspath(os.pardir)))
-# autodoc_mock_imports = ['lmfit', 'scipy', 'specutils', 'pylatex']
+# Adding library path to the compilation for the autodoc documentation
+import sys
+from pathlib import Path
+_lib_path = Path(__file__).parents[2]/'src'
+sys.path.append(str(_lib_path))
 
 # -- Project information -----------------------------------------------------
 
@@ -47,6 +48,8 @@ extensions = [
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+autodoc_member_order = 'bysource'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
