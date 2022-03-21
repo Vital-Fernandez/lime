@@ -389,7 +389,7 @@ class LiMePlots:
                 color_fit = 'tab:red'
 
                 # Check if the measurement had an error:
-                if observations != '':
+                if observations != 'None':
                     color_fit = 'black'
                     width_curve = 2.5
 
@@ -513,7 +513,7 @@ class LiMePlots:
             flux_resample = lmfit_output.eval_components(x=wave_resample)
 
             # Check if the measurement had an error:
-            if self.observations != '':
+            if self.observations != 'None':
                 color_fit = 'black'
                 width_curve = 3
 

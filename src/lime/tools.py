@@ -29,14 +29,14 @@ def int_to_roman(num):
     return roman_num
 
 
-def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
+def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
                         user_format={}):
 
     """
     This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
 
-    :param input_lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
-    :type input_lines: str, list
+    :param lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
+    :type lines: str, list
 
     :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
                         assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
@@ -52,7 +52,7 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict
     :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
     :type user_format: dict, optional
 
-    :return: 3 arrays (or scalars) with the input line(s) transition ion, wavelength and scientific notation in latex format.
+    :return: 3 arrays (or scalars) with the input transition line(s) ion, wavelength and scientific notation in latex format.
     :rtype: numpy.ndarray
 
     :Example:
@@ -68,16 +68,16 @@ def label_decomposition(input_lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict
 
     # Confirm input array has one dimension
     # TODO for blended lines it may be better to return all the blended components individually
-    input_lines = np.array(input_lines, ndmin=1)
+    lines = np.array(lines, ndmin=1)
 
     # TODO current workflow breaks if repeated labels
-    uniq, count = np.unique(input_lines, return_counts=True)
+    uniq, count = np.unique(lines, return_counts=True)
     assert not np.any(count > 1), '- ERROR: The input line labels in lime.label_decomposition includes repeated entries, please remove them'
 
     # Containers for input data
     ion_dict, wave_dict, latexLabel_dict = {}, {}, {}
 
-    for lineLabel in input_lines:
+    for lineLabel in lines:
         if lineLabel not in user_format:
             # Check if line reference corresponds to blended component
             mixture_line = False
@@ -310,7 +310,7 @@ class LineFinder:
             f'and {noise_region[1]/(1+self.redshift)} < {self.wave[-1]/(1+self.redshift)}'
 
         # Wavelength range and flux to use
-        input_wave, input_flux = self.wave, self.flux # TODO does this modify my flux
+        input_wave, input_flux = self.wave, self.flux
 
         # Identify high flux regions
         idcs_noiseRegion = (noise_region[0] <= input_wave) & (input_wave <= noise_region[1])
@@ -408,13 +408,6 @@ class LineFinder:
                         idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation, emission_check=emission_check)
                         matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
                         matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
-
-                # Else leave the values already there
-                # else:
-                #     idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation)
-                #     idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation)
-                #     match_log.loc[row_index, 'w3'] = self.wave_rest[idx_min]
-                #     match_log.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
         # Include_only_detected
         idcs_unknown = matched_DF['observation'] == 'not detected'

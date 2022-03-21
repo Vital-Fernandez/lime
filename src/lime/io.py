@@ -141,7 +141,7 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
     elif ',' in entry_value:
 
         # Specia cases conversion
-        if key_label in ['input_lines']:
+        if key_label in ['lines']:
             if entry_value == 'all':
                 output_variable = 'all'
             else:

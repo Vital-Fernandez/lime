@@ -245,7 +245,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
   using the expression:
 
   .. math::
-        F_{i, g} = A_i \cdot 2.50663 \cdot \sigma_i
+        F_{i, g} = A_i \cdot \sqrt{2\pi} \cdot \sigma_i
 
   where :math:`A_i` is Gaussian component amplitude (``.amp``) and :math:`\sigma_{i}` gaussian component standard deviation (``.sigma``)
 

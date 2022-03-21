@@ -962,7 +962,7 @@ class CubeFitsInspector(Spectrum):
                                          self.log.loc[lineLabel, 'sigma']
                     observations = self.log.loc[lineLabel, 'observations']
                     blended_label = self.log.loc[lineLabel, 'profile_label']
-                    # print(line, observations, type(observations))
+                    # print(lineLabel, observations, type(observations))
 
                     # Rest frame
                     if frame == 'rest':
@@ -1005,7 +1005,7 @@ class CubeFitsInspector(Spectrum):
                             width_curve = 2
 
                     # Check if the measurement had an error:
-                    if observations != '':
+                    if observations != 'None':
                         color_curve = 'black'
                         width_curve = 3
 

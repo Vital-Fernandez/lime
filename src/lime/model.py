@@ -23,6 +23,11 @@ def iraf_snr(input_y):
     snr = avg/rms
     return snr
 
+def signal_to_noise(flux_line, sigma_noise, n_pixels):
+
+    snr = flux_line / (sigma_noise * np.sqrt(n_pixels))
+
+    return snr
 
 def gaussian_model(x, amp, center, sigma):
     """1-d gaussian curve : gaussian(x, amp, cen, wid)"""
@@ -99,7 +104,7 @@ class EmissionFitting:
         self.v_r, self.v_r_err = None, None
         self.sigma_vel, self.sigma_vel_err = None, None
         self.snr_line, self.snr_cont = None, None
-        self.observations, self.comments = '', 'None'
+        self.observations, self.comments = 'None', 'None'
         self.FWHM_int, self.FWHM_g = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
@@ -169,7 +174,6 @@ class EmissionFitting:
         self.pixelWidth = np.diff(emisWave).mean()
         self.std_cont = np.std(contFlux - continuaFit)
         self.cont = self.peak_wave * self.m_cont + self.n_cont
-        self.snr_line, self.snr_cont = iraf_snr(emisFlux), iraf_snr(contFlux)
 
         # Establish the pixel sigma error
         err_array = self.std_cont if emisErr is None else emisErr
@@ -179,6 +183,8 @@ class EmissionFitting:
         lineFluxMatrix = emisFlux + normalNoise
         areasArray = (lineFluxMatrix.sum(axis=1) - lineLinearCont.sum()) * self.pixelWidth
         self.intg_flux, self.intg_err = areasArray.mean(), areasArray.std()
+        self.snr_line = signal_to_noise(self.intg_flux, self.std_cont, emisWave.size)
+        self.snr_cont = self.cont/self.std_cont
 
         # Velocity calculations
         if emisWave.size > 15:
@@ -213,7 +219,6 @@ class EmissionFitting:
                 A = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
                 K = W_90 / (1.397 * self.FWHM_int)
 
-        # TODO apply the redshift correction
         # Equivalent width computation
         lineContinuumMatrix = lineLinearCont + normalNoise
         eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
@@ -269,7 +274,10 @@ class EmissionFitting:
         self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights, method=self._minimize_method)
 
         if not self.fit_output.errorbars:
-            self.observations += 'No_errorbars'
+            if self.observations == 'None':
+                self.observations = 'No_errorbars'
+            else:
+                self.observations += 'No_errorbars'
             print(f'-- WARNING: Parameter(s) uncertainty could not be measured for line {line_label}')
 
         # Generate containers for the results
