@@ -89,9 +89,8 @@ values. Once you run
 
 .. code-block:: python
 
-    # Run the interative plot
-    lime.MaskInspector(lines_log_address=objMaskFile, input_wave=wave, input_flux=flux,
-                       redshift=z_obj, norm_flux=norm_flux)
+    # Manually inspect the masks and correct them iteratively
+    lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
 
 An interactive grid plot is displayed:
 
@@ -115,9 +114,10 @@ grid plot:
 
 .. code-block:: python
 
+    # In case you have many masks you can adjust the number of elements inspect the masks and correct them iteratively
     lines_interval = (6, 10)
-    lime.MaskInspector(lines_log_address=objMaskFile, log=lines_log_section, input_wave=wave, input_flux=flux,
-    redshift=z_obj, norm_flux=norm_flux, lines_interval=lines_interval)
+    lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
+                       n_cols=2, lines_interval=lines_interval)
 
 .. image:: ../_static/4_mask_selection_grid_Detail.png
 
@@ -125,7 +125,8 @@ Or the user can provide a list of lines with the same notation as in the mask fi
 
 .. code-block:: python
 
-    lines_interval = ['He2_4686A', 'S3_6312A', 'O3_4363A']
+    # You can also specify the lines you are interested in inspecting the mask
+    lines_interval = ['He2_4686A', 'S2_6716A_b', 'O3_4363A']
     lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
                        lines_interval=lines_interval)
 

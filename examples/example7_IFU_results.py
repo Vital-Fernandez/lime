@@ -73,14 +73,14 @@ SII_contourLevels = np.nanpercentile(SII_image, percentile_array)
 # Labels for the axes
 ax_conf = {'image': {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'MANGA SHOC579'}}
 
-# Color normalization for the flux band:
+# Color normalization for the flux image:
 min_flux = np.nanpercentile(Halpha_image, 60)
 log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
 # Interactive plotter for IFU data cubes
 lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
-                       fits_header=hdr, axes_conf=ax_conf, color_norm=log_norm_bg,
-                       lines_log_address=log_file)
+                       fits_header=hdr, ax_conf=ax_conf, color_norm=log_norm_bg,
+                       lines_log_address=log_file, mask_file='./sample_data/SHOC579_mask.fits')
 
 # WCS header data
 hdr_coords = {}

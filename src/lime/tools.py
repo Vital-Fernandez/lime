@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from lmfit.models import PolynomialModel
-
+from sys import exit
 import astropy.units as au
 
 try:
@@ -211,6 +211,39 @@ def kinematic_component_labelling(line_latex_label, comp_ref):
     return comp_label, lineEmisLabel
 
 
+def blended_label_from_log(line, log):
+
+    # Default values: single line
+    blended_check = False
+
+    if line in log.index:
+
+        if log.loc[line, 'profile_label'] == 'no':
+            profile_label = 'no'
+        elif line.endswith('_m'):
+            profile_label = log.loc[line, 'profile_label']
+        else:
+            blended_check = True
+            profile_label = log.loc[line, 'profile_label']
+    else:
+        exit(f'\n-- ERROR: line {line} not found input lines log')
+
+    return blended_check, profile_label
+
+    # first_comp, profile_label = line, None
+    # if '_b' in line:
+    #     if line[:-2] in log.index:
+    #         first_comp = line[:-2]
+    #         profile_label = log.loc[line[:-2], 'profile_label']
+    #     elif line in log.index:
+    #         first_comp = line
+    #         profile_label = log.loc[line, 'profile_label']
+    #     else:
+    #         first_comp, profile_label = None, None
+
+    return first_comp, profile_label
+
+
 class LineFinder:
 
     def __init__(self):
@@ -218,7 +251,7 @@ class LineFinder:
         return
 
     def match_line_mask(self, log, noise_region, detect_threshold=3, emis_threshold=(4, 4), abs_threshold=(1.5, 1.5),
-                        poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='auto'):
+                        poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='fixed'):
 
         """
         This function compares a spectrum flux peaks and troughs with the lines mask in a log to confirm the presence of
@@ -273,7 +306,7 @@ class LineFinder:
         :param line_type: Type of lines matched in the output lines log. Accepted values are 'emission' and 'absorption'
         :type line_type: str, optional
 
-        :param width_mode: Scheme for the line band mask detection. If set to "fix" the input w3 and w4 values won't be modified.
+        :param width_mode: Scheme for the line band mask detection. If set to "fixed" the input w3 and w4 values won't be modified.
         :type width_tol: str, optional
 
         :return: Table with the peaks/trough detected and log with the matched lines.

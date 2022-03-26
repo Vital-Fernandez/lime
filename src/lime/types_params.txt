@@ -1,50 +1,50 @@
-              Norm_by_flux Mask_wavelength Array_var Export_log  dtype
-wavelength           False           False      True      False    <f8
-intg_flux             True           False     False       True    <f8
-intg_err              True           False     False       True    <f8
-gauss_flux            True           False      True       True    <f8
-gauss_err             True           False      True       True    <f8
-eqw                  False           False      True       True    <f8
-eqw_err              False           False      True       True    <f8
-ion                  False           False      True      False   <U50
-latex_label          False           False      True      False  <U100
-profile_label        False           False     False       True  <U120
-w1                   False            True     False      False    <f8
-w2                   False            True     False      False    <f8
-w3                   False            True     False      False    <f8
-w4                   False            True     False      False    <f8
-w5                   False            True     False      False    <f8
-w6                   False            True     False      False    <f8
-peak_wave            False           False     False       True    <f8
-peak_flux             True           False     False       True    <f8
-cont                  True           False     False       True    <f8
-std_cont              True           False     False       True    <f8
-m_cont                True           False     False       True    <f8
-n_cont                True           False     False       True    <f8
-snr_line             False           False     False       True    <f8
-snr_cont             False           False     False       True    <f8
-z_line               False           False      True       True    <f8
-amp                   True           False      True       True    <f8
-center               False           False      True       True    <f8
-sigma                False           False      True       True    <f8
-amp_err               True           False      True       True    <f8
-center_err           False           False      True       True    <f8
-sigma_err            False           False      True       True    <f8
-v_r                  False           False      True       True    <f8
-v_r_err              False           False      True       True    <f8
-sigma_vel            False           False      True       True    <f8
-sigma_vel_err        False           False      True       True    <f8
-FWHM_int             False           False     False       True    <f8
-FWHM_g               False           False      True       True    <f8
-v_med                False           False     False       True    <f8
-v_50                 False           False     False       True    <f8
-v_5                  False           False     False       True    <f8
-v_10                 False           False     False       True    <f8
-v_90                 False           False     False       True    <f8
-v_95                 False           False     False       True    <f8
-chisqr               False           False     False       True    <f8
-redchi               False           False     False       True    <f8
-aic                  False           False     False       True    <f8
-bic                  False           False     False       True    <f8
-observations         False           False     False       True   <U50
-comments             False           False     False       True   <U50
+               Norm_by_flux  Mask_wavelength  Array_var  Export_log  dtype          latex_label
+wavelength                0                0          1           0    <f8        $\lambda_{i}$
+intg_flux                 1                0          0           1    <f8           $F_{intg}$
+intg_err                  1                0          0           1    <f8     $F_{err,\,intg}$
+gauss_flux                1                0          1           1    <f8          $F_{gauss}$
+gauss_err                 1                0          1           1    <f8     $F_{err,\,intg}$
+eqw                       0                0          1           1    <f8                $Eqw$
+eqw_err                   0                0          1           1    <f8          $Eqw_{err}$
+ion                       0                0          1           0   <U50                  Ion
+latex_label               0                0          1           0  <U100           Transition
+profile_label             0                0          0           1  <U120           Components
+w1                        0                1          0           0    <f8              $w_{1}$
+w2                        0                1          0           0    <f8              $w_{2}$
+w3                        0                1          0           0    <f8              $w_{3}$
+w4                        0                1          0           0    <f8              $w_{4}$
+w5                        0                1          0           0    <f8              $w_{5}$
+w6                        0                1          0           0    <f8              $w_{6}$
+peak_wave                 0                0          0           1    <f8     $\lambda_{peak}$
+peak_flux                 1                0          0           1    <f8           $F_{peak}$
+cont                      1                0          0           1    <f8           $F_{cont}$
+std_cont                  1                0          0           1    <f8     '$\sigma_{cont}$'
+m_cont                    1                0          0           1    <f8           $m_{cont}$
+n_cont                    1                0          0           1    <f8           $n_{cont}$
+snr_line                  0                0          0           1    <f8 $\frac{S}{N}_{line}$
+snr_cont                  0                0          0           1    <f8 $\frac{S}{N}_{cont}$
+z_line                    0                0          1           1    <f8           $z_{line}$
+amp                       1                0          1           1    <f8              $A_{i}$
+center                    0                0          1           1    <f8            $\mu_{i}$
+sigma                     0                0          1           1    <f8         $\sigma_{i}$
+amp_err                   1                0          1           1    <f8        $A_{i,\,err}$
+center_err                0                0          1           1    <f8      $\mu_{i,\,err}$
+sigma_err                 0                0          1           1    <f8   $\sigma_{i,\,err}$
+v_r                       0                0          1           1    <f8              $v_{r}$
+v_r_err                   0                0          1           1    <f8        $v_{r,\,err}$
+sigma_vel                 0                0          1           1    <f8       $\sigma_{vel}$
+sigma_vel_err             0                0          1           1    <f8 $\sigma_{vel,\,err}$
+FWHM_int                  0                0          0           1    <f8        $FWHM_{intg}$
+FWHM_g                    0                0          1           1    <f8       $FWHM_{gauss}$
+v_med                     0                0          0           1    <f8            $v_{med}$
+v_50                      0                0          0           1    <f8             $v_{50}$
+v_5                       0                0          0           1    <f8              $v_{5}$
+v_10                      0                0          0           1    <f8             $v_{10}$
+v_90                      0                0          0           1    <f8             $v_{90}$
+v_95                      0                0          0           1    <f8             $v_{95}$
+chisqr                    0                0          0           1    <f8           $\chi^{2}$
+redchi                    0                0          0           1    <f8     $\chi_{\nu}^{2}$
+aic                       0                0          0           1    <f8                  AIC
+bic                       0                0          0           1    <f8                  BIC
+observations              0                0          0           1   <U50         Observations
+comments                  0                0          0           1   <U50             Comments

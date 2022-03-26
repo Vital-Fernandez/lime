@@ -83,7 +83,7 @@ window to display the spectrum of the right-clicked spaxel. Before running this 
     # Open the cube fits file
     with fits.open(SHOC579_cube_address) as hdul:
         wave = hdul['WAVE'].data
-        flux = hdul['FLUX'].data
+        flux_cube = hdul['FLUX'].data * 1e-17
         hdr = hdul['FLUX'].header
 
 Now, we need to define a 2D image of our galaxy for the plot. Since this object luminosity comes from the ionized gas,
@@ -92,13 +92,13 @@ account the galaxy redshift:
 
 .. code-block:: python
 
-    # Load the configuration file and the line masks:
+    # Load the configuration file:
     cfgFile = './sample_data/config_file.cfg'
     obs_cfg = lime.load_cfg(cfgFile)
     z_SHOC579 = obs_cfg['SHOC579_data']['redshift']
 
-    # and the masks file
-    mask_file = './sample_data/osiris_mask.txt'
+    # and the masks file:
+    mask_file = './sample_data/SHOC579_region0_maskLog.txt'
     mask_log = lime.load_lines_log(mask_file)
 
 Now, we are going to generate a :math:`H\alpha` image summing all the pixels in the ``H1_6563A_b`` band (actually, this
@@ -108,9 +108,9 @@ on the data cube:
 .. code-block:: python
 
     # Establish the band image for the plot bacground using Halpha
-    Halpha_band = mask_log.loc['H1_6563A_b', 'w3':'w4'].values * (1 + z_SHOC579)
-    idcs_Halpha = np.searchsorted(wave, Halpha_band)
-    Halpha_image = flux[idcs_Halpha[0]:idcs_Halpha[1], :, :].sum(axis=0)
+    w3_Halpha, w4_Halpha = mask_log.loc['H1_6563A_b', 'w3':'w4'].values * (1 + z_SHOC579)
+    idcs_Halpha = np.searchsorted(wave, (w3_Halpha, w4_Halpha))
+    Halpha_image = flux_cube[idcs_Halpha[0]:idcs_Halpha[1], :, :].sum(axis=0)
 
 Finally, we have the option to include some contours in the plot. These can be from the background image or we can use
 other flux image. For example, let's use the percentile intensity of the :math:`[SII]6716,6731\AA` band for these foreground
@@ -119,9 +119,10 @@ contours
 .. code-block:: python
 
     # Use SII lines as the foreground image contours
-    SII_band = mask_log.loc['S2_6716A_b', 'w3':'w4'].values * (1 + z_SHOC579)
-    idcs_SII = np.searchsorted(wave, SII_band)
-    SII_image = flux[idcs_SII[0]:idcs_SII[1], :, :].sum(axis=0)
+    w3_SII = mask_log.loc['S2_6716A', 'w3'] * (1 + z_SHOC579)
+    w4_SII = mask_log.loc['S2_6731A', 'w4'] * (1 + z_SHOC579)
+    idcs_SII = np.searchsorted(wave, (w3_SII, w4_SII))
+    SII_image = flux_cube[idcs_SII[0]:idcs_SII[1], :, :].sum(axis=0)
 
     # Establishing the contours intensity using percentiles
     percentile_array = np.array([80, 90, 95, 99, 99.9])
@@ -139,8 +140,8 @@ Now we can run the ``CubeFitsInspector`` class:
     log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
     # Interactive plotter for IFU data cubes
-    lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels,
-                           fits_header=hdr, axes_conf=ax_conf, color_norm=log_norm_bg)
+    lime.CubeFitsInspector(wave, flux_cube, Halpha_image, SII_image, SII_contourLevels,
+                           fits_header=hdr, ax_conf=ax_conf, color_norm=log_norm_bg)
 
 .. image:: ../_static/5_SHOC579_CubeFitsInspector.png
     :align: center
@@ -160,9 +161,6 @@ we are going to use the intensity percentiles of the ``'S2_6716A_b'`` band to de
 
 .. code-block:: python
 
-    # Output masks file address
-    mask_file = './sample_data/SHOC579_mask.fits'
-
     # Create a dictionary with the coordinate entries for the header
     hdr_coords = {}
     for key in lime.COORD_ENTRIES:
@@ -170,7 +168,9 @@ we are going to use the intensity percentiles of the ``'S2_6716A_b'`` band to de
             hdr_coords[key] = hdr[key]
 
     # Run the task
-    lime.spatial_mask_generator(SII_image, 'percentile', percentile_array, mask_ref='S2_6716A_b', output_address=mask_file,
+    output_mask_file = './sample_data/SHOC579_mask.fits'
+    lime.spatial_mask_generator('flux', wave, flux_cube, percentile_array, signal_band=(w3_SII, w4_SII),
+                                mask_ref='S2_6716A_b', output_address=output_mask_file,
                                 fits_header=hdr_coords, show_plot=True)
 
 In the script above, the ``lime.COORD_ENTRIES`` contains the list of *.fits* keys which contain the World Coordinate System
@@ -196,13 +196,16 @@ and for this analysis we are going to limit the analysis to the spaxels in the m
     # New HDUs for the modified mask
     hdul_new = fits.HDUList([fits.PrimaryHDU()])
 
-    # Open the mask file, loop through the target masks and set voxels below row 22 outside the mask (False)
-    with fits.open(mask_file) as hdul:
+    # Open the original mask file, loop through the target masks and set voxels below row 22 outside the mask (False)
+    with fits.open(output_mask_file) as hdul:
         for i, mask_ext in enumerate(mask_list):
             mask_frame = hdul[mask_ext].data.astype('bool')
             mask_frame[:coord_lower_limit, :] = False
             hdul_new.append(fits.ImageHDU(name=f'S2_6716A_B_MASK_{i}', data=mask_frame.astype(int),
                                       ver=1, header=fits.Header(hdr_coords)))
+
+    # Save the modified mask
+    hdul_new.writeto(output_mask_file, overwrite=True)
 
 .. note::
 
@@ -215,7 +218,7 @@ covering the scientific region, we are going to plot masks over the galaxy :math
 .. code-block:: python
 
     # Load one of the masks headers to get the WCS for the plot
-    masks_hdr = fits.getheader(mask_file, extname='S2_6716A_B_MASK_0')
+    masks_hdr = fits.getheader(output_mask_file, extname='S2_6716A_B_MASK_0')
 
     # Plot the Halpha image of the cube with the new masks
     fig = plt.figure(figsize=(14, 10))
@@ -228,7 +231,7 @@ covering the scientific region, we are going to plot masks over the galaxy :math
     legend_list = [None] * len(mask_list)
 
     # Open the mask .fits file and plot the masks as numpy masked array
-    with fits.open(mask_file) as hdul:
+    with fits.open(output_mask_file) as hdul:
         for i, HDU in enumerate(hdul):
             if i > 0:
                 mask_name, mask_frame = HDU.name, HDU.data

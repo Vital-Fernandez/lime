@@ -137,3 +137,54 @@ Now we include this information in the fitting:
 This time the fitted profile better represents the observation.
 
 
+.. code-block:: python
+
+    import numpy as np
+    import lime
+
+    # Load the spectrum data
+    wave, flux = np.loadtxt('GP121903', unpack=True)
+    z_gp = 0.19531
+    normFlux_gp = 1e-14
+
+    # Declare lime Spectrum object
+    gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, norm_flux=normFlux_gp)
+    gp_spec.plot_spectrum(frame='rest', spec_label='GP121903')
+
+
+.. code-block:: python
+
+    # Perform the fitting
+    line = 'H1_6563A'
+    mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
+    gp_spec.fit_from_wavelengths(line, mask)
+    gp_spec.display_results()
+
+
+.. code-block:: python
+
+    # Perform the fitting
+    line = 'H1_6563A_b'
+
+    mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
+
+    fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
+                'N2_6548A_amp': {'expr': 'N2_6584A_amp / 2.94'},
+                'N2_6548A_kinem': 'N2_6584A'}
+
+    gp_spec.fit_from_wavelengths(line, mask, fit_conf)
+    gp_spec.display_results()
+
+.. code-block:: python
+
+    # Measurements be saved according to the output file extension
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP121903')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
+
+.. code-block:: python
+
+    # Load measurements
+    log = lime.load_lines_log('./sample_data/example1_linelog.fits', ext='GP121903')
+

@@ -18,17 +18,19 @@ and the fitting configuration. Let's start by specifying the data location:
     from astropy.io import fits
     import lime
 
+
     def import_osiris_fits(file_address, ext=0):
 
         # Open fits file
         with fits.open(file_address) as hdul:
-            data, header = hdul[ext].data, hdul[ext].header
+            data, hdr = hdul[ext].data, hdul[ext].header
 
-        w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'] , header['NAXIS1']
+        w_min, dw, n_pix = hdr['CRVAL1'],  hdr['CD1_1'], hdr['NAXIS1']
         w_max = w_min + dw * n_pix
         wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
-        return wavelength, data, header
+        return wavelength, data, hdr
+
 
     # State the data files
     obsFitsFile = './sample_data/gp121903_BR.fits'
@@ -48,7 +50,7 @@ To read this file you can use the ``.load_lines_log`` function:
 .. code-block:: python
 
     # Load mask
-    maskDF = lime.load_lines_log(lineMaskFile)
+    mask = lime.load_lines_log(lineMaskFile)
 
 This mask is loaded as a `pandas dataframe <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html>`_:
 
@@ -127,8 +129,8 @@ This conversion is done by the ``.load_cfg`` function:
 
 .. code-block:: python
 
-    # Load mask
-    obs_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
+    # Load configuration
+    obs_cfg = lime.load_cfg(cfgFile)
 
 
 The ``obs_cfg`` variable is a dictionary of dictionaries, where each section and option names are keys of the parent and
@@ -146,8 +148,6 @@ Using the data on this file, we are going to define the ``lime.Spectrum`` object
 
 .. code-block:: python
 
-    print(obs_cfg['sample_data']['z_array'])
-
     # Declare line measuring object
     z_obj = obs_cfg['sample_data']['z_array'][2]
     norm_flux = obs_cfg['sample_data']['norm_flux']
@@ -161,7 +161,8 @@ that is using the ``.match_line_mask`` function:
 
 .. code-block:: python
 
-    peaks_table, matched_masks_DF = gp_spec.match_line_mask(maskDF, obs_cfg['sample_data']['noiseRegion_array'])
+    peaks_table, matched_masks_DF = gp_spec.match_line_mask(mask, obs_cfg['sample_data']['noiseRegion_array'])
+
 
 This function uses the ``.find_lines_derivative`` from the `specutils library <https://specutils.readthedocs.io/en/stable/fitting.html>`_
 to find the peaks of flux on the spectrum. Afterwards, these peaks location are matched against the line mask location
@@ -170,8 +171,8 @@ to find the peaks of flux on the spectrum. Afterwards, these peaks location are 
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum(obsLinesTable=peaks_table, matchedLinesDF=matched_masks_DF, specLabel=f'GP121903 spectrum',
-                          frame=plots_frame)
+    gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum')
+
 
 
 .. image:: ../_static/3_MatchSpec.png
@@ -195,8 +196,8 @@ To save the new mask you can use the ``.save_line_log`` function:
 
 .. code-block:: python
 
-    lime.save_line_log(matched_masks_DF, 'gp121903_BR_mask_corrected', 'txt')
-
+    corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'
+    lime.save_line_log(matched_masks_DF, corrected_mask_file)
 
 Using the GP121903 specific line mask we can start fitting the lines:
 
@@ -242,7 +243,7 @@ function
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum(frame=plots_frame, profile_fittings=True)
+    gp_spec.plot_spectrum(include_fits=True)
 
 .. image:: ../_static/3_profileOverplot.png
 .. image:: ../_static/3_DetailprofileOverplot.png
@@ -259,10 +260,11 @@ As a final step, we can use the ``.save_line_log`` function to save your measure
 
 .. code-block:: python
 
+    # Save the results
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf')
-    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits')
-    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xls')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits', ext='GP121903')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='GP121903')
 
 .. note::
    The file extension determines the output file type. In the case of ``.fits`` and ``.xlsx`` files if you do not

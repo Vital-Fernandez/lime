@@ -23,9 +23,8 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
 
-from matplotlib import pyplot as plt, colors, cm, patches
-from .plots import table_fluxes
-
+from matplotlib import pyplot as plt, colors, cm, patches, rc_context
+from .plots import table_fluxes, colorDict, latex_science_float, STANDARD_PLOT, STANDARD_AXES
 
 try:
     import openpyxl
@@ -42,7 +41,8 @@ _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
                         _PARAMS_CONF_TABLE.loc[:, 'Norm_by_flux':'dtype'].values))
 
 # Array with the parameters to be included in the output log
-_LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log].index.values
+print()
+_LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.values.astype(bool)].index.values
 
 # Dictionary with the parameter dtypes
 _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -55,38 +55,7 @@ _LOG_DTYPES_REC = np.dtype(list(_LOG_TYPES_DICT.items()))
 COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
                  'CTYPE1', 'CTYPE2']
 
-# Plots style and themes
-STANDARD_PLOT = {'figure.figsize': (14, 7),
-                 'axes.titlesize': 14,
-                 'axes.labelsize': 14,
-                 'legend.fontsize': 12,
-                 'xtick.labelsize': 12,
-                 'ytick.labelsize': 12}
-
-background_color = np.array((43, 43, 43))/255.0
-foreground_color = np.array((179, 199, 216))/255.0
-red_color = np.array((43, 43, 43))/255.0
-yellow_color = np.array((191, 144, 0))/255.0
-
-DARK_PLOT = {'figure.figsize': (14, 7),
-             'axes.titlesize': 14,
-             'axes.labelsize': 14,
-             'legend.fontsize': 12,
-             'xtick.labelsize': 12,
-             'ytick.labelsize': 12,
-             'text.color': foreground_color,
-             'figure.facecolor': background_color,
-             'axes.facecolor': background_color,
-             'axes.edgecolor': foreground_color,
-             'axes.labelcolor': foreground_color,
-             'xtick.color': foreground_color,
-             'ytick.color': foreground_color,
-             'legend.edgecolor': 'inherit',
-             'legend.facecolor': 'inherit'}
-
-STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
-
-STRINGCONFKEYS = ['sampler', 'reddenig_curve', 'norm_line_label', 'norm_line_pynebCode']
+# STRINGCONFKEYS = ['sampler', 'reddenig_curve', 'norm_line_label', 'norm_line_pynebCode']
 GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
 
 FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
@@ -647,8 +616,9 @@ def load_fits(file_address, instrument, frame_idx=None):
         return data, header
 
 
-def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", output_address=None,
-                           min_level=None, show_plot=False, fits_header=None):
+def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_levels, signal_band, cont_band=None,
+                           mask_ref="", output_address=None, min_level=None, show_plot=False, fits_header=None,
+                           plt_cfg={}, ax_cfg={'xlabel': 'RA', 'ylabel': 'DEC'}):
 
     """
     This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
@@ -659,7 +629,8 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
     :param image_flux: Matrix with the image flux to be spatially masked.
     :type image_flux: np.array()
 
-    :param mask_param: Flux intensity model from which the masks are calculated. The options available are ['percentil'].
+    :param mask_param: Flux intensity model from which the masks are calculated. The options available are 'flux',
+           'SN_line' and 'SN_cont'.
     :type mask_param: str, optional
 
     :param contour_levels: Vector in decreasing order with the parameter values for the mask_param chosen.
@@ -686,17 +657,46 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
     :return:
     """
 
+    # Compute the image flux from the band signal_band, cont_band
+    idcs_signal = np.searchsorted(wavelength_array, signal_band)
+
     # Check the contour vector is in decreasing order
     assert np.all(np.diff(contour_levels) > 0), '- ERROR contour_levels are not in increasing order for spatial mask'
     contour_levels_r = np.flip(contour_levels)
 
     # Check the logic for the mask calculation
-    assert mask_param in ['percentile', 'SNR'], f'- ERROR {mask_param} is not recognise for the spatial mask calculation'
+    assert mask_param in ['flux', 'SN_line', 'SN_cont'], f'\n- ERROR {mask_param} is not recognise for the spatial mask calculation'
 
-    # Compute the mask diagnostic parameter form the provided flux
-    if mask_param == 'percentile':
-        param_image = image_flux
-        param_array = np.nanpercentile(image_flux, contour_levels_r)
+    # Compute the band slice
+    signal_slice = flux_cube[idcs_signal[0]:idcs_signal[1], :, :]
+
+    # Compute the continuum band
+    if cont_band is not None:
+        idcs_cont = np.searchsorted(wavelength_array, cont_band)
+        cont_slice = flux_cube[idcs_cont[0]:idcs_cont[1], :, :]
+
+    # Compute the mask diagnostic
+    if mask_param == 'flux':
+        default_title = 'Spaxel flux percentile masks'
+        param_image = signal_slice.sum(axis=0)
+
+    # S/N cont
+    elif mask_param == 'SN_cont':
+        default_title = 'Spaxel continuum S/N percentile masks'
+        param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
+
+    # S/N line
+    else:
+        default_title = 'Spaxel emission line S/N percentile masks'
+        N_elem = idcs_cont[1] - idcs_cont[0]
+
+        Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
+        std_image = np.nanstd(cont_slice, axis=0)
+
+        param_image = (np.sqrt(2*N_elem*np.pi)/6) * (Amp_image/std_image)
+
+    # Percentiles vector for the target parameter
+    param_array = np.nanpercentile(param_image, contour_levels_r)
 
     # If minimum level not provided by user use lowest contour_level
     min_level = param_array[-1] if min_level is None else min_level
@@ -726,54 +726,67 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
             boundary_dict[f'mask_{i}'] = contour_levels_r[i]
             param_level[f'mask_{i}'] = param_array[i]
 
-    # Plot the combined masks
-    if output_address is not None:
-        fits_folder = Path(output_address).parent
-    else:
-        fits_folder = None
+    # Output folder computed from the output address
+    fits_folder = Path(output_address).parent if output_address is not None else None
 
+    # Plot the combined masks
     if (fits_folder is not None) or show_plot:
 
-        if fits_header is None:
-            fig, ax = plt.subplots(figsize=(12, 12))
-        else:
-            fig = plt.figure(figsize=(10, 10))
-            ax = fig.add_subplot(projection=WCS(fits_header), slices=('x', 'y'))
+        # Adjust default theme
+        PLT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+        AXES_CONF['title'] = default_title
 
-        cmap = cm.get_cmap('viridis_r', len(mask_dict))
-        legend_list = [None] * len(mask_dict)
-        # alpha_levels = np.linspace(0.1, 0.5, len(mask_dict))[::-1]
+        # User configuration overrites user
+        PLT_CONF = {**PLT_CONF, **plt_cfg}
+        AXES_CONF = {**AXES_CONF, **ax_cfg}
 
-        for idx_region, region_items in enumerate(mask_dict.items()):
+        with rc_context(PLT_CONF):
 
-            region_label, region_mask = region_items
-
-            # Inverse the mask array for the plot
-            inv_mask_array = np.ma.masked_array(region_mask.data, ~region_mask)
-
-            # Prepare the labels for each mask to add to imshow
-            legend_text = f'mask_{idx_region}: {mask_param} = {boundary_dict[region_label]}'
-            legend_list[idx_region] = patches.Patch(color=cmap(idx_region),label=legend_text)
-
-            cm_i = colors.ListedColormap(['black', cmap(idx_region)])
-            ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
-
-        ax.legend(handles=legend_list, loc=2.)
-
-        if fits_folder is not None:
-
-            if mask_ref is None:
-                output_image = fits_folder/f'mask_contours.png'
+            if fits_header is None:
+                fig, ax = plt.subplots(figsize=(12, 12))
             else:
-                output_image = fits_folder/f'{mask_ref}_mask_contours.png'
+                fig = plt.figure(figsize=(10, 10))
+                ax = fig.add_subplot(projection=WCS(fits_header), slices=('x', 'y'))
 
-            plt.savefig(output_image)
+            cmap = cm.get_cmap(colorDict['mask_map'], len(mask_dict))
+            legend_list = [None] * len(mask_dict)
 
-        if show_plot:
-            plt.show()
+            for idx_region, region_items in enumerate(mask_dict.items()):
 
-        plt.close(fig)
+                region_label, region_mask = region_items
 
+                # Inverse the mask array for the plot
+                inv_mask_array = np.ma.masked_array(region_mask.data, ~region_mask)
+
+                # Prepare the labels for each mask to add to imshow
+                ext_name = f'{mask_ref}_{region_label}'
+                percentile_ref = f'{mask_param}' + r'$_{{{}th}}$'.format(boundary_dict[region_label])
+                param_percentile = f'${latex_science_float(param_array[idx_region], dec=3)}$'
+                mask_voxels = np.sum(region_mask)
+
+                legend_text = f'{ext_name}: {percentile_ref} = {param_percentile} ({mask_voxels} voxels)'
+                legend_list[idx_region] = patches.Patch(color=cmap(idx_region), label=legend_text)
+
+                cm_i = colors.ListedColormap(['black', cmap(idx_region)])
+                ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
+
+            ax.legend(handles=legend_list, loc=2)
+            ax.set(**AXES_CONF)
+
+            if fits_folder is not None:
+
+                if mask_ref is None:
+                    output_image = fits_folder/f'mask_contours.png'
+                else:
+                    output_image = fits_folder/f'{mask_ref}_mask_contours.png'
+
+                plt.savefig(output_image)
+
+            if show_plot:
+                plt.show()
+
+            plt.close(fig)
 
     # Save to a fits file:
     if output_address is not None:
@@ -786,7 +799,8 @@ def spatial_mask_generator(image_flux, mask_param, contour_levels, mask_ref="", 
             # Metadata for the fits page
             header_dict = {'PARAM': mask_param,
                            'PARAMIDX': boundary_dict[region_label],
-                           'PARAMVAL': param_level[region_label]}
+                           'PARAMVAL': param_level[region_label],
+                           'NUMSPAXE': np.sum(region_mask)}
             fits_hdr = fits.Header(header_dict)
 
             if fits_header is not None:

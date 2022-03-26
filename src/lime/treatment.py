@@ -9,14 +9,19 @@ from astropy.wcs import WCS
 
 from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder
-from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES
+from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
-from .model import gaussian_model
+from .model import gaussian_profiles_computation, linear_continuum_computation
 
-from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec
+from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
+from matplotlib.widgets import RadioButtons
 
-# import mplcursors
+try:
+    import mplcursors
+    mplcursors_check = True
+except ImportError:
+    mplcursors_check = False
 
 
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
@@ -197,7 +202,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def display_results(self, line=None, fit_report=False, plot=True, log_scale=True, frame='obs',
+    def display_results(self, line=None, fit_report=False, plot=True, log_scale=True, frame='observed',
                         output_address=None):
 
         """
@@ -296,16 +301,16 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         if plot:
 
             if output_address is None:
-                self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame)
+                self.plot_fit_components(log_scale=log_scale, frame=frame)
             else:
-                self.plot_fit_components(self.fit_output, log_scale=log_scale, frame=frame, output_address=output_address)
+                self.plot_fit_components(log_scale=log_scale, frame=frame, output_address=output_address)
 
         return
 
     def import_line_kinematics(self, user_conf, z_cor):
 
         # Check if imported kinematics come from blended component
-        if self.profile_label != 'None':
+        if self.profile_label != 'no':
             childs_list = self.profile_label.split('-')
         else:
             childs_list = np.array(self.line, ndmin=1)
@@ -499,30 +504,33 @@ class MaskInspector(Spectrum):
             n_cols = n_lines
             n_rows = 1
 
-        defaultConf = STANDARD_PLOT.copy()
-        plotConf = {'figure.figsize': (n_rows * 2, 8)}
-        defaultConf.update(plotConf)
-        rcParams.update(defaultConf)
+        # Adjust the plot theme
+        PLOT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+        PLOT_CONF['figure.figsize'] = (n_rows * 2, 8)
+        AXES_CONF.pop('xlabel')
 
-        self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-        self.ax = ax.flatten()
-        self.in_ax = None
-        self.dict_spanSelec = {}
-        self.axConf = {}
+        with rc_context(PLOT_CONF):
 
-        # Plot function
-        self.plot_line_mask_selection(logscale='auto', grid_size=n_rows * n_cols)
-        plt.gca().axes.yaxis.set_ticklabels([])
+            self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
+            self.ax = ax.flatten()
+            self.in_ax = None
+            self.dict_spanSelec = {}
+            self.axConf = {}
 
-        try:
-            manager = plt.get_current_fig_manager()
-            manager.window.showMaximized()
-        except:
-            print('-- Window could not be maximized')
+            # Plot function
+            self.plot_line_mask_selection(logscale='auto', grid_size=n_rows * n_cols)
+            plt.gca().axes.yaxis.set_ticklabels([])
 
-        plt.tight_layout()
-        plt.show()
-        plt.close(self.fig)
+            try:
+                manager = plt.get_current_fig_manager()
+                manager.window.showMaximized()
+            except:
+                print('-- Window could not be maximized')
+
+            plt.tight_layout()
+            plt.show()
+            plt.close(self.fig)
 
         return
 
@@ -583,14 +591,14 @@ class MaskInspector(Spectrum):
             # Fill the user selections
             if non_nan == 2:
                 idx1, idx2 = np.searchsorted(self.wave_rest, self.mask[0:2])
-                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
+                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
                                 step='mid', alpha=0.5)
 
             if non_nan == 4:
                 idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.mask[0:4])
-                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor='tab:green',
+                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
                                 step='mid', alpha=0.5)
-                ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor='tab:green',
+                ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor=self._color_dict['cont_band'],
                                 step='mid', alpha=0.5)
 
         # Complete selections
@@ -610,14 +618,14 @@ class MaskInspector(Spectrum):
             waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
 
             # Plot the line
-            ax.step(waveLine, fluxLine)
+            ax.step(waveLine, fluxLine, color=self._color_dict['fg'], where='mid')
 
             # Fill the user selections
-            ax.fill_between(waveCentral, 0, fluxCentral, step="pre", alpha=0.4)
-            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor='tab:orange',
-                            step="pre", alpha=0.2)
-            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor='tab:orange',
-                            step="pre", alpha=0.2)
+            ax.fill_between(waveCentral, 0, fluxCentral, step="mid", alpha=0.4, facecolor=self._color_dict['line_band'])
+            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor=self._color_dict['cont_band'],
+                            step="mid", alpha=0.2)
+            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor=self._color_dict['cont_band'],
+                            step="mid", alpha=0.2)
 
         # Plot format
         ax.yaxis.set_major_locator(plt.NullLocator())
@@ -690,6 +698,7 @@ class MaskInspector(Spectrum):
 
                     # Clear the selections
                     # self.mask = np.array([np.nan] * 6)
+
                     print(f'\n-- The line {self.line} mask has been removed')
 
                 else:
@@ -701,6 +710,7 @@ class MaskInspector(Spectrum):
 
             # Proceed to re-measurement if possible:
             if non_nans == 6:
+
                 # TODO add option to perform the measurement a new
                 # self.clear_fit()
                 # self.fit_from_wavelengths(self.line, self.mask, user_cfg={})
@@ -771,9 +781,9 @@ class MaskInspector(Spectrum):
 
 class CubeFitsInspector(Spectrum):
 
-    def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None,
-                 color_norm=None, redshift=0, lines_log_address=None, fits_header=None, fig_conf=None, axes_conf={},
-                 ext_suffix='_LINESLOG', ):
+    def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None, color_norm=None,
+                 redshift=0, lines_log_address=None, fits_header=None, plt_cfg={}, ax_conf={},
+                 ext_suffix='_LINESLOG', mask_file=None):
 
         """
         This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
@@ -819,11 +829,11 @@ class CubeFitsInspector(Spectrum):
         :param fits_header: *.fits* header with the entries for the astronomical coordinates plot conversion.
         :type fits_header: dict, optional
 
-        :param fig_conf: Dictionary with the configuration for the matplotlib rcParams style.
-        :type fig_conf: dict, optional
+        :param plt_cfg: Dictionary with the configuration for the matplotlib rcParams style.
+        :type plt_cfg: dict, optional
 
-        :param axes_conf: Dictionary with the configuration for the matplotlib axes style.
-        :type axes_conf: dict, optional
+        :param ax_conf: Dictionary with the configuration for the matplotlib axes style.
+        :type ax_conf: dict, optional
 
         :param ext_suffix: Suffix of the line logs extensions. The default value is “_LINESLOG”.
         :type ext_suffix: str, optional
@@ -833,8 +843,7 @@ class CubeFitsInspector(Spectrum):
         # Assign attributes to the parent class
         super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1)
 
-        self.fig = None
-        self.ax0, self.ax1, self.in_ax = None, None, None
+        # Data attributes
         self.grid_mesh = None
         self.cube_flux = cube_flux
         self.wave = wave
@@ -842,83 +851,137 @@ class CubeFitsInspector(Spectrum):
         self.image_bg = image_bg
         self.image_fg = image_fg
         self.contour_levels_fg = contour_levels
-        self.fig_conf = STANDARD_PLOT.copy()
+        self.hdul_linelog = None
+        self.ext_log = ext_suffix
+
+        # Mask correction attributes
+        self.mask_file = None
+        self.mask_ext = None
+        self.mask_dict = {}
+        self.mask_color = None
+        self.mask_array = None
+
+        # Plot attributes
+        self.fig = None
+        self.ax0, self.ax1, self.in_ax = None, None, None
+        self.fig_conf = None
         self.axes_conf = {}
         self.axlim_dict = {}
         self.color_norm = color_norm
-        self.hdul_linelog = None
-        self.ext_log = ext_suffix
+        self.mask_color_i = None
+        self.key_coords = None
+        self.marker = None
 
         # Scenario we use the background image also for the contours
         if (image_fg is None) and (contour_levels is not None):
             self.image_fg = image_bg
 
-        # Read the figure configuration
-        self.fig_conf = STANDARD_PLOT if fig_conf is None else fig_conf
-        rcParams.update(self.fig_conf)
+        # State the figure and axis format
+        self.fig_conf = STANDARD_PLOT.copy()
+        self.axes_conf = {'image': {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'},
+                          'spectrum': STANDARD_AXES}
 
-        # Read the axes format
-        if 'image' in axes_conf:
-            default_conf = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
-            default_conf.update(axes_conf['image'])
-            self.axes_conf['image'] = default_conf
-        else:
-            self.axes_conf['image'] = {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'}
+        # Adjust the default theme
+        self.fig_conf['figure.figsize'] = (18, 6)
+        # self.fig_conf['ytick.labelsize'] = 10
+        # self.fig_conf['xtick.labelsize'] = 10
 
-        if 'spectrum' in axes_conf:
-            self.axes_conf['spectrum'] = STANDARD_AXES.update(axes_conf['spectrum'])
-        else:
-            self.axes_conf['spectrum'] = STANDARD_AXES
+        # Update to the user configuration
+        self.fig_conf = {**self.fig_conf, **plt_cfg}
 
-        # Figure structure
-        self.fig = plt.figure(figsize=(18, 5))
-        gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
-        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-        self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+        for plot_type in ('image', 'spectrum'):
+            if plot_type in ax_conf:
+                self.axes_conf[plot_type] = {**self.axes_conf[plot_type], **ax_conf[plot_type]}
 
-        # Axes configuration
-        if self.header is None:
-            self.ax0 = self.fig.add_subplot(gs[0])
-        else:
-            sky_wcs = WCS(self.header)
-            self.ax0 = self.fig.add_subplot(gs[0], projection=sky_wcs, slices=('x', 'y', 1))
-        self.ax1 = self.fig.add_subplot(gs[1])
+        # Prepare the mask correction attributes
+        if mask_file is not None:
 
-        # Image mesh grid
-        frame_size = self.cube_flux.shape
-        y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
-        self.grid_mesh = np.meshgrid(x, y)
+            assert Path(mask_file).is_file(), f'- ERROR: mask file at {mask_file} not found'
 
-        # Use central voxels as initial coordinate
-        init_coord = int(self.cube_flux.shape[1] / 2), int(self.cube_flux.shape[2] / 2)
+            self.mask_file = mask_file
+            with fits.open(self.mask_file) as maskHDUs:
 
-        # Load the complete fits lines log if input
-        if lines_log_address is not None:
-            self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+                # Save the fits data to restore later
+                for HDU in maskHDUs:
+                    if HDU.name != 'PRIMARY':
+                        self.mask_dict[HDU.name] = (HDU.data.astype('bool'), HDU.header)
+                self.mask_array = np.array(list(self.mask_dict.keys()))
 
-        # Generate the plot
-        self.plot_map_voxel(self.image_bg, init_coord, self.image_fg, self.contour_levels_fg)
-        plt.show()
+                # Get the target mask
+                self.mask_ext = self.mask_array[0]
 
-        # Close the lines log if it has been opened
-        if isinstance(self.hdul_linelog, fits.hdu.HDUList):
-            self.hdul_linelog.close()
+        # Generate the figure
+        with rc_context(self.fig_conf):
+
+            # Figure structure
+            self.fig = plt.figure()
+            gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self.fig, width_ratios=[1, 2], height_ratios=[1])
+
+            # Spectrum plot
+            self.ax1 = self.fig.add_subplot(gs[1])
+
+            # Create subgrid for buttons if mask file provided
+            if self.mask_ext is not None:
+                gs_image = gridspec.GridSpecFromSubplotSpec(nrows=2, ncols=1, subplot_spec=gs[0], height_ratios=[0.8, 0.2])
+            else:
+                gs_image = gs
+
+            # Image axes Astronomical coordinates if provided
+            if self.header is None:
+                self.ax0 = self.fig.add_subplot(gs_image[0])
+            else:
+                self.ax0 = self.fig.add_subplot(gs_image[0], projection=WCS(self.header), slices=('x', 'y', 1))
+
+            # Buttons axis if provided
+            if self.mask_ext is not None:
+                self.ax2 = self.fig.add_subplot(gs_image[1])
+                radio = RadioButtons(self.ax2, list(self.mask_array))
+
+            # Image mesh grid
+            frame_size = self.cube_flux.shape
+            y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
+            self.grid_mesh = np.meshgrid(x, y)
+
+            # Use central voxel as initial coordinate
+            self.key_coords = int(self.cube_flux.shape[1] / 2), int(self.cube_flux.shape[2] / 2)
+
+            # Load the complete fits lines log if input
+            if lines_log_address is not None:
+                self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+
+            # Generate the plot
+            self.plot_map_voxel(self.image_bg, self.key_coords, self.image_fg, self.contour_levels_fg)
+
+            # Connect the widgets
+            self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+            self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+            if self.mask_file is not None:
+                radio.on_clicked(self.mask_selection)
+
+            # Display the figures
+            plt.show()
+
+            # Close the lines log if it has been opened
+            if isinstance(self.hdul_linelog, fits.hdu.HDUList):
+                self.hdul_linelog.close()
 
         return
 
-    def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None, frame='obs'):
+    def plot_map_voxel(self, image_bg, voxel_coord=None, image_fg=None, flux_levels=None, frame='observed'):
 
-
-        # min_flux = np.nanpercentile(image_bg, self.min_bg_percentil)
-        # norm_color_bg = colors.SymLogNorm(linthresh=min_flux,
-        #                                   vmin=min_flux,
-        #                                   base=10)
-        self.ax0.imshow(image_bg, cmap=cm.gray, norm=self.color_norm)
+        # Background image
+        self.im = self.ax0.imshow(image_bg, cmap=cm.gray, norm=self.color_norm)
 
         # Emphasize input coordinate
         idx_j, idx_i = voxel_coord
         if voxel_coord is not None:
-            self.ax0.plot(idx_i, idx_j, '+', color='red')
+
+            # Delete previous if it is there
+            if self.marker is not None:
+                self.marker.remove()
+                self.marker = None
+
+            self.marker, = self.ax0.plot(idx_i, idx_j, '+', color='red')
 
         # Plot contours image
         if image_fg is not None:
@@ -928,182 +991,194 @@ class CubeFitsInspector(Spectrum):
         # Voxel spectrum
         if voxel_coord is not None:
             flux_voxel = self.cube_flux[:, idx_j, idx_i]
-            self.ax1.step(self.wave, flux_voxel, where='mid', label='')
+            self.ax1.step(self.wave, flux_voxel, label='', where='mid', color=self._color_dict['fg'])
 
         # Plot the emission line fittings:
         if self.hdul_linelog is not None:
+
             ext_name = f'{idx_j}-{idx_i}{self.ext_log}'
 
-            if ext_name in self.hdul_linelog:
+            # Better sorry than permission. Faster?
+            try:
                 lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
                 lineslogDF.set_index('index', inplace=True)
                 self.log = lineslogDF
-            else:
+
+            except KeyError:
                 self.log = None
 
             if self.log is not None:
 
-                if frame == 'rest':
-                    z_corr = (1 + self.redshift)
-                    flux_plot = self.flux * z_corr
-                    wave_plot = self.wave_rest
-                else:
-                    z_corr = 1
-                    flux_plot = self.flux
-                    wave_plot = self.wave
+                # Plot all lines encountered in the voxel log
+                line_list = self.log.index.values
 
-                ion_array, wave_array, latex_array = label_decomposition(self.log.index.values)
+                # Reference frame for the plot
+                wave_plot, flux_plot, z_corr, mask_corr = self.plot_frame_switch(self.wave, flux_voxel, self.redshift, frame)
 
-                for i_line, lineLabel in enumerate(self.log.index):
+                # Compute the individual profiles
+                wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, z_corr, mask_corr)
+                wave_array, cont_array = linear_continuum_computation(line_list, self.log, z_corr, mask_corr)
 
-                    w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
-                    m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
-                    amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
-                                         self.log.loc[lineLabel, 'sigma']
-                    observations = self.log.loc[lineLabel, 'observations']
-                    blended_label = self.log.loc[lineLabel, 'profile_label']
-                    # print(lineLabel, observations, type(observations))
+                # Mask with
+                w3_array, w4_array = self.log.w3.values, self.log.w4.values
 
-                    # Rest frame
-                    if frame == 'rest':
-                        w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                        cont = (m_cont * wave_range + n_cont)
-                        wave_range = wave_range / (1 + self.redshift)
-                        center = center / (1 + self.redshift)
+                # Separating blended from unblended lines
+                idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label == 'no').values
 
-                    # Observed frame
-                    else:
-                        w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                        wave_range = np.linspace(w3, w4, int((w4 - w3) * 4))
-                        cont = (m_cont * wave_range + n_cont) * z_corr
+                # Plot single lines
+                line_list = self.log.loc[idcs_nonBlended].index
+                for line in line_list:
 
-                    line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
+                    i = self.log.index.get_loc(line)
 
-                    # Check if single Gaussian
-                    if blended_label == 'None':
-                        color_curve = 'tab:red'
-                        style_curve = '-'
-                        width_curve = 0.5
-                        self.ax1.plot(wave_range, cont, ':', color='tab:purple', linewidth=0.5)
+                    # Determine the line region
+                    idcs_plot = ((w3_array[i] - 5) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i] + 5) * mask_corr)
 
-                    else:
-                        list_comps = blended_label.split('-')
+                    # Plot the gauss curve elements
+                    wave_i = wave_array[:, i][..., None]
+                    cont_i = cont_array[:, i][..., None]
+                    gauss_i = gaussian_array[:, i][..., None]
 
-                        # Blended
-                        if not np.sum(self.log.index.isin(list_comps)) == len(list_comps):
-                            color_curve = 'tab:red'
-                            style_curve = '-'
-                            width_curve = 0.5
+                    line_comps = [line]
+                    self.gaussian_profiles_plotting(line_comps, self.log,
+                                                    wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                    axis=self.ax1, frame=frame, cont_bands=None,
+                                                    wave_array=wave_i, cont_array=cont_i,
+                                                    gaussian_array=gauss_i)
 
-                        # Merged
-                        else:
-                            cmap = cm.get_cmap()
-                            idx_line = list_comps.index(lineLabel)
-                            color_curve = cmap(idx_line / len(list_comps))
-                            style_curve = ':'
-                            width_curve = 2
+                # Plot combined lines
+                profile_list = self.log.loc[~idcs_nonBlended, 'profile_label'].unique()
+                for profile_group in profile_list:
 
-                    # Check if the measurement had an error:
-                    if observations != 'None':
-                        color_curve = 'black'
-                        width_curve = 3
+                    idcs_group = (self.log.profile_label == profile_group)
+                    i_group = np.where(idcs_group)[0]
 
-                    self.ax1.plot(wave_range, (line_profile + cont), color=color_curve,
-                                  linestyle=style_curve, linewidth=width_curve, label=latex_array[i_line])
+                    # Determine the line region
+                    idcs_plot = ((w3_array[i_group[0]] - 1) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i_group[0]] + 1) * mask_corr)
 
-                # mplcursors.cursor().connect(
-                #     "add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
-                # mplcursors.cursor(bindings={"toggle_visible": "h", "toggle_enabled": "e"}).connect(
-                #      "add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
-                # mplcursors.cursor(hover=True)
+                    # Plot the gauss curve elements
+                    wave_i = wave_array[:, i_group[0]:i_group[-1]+1]
+                    cont_i = cont_array[:, i_group[0]:i_group[-1]+1]
+                    gauss_i = gaussian_array[:, i_group[0]:i_group[-1]+1]
 
-                # Plot the sum flux of the blended components:
-                # TODO we need a method just for this
-                idcs_blended = (self.log['profile_label'] != 'None')
-                blended_groups = self.log.loc[idcs_blended, 'profile_label'].unique()
-                for lineGroup in blended_groups:
+                    line_comps = profile_group.split('-')
+                    self.gaussian_profiles_plotting(line_comps, self.log,
+                                                    wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                    axis=self.ax1, frame=frame, cont_bands=None,
+                                                    wave_array=wave_i, cont_array=cont_i,
+                                                    gaussian_array=gauss_i)
 
-                    list_comps = lineGroup.split('-')
+        # Overplot the mask region
+        if self.mask_file is not None:
 
-                    if np.sum(self.log.index.isin(list_comps)) == len(list_comps):
+            inv_masked_array = np.ma.masked_where(~self.mask_dict[self.mask_ext][0], self.image_bg)
 
-                        for i, lineLabel in enumerate(list_comps):
+            cmap_contours = cm.get_cmap(colorDict['mask_map'], self.mask_array.size)
+            idx_color = np.argwhere(self.mask_array == self.mask_ext)[0][0]
+            cm_i = colors.ListedColormap([cmap_contours(idx_color)])
 
-                            w3, w4 = self.log.loc[lineLabel, 'w3'], self.log.loc[lineLabel, 'w4']
-                            m_cont, n_cont = self.log.loc[lineLabel, 'm_cont'], self.log.loc[lineLabel, 'n_cont']
-                            amp, center, sigma = self.log.loc[lineLabel, 'amp'], self.log.loc[lineLabel, 'center'], \
-                                                 self.log.loc[lineLabel, 'sigma']
+            self.ax0.imshow(inv_masked_array, cmap=cm_i, vmin=0, vmax=1, alpha=0.5)
 
-                            # Rest frame
-                            if frame == 'rest':
-                                w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                                if i == 0:
-                                    wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                                cont = (m_cont * wave_range + n_cont)
-                                wave_range = wave_range / (1 + self.redshift)
-                                center = center / (1 + self.redshift)
-
-                            # Observed frame
-                            else:
-                                w3, w4 = w3 * (1 + self.redshift), w4 * (1 + self.redshift)
-                                if i == 0:
-                                    wave_range = np.linspace(w3, w4, int((w4 - w3) * 3))
-                                cont = (m_cont * wave_range + n_cont) * z_corr
-
-                            if i == 0:
-                                line_profile = gaussian_model(wave_range, amp, center, sigma) * z_corr
-                            else:
-                                line_profile += gaussian_model(wave_range, amp, center, sigma) * z_corr
-
-                        self.ax1.plot(wave_range, (line_profile + cont), color='tab:red',
-                                      linestyle='-', linewidth=0.5)
-
-        self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
+        # Add the mplcursors legend
+        if mplcursors_check and (self.hdul_linelog is not None):
+            for label, lineProfile in self._legends_dict.items():
+                mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
 
         # Update the axis
+        self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
         self.ax0.update(self.axes_conf['image'])
         self.ax1.update(self.axes_conf['spectrum'])
 
         return
 
-    def on_click(self, event, mouse_trigger_buttton=3):
-
-        """
-        This method defines launches the new plot selection once the user clicks on an image voxel. By default this is a
-        a right click on a minimum three button mouse
-        :param event: This variable represents the user action on the plot
-        :param mouse_trigger_buttton: Number-coded mouse button which defines the button launching the voxel selection
-        :return:
-        """
+    def on_click(self, event, new_voxel_button=3, mask_button='m'):
 
         if self.in_ax == self.ax0:
 
-            if event.button == mouse_trigger_buttton:
-                # Save axes zoom
-                self.save_zoom()
+            # Save axes zoom
+            self.save_zoom()
+
+            if event.button == new_voxel_button:
 
                 # Save clicked coordinates for next plot
-                idx_j, idx_i = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
-                print(f'Current voxel: {idx_j}-{idx_i} (mouse button {event.button})')
+                self.key_coords = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
 
                 # Remake the drawing
-                self.ax0.clear()
+                self.im.remove()# self.ax0.clear()
                 self.ax1.clear()
-                self.plot_map_voxel(self.image_bg, (idx_j, idx_i), self.image_fg, self.contour_levels_fg)
+                self.plot_map_voxel(self.image_bg, self.key_coords, self.image_fg, self.contour_levels_fg)
 
                 # Reset the image
                 self.reset_zoom()
                 self.fig.canvas.draw()
 
+            if event.dblclick:
+
+                if self.mask_file is not None:
+
+                    # Save clicked coordinates for next plot
+                    self.key_coords = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
+
+                    # Add or remove voxel from mask:
+                    self.spaxel_selection()
+
+                    # # Save the new mask:
+                    # hdul = fits.HDUList([fits.PrimaryHDU()])
+                    # for mask_name, mask_attr in self.mask_dict.items():
+                    #     hdul.append(fits.ImageHDU(name=mask_name, data=mask_attr[0].astype(int), ver=1, header=mask_attr[1]))
+                    # hdul.writeto(self.mask_file, overwrite=True, output_verify='fix')
+
+                    # Remake the drawing
+                    self.im.remove()# self.ax0.clear()
+                    self.ax1.clear()
+                    self.plot_map_voxel(self.image_bg, self.key_coords, self.image_fg, self.contour_levels_fg)
+
+                    # Reset the image
+                    self.reset_zoom()
+                    self.fig.canvas.draw()
+
+            return
+
+    def mask_selection(self, mask_label):
+
+        # Assign the mask
+        self.mask_ext = mask_label
+
+        # Replot the figure
+        self.save_zoom()
+        self.im.remove()# self.ax0.clear()
+        self.ax1.clear()
+        self.plot_map_voxel(self.image_bg, self.key_coords, self.image_fg, self.contour_levels_fg)
+
+        # Reset the image
+        self.reset_zoom()
+        self.fig.canvas.draw()
+
+        return
+
+    def spaxel_selection(self):
+
+        for mask, mask_data in self.mask_dict.items():
+
+            mask_matrix = mask_data[0]
+            if mask == self.mask_ext:
+                mask_matrix[self.key_coords[0], self.key_coords[1]] = not mask_matrix[self.key_coords[0], self.key_coords[1]]
+            else:
+                mask_matrix[self.key_coords[0], self.key_coords[1]] = False
+
+        return
+
     def on_enter_axes(self, event):
         self.in_ax = event.inaxes
 
     def save_zoom(self):
+
         self.axlim_dict['image_xlim'] = self.ax0.get_xlim()
         self.axlim_dict['image_ylim'] = self.ax0.get_ylim()
         self.axlim_dict['spec_xlim'] = self.ax1.get_xlim()
         self.axlim_dict['spec_ylim'] = self.ax1.get_ylim()
+
+        return
 
     def reset_zoom(self):
 
@@ -1111,3 +1186,5 @@ class CubeFitsInspector(Spectrum):
         self.ax0.set_ylim(self.axlim_dict['image_ylim'])
         self.ax1.set_xlim(self.axlim_dict['spec_xlim'])
         self.ax1.set_ylim(self.axlim_dict['spec_ylim'])
+
+        return

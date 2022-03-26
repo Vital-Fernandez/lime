@@ -23,11 +23,13 @@ def iraf_snr(input_y):
     snr = avg/rms
     return snr
 
+
 def signal_to_noise(flux_line, sigma_noise, n_pixels):
 
     snr = flux_line / (sigma_noise * np.sqrt(n_pixels))
 
     return snr
+
 
 def gaussian_model(x, amp, center, sigma):
     """1-d gaussian curve : gaussian(x, amp, cen, wid)"""
@@ -51,6 +53,92 @@ def gauss_func(ind_params, a, mu, sigma):
 
     x, z = ind_params
     return a * np.exp(-((x - mu) * (x - mu)) / (2 * (sigma * sigma))) + z
+
+
+def gaussian_profiles_computation(line_list, log, z_corr, mask_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+
+    # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
+    # and starting at interval[0] values beyond interval[0] are masked
+    if x_array is None:
+
+        idcs_lines = (log.index.isin(line_list))
+
+        amp_array = log.loc[idcs_lines, 'amp'].values
+        center_array = log.loc[idcs_lines, 'center'].values / z_corr
+        sigma_array = log.loc[idcs_lines, 'sigma'].values
+
+        wmin_array = log.loc[idcs_lines, interval[0]].values * mask_corr
+        wmax_array = log.loc[idcs_lines, interval[1]].values * mask_corr
+        w_mean = np.max(wmax_array - wmin_array)
+
+        x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
+        x_array = np.add(np.c_[x_zero], wmin_array)
+
+        gaussian_array = gaussian_model(x_array, amp_array, center_array, sigma_array) * z_corr
+
+        for i in range(x_array.shape[1]):
+            idcs_nan = x_array[:, i] > wmax_array[i]
+            x_array[idcs_nan, i] = np.nan
+            gaussian_array[idcs_nan, i] = np.nan
+
+        return x_array, gaussian_array
+
+    # All lines are computed with the wavelength range provided by the user
+    else:
+
+        # Profile container
+        gaussian_array = np.zeros((len(x_array), len(line_list)))
+
+        # Compute the individual profiles
+        for i, comp in enumerate(line_list):
+            amp = log.loc[comp, 'amp']
+            center = log.loc[comp, 'center']
+            sigma = log.loc[comp, 'sigma']
+
+            # Gaussian components calculation
+            gaussian_array[:, i] = gaussian_model(x_array, amp, center, sigma) * z_corr
+
+        return gaussian_array
+
+
+def linear_continuum_computation(line_list, log, z_corr, mask_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+
+    # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
+    # and starting at interval[0] values beyond interval[0] are masked
+    if x_array is None:
+
+        idcs_lines = (log.index.isin(line_list))
+
+        m_array = log.loc[idcs_lines, 'm_cont'].values
+        n_array = log.loc[idcs_lines, 'n_cont'].values
+
+        wmin_array = log.loc[idcs_lines, interval[0]].values * mask_corr
+        wmax_array = log.loc[idcs_lines, interval[1]].values * mask_corr
+        w_mean = np.max(wmax_array - wmin_array)
+
+        x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
+        x_array = np.add(np.c_[x_zero], wmin_array)
+
+        cont_array = (m_array * x_array + n_array) * z_corr
+
+        for i in range(x_array.shape[1]):
+            idcs_nan = x_array[:, i] > wmax_array[i]
+            x_array[idcs_nan, i] = np.nan
+            cont_array[idcs_nan, i] = np.nan
+
+        return x_array, cont_array
+
+    # All lines are computed with the wavelength range provided by the user
+    else:
+
+        cont_array = np.zeros((len(x_array), len(line_list)))
+
+        for i, comp in enumerate(line_list):
+            m_cont = log.loc[comp, 'm_cont']
+            n_cont = log.loc[comp, 'n_cont']
+            cont_array[:, i] = (m_cont * x_array + n_cont) * z_corr
+
+        return cont_array
 
 
 def linear_model(x, slope, intercept):
@@ -90,7 +178,7 @@ class EmissionFitting:
     def __init__(self):
 
         self.line, self.mask = '', np.array([np.nan] * 6)
-        self.blended_check, self.profile_label = False, 'None'
+        self.blended_check, self.profile_label = False, 'no'
 
         self.intg_flux, self.intg_err = None, None
         self.peak_wave, self.peak_flux = None, None
@@ -104,7 +192,7 @@ class EmissionFitting:
         self.v_r, self.v_r_err = None, None
         self.sigma_vel, self.sigma_vel_err = None, None
         self.snr_line, self.snr_cont = None, None
-        self.observations, self.comments = 'None', 'None'
+        self.observations, self.comments = 'no', 'no'
         self.FWHM_int, self.FWHM_g = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
@@ -128,8 +216,7 @@ class EmissionFitting:
         idcsW = np.searchsorted(wave_arr, masks_array)
 
         # Emission region
-        idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) &
-                          (wave_arr[:, None] <= wave_arr[idcsW[:, 3]])).squeeze()
+        idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]])).squeeze()
 
 
         # Return left and right continua merged in one array
@@ -274,7 +361,7 @@ class EmissionFitting:
         self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights, method=self._minimize_method)
 
         if not self.fit_output.errorbars:
-            if self.observations == 'None':
+            if self.observations == 'no':
                 self.observations = 'No_errorbars'
             else:
                 self.observations += 'No_errorbars'
