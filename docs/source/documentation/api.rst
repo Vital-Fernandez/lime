@@ -29,4 +29,4 @@ Convenience functions
 
 .. autofunction:: lime.spatial_mask_generator
 
-.. autofunction:: lime.CubeFitsInspector
+.. autofunction:: lime.CubeInspector
