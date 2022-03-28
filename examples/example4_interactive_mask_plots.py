@@ -25,7 +25,7 @@ cfgFile = './sample_data/config_file.cfg'
 wave, flux, header = import_osiris_fits(obsFitsFile)
 
 # Load configuration
-sample_cfg = lime.load_cfg(cfgFile, obj_section={'sample_data': 'object_list'})
+sample_cfg = lime.load_cfg(cfgFile)
 
 # Object properties
 z_obj = sample_cfg['sample_data']['z_array'][2]

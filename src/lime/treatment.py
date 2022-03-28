@@ -23,6 +23,10 @@ try:
 except ImportError:
     mplcursors_check = False
 
+if mplcursors_check:
+    from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
+    popupProps['bbox']['alpha'] = 0.9
+
 
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
@@ -147,13 +151,17 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         """
 
+        # Security checks for the mask wavelengths
+        assert np.all(np.diff(mask) >= 0), f'\n- Error: the {line} mask is not sorted'
+        assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest frame limit (w_min = {self.wave_rest[0]:.2f})'
+        assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest frame limit (w_min = {self.wave_rest[-1]:.2f})'
+
         # For security previous measurement is cleared and a copy of the user configuration is used
         self.clear_fit()
         fit_conf = user_cfg.copy()
 
         # Estate the minimizing method for the fitting (this parameter is not restored to default by the self.clear_fit function)
         self._minimize_method = fit_method
-
 
         # Label the current measurement
         self.line = line
@@ -163,42 +171,43 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self._emission_check = emission
         self._cont_from_adjacent = adjacent_cont
 
-        # Check if the masks are within the range
-        if not np.any((self.mask < self.wave_rest[0]) | (self.mask > self.wave_rest[-1])):
+         # Establish spectrum line and continua regions
+        idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.mask)
 
-            # Establish spectrum line and continua regions
-            idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.mask)
+        # Integrated line properties
+        emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
+        contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
+        err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
 
-            # Integrated line properties
-            emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
-            contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
-            err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
-            self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
+        # Store error very small mask
+        if emisWave.size <= 1:
+            if self.observations == 'no':
+                self.observations = 'Small_line_band'
+            else:
+                self.observations += 'Small_line_band'
+            print(f'-- WARNING: Line band mask is too small for line {line}')
 
-            # Check if blended line
-            if self.line in fit_conf:
-                self.profile_label = fit_conf[self.line]
-                if '_b' in self.line:
-                    self.blended_check = True
+        self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
 
-            # Import kinematics if requested
-            self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
+        # Check if blended line
+        if self.line in fit_conf:
+            self.profile_label = fit_conf[self.line]
+            if '_b' in self.line:
+                self.blended_check = True
 
-            # Gaussian fitting # TODO Add logic for very small lines
-            idcsLine = idcsEmis + idcsCont
-            x_array = self.wave[idcsLine]
-            y_array = self.flux[idcsLine]
-            w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size,
-                                                                                              1.0 / self.std_cont)
-            self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, self.log, z_obj=self.redshift)
+        # Import kinematics if requested
+        self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
 
-            # Safe the results to log DF
-            self.results_to_database(self.line, self.log, fit_conf)
+        # Gaussian fitting # TODO Add logic for very small lines
+        idcsLine = idcsEmis + idcsCont
+        x_array = self.wave[idcsLine]
+        y_array = self.flux[idcsLine]
+        w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size,
+                                                                                          1.0 / self.std_cont)
+        self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, self.log, z_obj=self.redshift)
 
-        else:
-            print(
-                f'- {self.line} mask beyond spectrum limits (w_min = {self.wave_rest[0]:0.1f}, w_max = {self.wave_rest[-1]:0.1f}):')
-            print(f' -- {self.mask}')
+        # Safe the results to log DF
+        self.results_to_database(self.line, self.log, fit_conf)
 
         return
 
@@ -779,10 +788,10 @@ class MaskInspector(Spectrum):
         return
 
 
-class CubeFitsInspector(Spectrum):
+class CubeInspector(Spectrum):
 
     def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None, color_norm=None,
-                 redshift=0, lines_log_address=None, fits_header=None, plt_cfg={}, ax_conf={},
+                 redshift=0, lines_log_address=None, fits_header=None, plt_cfg={}, ax_cfg={},
                  ext_suffix='_LINESLOG', mask_file=None):
 
         """
@@ -832,8 +841,8 @@ class CubeFitsInspector(Spectrum):
         :param plt_cfg: Dictionary with the configuration for the matplotlib rcParams style.
         :type plt_cfg: dict, optional
 
-        :param ax_conf: Dictionary with the configuration for the matplotlib axes style.
-        :type ax_conf: dict, optional
+        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
+        :type ax_cfg: dict, optional
 
         :param ext_suffix: Suffix of the line logs extensions. The default value is “_LINESLOG”.
         :type ext_suffix: str, optional
@@ -890,8 +899,8 @@ class CubeFitsInspector(Spectrum):
         self.fig_conf = {**self.fig_conf, **plt_cfg}
 
         for plot_type in ('image', 'spectrum'):
-            if plot_type in ax_conf:
-                self.axes_conf[plot_type] = {**self.axes_conf[plot_type], **ax_conf[plot_type]}
+            if plot_type in ax_cfg:
+                self.axes_conf[plot_type] = {**self.axes_conf[plot_type], **ax_cfg[plot_type]}
 
         # Prepare the mask correction attributes
         if mask_file is not None:

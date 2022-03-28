@@ -34,11 +34,11 @@ obs_cfg = lime.load_cfg(cfgFile)
 z_obj = obs_cfg['sample_data']['z_array'][2]
 norm_flux = obs_cfg['sample_data']['norm_flux']
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot_spectrum()
+gp_spec.plot_spectrum(spec_label=f'GP121903 spectrum')
 
 # Find lines
 peaks_table, matched_masks_DF = gp_spec.match_line_mask(mask, obs_cfg['sample_data']['noiseRegion_array'])
-gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum')
+gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum', log_scale=True)
 
 # Correct line region
 corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'

@@ -78,9 +78,9 @@ min_flux = np.nanpercentile(Halpha_image, 60)
 log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
 # Interactive plotter for IFU data cubes
-lime.CubeFitsInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
-                       fits_header=hdr, ax_conf=ax_conf, color_norm=log_norm_bg,
-                       lines_log_address=log_file, mask_file='./sample_data/SHOC579_mask.fits')
+lime.CubeInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
+                   fits_header=hdr, ax_cfg=ax_conf, color_norm=log_norm_bg,
+                   lines_log_address=log_file, mask_file='./sample_data/SHOC579_mask.fits')
 
 # WCS header data
 hdr_coords = {}
@@ -101,7 +101,7 @@ lines_ratio = {'H1': ['H1_6563A', 'H1_4861A'],
                'S3': ['S3_9531A', 'S3_9069A']}
 
 # State the parameter map file
-fits_file = f'./sample_data/SHOC579_intg_flux.fits'
+fits_file = f'./sample_data/SHOC579_gauss_flux.fits'
 
 # Loop through the line ratios
 for ion, lines in lines_ratio.items():

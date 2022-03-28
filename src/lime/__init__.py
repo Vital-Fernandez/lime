@@ -6,7 +6,7 @@ import os
 import sys
 import configparser
 
-from .treatment import Spectrum, MaskInspector, CubeFitsInspector
+from .treatment import Spectrum, MaskInspector, CubeInspector
 from .io import *
 from .tools import label_decomposition, LineFinder
 

@@ -4,7 +4,6 @@ from matplotlib import pyplot as plt, rcParams, rcParamsDefault, gridspec, patch
 from scipy.interpolate import interp1d
 from functools import partial
 from collections import Sequence
-from cycler import cycler
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
 from .tools import label_decomposition, kinematic_component_labelling, blended_label_from_log
@@ -21,6 +20,9 @@ try:
 except ImportError:
     mplcursors_check = False
 
+if mplcursors_check:
+    from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
+    popupProps['bbox']['alpha'] = 0.9
 
 PLOT_SIZE_FONT = {'figure.figsize': (10, 5), 'axes.titlesize': 18, 'axes.labelsize': 16, 'legend.fontsize': 12,
                  'xtick.labelsize': 16, 'ytick.labelsize': 16, 'font.family': 'Times New Roman', 'mathtext.fontset':'cm'}
@@ -40,8 +42,7 @@ colorDict = {'bg': 'white', 'fg': 'black',
 PLOT_COLORS = {'figure.facecolor': colorDict['bg'], 'axes.facecolor': colorDict['bg'],
                'axes.edgecolor': colorDict['fg'], 'axes.labelcolor': colorDict['fg'],
                'xtick.color': colorDict['fg'],  'ytick.color': colorDict['fg'],
-               'text.color': colorDict['fg'], 'legend.edgecolor': 'inherit', 'legend.facecolor': 'inherit',
-               'axes.prop_cycle': cycler('color', colorDict['color_cycle'])}
+               'text.color': colorDict['fg'], 'legend.edgecolor': 'inherit', 'legend.facecolor': 'inherit'}
 
 colorDictDark = {'bg': np.array((43, 43, 43))/255.0, 'fg': np.array((179, 199, 216))/255.0,
                  'red': np.array((43, 43, 43))/255.0, 'yellow': np.array((191, 144, 0))/255.0}
@@ -352,6 +353,8 @@ class LiMePlots:
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
 
+        PLOT_CONF['figure.figsize'] = (10, 6)
+
         # User configuration overrites user
         PLT_CONF = {**PLOT_CONF, **plt_cfg}
         AXES_CONF = {**AXES_CONF, **ax_cfg}
@@ -359,6 +362,7 @@ class LiMePlots:
         # Use the memory log if none is provided
         log = self.log if log is None else log
 
+        legend_check = True
         with rc_context(PLT_CONF):
 
             fig, ax = plt.subplots()
@@ -388,15 +392,17 @@ class LiMePlots:
             # Shade regions of matched lines if provided
             if match_log is not None:
                 ion_array, wave_array, latex_array = label_decomposition(match_log.index.values)
-                mask_corr = 1 if frame == 'rest' else (1 + self.redshift)
-                w3 = match_log.w3.values * mask_corr
-                w4 = match_log.w4.values * mask_corr
+                w3 = match_log.w3.values
+                w4 = match_log.w4.values
+                mean_flux = np.nanmean(flux_plot)
+                idcsLineBand = np.searchsorted(wave_plot, np.array([w3, w4]) * mask_corr)
 
                 first_check = True
                 for i in np.arange(latex_array.size):
                     label = 'Matched line' if first_check else '_'
-                    ax.axvspan(w3[i], w4[i], alpha=0.30, color=self._color_dict['matched_line'], label=label)
-                    ax.text(wave_array[i] * mask_corr, 0, latex_array[i], rotation=270)
+                    max_region = np.max(flux_plot[idcsLineBand[0, i]:idcsLineBand[1, i]])
+                    ax.axvspan(w3[i] * mask_corr, w4[i] * mask_corr, label=label, alpha=0.30, color=self._color_dict['matched_line'])
+                    ax.text(wave_array[i] * mask_corr, max_region * 0.9, latex_array[i], rotation=270)
                     first_check = False
 
             # Shade noise region if provided
@@ -406,6 +412,7 @@ class LiMePlots:
             # Plot the line fittings
             if include_fits:
 
+                legend_check = False
                 w3_array, w4_array = self.log.w3.values, self.log.w4.values
 
                 # Compute the individual profiles
@@ -473,6 +480,10 @@ class LiMePlots:
 
             # Add the figure labels
             ax.set(**AXES_CONF)
+
+            # Add or remove legend according to the plot type:
+            if legend_check:
+                ax.legend()
 
             # By default plot on screen unless an output address is provided
             if output_address is None:
@@ -556,13 +567,13 @@ class LiMePlots:
             # Shade Continuum flux standard deviation # TODO revisit this calculation
             label = r'$\sigma_{Continuum}/\overline{F_{cont}}$'
             y_limit = cont_std / cont_level
-            resid_ax.fill_between(wave_plot[idcs_plot], -y_limit, +y_limit, facecolor='yellow', alpha=0.3, label=label)
+            resid_ax.fill_between(wave_plot[idcs_plot], -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
 
             # Shade the pixel error spectrum if available:
             if self.err_flux is not None:
                 label = r'$\sigma_{pixel}/\overline{F(cont)}$'
                 err_norm = self.err_flux[idcs_plot] * z_corr/cont_level
-                resid_ax.fill_between(wave_plot[idcs_plot], -err_norm, err_norm, label=label, facecolor='tab:red', alpha=0.5)
+                resid_ax.fill_between(wave_plot[idcs_plot], -err_norm, err_norm, label=label, facecolor='salmon', alpha=0.3)
 
             # Add the flux normalization to units if non provided
             if self.norm_flux != 1.0:
@@ -581,10 +592,22 @@ class LiMePlots:
             spec_ax.set(**AXES_CONF)
             spec_ax.legend()
 
-            # Residual plot labeling
+            # Spec upper and lower limit based on absorption or emission
+            if self._emission_check:
+                spec_ax.set_ylim(None, self.log.loc[line, 'peak_flux']/self.norm_flux*2)
+
+            else:
+                spec_ax.set_ylim(self.log.loc[line, 'peak_flux']/self.norm_flux/2, None)
+
+            # Residual x axis limit from spec axis
             resid_ax.set_xlim(spec_ax.get_xlim())
-            resd_limit = np.std(residual)
-            resid_ax.set_ylim(residual.mean() - 5*resd_limit, residual.mean() + 5*resd_limit)
+
+            # Residual y axis limit from std at line location
+            idx_w3, idx_w4 = np.searchsorted(wave_plot[idcs_plot], self.log.loc[line, 'w3':'w4'] * mask_corr)
+            resd_limit = np.std(residual[idx_w3:idx_w4]) * 5
+            resid_ax.set_ylim(-resd_limit, resd_limit)
+
+            # Residual plot labeling
             resid_ax.legend(loc='upper left')
             resid_ax.set_ylabel(label_residual, fontsize=22)
             resid_ax.set_xlabel(r'Wavelength $(\AA)$')
@@ -913,7 +936,6 @@ class LiMePlots:
             peak_wave = log.loc[list_comps[0]].peak_wave / z_corr,
             peak_flux = log.loc[list_comps[0]].peak_flux * z_corr/self.norm_flux
             axis.scatter(peak_wave, peak_flux, facecolors='red')
-            # self._legends_dict.append('Line peak')
 
         # Plot the Gaussian profile
         if (gaussian_array is not None) and (cont_array is not None):
@@ -925,10 +947,10 @@ class LiMePlots:
             # Plot the continuum,  Usine wavelength array and continuum form the first component
             cont_wave = wave_array[:, 0]
             cont_linear = cont_array[:, 0] / self.norm_flux
-            axis.plot(cont_wave, cont_linear, color=self._color_dict['cont'], label=None, linestyle='--',
-                      linewidth=0.5)
+            axis.plot(cont_wave, cont_linear, color=self._color_dict['cont'], label=None, linestyle='--', linewidth=0.5)
 
             # Individual components
+            first_check = True
             for i, line in enumerate(list_comps):
 
                 # Color and thickness
@@ -951,6 +973,8 @@ class LiMePlots:
                 if mplcursors_check:
                     label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux)
                     self._legends_dict[label_complex] = line_g
+
+                first_check = False
 
             # Combined profile if applicable
             if len(list_comps) > 1:

@@ -110,13 +110,11 @@ for idx_region in [0, 1, 2]:
         for idx_line, line in enumerate(matched_mask_log.index):
 
             wave_regions = matched_mask_log.loc[line, 'w1':'w6'].values
-
             try:
                 spaxel_spec.fit_from_wavelengths(line, wave_regions, fit_method='least_squares', user_cfg=region_fit_cfg)
 
                 if verbose:
-                    if '_b' in line:
-                        spaxel_spec.display_results(fit_report=True, frame='rest')
+                        spaxel_spec.display_results(fit_report=True)
 
             except ValueError as e:
                 print(f'--- Line measuring failure at {line} in spaxel {idxY}-{idxX}:\n{e}')

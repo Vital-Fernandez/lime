@@ -64,8 +64,6 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
 
     """
 
-
-
     # Confirm input array has one dimension
     # TODO for blended lines it may be better to return all the blended components individually
     lines = np.array(lines, ndmin=1)
@@ -81,7 +79,7 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
         if lineLabel not in user_format:
             # Check if line reference corresponds to blended component
             mixture_line = False
-            if '_b' in lineLabel or '_m' in lineLabel:
+            if lineLabel.endswith('_b') or lineLabel.endswith('_m'):
                 mixture_line = True
                 if lineLabel in comp_dict:
                     lineRef = comp_dict[lineLabel]

@@ -74,8 +74,8 @@ min_flux = np.nanpercentile(Halpha_image, 60)
 log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
 # Interactive plotter for IFU data cubes
-lime.CubeFitsInspector(wave, flux_cube, Halpha_image, SII_image, SII_contourLevels,
-                       fits_header=hdr, ax_conf=ax_conf, color_norm=log_norm_bg)
+lime.CubeInspector(wave, flux_cube, Halpha_image, SII_image, SII_contourLevels,
+                   fits_header=hdr, ax_cfg=ax_conf, color_norm=log_norm_bg)
 
 # Create a dictionary with the coordinate entries for the header
 hdr_coords = {}
@@ -88,14 +88,14 @@ output_mask_file = './sample_data/SHOC579_mask.fits'
 lime.spatial_mask_generator('flux', wave, flux_cube, percentile_array, signal_band=(w3_SII, w4_SII),
                             mask_ref='S2_6716A_b', output_address=output_mask_file,
                             fits_header=hdr_coords, show_plot=True)
-
-# w1_SII, w2_SII = mask_log.loc['S2_6716A_b', 'w1':'w2'].values * (1 + z_SHOC579)
+#
+# w1_SII, w2_SII = mask_log.loc['S2_6716A', 'w1':'w2'].values * (1 + z_SHOC579)
 # output_mask_file = './sample_data/SHOC579_mask.fits'
 # lime.spatial_mask_generator('SN_cont', wave, flux_cube, percentile_array, signal_band=(w1_SII, w2_SII),
 #                             mask_ref='S2_6716A_b', output_address=output_mask_file,
 #                             fits_header=hdr_coords, show_plot=True)
 #
-# w1_SII, w2_SII = mask_log.loc['S2_6716A_b', 'w1':'w2'].values * (1 + z_SHOC579)
+# w1_SII, w2_SII = mask_log.loc['S2_6716A', 'w1':'w2'].values * (1 + z_SHOC579)
 # output_mask_file = './sample_data/SHOC579_mask.fits'
 # lime.spatial_mask_generator('SN_line', wave, flux_cube, percentile_array, signal_band=(w3_SII, w4_SII), cont_band=(w1_SII, w2_SII),
 #                             mask_ref='S2_6716A_b', output_address=output_mask_file,
@@ -152,5 +152,7 @@ ax.update({'title': r'SHOC579 Mask regions', 'xlabel': r'RA', 'ylabel': r'DEC'})
 plt.tight_layout()
 plt.show()
 
-
-
+# You can adjust the spaxels manually including the mask file in the CubeInspector class
+lime.CubeInspector(wave, flux_cube, Halpha_image, SII_image, SII_contourLevels,
+                   fits_header=hdr, ax_cfg=ax_conf, color_norm=log_norm_bg,
+                   mask_file=output_mask_file)
