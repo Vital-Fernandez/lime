@@ -331,8 +331,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                 # Case we want to copy from previous line and the data is not available
                 if (parent_label not in self.log.index) and (not self.blended_check):
-                    print(
-                        f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}')
+                    warning_messange = f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}'
+                    print(warning_messange)
 
                 else:
                     ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True)
@@ -344,8 +344,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                         # Warning overwritten existing configuration
                         if param_label_child in user_conf:
-                            print(
-                                f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
+                            print(f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                         # Case where parent and child are in blended group
                         if parent_label in childs_list:
@@ -1131,11 +1130,11 @@ class CubeInspector(Spectrum):
                     # Add or remove voxel from mask:
                     self.spaxel_selection()
 
-                    # # Save the new mask:
-                    # hdul = fits.HDUList([fits.PrimaryHDU()])
-                    # for mask_name, mask_attr in self.mask_dict.items():
-                    #     hdul.append(fits.ImageHDU(name=mask_name, data=mask_attr[0].astype(int), ver=1, header=mask_attr[1]))
-                    # hdul.writeto(self.mask_file, overwrite=True, output_verify='fix')
+                    # Save the new mask:
+                    hdul = fits.HDUList([fits.PrimaryHDU()])
+                    for mask_name, mask_attr in self.mask_dict.items():
+                        hdul.append(fits.ImageHDU(name=mask_name, data=mask_attr[0].astype(int), ver=1, header=mask_attr[1]))
+                    hdul.writeto(self.mask_file, overwrite=True, output_verify='fix')
 
                     # Remake the drawing
                     self.im.remove()# self.ax0.clear()
