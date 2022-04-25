@@ -555,7 +555,7 @@ class LiMePlots:
 
             # Plot the gauss curve elements
             self.gaussian_profiles_plotting(list_comps, self.log, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
-                                            axis=spec_ax, frame=frame, peak_check=False, cont_bands=True,
+                                            axis=spec_ax, frame=frame, peak_check=True, cont_bands=True,
                                             wave_array=wave_array, cont_array=cont_array, gaussian_array=gaussian_array,
                                             mplcursors_active=True)
 
@@ -642,7 +642,7 @@ class LiMePlots:
         AXES_CONF = {**AXES_CONF, **ax_cfg}
 
         # Establish spectrum line and continua regions
-        idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.mask)
+        idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.mask)
 
         # Load parameters from log
         peak_wave = self.log.loc[line, 'peak_wave']
@@ -926,7 +926,7 @@ class LiMePlots:
             mask = self.log.loc[list_comps[0], 'w1':'w6'].values
             mask_corr = 1 if frame == 'rest' else (1 + self.redshift)
 
-            idcsLine, idcsBlue, idcsRed = self.define_masks(x/mask_corr, y, mask, merge_continua=False)
+            idcsLine, idcsBlue, idcsRed = self.define_masks(x/mask_corr, mask, merge_continua=False)
             axis.fill_between(x[idcsBlue], 0, y[idcsBlue], facecolor=self._color_dict['cont_band'], step='mid', alpha=0.25)
             axis.fill_between(x[idcsLine], 0, y[idcsLine], facecolor=self._color_dict['line_band'], step='mid', alpha=0.25)
             axis.fill_between(x[idcsRed], 0, y[idcsRed], facecolor=self._color_dict['cont_band'], step='mid', alpha=0.25)
@@ -950,7 +950,6 @@ class LiMePlots:
             axis.plot(cont_wave, cont_linear, color=self._color_dict['cont'], label=None, linestyle='--', linewidth=0.5)
 
             # Individual components
-            first_check = True
             for i, line in enumerate(list_comps):
 
                 # Color and thickness
@@ -973,8 +972,6 @@ class LiMePlots:
                 if mplcursors_check:
                     label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux)
                     self._legends_dict[label_complex] = line_g
-
-                first_check = False
 
             # Combined profile if applicable
             if len(list_comps) > 1:

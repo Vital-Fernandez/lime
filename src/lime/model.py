@@ -207,10 +207,16 @@ class EmissionFitting:
 
         return
 
-    def define_masks(self, wave_arr, flux_arr, masks_array, merge_continua=True):
+    def define_masks(self, wave_rest, masks_array, merge_continua=True):
 
         # Make sure it is a matrix
         masks_array = np.array(masks_array, ndmin=2)
+
+        # Check if it is a masked array
+        if np.ma.is_masked(wave_rest):
+            wave_arr = wave_rest.data
+        else:
+            wave_arr = wave_rest
 
         # Find indeces for six points in spectrum
         idcsW = np.searchsorted(wave_arr, masks_array)
@@ -218,9 +224,7 @@ class EmissionFitting:
         # Emission region
         idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]])).squeeze()
 
-
         # Return left and right continua merged in one array
-        # TODO add check for wavelengths beyond wavelengh limits
         if merge_continua:
 
             idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &

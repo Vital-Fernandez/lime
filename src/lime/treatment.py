@@ -172,7 +172,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self._cont_from_adjacent = adjacent_cont
 
          # Establish spectrum line and continua regions
-        idcsEmis, idcsCont = self.define_masks(self.wave_rest, self.flux, self.mask)
+        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift))
 
         # Integrated line properties
         emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
@@ -414,7 +414,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 class MaskInspector(Spectrum):
 
     def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
-                 norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None):
+                 norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None, y_scale='auto'):
 
         """
         This class plots the masks from the ``log_address`` as a grid for the input spectrum as a grid. Clicking and
@@ -438,6 +438,9 @@ class MaskInspector(Spectrum):
         The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
         parameter can be an array of strings with the labels of the target lines or a two value integer array with the
         interval of lines to plot.
+
+        Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 abd w5 smaller
+        and greater than the blue and red wavelegnth values respectively.
 
         :param log_address: Address for the lines log mask file.
         :type log_address: str
@@ -469,10 +472,16 @@ class MaskInspector(Spectrum):
         :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
                                this interval must be a two value array.
         :type lines_interval: list
+
+        :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
+                        strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
+        :type y_scale: str, optional
+
         """
 
         # Output file address
         self.linesLogAddress = Path(log_address)
+        self.y_scale = y_scale
 
         # Assign attributes to the parent class
         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
@@ -521,13 +530,13 @@ class MaskInspector(Spectrum):
         with rc_context(PLOT_CONF):
 
             self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-            self.ax = ax.flatten()
+            self.ax = ax.flatten() if n_lines > 1 else [ax]
             self.in_ax = None
             self.dict_spanSelec = {}
             self.axConf = {}
 
             # Plot function
-            self.plot_line_mask_selection(logscale='auto', grid_size=n_rows * n_cols)
+            self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols)
             plt.gca().axes.yaxis.set_ticklabels([])
 
             try:
@@ -649,6 +658,10 @@ class MaskInspector(Spectrum):
         if logscale == 'auto':
             if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
                 ax.set_yscale('log')
+        else:
+            if logscale == 'log':
+                ax.set_yscale('log')
+
 
         return
 
@@ -731,7 +744,7 @@ class MaskInspector(Spectrum):
 
             # Redraw the line measurement
             self.in_ax.clear()
-            self.plot_line_region_i(self.in_ax, self.line, logscale='auto')
+            self.plot_line_region_i(self.in_ax, self.line, logscale=self.y_scale)
             self.in_fig.canvas.draw()
 
         return

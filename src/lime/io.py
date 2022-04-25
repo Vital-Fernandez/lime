@@ -1,6 +1,7 @@
 __all__ = [
     'spatial_mask_generator',
     'load_fits',
+    'save_cfg',
     'load_cfg',
     'load_lines_log',
     'save_line_log',
@@ -160,7 +161,7 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
     return output_variable
 
 
-# Function to load SpecSyzer configuration file
+# Function to load SpecSyzer configuration file #TODO change default name default_line_fitting
 def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='line_fitting'):
 
     """
