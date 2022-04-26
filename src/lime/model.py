@@ -307,8 +307,8 @@ class EmissionFitting:
 
                 W_80 = self.v_90 - self.v_10
                 W_90 = self.v_95 - self.v_5
-                A = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
-                K = W_90 / (1.397 * self.FWHM_int)
+                A_factor = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
+                K_factor = W_90 / (1.397 * self.FWHM_int)
 
         # Equivalent width computation
         lineContinuumMatrix = lineLinearCont + normalNoise
@@ -326,6 +326,9 @@ class EmissionFitting:
         mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
         n_comps = mixtureComponents.size
         ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf)
+
+        # Line redshift
+        self.z_line = self.peak_wave / theoWave_arr - 1
 
         # Compute the line redshift and reference wavelength
         if self.blended_check:
@@ -402,9 +405,6 @@ class EmissionFitting:
                 # Case with error propagation
                 if (term_err[i] == 0) and (f'{line}_{param}_err' in user_conf):
                     term_err[i] = user_conf[f'{line}_{param}_err']
-
-            # Compute line location
-            self.z_line[i] = self.center[i]/theoWave_arr[i] - 1
 
             # Gaussian area
             self.gauss_flux[i] = self.fit_output.params[f'{line}_area'].value

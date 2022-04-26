@@ -56,8 +56,8 @@ assumption on the emission line profile shape.
 
 .. attention::
     In the output measurements log and the ``lime.Spectrum.log``, these parameters have the same flux units as the
-    input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the constant provided at the
-    ``lime.Spectrum`` definition.
+    input spectrum. However, the attributes of the ``lime.Spectrum`` are normalized by the ``.norm_flux`` constant
+    provided by the user at the ``lime.Spectrum`` definition.
 
 * **peak_wave** (``.peak_wave``, ``float``): This variable is the wavelength of the highest pixel value in the line region.
 
@@ -77,19 +77,19 @@ assumption on the emission line profile shape.
 * **intg_flux** (``.intg_flux``, ``float``): This variable contains measurement of the integrated flux.
   This value is calculated via a Monte Carlo algorithm:
 
-  * If the pixel error spectrum is not provided by the user the algorithm takes the line ``.std_cont`` for all the pixels in the
-    line region.
+  * If the pixel error spectrum is not provided by the user, the algorithm uses the line ``.std_cont`` as a uniform
+    uncertainty for all the line pixels.
 
-  * The pixels error spectrum (or ``.std_cont``) is added stochastically to each pixel in the line region mask.
+  * The pixel error is added stochastically to each pixel in the line region mask.
 
   * The flux in the line region is summed up taking into consideration the line region averaged pixel width and removing
     the contribution of the linear continuum.
 
-  * The previous two steps are repeated in a 500 loop. The mean flux value from the resulting array is taken as the integrated
-    flux value.
+  * The previous two steps are repeated in a 1000 loop. The mean flux value from the resulting array is taken as the
+    integrated flux value.
 
 * **intg_err** (``.intg_err``, ``float``): This attribute contains the integrated flux uncertainty. This
-  value is derived from the standard deviation of the Monte Carlo algorithm steps described above.
+  value is derived from the standard deviation of the Monte Carlo flux calculation described above.
 
 .. attention::
     Blended components have the same ``.intg_flux`` and ``.intg_err`` values.
@@ -97,15 +97,18 @@ assumption on the emission line profile shape.
 * **eqw** (``.eqw``, ``float`` or ``np.array()``): This parameter is the equivalent of the emission line. It is calculated
   using the expression below:
 
-    .. math::
+  .. math::
 
-        Eqw = \frac{F_{\lambda}}{F_{cont}}
+        Eqw = \int_{\lambda_{1}}^{\lambda_{2}}\frac{F_{c}-F_{\lambda}}{F_{c}}d\lambda = \int_{\lambda_{1}}^{\lambda_{2}}\frac{F_{line}}{F_{c}}d\lambda
 
-  In blended lines the ``.gauss_flux`` is used otherwise the ``.intg_flux`` is used. In all cases the ``.cont`` is used
-  as denominator.
+
+  where :math:`F_c` is the integrated flux of the linear continuum in the line region (``.cont``) and  :math:`F_\lambda`
+  is the spectrum flux. In single lines, :math:`F_{line}` is the integrated flux (``.intg_flux``) while in blended lines, the
+  corresponding gaussian flux (``.gauss_flux``) is used. The integration limits for the line region are ``w3`` and ``w4``
+  from the input  user mask.
 
 * **eqw_err** (``.eqw``, ``float`` or ``np.array()``): This parameter is the uncertainty in the equivalent width. It is
-  calculated from a Monte Carlo vector of the  ``.cont`` and its ``.std_cont`` and the uncertainty of the line flux.
+  calculated from a Monte Carlo propagation of the  ``.cont`` and its ``.std_cont`` and the uncertainty of the line flux.
 
 * **z_line** (``.z_line``, ``float``): This variable is the emission line redshift:
 
@@ -113,8 +116,8 @@ assumption on the emission line profile shape.
 
         z_{\lambda} = \frac{\lambda_{obs}}{\lambda_{theo}} - 1
 
-  where :math:`\lambda_{obs}` is the ``.peak_wave`` for non-blended lines. Otherwise the gaussian profile ``.center`` is
-  used. In all cases :math:`\lambda_{theo}` is the theoretical transition wavelength obtained from the input ``.line``
+  where :math:`\lambda_{obs}` is the ``.peak_wave``. In blended lines, this variable is computed using the same ``.peak_wave``
+  for all transitions (this is the most intense pixel in the line band).
 
 * **FWHM_int** (``.FWHM_int``, ``float``): This variable is the Full Width Half-Measure in :math:`km/s` computed from
   the integrated profile: The algorithm finds the pixel coordinates which are above half the line peak flux. The blue and and red
@@ -123,15 +126,27 @@ assumption on the emission line profile shape.
   .. attention::
      This operation is only available for lines whose width is above 15 pixels.
 
-* **snr_line**  (``.FWHM_int``, ``float``): This variable is the signal to noise ratio of the emission line region using the
-  `IRAF splot definition <https://github.com/joequant/iraf/blob/master/noao/onedspec/splot/avgsnr.x>`_:
+* **snr_line**  (``.FWHM_int``, ``float``): This variable is the signal to noise ratio of the emission line using the
+  definition by `Rola et al. 1994 <https://ui.adsabs.harvard.edu/abs/1994A%26A...287..676R/abstract>`_:
 
    .. math::
 
-      SNR = \frac{avg}{rms} = \frac{{\frac {1}{n}}\sum _{i=1}^{n}y_{i}}{\sqrt{(\frac{1}{n})\sum_{i=1}^{n}(y_{i} - y_{avg})^{2}}}
+      \frac{S}{N}_{line}\approx\frac{\sqrt{2\pi}}{6}\frac{A_{line}}{\sigma_{cont}}\sqrt{N}\approx\frac{F_{line}}{\sigma_{cont}\cdot\sqrt{N}}
 
-* **snr_cont** (``.snr_cont``, ``float``): This variable is the signal to noise ratio of the emission line region using the `IRAF splot definition <https://github.com/joequant/iraf/blob/master/noao/onedspec/splot/avgsnr.x>`_
-  as in the equation above.
+  where :math:`A_{line}` is the amplitude of the line, :math:`F_{line}` is the integrated flux of the line (``.intg_flux``)
+  :math:`\sigma_{cont}` is the continuum flux standard deviation (``.std_cont``) and :math:`N` is the number of pixels
+  in the input line band. The later parameter approximates to :math:`N=6\sigma` in single lines, where :math:`\sigma`
+  is the gaussian profile standard deviation.
+
+* **snr_cont** (``.snr_cont``, ``float``): This variable is the signal to noise ratio of the emission line region using
+  the formula:
+
+   .. math::
+
+      \frac{S}{N}_{cont} =\frac{F_{cont}}{\sigma_{cont}}
+
+  where :math:`\sigma_{cont}` is the continuum flux at the peak location and :math:`\sigma_{cont}` is the continuum flux
+  standard deviation.
 
 * **v_med** (``.v_med``, ``float``): This variable is the median velocity of the emission line. The emission line wavelength
   is converted to velocity units using the formula:
@@ -144,25 +159,25 @@ assumption on the emission line profile shape.
   between :math:`w3` and :math:`w4` points and :math:`\lambda_{peak}` is the ``.peak_wave`` of the emission line.
 
 * **v_50** (``.v_50``, ``float``): This variable is velocity corresponding to the 50th percentile of the emission line
-  flux in :math:`km/s`. A cumulative sum is performed in the line flux array.  Afterwards, this array is multiplied by the
-  ``.pixelWidth`` and divided by the ``.intg_flux``. The resulting vector quantifies the flux percentage corresponding to
-  each pixel in the :math:`w3` and :math:`w4` mask selection. Afterwards, this vector is interpolated with respect to the
-  velocity array (whose calculation is provided at ``.v_med``).  in order to compute velocity at the 50th flux percentile.
+  spectrum where the wavelength array is in :math:`km/s`. A cumulative sum is performed in the line flux array.  Afterwards,
+  this array is multiplied by the ``.pixelWidth`` and divided by the ``.intg_flux``. The resulting vector quantifies the
+  flux percentage corresponding to each pixel in the :math:`w3` and :math:`w4` mask selection. Afterwards, this vector is
+  interpolated with respect to the velocity array (whose calculation can be found above).
 
     .. attention::
        This operation is only available for lines whose width is above 15 pixels.
 
 * **v_5** (``.v_5``, ``float``): This variable is the velocity corresponding to the 5th percentile of the emission line
-  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+  flux. The calculation procedure is described at the ``.v_50`` entry.
 
 * **v_10** (``.v_10``, ``float``): This variable is the velocity corresponding to the 10th percentile of the emission line
-  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+  flux. The calculation procedure is described at the ``.v_50`` entry.
 
 * **v_90** (``.v_90``, ``float``): This variable is the velocity corresponding to the 90th percentile of the emission line
-  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+  flux. The calculation procedure is described at the ``.v_50`` entry.
 
 * **v_95** (``.v_95``, ``float``): This variable is the velocity corresponding to the 95th percentile of the emission line
-  flux in :math:`km/s`. The calculation procedure is described at ``.v_50``.
+  flux. The calculation procedure is described at the ``.v_50`` entry.
 
 
 Gaussian properties
@@ -178,7 +193,7 @@ multi-Gaussian profile:
 where :math:`F_{\lambda}` is the combined flux profile of the emission line for the line wavelength range :math:`\lambda`.
 :math:`A_{i}` is the height of a gaussian component with respect to the line continuum (``.cont``), :math:`\mu_{i}` is the center
 of the of gaussian component and :math:`\sigma_{i}` is the standard deviation. The first parameters has the input
-flux units (``lime.Spectrum.flux``), while the later two have the input wavelength units (``lime.Spectrum.wave``).
+flux units (``lime.Spectrum.flux``), while the latter two have the input wavelength units (``lime.Spectrum.wave``).
 
 The output uncertainty in these parameters corresponds to the `1σ error <https://lmfit.github.io/lmfit-py/fitting.html#uncertainties-in-variable-parameters-and-their-correlations>`_:
 This is the standard error which increases the magnitude of the :math:`\chi^2` calculated by the least squares algorithm.
@@ -188,7 +203,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
    defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. :math:`\textsc{LiMe}` defines its own model where the
    amplitude is defined as the height of the line with respect to the adjacent continuum.
 
-* **amp** (``.amp``, ``np.array()``): This array contains the amplitude of the Gaussian components. The parameter units
+* **amp** (``.amp``, ``np.array()``): This array contains the amplitude of the Gaussian profiles. The parameter units
   are those of the input spectrum flux (``lime.Spectrum.flux``).
 * **amp_err** (``.amp_err``, ``np.array()``): This array contains the uncertainty on the Gaussian profiles amplitude.
   The parameter units are those of the input flux (``lime.Spectrum.flux``).
@@ -211,8 +226,8 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
   where :math:`c = 299792.458 km/s` is the speed of light, :math:`\lambda_{center}` is the Gaussian profile central wavelength
   (``.center``) and :math:`\lambda_{ref}` is the reference wavelength. In non-blended lines :math:`\lambda_{ref}` is the
-  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the theoretical wavelength (``.wave``) of the
-  emission line transition (redshifted by the value provided by in the ``lime.Spectrum`` definition).
+  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the component transition wavelength
+  (``.wave``) shifted to the observed frame using the redshif provided by the user at the ``lime.Spectrum``.
 
 * **v_r_err** (``.v_r_err``, ``np.array()``): This array contains the uncertainty of the Gaussian components radial velocity
   in :math:`km/s`.
@@ -226,8 +241,8 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
   where c :math:`c = 299792.458 km/s` is the speed of light, :math:`\sigma` is the Gaussian profile standard deviation
   (``.sigma``) and :math:`\lambda_{ref}` is the reference wavelength. In non-blended lines :math:`\lambda_{ref}` is the
-  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the theoretical wavelength
-  (``.wave``) of the emission line transition (redshifted by the value provided by in the ``lime.Spectrum`` definition)
+  observed peak wavelength (``.peak_wave``). In blended lines, :math:`\lambda_{ref}` is the component transition wavelength
+  (``.wave``) shifted to the observed frame using the redshif provided by the user at the ``lime.Spectrum``.
 
 * **sigma_vel_err** (``sigma_vel_err``, ``float`` or ``np.array()``) This array contains the uncertainty of the Gaussian
   components standard deviation in :math:`km/s`.
