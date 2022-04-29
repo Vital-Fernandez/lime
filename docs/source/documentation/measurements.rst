@@ -145,7 +145,7 @@ assumption on the emission line profile shape.
 
       \frac{S}{N}_{cont} =\frac{F_{cont}}{\sigma_{cont}}
 
-  where :math:`\sigma_{cont}` is the continuum flux at the peak location and :math:`\sigma_{cont}` is the continuum flux
+  where :math:`\sigma_{cont}` is the continuum flux at the peak wavelength and :math:`\sigma_{cont}` is the continuum flux
   standard deviation.
 
 * **v_med** (``.v_med``, ``float``): This variable is the median velocity of the emission line. The emission line wavelength

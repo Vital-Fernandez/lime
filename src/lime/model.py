@@ -55,7 +55,7 @@ def gauss_func(ind_params, a, mu, sigma):
     return a * np.exp(-((x - mu) * (x - mu)) / (2 * (sigma * sigma))) + z
 
 
-def gaussian_profiles_computation(line_list, log, z_corr, mask_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+def gaussian_profiles_computation(line_list, log, z_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
 
     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
     # and starting at interval[0] values beyond interval[0] are masked
@@ -64,17 +64,17 @@ def gaussian_profiles_computation(line_list, log, z_corr, mask_corr, res_factor=
         idcs_lines = (log.index.isin(line_list))
 
         amp_array = log.loc[idcs_lines, 'amp'].values
-        center_array = log.loc[idcs_lines, 'center'].values / z_corr
+        center_array = log.loc[idcs_lines, 'center'].values
         sigma_array = log.loc[idcs_lines, 'sigma'].values
 
-        wmin_array = log.loc[idcs_lines, interval[0]].values * mask_corr
-        wmax_array = log.loc[idcs_lines, interval[1]].values * mask_corr
+        wmin_array = log.loc[idcs_lines, interval[0]].values * z_corr
+        wmax_array = log.loc[idcs_lines, interval[1]].values * z_corr
         w_mean = np.max(wmax_array - wmin_array)
 
         x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
         x_array = np.add(np.c_[x_zero], wmin_array)
 
-        gaussian_array = gaussian_model(x_array, amp_array, center_array, sigma_array) * z_corr
+        gaussian_array = gaussian_model(x_array, amp_array, center_array, sigma_array)
 
         for i in range(x_array.shape[1]):
             idcs_nan = x_array[:, i] > wmax_array[i]
@@ -96,12 +96,12 @@ def gaussian_profiles_computation(line_list, log, z_corr, mask_corr, res_factor=
             sigma = log.loc[comp, 'sigma']
 
             # Gaussian components calculation
-            gaussian_array[:, i] = gaussian_model(x_array, amp, center, sigma) * z_corr
+            gaussian_array[:, i] = gaussian_model(x_array, amp, center, sigma)
 
         return gaussian_array
 
 
-def linear_continuum_computation(line_list, log, z_corr, mask_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+def linear_continuum_computation(line_list, log, z_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
 
     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
     # and starting at interval[0] values beyond interval[0] are masked
@@ -111,15 +111,14 @@ def linear_continuum_computation(line_list, log, z_corr, mask_corr, res_factor=1
 
         m_array = log.loc[idcs_lines, 'm_cont'].values
         n_array = log.loc[idcs_lines, 'n_cont'].values
-
-        wmin_array = log.loc[idcs_lines, interval[0]].values * mask_corr
-        wmax_array = log.loc[idcs_lines, interval[1]].values * mask_corr
+        wmin_array = log.loc[idcs_lines, interval[0]].values * z_corr
+        wmax_array = log.loc[idcs_lines, interval[1]].values * z_corr
         w_mean = np.max(wmax_array - wmin_array)
 
         x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
         x_array = np.add(np.c_[x_zero], wmin_array)
 
-        cont_array = (m_array * x_array + n_array) * z_corr
+        cont_array = m_array * x_array + n_array
 
         for i in range(x_array.shape[1]):
             idcs_nan = x_array[:, i] > wmax_array[i]
@@ -136,7 +135,7 @@ def linear_continuum_computation(line_list, log, z_corr, mask_corr, res_factor=1
         for i, comp in enumerate(line_list):
             m_cont = log.loc[comp, 'm_cont']
             n_cont = log.loc[comp, 'n_cont']
-            cont_array[:, i] = (m_cont * x_array + n_cont) * z_corr
+            cont_array[:, i] = m_cont * x_array + n_cont
 
         return cont_array
 
@@ -152,6 +151,25 @@ def is_digit(x):
         return True
     except ValueError:
         return False
+
+
+def format_line_mask_option(entry_value, wave_array):
+
+    # Check if several entries
+    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
+
+    # Check if interval or single pixel mask
+    for i, element in enumerate(formatted_value):
+        if '-' in element:
+            formatted_value[i] = element.split('-')
+        else:
+            element = float(element)
+            pix_width = np.diff(wave_array).mean()/2
+            formatted_value[i] = [element-pix_width, element+pix_width]
+
+    formatted_value = np.array(formatted_value).astype(float)
+
+    return formatted_value
 
 
 class EmissionFitting:
@@ -193,6 +211,7 @@ class EmissionFitting:
         self.sigma_vel, self.sigma_vel_err = None, None
         self.snr_line, self.snr_cont = None, None
         self.observations, self.comments = 'no', 'no'
+        self.pixel_mask = 'no'
         self.FWHM_int, self.FWHM_g = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
@@ -207,22 +226,38 @@ class EmissionFitting:
 
         return
 
-    def define_masks(self, wave_rest, masks_array, merge_continua=True):
+    def define_masks(self, wavelength_array, masks_array, merge_continua=True, line_mask_entry=None):
 
         # Make sure it is a matrix
         masks_array = np.array(masks_array, ndmin=2)
 
         # Check if it is a masked array
-        if np.ma.is_masked(wave_rest):
-            wave_arr = wave_rest.data
+        if np.ma.is_masked(wavelength_array):
+            wave_arr = wavelength_array.data
         else:
-            wave_arr = wave_rest
+            wave_arr = wavelength_array
+
+        # Remove masked pixels from this function wavelength array
+        if line_mask_entry is not None:
+
+            # Convert cfg mask string to limits
+            line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
+
+            # Get masked indeces
+            idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+            idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
+
+            # Store the line pixel mask in the log
+            self.pixel_mask = line_mask_entry
+
+        else:
+            idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
 
         # Find indeces for six points in spectrum
         idcsW = np.searchsorted(wave_arr, masks_array)
 
         # Emission region
-        idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]])).squeeze()
+        idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
 
         # Return left and right continua merged in one array
         if merge_continua:
@@ -230,15 +265,15 @@ class EmissionFitting:
             idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
                               (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
                               ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-                               wave_arr[:, None] <= wave_arr[idcsW[:, 5]]))).squeeze()
+                               wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
 
             return idcsLineRegion, idcsContRegion
 
         # Return left and right continua in separated arrays
         else:
 
-            idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])).squeeze()
-            idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]])).squeeze()
+            idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
+            idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
 
             return idcsLineRegion, idcsContLeft, idcsContRight
 
@@ -301,7 +336,7 @@ class EmissionFitting:
                 percentInterp = interp1d(percentFluxArray, velocArray, kind='slinear', fill_value='extrapolate')
                 velocPercent = percentInterp(TARGET_PERCENTILES)
 
-                self.v_med, self.v_50 = np.median(velocArray), velocPercent[3]
+                self.v_med, self.v_50 = np.median(velocArray), velocPercent[3] # FIXME np.median ignores the mask
                 self.v_5, self.v_10 = velocPercent[1], velocPercent[2]
                 self.v_90, self.v_95 = velocPercent[4], velocPercent[5]
 
@@ -363,9 +398,18 @@ class EmissionFitting:
             self.define_param(fit_model, comp, 'sigma', 1.0, self._SIG_PAR, user_conf)
             self.define_param(fit_model, comp, 'area', comp, self._AREA_PAR, user_conf)
 
+        # Unpack the mask
+        if np.ma.is_masked(x):
+            idcs_good = ~x.mask
+            x_in = x.data[idcs_good]
+            y_in = y.data[idcs_good]
+            weights_in = weights[idcs_good]# if np.ma.is_masked(weights) else weights# TODO this should be mask if possible
+        else:
+            x_in, y_in, weights_in = x, y, weights
+
         # Fit the line
         self.fit_params = fit_model.make_params()
-        self.fit_output = fit_model.fit(y, self.fit_params, x=x, weights=weights, method=self._minimize_method)
+        self.fit_output = fit_model.fit(y_in, self.fit_params, x=x_in, weights=weights_in, method=self._minimize_method)
 
         if not self.fit_output.errorbars:
             if self.observations == 'no':

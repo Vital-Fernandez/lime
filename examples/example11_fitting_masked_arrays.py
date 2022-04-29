@@ -14,45 +14,32 @@ idcs_limits = (a >= 5) & (a <= 5)
 print(a[idcs_limits])
 
 
-def converting_entry(entry_value, wave_array):
+def format_line_mask_option(entry_value, wave_array):
 
-    if ',' in entry_value:
-        formated_value = entry_value.split(',')
-    else:
-        formated_value = [f'{entry_value}']
+    # Check if several entries
+    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
 
-    for i, element in enumerate(formated_value):
+    # Check if interval or single pixel mask
+    for i, element in enumerate(formatted_value):
         if '-' in element:
-            formated_value[i] = element.split('-')
+            formatted_value[i] = element.split('-')
         else:
             element = float(element)
             pix_width = np.diff(wave_array).mean()/2
-            formated_value[i] = [element-pix_width, element+pix_width]
+            formatted_value[i] = [element-pix_width, element+pix_width]
 
-    formated_value = np.array(formated_value).astype(float)
+    formatted_value = np.array(formatted_value).astype(float)
 
-    return formated_value
+    return formatted_value
 
 
-def mask_indexing(wave_array, limits_array):
+def line_mask_indexing(wave_array, limits_array):
 
-    # mask_array = np.ones(wave_array.size).astype(bool)
-    #
-    # for entry in limits_array:
-    #     idcs_entry = np.searchsorted(wave_array, entry)
-    #     mask_array[idcs_entry[0]:idcs_entry[1]] = False
-    #
-    # # Valid pixels are true
-    # return mask_array
+    # True values for masked pixels
+    idcsMask = (wave_array[:, None] >= limits_array[:, 0]) & (wave_array[:, None] <= limits_array[:, 1])
+    idcsMask = idcsMask.sum(axis=1).astype(bool)
 
-    mask_array = np.zeros(wave_array.size).astype(bool)
-
-    for entry in limits_array:
-        entry_array = (wave_array >= entry[0]) & (wave_array <= entry[1])
-        mask_array += entry_array
-
-    # Valid pixels are true
-    return ~mask_array
+    return idcsMask
 
 
 conf_file = '/home/vital/PycharmProjects/vital_tests/astro/data/LzLCS_ISIS/LzLCS_ISIS_cfg.ini'
@@ -82,27 +69,32 @@ for i, specName in enumerate(specNameList):
 
             # Lime spectrum object
             print(f'- ({i}) {objList[i]}: {arm}')
-            spec = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
             # spec.plot_spectrum(spec_label=objList[i])
 
-            # # Adjust mask to object
+            # # # Adjust mask to object
             obj_mask_file = dataFolder/objList[i]/f'{objList[i]}_{arm}_mask.txt'
-            # # shu_copy(refMask, obj_mask)
+            # # # shu_copy(refMask, obj_mask)
             # lime.MaskInspector(obj_mask_file, wave, flux, redshift=zList[i], norm_flux=norm_flux, y_scale='linear')
             mask = lime.load_lines_log(obj_mask_file)
             line_mask = mask.loc['S2_6716A_b', 'w1':'w6'].values * (1+zList[i])
 
-            mask_limits = converting_entry(S2_6716A_b_mask, wave)
-            idcs_mask_limits = mask_indexing(wave, mask_limits)
-            wave_ma = np.ma.masked_array(wave, mask=~idcs_mask_limits)
-            flux_ma = np.ma.masked_array(flux, mask=~idcs_mask_limits)
+            mask_limits = format_line_mask_option(S2_6716A_b_mask, wave)
+            idcs_mask_limits = line_mask_indexing(wave, mask_limits)
+            wave_ma = np.ma.masked_array(wave, mask=idcs_mask_limits)
+            flux_ma = np.ma.masked_array(flux, mask=idcs_mask_limits)
 
-            spec.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
-            spec.display_results()
+            # spec = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
+            # spec.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
+            # spec.display_results()
+            # spec_mask = lime.Spectrum(wave_ma, flux_ma, redshift=zList[i], norm_flux=norm_flux)
+            # spec_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
+            # spec_mask.display_results(log_scale=False)
 
-            spec_mask = lime.Spectrum(wave_ma, flux_ma, redshift=zList[i], norm_flux=norm_flux)
-            spec_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
-            spec_mask.display_results()
+            spec_new_mask = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
+            fit_cfg['S2_6716A_b_mask'] = S2_6716A_b_mask
+            spec_new_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
+            spec_new_mask.display_results(log_scale=True, frame='rest')
+            lime.save_line_log(spec_new_mask.log, 'testing_masks.txt')
 
             # fig, ax = plt.subplots(figsize=(12, 12))
             # ax.step(wave, flux, where='mid')

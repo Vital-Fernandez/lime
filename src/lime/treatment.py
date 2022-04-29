@@ -171,8 +171,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self._emission_check = emission
         self._cont_from_adjacent = adjacent_cont
 
-         # Establish spectrum line and continua regions
-        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift))
+        # Get spectrum line and continua band indeces
+        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift), line_mask_entry=fit_conf.get(f'{self.line}_mask'))
 
         # Integrated line properties
         emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
@@ -202,8 +202,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         idcsLine = idcsEmis + idcsCont
         x_array = self.wave[idcsLine]
         y_array = self.flux[idcsLine]
-        w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size,
-                                                                                          1.0 / self.std_cont)
+        w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size, 1.0 / self.std_cont)
         self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, self.log, z_obj=self.redshift)
 
         # Safe the results to log DF
@@ -542,8 +541,8 @@ class MaskInspector(Spectrum):
             try:
                 manager = plt.get_current_fig_manager()
                 manager.window.showMaximized()
-            except:
-                print('-- Window could not be maximized')
+            except: #TODO add exception
+                print()
 
             plt.tight_layout()
             plt.show()
@@ -1034,11 +1033,11 @@ class CubeInspector(Spectrum):
                 line_list = self.log.index.values
 
                 # Reference frame for the plot
-                wave_plot, flux_plot, z_corr, mask_corr = self.plot_frame_switch(self.wave, flux_voxel, self.redshift, frame)
+                wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, flux_voxel, self.redshift, frame)
 
                 # Compute the individual profiles
-                wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, z_corr, mask_corr)
-                wave_array, cont_array = linear_continuum_computation(line_list, self.log, z_corr, mask_corr)
+                wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, (1 + self.redshift))
+                wave_array, cont_array = linear_continuum_computation(line_list, self.log, (1 + self.redshift))
 
                 # Mask with
                 w3_array, w4_array = self.log.w3.values, self.log.w4.values
@@ -1046,14 +1045,15 @@ class CubeInspector(Spectrum):
                 # Separating blended from unblended lines
                 idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label == 'no').values
 
+                w3 = self.log.w3.values * (1 + self.redshift)
+                w4 = self.log.w4.values * (1 + self.redshift)
+                idcsLines = ((w3 - 5) <= wave_plot[:, None]) & (wave_plot[:, None] <= (w4 + 5))
+
                 # Plot single lines
                 line_list = self.log.loc[idcs_nonBlended].index
                 for line in line_list:
 
                     i = self.log.index.get_loc(line)
-
-                    # Determine the line region
-                    idcs_plot = ((w3_array[i] - 5) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i] + 5) * mask_corr)
 
                     # Plot the gauss curve elements
                     wave_i = wave_array[:, i][..., None]
@@ -1062,7 +1062,7 @@ class CubeInspector(Spectrum):
 
                     line_comps = [line]
                     self.gaussian_profiles_plotting(line_comps, self.log,
-                                                    wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                    wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]], z_corr,
                                                     axis=self.ax1, frame=frame, cont_bands=None,
                                                     wave_array=wave_i, cont_array=cont_i,
                                                     gaussian_array=gauss_i)
@@ -1075,7 +1075,7 @@ class CubeInspector(Spectrum):
                     i_group = np.where(idcs_group)[0]
 
                     # Determine the line region
-                    idcs_plot = ((w3_array[i_group[0]] - 1) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i_group[0]] + 1) * mask_corr)
+                    idcs_plot = ((w3[i_group[0]] - 1) <= wave_plot) & (wave_plot <= (w4[i_group[0]] + 1))
 
                     # Plot the gauss curve elements
                     wave_i = wave_array[:, i_group[0]:i_group[-1]+1]

@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from functools import partial
 from collections import Sequence
 
-from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
+from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
 from .tools import label_decomposition, kinematic_component_labelling, blended_label_from_log
 
 try:
@@ -37,7 +37,9 @@ colorDict = {'bg': 'white', 'fg': 'black',
              'profile': '#1f77b4',
              'cont': '#ff7f0e',
              'error': 'red',
-             'mask_map': 'viridis'}
+             'mask_map': 'viridis',
+             'comps_map': 'Dark2',
+             'mask_marker': 'red'}
 
 PLOT_COLORS = {'figure.facecolor': colorDict['bg'], 'axes.facecolor': colorDict['bg'],
                'axes.edgecolor': colorDict['fg'], 'axes.labelcolor': colorDict['fg'],
@@ -349,10 +351,10 @@ class LiMePlots:
         :param frame: str, optional
 
         """
+
         # Adjust default theme
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
-
         PLOT_CONF['figure.figsize'] = (10, 6)
 
         # User configuration overrites user
@@ -368,15 +370,15 @@ class LiMePlots:
             fig, ax = plt.subplots()
 
             # Reference frame for the plot
-            wave_plot, flux_plot, z_corr, mask_corr = self.plot_frame_switch(self.wave, self.flux, self.redshift, frame)
+            wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
             # Plot the spectrum
-            ax.step(wave_plot, flux_plot, label=spec_label, where='mid', color=self._color_dict['fg'])
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=spec_label, where='mid', color=self._color_dict['fg'])
 
             # Plot the continuum if available
             if comp_array is not None:
                 assert len(comp_array) == len(wave_plot), '- ERROR: comp_array and wavelength array have mismatching length'
-                ax.step(wave_plot, comp_array, label='Sigma Continuum', linestyle=':', where='mid')
+                ax.step(wave_plot/z_corr, comp_array, label='Sigma Continuum', linestyle=':', where='mid')
 
             # Plot peaks and troughs if provided
             if peaks_table is not None:
@@ -386,23 +388,21 @@ class LiMePlots:
                 for i in range(2):
                     idcs_emission = peaks_table['line_type'] == line_types[i]
                     idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
-                    ax.scatter(wave_plot[idcs_linePeaks], flux_plot[idcs_linePeaks], label=labels[i], facecolors='none',
-                               edgecolors=color_peaks[i])
+                    ax.scatter(wave_plot[idcs_linePeaks]/z_corr, flux_plot[idcs_linePeaks]*z_corr, label=labels[i],
+                               facecolors='none', edgecolors=color_peaks[i])
 
             # Shade regions of matched lines if provided
             if match_log is not None:
                 ion_array, wave_array, latex_array = label_decomposition(match_log.index.values)
-                w3 = match_log.w3.values
-                w4 = match_log.w4.values
-                mean_flux = np.nanmean(flux_plot)
-                idcsLineBand = np.searchsorted(wave_plot, np.array([w3, w4]) * mask_corr)
+                w3, w4 = match_log.w3.values * (1+self.redshift), match_log.w4.values * (1+self.redshift)
+                idcsLineBand = np.searchsorted(wave_plot, np.array([w3, w4]))
 
                 first_check = True
                 for i in np.arange(latex_array.size):
                     label = 'Matched line' if first_check else '_'
                     max_region = np.max(flux_plot[idcsLineBand[0, i]:idcsLineBand[1, i]])
-                    ax.axvspan(w3[i] * mask_corr, w4[i] * mask_corr, label=label, alpha=0.30, color=self._color_dict['matched_line'])
-                    ax.text(wave_array[i] * mask_corr, max_region * 0.9, latex_array[i], rotation=270)
+                    ax.axvspan(w3[i]/z_corr, w4[i]/z_corr, label=label, alpha=0.30, color=self._color_dict['matched_line'])
+                    ax.text(wave_array[i] * (1+self.redshift)/z_corr, max_region * 0.9 * z_corr, latex_array[i], rotation=270)
                     first_check = False
 
             # Shade noise region if provided
@@ -416,8 +416,8 @@ class LiMePlots:
                 w3_array, w4_array = self.log.w3.values, self.log.w4.values
 
                 # Compute the individual profiles
-                wave_array, gaussian_array = gaussian_profiles_computation(log.index.values, log, z_corr, mask_corr)
-                wave_array, cont_array = linear_continuum_computation(log.index.values, log, z_corr, mask_corr)
+                wave_array, gaussian_array = gaussian_profiles_computation(log.index.values, log, (1 + self.redshift))
+                wave_array, cont_array = linear_continuum_computation(log.index.values, log, (1 + self.redshift))
 
                 # Separating blended from unblended lines
                 idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label == 'no').values
@@ -429,19 +429,21 @@ class LiMePlots:
                     i = self.log.index.get_loc(line)
 
                     # Determine the line region
-                    idcs_plot = ((w3_array[i] - 5) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i] + 5) * mask_corr)
+                    idcs_plot = ((w3_array[i] - 5) * z_corr <= wave_plot) & (wave_plot <= (w4_array[i] + 5) * z_corr)
 
-                    # Plot the gauss curve elements
+                    # Plot the gaussian profiles
                     wave_i = wave_array[:, i][..., None]
                     cont_i = cont_array[:, i][..., None]
                     gauss_i = gaussian_array[:, i][..., None]
 
-                    line_comps = [line]
-                    self.gaussian_profiles_plotting(line_comps, self.log,
+                    self.gaussian_profiles_plotting([line], self.log,
                                                     wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
                                                     axis=ax, frame=frame, cont_bands=None,
                                                     wave_array=wave_i, cont_array=cont_i,
                                                     gaussian_array=gauss_i)
+
+                    # Plot masked pixels if possible
+                    self.mask_pixels_plotting(line, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr, ax, self.log)
 
                 # Plot combined lines
                 profile_list = self.log.loc[~idcs_nonBlended, 'profile_label'].unique()
@@ -451,7 +453,7 @@ class LiMePlots:
                     i_group = np.where(idcs_group)[0]
 
                     # Determine the line region
-                    idcs_plot = ((w3_array[i_group[0]] - 1) * mask_corr <= wave_plot) & (wave_plot <= (w4_array[i_group[0]] + 1) * mask_corr)
+                    idcs_plot = ((w3_array[i_group[0]] - 1) * z_corr <= wave_plot) & (wave_plot <= (w4_array[i_group[0]] + 1) * z_corr)
 
                     # Plot the gauss curve elements
                     wave_i = wave_array[:, i_group[0]:i_group[-1]+1]
@@ -525,24 +527,25 @@ class LiMePlots:
             list_comps = profile_label.split('-') if blended_check else [line]
 
             # Reference frame for the plot
-            wave_plot, flux_plot, z_corr, mask_corr = self.plot_frame_switch(self.wave, self.flux, self.redshift, frame)
+            wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
             # Determine the line region
-            w1, w6 = self.log.loc[line, 'w1'], self.log.loc[line, 'w6']
-            idcs_plot = ((w1 - 5) * mask_corr <= wave_plot) & (wave_plot <= (w6 + 5) * mask_corr)
+            w1 = self.log.loc[line, 'w1'] * (1 + self.redshift)
+            w6 = self.log.loc[line, 'w6'] * (1 + self.redshift)
+            idcs_plot = ((w1 - 5) <= wave_plot) & (wave_plot <= (w6 + 5))
 
             # Continuum level
-            cont_level = self.log.loc[line, 'cont'] * z_corr/self.norm_flux
-            cont_std = self.log.loc[list_comps[0], 'std_cont'] * z_corr/self.norm_flux
+            cont_level = self.log.loc[line, 'cont']
+            cont_std = self.log.loc[list_comps[0], 'std_cont']
 
             # Calculate the line components for upper plot
-            wave_array, cont_array = linear_continuum_computation(list_comps, self.log, z_corr, mask_corr)
-            wave_array, gaussian_array = gaussian_profiles_computation(list_comps, self.log, z_corr, mask_corr)
+            wave_array, cont_array = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift))
+            wave_array, gaussian_array = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift))
 
             # Calculate the fluxes for the residual plot
-            cont_i_resd = linear_continuum_computation(list_comps, self.log, z_corr, mask_corr, x_array=wave_plot[idcs_plot])
-            gaussian_i_resd = gaussian_profiles_computation(list_comps, self.log, z_corr, mask_corr, x_array=wave_plot[idcs_plot])
-            total_resd = (gaussian_i_resd.sum(axis=1) + cont_i_resd[:, 0])/self.norm_flux
+            cont_i_resd = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
+            gaussian_i_resd = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
+            total_resd = gaussian_i_resd.sum(axis=1) + cont_i_resd[:, 0]
 
             # Two axes figure, upper one for the line lower for the residual
             gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
@@ -551,7 +554,7 @@ class LiMePlots:
 
             # Plot the Line spectrum
             color = self._color_dict['fg']
-            spec_ax.step(wave_plot[idcs_plot], flux_plot[idcs_plot], where='mid', color=color)
+            spec_ax.step(wave_plot[idcs_plot]/z_corr, flux_plot[idcs_plot]*z_corr, where='mid', color=color)
 
             # Plot the gauss curve elements
             self.gaussian_profiles_plotting(list_comps, self.log, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
@@ -561,19 +564,29 @@ class LiMePlots:
 
             # Lower plot residual
             label_residual = r'$\frac{F_{obs} - F_{fit}}{F_{cont}}$'
-            residual = ((flux_plot[idcs_plot] - total_resd)/cont_level)
-            resid_ax.step(wave_plot[idcs_plot], residual, where='mid', color=self._color_dict['fg'])
+            residual = ((flux_plot[idcs_plot] - total_resd/self.norm_flux)/(cont_level/self.norm_flux))
+            resid_ax.step(wave_plot[idcs_plot]/z_corr, residual*z_corr, where='mid', color=self._color_dict['fg'])
 
             # Shade Continuum flux standard deviation # TODO revisit this calculation
             label = r'$\sigma_{Continuum}/\overline{F_{cont}}$'
-            y_limit = cont_std / cont_level
-            resid_ax.fill_between(wave_plot[idcs_plot], -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
+            y_limit = cont_std/cont_level
+            resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
+
+            # Marked masked pixels if they are there
+            if idcs_mask is not None:
+                x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
+                y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
+                spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'])
+
+            # Plot masked pixels if possible
+            self.mask_pixels_plotting(list_comps[0], wave_plot, flux_plot, z_corr, spec_ax, self.log)
 
             # Shade the pixel error spectrum if available:
             if self.err_flux is not None:
                 label = r'$\sigma_{pixel}/\overline{F(cont)}$'
                 err_norm = self.err_flux[idcs_plot] * z_corr/cont_level
-                resid_ax.fill_between(wave_plot[idcs_plot], -err_norm, err_norm, label=label, facecolor='salmon', alpha=0.3)
+                resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm, err_norm,
+                                      label=label, facecolor='salmon', alpha=0.3)
 
             # Add the flux normalization to units if non provided
             if self.norm_flux != 1.0:
@@ -594,16 +607,15 @@ class LiMePlots:
 
             # Spec upper and lower limit based on absorption or emission
             if self._emission_check:
-                spec_ax.set_ylim(None, self.log.loc[line, 'peak_flux']/self.norm_flux*2)
-
+                spec_ax.set_ylim(None, self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux*2)
             else:
-                spec_ax.set_ylim(self.log.loc[line, 'peak_flux']/self.norm_flux/2, None)
+                spec_ax.set_ylim(self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux/2, None)
 
             # Residual x axis limit from spec axis
             resid_ax.set_xlim(spec_ax.get_xlim())
 
             # Residual y axis limit from std at line location
-            idx_w3, idx_w4 = np.searchsorted(wave_plot[idcs_plot], self.log.loc[line, 'w3':'w4'] * mask_corr)
+            idx_w3, idx_w4 = np.searchsorted(wave_plot[idcs_plot], self.log.loc[line, 'w3':'w4'] * (1+self.redshift))
             resd_limit = np.std(residual[idx_w3:idx_w4]) * 5
             resid_ax.set_ylim(-resd_limit, resd_limit)
 
@@ -651,12 +663,13 @@ class LiMePlots:
         latex_label = self.log.loc[line, 'latex_label']
         intg_flux = self.log.loc[line, 'intg_flux']
 
-        print(peak_wave)
+        # Reference frame for the plot
+        wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, user_choice='observed')
 
         # Velocity spectrum for the line region
-        flux_plot = self.flux[idcsEmis]
-        cont_plot = (m_cont * self.wave[idcsEmis] + n_cont)/self.norm_flux
-        vel_plot = c_KMpS * (self.wave[idcsEmis] - peak_wave) / peak_wave
+        flux_plot = flux_plot[idcsEmis]
+        cont_plot = (m_cont * wave_plot[idcsEmis] + n_cont)/self.norm_flux
+        vel_plot = c_KMpS * (wave_plot[idcsEmis] - peak_wave) / peak_wave
 
         # Velocity values
         vel_med = np.median(vel_plot)
@@ -755,28 +768,27 @@ class LiMePlots:
             n_axes, n_lines = ncols * nrows, line_list.size
 
             # Reference frame for the plot
-            wave_plot, flux_plot, z_corr, mask_corr = self.plot_frame_switch(self.wave, self.flux, self.redshift, frame)
+            wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
-            w1_array, w6_array = self.log.w1.values, self.log.w6.values
+            w1 = self.log.w1.values * (1 + self.redshift)
+            w6 = self.log.w6.values * (1 + self.redshift)
+            idcsLines = ((w1 - 5) <= wave_plot[:, None]) & (wave_plot[:, None] <= (w6 + 5))
 
             fig, ax = plt.subplots(nrows=nrows, ncols=ncols)
             axesList = ax.flatten()
 
             # Compute the gaussian profiles
-            wave_array, cont_array = linear_continuum_computation(line_list, self.log, z_corr, mask_corr)
-            wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, z_corr, mask_corr)
+            wave_array, cont_array = linear_continuum_computation(line_list, self.log, (1+self.redshift))
+            wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, (1+self.redshift))
 
             # Loop through the lines
             for i, ax_i in enumerate(axesList):
 
                 if i < n_lines:
 
-                    # Determine the line region # TODO without these extra pixels the plot bands break
-                    idcs_plot = ((w1_array[i] - 5) * mask_corr <= wave_plot) & (wave_plot <= (w6_array[i] + 5) * mask_corr)
-
                     # Plot the spectrum
                     color = self._color_dict['fg']
-                    ax_i.step(wave_plot[idcs_plot], flux_plot[idcs_plot], where='mid', color=color)
+                    ax_i.step(wave_plot[idcsLines[:, i]]/z_corr, flux_plot[idcsLines[:, i]]*z_corr, where='mid', color=color)
 
                     # Plot the gauss curve elements
                     wave_i = wave_array[:, i][..., None]
@@ -784,13 +796,14 @@ class LiMePlots:
                     gauss_i = gaussian_array[:, i][..., None]
 
                     self.gaussian_profiles_plotting([line_list[i]], self.log,
-                                                    wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                    wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]], z_corr,
                                                     axis=ax_i, frame=frame, cont_bands=True,
                                                     wave_array=wave_i, cont_array=cont_i,
                                                     gaussian_array=gauss_i)
 
-                    # if mplcursors:
-                    #     mplcursors.cursor().connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+                    # Plot masked pixels if possible
+                    self.mask_pixels_plotting(line_list[i], wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]],
+                                              z_corr, ax_i, self.log)
 
                     # Axis format
                     ax_i.yaxis.set_major_locator(plt.NullLocator())
@@ -898,43 +911,44 @@ class LiMePlots:
 
         return
 
-    def plot_frame_switch(self, wave_obs, flux_obs, redshift, user_choice):
+    def frame_mask_switch(self, wave_obs, flux_obs, redshift, user_choice, flux_coeff=1):
 
         assert user_choice in ['observed', 'rest'], f'- ERROR: frame of reference {user_choice} not recognized. ' \
                                                     f'Please use "observed" or "rest".'
-        if user_choice == 'rest':
-            z_corr = (1 + redshift)
-            masc_corr = 1
-            flux_plot = flux_obs * z_corr
-            wave_plot = wave_obs / z_corr
-        else:
-            z_corr = 1
-            masc_corr = (1 + redshift)
-            flux_plot = flux_obs
-            wave_plot = wave_obs
 
-        return wave_plot, flux_plot, z_corr, masc_corr
+        # Doppler factor for rest frame plots
+        z_corr = (1 + redshift) if user_choice == 'rest' else 1
+
+        # Remove mask from plots and recover bad indeces
+        if np.ma.is_masked(wave_obs):
+            idcs_mask = wave_obs.mask
+            wave_plot, flux_plot = wave_obs.data, flux_obs.data
+            flux_plot[idcs_mask] = flux_plot[idcs_mask]/self.norm_flux
+
+        else:
+            idcs_mask = None
+            wave_plot, flux_plot = wave_obs, flux_obs
+
+        return wave_plot, flux_plot, z_corr, idcs_mask
 
     def gaussian_profiles_plotting(self, list_comps, log, x, y, z_corr, axis, frame='observed', peak_check=False,
                                    cont_bands=None, wave_array=None, cont_array=None, gaussian_array=None, mplcursors_active=True):
 
+        cmap = cm.get_cmap(self._color_dict['comps_map'])
+
         # Shade band regions if provided
-        cmap = cm.get_cmap('Dark2')
-
         if cont_bands is not None:
-            # Establish line and continua bands
             mask = self.log.loc[list_comps[0], 'w1':'w6'].values
-            mask_corr = 1 if frame == 'rest' else (1 + self.redshift)
-
-            idcsLine, idcsBlue, idcsRed = self.define_masks(x/mask_corr, mask, merge_continua=False)
-            axis.fill_between(x[idcsBlue], 0, y[idcsBlue], facecolor=self._color_dict['cont_band'], step='mid', alpha=0.25)
-            axis.fill_between(x[idcsLine], 0, y[idcsLine], facecolor=self._color_dict['line_band'], step='mid', alpha=0.25)
-            axis.fill_between(x[idcsRed], 0, y[idcsRed], facecolor=self._color_dict['cont_band'], step='mid', alpha=0.25)
+            idcsLine, idcsBlue, idcsRed = self.define_masks(x/(1 + self.redshift), mask, merge_continua=False)
+            shade_line, shade_cont = self._color_dict['line_band'], self._color_dict['cont_band']
+            axis.fill_between(x[idcsBlue]/z_corr, 0, y[idcsBlue]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
+            axis.fill_between(x[idcsLine]/z_corr, 0, y[idcsLine]*z_corr, facecolor=shade_line, step='mid', alpha=0.25)
+            axis.fill_between(x[idcsRed]/z_corr, 0, y[idcsRed]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
 
         # Plot the peak flux if requested
         if peak_check and (log is not None):
-            peak_wave = log.loc[list_comps[0]].peak_wave / z_corr,
-            peak_flux = log.loc[list_comps[0]].peak_flux * z_corr/self.norm_flux
+            peak_wave = log.loc[list_comps[0]].peak_wave/z_corr,
+            peak_flux = log.loc[list_comps[0]].peak_flux*z_corr/self.norm_flux
             axis.scatter(peak_wave, peak_flux, facecolors='red')
 
         # Plot the Gaussian profile
@@ -946,8 +960,9 @@ class LiMePlots:
 
             # Plot the continuum,  Usine wavelength array and continuum form the first component
             cont_wave = wave_array[:, 0]
-            cont_linear = cont_array[:, 0] / self.norm_flux
-            axis.plot(cont_wave, cont_linear, color=self._color_dict['cont'], label=None, linestyle='--', linewidth=0.5)
+            cont_linear = cont_array[:, 0]
+            axis.plot(cont_wave/z_corr, cont_linear*z_corr/self.norm_flux, color=self._color_dict['cont'],
+                      label=None, linestyle='--', linewidth=0.5)
 
             # Individual components
             for i, line in enumerate(list_comps):
@@ -965,8 +980,10 @@ class LiMePlots:
 
                 # Plot the profile
                 label = latex_array[i]
-                y = (gaussian_array[:, i] + cont_array[:, i]) / self.norm_flux
-                line_g = axis.plot(wave_array[:, i], y, label=label, linewidth=width_i, linestyle=style_i, color=color_i)
+                x = wave_array[:, i]
+                y = gaussian_array[:, i] + cont_array[:, i]
+                line_g = axis.plot(x/z_corr, y*z_corr/self.norm_flux, label=label, linewidth=width_i,
+                                                                      linestyle=style_i, color=color_i)
 
                 # Compute mplcursors box text
                 if mplcursors_check:
@@ -977,14 +994,28 @@ class LiMePlots:
             if len(list_comps) > 1:
 
                 # Combined flux compuation
-                total_flux = gaussian_array.sum(axis=1) / self.norm_flux
+                total_flux = gaussian_array.sum(axis=1)
                 line_profile = (total_flux + cont_linear)
 
                 width_i, style_i, color_i = 1, '-', self._color_dict['profile']
-                axis.plot(cont_wave, line_profile, color=color_i, linestyle=style_i, linewidth=width_i)
+                axis.plot(cont_wave/z_corr, line_profile*z_corr/self.norm_flux, color=color_i, linestyle=style_i,
+                                                                                linewidth=width_i)
 
         return
 
+    def mask_pixels_plotting(self, line, x, y, z_corr, axis, log):
+
+        if 'pixel_mask' in log.columns:  # TODO remove this one at release
+            pixel_mask = log.loc[line, 'pixel_mask']
+            if pixel_mask != 'no':
+                line_mask_limits = format_line_mask_option(pixel_mask, x)
+                idcsMask = (x[:, None] >= line_mask_limits[:, 0]) & (x[:, None] <= line_mask_limits[:, 1])
+                idcsMask = idcsMask.sum(axis=1).astype(bool)
+                if np.sum(idcsMask) >= 1:
+                    axis.scatter(x[idcsMask] / z_corr, y[idcsMask] * z_corr, marker="x",
+                                 color=self._color_dict['mask_marker'])
+
+        return
 
 class PdfMaker:
 

@@ -100,7 +100,8 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
                     output_variable[key] = strtobool(value) == 1
                 else:
                     output_variable[key] = value
-
+            elif '_mask' in key_label:
+                output_variable = entry_value
             # Conversion for non-parameter class atributes (only str conversion possible)
             else:
                 output_variable = check_numeric_Value(entry_value)
@@ -565,7 +566,7 @@ def load_fits(file_address, instrument, frame_idx=None):
 
         headers = (header_0, header_2, header_3)
 
-        # return wave_rest, flux, headers
+        # return wavelength_array, flux, headers
         return wave, data, headers
 
     elif instrument == 'xshooter':
@@ -657,6 +658,8 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
 
     :return:
     """
+
+    # TODO overwrite spatial mask file not update
 
     # Compute the image flux from the band signal_band, cont_band
     idcs_signal = np.searchsorted(wavelength_array, signal_band)

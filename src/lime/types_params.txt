@@ -9,6 +9,7 @@ eqw_err                   0                0          1           1    <f8      
 ion                       0                0          1           0   <U50                  Ion
 latex_label               0                0          1           0  <U100           Transition
 profile_label             0                0          0           1  <U120           Components
+pixel_mask                0                0          0           1  <U100     $Masked\,Pixels$
 w1                        0                1          0           0    <f8              $w_{1}$
 w2                        0                1          0           0    <f8              $w_{2}$
 w3                        0                1          0           0    <f8              $w_{3}$
