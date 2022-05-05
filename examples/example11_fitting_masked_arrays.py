@@ -92,6 +92,7 @@ for i, specName in enumerate(specNameList):
 
             spec_new_mask = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
             fit_cfg['S2_6716A_b_mask'] = S2_6716A_b_mask
+            fit_cfg['S2_6731A_kinem'] = 'S2_6716A'
             spec_new_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
             spec_new_mask.display_results(log_scale=True, frame='rest')
             lime.save_line_log(spec_new_mask.log, 'testing_masks.txt')

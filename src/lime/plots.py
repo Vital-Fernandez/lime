@@ -584,9 +584,9 @@ class LiMePlots:
             # Shade the pixel error spectrum if available:
             if self.err_flux is not None:
                 label = r'$\sigma_{pixel}/\overline{F(cont)}$'
-                err_norm = self.err_flux[idcs_plot] * z_corr/cont_level
-                resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm, err_norm,
-                                      label=label, facecolor='salmon', alpha=0.3)
+                err_norm = self.err_flux[idcs_plot] / (cont_level/self.norm_flux)
+                resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm*z_corr, err_norm*z_corr, label=label,
+                                      facecolor='salmon', alpha=0.3)
 
             # Add the flux normalization to units if non provided
             if self.norm_flux != 1.0:
@@ -642,8 +642,6 @@ class LiMePlots:
 
         line = self.line if line is None else line
 
-        # ion, wave, latexLabel = label_decomposition(line_label, scalar_output=True)
-
         # Adjust default theme
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
@@ -658,10 +656,8 @@ class LiMePlots:
 
         # Load parameters from log
         peak_wave = self.log.loc[line, 'peak_wave']
-        pixel_width = np.diff(self.wave[idcsEmis]).mean()
         m_cont, n_cont = self.log.loc[line, 'm_cont'], self.log.loc[line, 'n_cont']
         latex_label = self.log.loc[line, 'latex_label']
-        intg_flux = self.log.loc[line, 'intg_flux']
 
         # Reference frame for the plot
         wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, user_choice='observed')
@@ -671,13 +667,15 @@ class LiMePlots:
         cont_plot = (m_cont * wave_plot[idcsEmis] + n_cont)/self.norm_flux
         vel_plot = c_KMpS * (wave_plot[idcsEmis] - peak_wave) / peak_wave
 
-        # Velocity values
-        vel_med = np.median(vel_plot)
+        vel_med = self.log.loc[line, 'v_med']
+        target_percentiles = ['v_5', 'v_10', 'v_50', 'v_90', 'v_95']
+        vel_percentiles = self.log.loc[line, target_percentiles].values
+        FWZI = self.log.loc[line, 'FWZI']
 
-        target_percentiles = np.array([2, 5, 10, 50, 90, 95, 98])
-        percentile_array = np.cumsum(flux_plot-cont_plot) * pixel_width/(intg_flux/self.norm_flux) * 100
-        percentInterp = interp1d(percentile_array, vel_plot, kind='slinear')
-        vel_percentiles = percentInterp(target_percentiles)
+        # Line edges
+        w_i, w_f = self.log.loc[line, 'w_i'], self.log.loc[line, 'w_f']
+        v_i, v_f = c_KMpS * (np.array([w_i, w_f]) - peak_wave) / peak_wave
+        idx_i, idx_f = np.searchsorted(wave_plot[idcsEmis], (w_i, w_f))
 
         # Generate the figure
         with rc_context(PLT_CONF):
@@ -689,24 +687,34 @@ class LiMePlots:
             # Plot line spectrum
             ax.step(vel_plot, flux_plot, label=latex_label, where='mid', color=self._color_dict['fg'])
 
+            # Velocity percentiles
             for i_percentil, percentil in enumerate(target_percentiles):
 
                 label_text = None if i_percentil > 0 else r'$v_{Pth}$'
                 ax.axvline(x=vel_percentiles[i_percentil], label=label_text, color=self._color_dict['fg'],
                               linestyle='dotted', alpha=0.5)
 
-                label_plot = r'$v_{{{}}}$'.format(percentil)
+                label_plot = r'$v_{{{}}}$'.format(percentil[2:])
                 ax.text(vel_percentiles[i_percentil], 0.80, label_plot, ha='center', va='center',
                            rotation='vertical', backgroundcolor=self._color_dict['bg'], transform=trans, alpha=0.5)
 
+            # Velocity edges
+            label_v_i, label_v_f = r'$v_{{0}}$', r'$v_{{100}}$'
+            ax.axvline(x=v_i, alpha=0.5, color=self._color_dict['fg'], linestyle='dotted')
+            ax.text(v_i, 0.50, label_v_i, ha='center', va='center', rotation='vertical', backgroundcolor=self._color_dict['bg'],
+                    transform=trans, alpha=0.5)
+            ax.axvline(x=v_f, alpha=0.5, color=self._color_dict['fg'], linestyle='dotted')
+            ax.text(v_f, 0.50, label_v_f, ha='center', va='center', rotation='vertical', backgroundcolor=self._color_dict['bg'],
+                    transform=trans, alpha=0.5)
+
             # Plot the line profile
-            ax.plot(vel_plot, cont_plot, linestyle='--')
+            ax.plot(vel_plot, cont_plot, linestyle='--', color=self._color_dict['fg'])
 
             # Plot velocity bands
-            w80 = vel_percentiles[4]-vel_percentiles[2]
+            w80 = vel_percentiles[1]-vel_percentiles[3]
             label_arrow = r'$w_{{80}}={:0.1f}\,Km/s$'.format(w80)
-            p1 = patches.FancyArrowPatch((vel_percentiles[2], 0.5),
-                                         (vel_percentiles[4], 0.5),
+            p1 = patches.FancyArrowPatch((vel_percentiles[1], 0.4),
+                                         (vel_percentiles[3], 0.4),
                                          label=label_arrow,
                                          arrowstyle='<->',
                                          color='tab:blue',
@@ -714,10 +722,22 @@ class LiMePlots:
                                          mutation_scale=20)
             ax.add_patch(p1)
 
-            # Velocity percentiles
+            # Plot FWHM bands
+            label_arrow = r'$FWZI={:0.1f}\,Km/s$'.format(FWZI)
+            p2 = patches.FancyArrowPatch((vel_plot[idx_i], cont_plot[idx_i]),
+                                         (vel_plot[idx_f], cont_plot[idx_f]),
+                                         label=label_arrow,
+                                         arrowstyle='<->',
+                                         color='tab:red',
+                                         transform=ax.transData,
+                                         mutation_scale=20)
+            ax.add_patch(p2)
+
+            # Median velocity
             label_vmed = r'$v_{{med}}={:0.1f}\,Km/s$'.format(vel_med)
             ax.axvline(x=vel_med, color=self._color_dict['fg'], label=label_vmed, linestyle='dashed', alpha=0.5)
 
+            # Peak velocity
             label_vmed = r'$v_{{peak}}$'
             ax.axvline(x=0.0, color=self._color_dict['fg'], label=label_vmed, alpha=0.5)
 
@@ -1016,6 +1036,7 @@ class LiMePlots:
                                  color=self._color_dict['mask_marker'])
 
         return
+
 
 class PdfMaker:
 

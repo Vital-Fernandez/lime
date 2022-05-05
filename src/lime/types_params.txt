@@ -16,6 +16,8 @@ w3                        0                1          0           0    <f8      
 w4                        0                1          0           0    <f8              $w_{4}$
 w5                        0                1          0           0    <f8              $w_{5}$
 w6                        0                1          0           0    <f8              $w_{6}$
+w_i                       0                0          0           1    <f8              $w_{i}$
+w_f                       0                0          0           1    <f8              $w_{f}$
 peak_wave                 0                0          0           1    <f8     $\lambda_{peak}$
 peak_flux                 1                0          0           1    <f8           $F_{peak}$
 cont                      1                0          0           1    <f8           $F_{cont}$
@@ -35,8 +37,12 @@ v_r                       0                0          1           1    <f8      
 v_r_err                   0                0          1           1    <f8        $v_{r,\,err}$
 sigma_vel                 0                0          1           1    <f8       $\sigma_{vel}$
 sigma_vel_err             0                0          1           1    <f8 $\sigma_{vel,\,err}$
-FWHM_int                  0                0          0           1    <f8        $FWHM_{intg}$
+sigma_thermal             0                0          1           1    <f8        $\sigma_{th}$
+sigma_instr               0                0          0           1    <f8      \sigma_{instr}$
+pixel_vel                 0                0          0           1    <f8        $pixel_{vel}$
+FWHM_intg                 0                0          0           1    <f8        $FWHM_{intg}$
 FWHM_g                    0                0          1           1    <f8       $FWHM_{gauss}$
+FWZI                      0                0          0           1    <f8               $FWZI$
 v_med                     0                0          0           1    <f8            $v_{med}$
 v_50                      0                0          0           1    <f8             $v_{50}$
 v_5                       0                0          0           1    <f8              $v_{5}$

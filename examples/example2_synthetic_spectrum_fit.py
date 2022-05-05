@@ -16,7 +16,7 @@ w_min = hdr_dict['CRVAL1']
 dw = hdr_dict['CD1_1']
 nPixels = hdr_dict['NAXIS1']
 w_max = w_min + dw * nPixels
-
+# FWZI
 wave_rest = np.linspace(w_min, w_max, nPixels, endpoint=False)
 wave_obs = (1 + z_obj) * wave_rest
 

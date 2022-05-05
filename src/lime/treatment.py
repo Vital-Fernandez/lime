@@ -63,7 +63,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     """
 
-    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None):
+    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
+                 inst_FWHM = np.nan):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -78,6 +79,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self.norm_flux = norm_flux
         self.redshift = redshift
         self.log = None
+        self.inst_FWHM = inst_FWHM
 
         # Start cropping the input spectrum if necessary
         if crop_waves is not None:
@@ -107,7 +109,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         return
 
-    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True):
+    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True,
+                             temp_line = 10000.0):
 
         """
 
@@ -166,6 +169,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         # Label the current measurement
         self.line = line
         self.mask = mask
+        self.temp_line = temp_line
 
         # Global fit parameters
         self._emission_check = emission
@@ -535,7 +539,7 @@ class MaskInspector(Spectrum):
             self.axConf = {}
 
             # Plot function
-            self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols)
+            self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols, n_lines=n_lines)
             plt.gca().axes.yaxis.set_ticklabels([])
 
             try:
@@ -550,14 +554,9 @@ class MaskInspector(Spectrum):
 
         return
 
-    def plot_line_mask_selection(self, logscale='auto', grid_size=None):
-
-        # Plot data
-        lineLabels = self.log.index.values
-        n_lines = lineLabels.size
+    def plot_line_mask_selection(self, logscale='auto', grid_size=None, n_lines=None):
 
         # Generate plot
-        # for i, line in enumerate(self.target_lines):
         for i in range(grid_size):
             if i < n_lines:
                 line = self.target_lines[i]

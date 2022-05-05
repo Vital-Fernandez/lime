@@ -180,6 +180,31 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check
     return i
 
 
+def compute_FWHM0(idx_peak, spec_flux, delta_wave, cont_flux, emission_check=True):
+
+    """
+
+    :param idx_peak:
+    :param spec_flux:
+    :param delta_wave:
+    :param cont_flux:
+    :param emission_check:
+    :return:
+    """
+
+    i = idx_peak
+    i_final = 0 if delta_wave < 0 else spec_flux.size - 1
+
+    if emission_check:
+        while (spec_flux[i] >= cont_flux[i]) and (i != i_final):
+            i += delta_wave
+    else:
+        while (spec_flux[i] <= cont_flux[i]) and (i != i_final):
+            i += delta_wave
+
+    return i
+
+
 def kinematic_component_labelling(line_latex_label, comp_ref):
     """
 

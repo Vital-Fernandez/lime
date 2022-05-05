@@ -2,7 +2,7 @@ import numpy as np
 from lmfit.models import Model
 from scipy import stats, optimize
 from scipy.interpolate import interp1d
-from .tools import label_decomposition
+from .tools import label_decomposition, compute_FWHM0
 
 c_KMpS = 299792.458  # Speed of light in Km/s (https://en.wikipedia.org/wiki/Speed_of_light)
 
@@ -12,6 +12,23 @@ k_FWHM = 2 * np.sqrt(2 * np.log(2))
 
 TARGET_PERCENTILES = np.array([2, 5, 10, 50, 90, 95, 98])
 
+# Atomic mass constant
+amu = 1.66053906660e-27 # Kg
+
+# Boltzmann constant
+k_Boltzmann = 1.380649e-23 # m^2 kg s^-2 K^-1
+
+# Dictionary with atomic masses https://www.ciaaw.org/atomic-weights.htm
+ATOMIC_MASS = {'H': (1.00784+1.00811)/2 * amu,
+               'He': 4.002602 * amu,
+               'C': (12.0096+12.0116)/2 * amu,
+               'N': (14.00643 + 14.00728)/2 * amu,
+               'O':  (15.99903 + 15.99977)/2 * amu,
+               'Ne': 20.1797 * amu,
+               'S': (32.059 + 32.076)/2 * amu,
+               'Cl': (35.446 + 35.457)/2 * amu,
+               'Ar': (39.792 + 39.963)/2 * amu,
+               'Fe': 55.845 * amu}
 
 def wavelength_to_vel(delta_lambda, lambda_wave, light_speed=c_KMpS):
     return light_speed * (delta_lambda/lambda_wave)
@@ -191,6 +208,8 @@ class EmissionFitting:
 
     _minimize_method = 'leastsq'
 
+    _atomic_mass_dict = ATOMIC_MASS
+
     # Switch for emission and absorption lines
 
     def __init__(self):
@@ -208,11 +227,14 @@ class EmissionFitting:
         self.amp_err, self.center_err, self.sigma_err = None, None, None
         self.z_line = 0
         self.v_r, self.v_r_err = None, None
+        self.pixel_vel = None
         self.sigma_vel, self.sigma_vel_err = None, None
+        self.sigma_thermal, self.sigma_instr = None, None
         self.snr_line, self.snr_cont = None, None
         self.observations, self.comments = 'no', 'no'
         self.pixel_mask = 'no'
-        self.FWHM_int, self.FWHM_g = None, None
+        self.FWHM_intg, self.FWHM_g, self.FWZI = None, None, None
+        self.w_i, self.w_f = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
         self.v_90, self.v_95 = None, None
@@ -221,6 +243,7 @@ class EmissionFitting:
 
         self.fit_params, self.fit_output = {}, None
         self.pixelWidth = None
+        self.temp_line = None
         self._emission_check = True
         self._cont_from_adjacent = True
 
@@ -312,38 +335,15 @@ class EmissionFitting:
         self.snr_line = signal_to_noise(self.intg_flux, self.std_cont, emisWave.size)
         self.snr_cont = self.cont/self.std_cont
 
+        # Line width to the pixel below the continuum (or mask size if not happening)
+        idx_0 = compute_FWHM0(peakIdx, emisFlux, -1, lineLinearCont, self._emission_check)
+        idx_f = compute_FWHM0(peakIdx, emisFlux, 1, lineLinearCont, self._emission_check)
+        self.w_i, self.w_f = emisWave[idx_0], emisWave[idx_f]
+
         # Velocity calculations
-        if emisWave.size > 15:
-
-            velocArray = c_KMpS * (emisWave - self.peak_wave)/self.peak_wave
-            percentFluxArray = np.cumsum(emisFlux-lineLinearCont) * self.pixelWidth / self.intg_flux * 100
-
-            if self._emission_check:
-                blue_range = emisFlux[:peakIdx] > self.peak_flux/2
-                red_range = emisFlux[peakIdx:] < self.peak_flux/2
-            else:
-                blue_range = emisFlux[:peakIdx] < self.peak_flux/2
-                red_range = emisFlux[peakIdx:] > self.peak_flux/2
-
-            # In case the peak is at the edge
-            if (blue_range.size > 2) and (red_range.size > 2):
-
-                vel_FWHM_blue = velocArray[:peakIdx][np.argmax(blue_range)]
-                vel_FWHM_red = velocArray[peakIdx:][np.argmax(red_range)]
-                self.FWHM_int = vel_FWHM_red - vel_FWHM_blue
-
-                # Interpolation for integrated kinematics
-                percentInterp = interp1d(percentFluxArray, velocArray, kind='slinear', fill_value='extrapolate')
-                velocPercent = percentInterp(TARGET_PERCENTILES)
-
-                self.v_med, self.v_50 = np.median(velocArray), velocPercent[3] # FIXME np.median ignores the mask
-                self.v_5, self.v_10 = velocPercent[1], velocPercent[2]
-                self.v_90, self.v_95 = velocPercent[4], velocPercent[5]
-
-                W_80 = self.v_90 - self.v_10
-                W_90 = self.v_95 - self.v_5
-                A_factor = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
-                K_factor = W_90 / (1.397 * self.FWHM_int)
+        velocArray = c_KMpS * (emisWave[idx_0:idx_f] - self.peak_wave) / self.peak_wave
+        self.FWZI = velocArray[-1] - velocArray[0]
+        self.velocity_percentiles_calculations(velocArray, emisFlux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
 
         # Equivalent width computation
         lineContinuumMatrix = lineLinearCont + normalNoise
@@ -365,11 +365,17 @@ class EmissionFitting:
         # Line redshift
         self.z_line = self.peak_wave / theoWave_arr - 1
 
+        # Pixel velocity
+        self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave
+
         # Compute the line redshift and reference wavelength
         if self.blended_check:
             ref_wave = theoWave_arr * (1 + z_obj)
         else:
             ref_wave = np.array([self.peak_wave], ndmin=1)
+
+        # Kinematics corrections
+        self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else np.nan
 
         # Define fitting params for each component
         fit_model = Model(linear_model)
@@ -430,6 +436,7 @@ class EmissionFitting:
         self.gauss_flux, self.gauss_err = np.empty(n_comps), np.empty(n_comps)
         self.z_line = np.empty(n_comps)
         self.FWHM_g = np.empty(n_comps)
+        self.sigma_thermal = np.empty(n_comps)
 
         # Fitting diagnostics
         self.chisqr, self.redchi = self.fit_output.chisqr, self.fit_output.redchi
@@ -464,6 +471,7 @@ class EmissionFitting:
             self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i] # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
             self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i] # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
+            self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
 
         if self.blended_check:
             self.eqw, self.eqw_err = eqw_g, eqwErr_g
@@ -542,46 +550,42 @@ class EmissionFitting:
 
         return
 
-    def gauss_mcfit(self, wave, flux, idcs_line, bootstrap_size=1000):
+    def velocity_percentiles_calculations(self, vel_array, line_flux, cont_flux):
 
-        # Get regions data
-        lineWave, lineFlux = wave[idcs_line], flux[idcs_line]
+        if vel_array.size > 15:
 
-        # Linear continuum linear fit
-        lineContFit = lineWave * self.m_cont + self.n_cont
+            peakIdx = np.argmax(line_flux)
 
-        # Initial gaussian fit values
-        p0_array = np.array([self.peak_flux, self.peak_wave, 1])
+            percentFluxArray = np.cumsum(line_flux-cont_flux) * self.pixelWidth / self.intg_flux * 100
 
-        # Monte Carlo to fit gaussian curve
-        normalNoise = np.random.normal(0.0, self.std_cont, (bootstrap_size, lineWave.size))
-        lineFluxMatrix = lineFlux + normalNoise
+            if self._emission_check:
+                blue_range = line_flux[:peakIdx] > self.peak_flux/2
+                red_range = line_flux[peakIdx:] < self.peak_flux/2
+            else:
+                blue_range = line_flux[:peakIdx] < self.peak_flux/2
+                red_range = line_flux[peakIdx:] > self.peak_flux/2
 
-        # Run the fitting
-        try:
-            p1_matrix = np.empty((bootstrap_size, 3))
+            # In case the peak is at the edge
+            if (blue_range.size > 2) and (red_range.size > 2):
 
-            for i in np.arange(bootstrap_size):
-                p1_matrix[i], pcov = optimize.curve_fit(gauss_func,
-                                                        (lineWave, lineContFit),
-                                                        lineFluxMatrix[i],
-                                                        p0=p0_array,
-                                                        # ftol=0.5,
-                                                        # xtol=0.5,
-                                                        # bounds=paramBounds,
-                                                        maxfev=1200)
+                vel_FWHM_blue = vel_array[:peakIdx][np.argmax(blue_range)]
+                vel_FWHM_red = vel_array[peakIdx:][np.argmax(red_range)]
+                self.FWHM_intg = vel_FWHM_red - vel_FWHM_blue
 
-            p1, p1_Err = p1_matrix.mean(axis=0), p1_matrix.std(axis=0)
+                # Interpolation for integrated kinematics
+                percentInterp = interp1d(percentFluxArray, vel_array, kind='slinear', fill_value='extrapolate')
+                velocPercent = percentInterp(TARGET_PERCENTILES)
 
-            lineArea = np.sqrt(2 * np.pi * p1_matrix[:, 2] * p1_matrix[:, 2]) * p1_matrix[:, 0]
-            y_gauss, y_gaussErr = lineArea.mean(), lineArea.std()
+                self.v_med, self.v_50 = np.median(vel_array), velocPercent[3] # FIXME np.median ignores the mask
+                self.v_5, self.v_10 = velocPercent[1], velocPercent[2]
+                self.v_90, self.v_95 = velocPercent[4], velocPercent[5]
 
-        except:
-            p1, p1_Err = np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
-            y_gauss, y_gaussErr = np.nan, np.nan
-
-        self.p1, self.p1_Err, self.gauss_flux, self.gauss_err = p1, p1_Err, y_gauss, y_gaussErr
+                W_80 = self.v_90 - self.v_10
+                W_90 = self.v_95 - self.v_5
+                A_factor = ((self.v_90 - self.v_med) - (self.v_med-self.v_10)) / W_80
+                K_factor = W_90 / (1.397 * self.FWHM_intg)
 
         return
+
 
 
