@@ -9,6 +9,7 @@ import configparser
 from .treatment import Spectrum, MaskInspector, CubeInspector
 from .io import *
 from .tools import label_decomposition, LineFinder
+from .plots import spatial_mask_generator
 
 # Get python version being used
 __python_version__ = sys.version_info

@@ -225,7 +225,7 @@ class EmissionFitting:
         self.m_cont, self.n_cont = None, None
         self.amp, self.center, self.sigma = None, None, None
         self.amp_err, self.center_err, self.sigma_err = None, None, None
-        self.z_line = 0
+        self.z_line = None
         self.v_r, self.v_r_err = None, None
         self.pixel_vel = None
         self.sigma_vel, self.sigma_vel_err = None, None
@@ -375,7 +375,7 @@ class EmissionFitting:
             ref_wave = np.array([self.peak_wave], ndmin=1)
 
         # Kinematics corrections
-        self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else np.nan
+        self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
 
         # Define fitting params for each component
         fit_model = Model(linear_model)
@@ -397,8 +397,7 @@ class EmissionFitting:
             # Amplitude default configuration changes according and emission or absorption feature
             AMP_PAR = self._AMP_PAR if self._emission_check else self._AMP_ABS_PAR
 
-            # Define the curve parameters
-            #TODO include the normalization here
+            # Define the curve parameters # TODO include the normalization here
             self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
             self.define_param(fit_model, comp, 'center', ref_wave[idx_comp], self._CENTER_PAR, user_conf, z_cor=(1+z_obj))
             self.define_param(fit_model, comp, 'sigma', 1.0, self._SIG_PAR, user_conf)

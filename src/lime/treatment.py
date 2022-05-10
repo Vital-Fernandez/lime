@@ -31,8 +31,8 @@ if mplcursors_check:
 class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     """
-    This class provides a set of tools to measure lines from the spectra of ionized gas. The user provides a spectrum
-    with input arrays for the observation wavelength and flux.
+    This class defines a spectrum object from which the lines can be measured. The required inputs for the spectrum definition
+    are the observation wavelength and flux arrays.
 
     Optionally, the user can provide the sigma spectrum with the pixel uncertainty. This array must be in the same
     units as the ``input_flux``.
@@ -40,8 +40,10 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     It is recommended to provide the object redshift and a flux normalization. This guarantees the functionality of
     the class functions.
 
-    Finally, the user can also provide a two value array with the same wavelength limits. This array must be in the
+    The user can also provide a two value array with the same wavelength limits. This array must be in the
     same units and frame of reference as the ``.wave``.
+
+    The user can also include the spectrum instrumental FWHM so it can be taken into account during the measurements.
 
     :param input_wave: wavelength array
     :type input_wave: numpy.array
@@ -60,6 +62,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
     :param crop_waves: wavelength array crop values
     :type norm_flux: np.array, optional
+
+    :param inst_FWHM: Spectrum instrument FWHM
+    :type inst_FWHM: float, optional
 
     """
 
@@ -110,7 +115,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         return
 
     def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True,
-                             temp_line = 10000.0):
+                             temp_line=10000.0):
 
         """
 
@@ -121,7 +126,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         adjacent continua. These wavelengths must be sorted by increasing order and in the rest frame.
 
         The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
-        the documentation for the complete details.
+        the documentation for the complete description.
 
         The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
 
@@ -133,6 +138,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
         first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
 
+        For the calculation of the thermal broadening on the emission lines the user can include the line electron
+        temperature in Kelvin. The default value is 10000 K
+
         :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
         :type line: string
 
@@ -142,8 +150,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         :param user_cfg: Dictionary with the fitting configuration.
         :type user_cfg: dict, optional
 
-        :param algorithm: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
-        :type algorithm: str, optional
+        :param fit_method: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
+        :type fit_method: str, optional
 
         :param emission: Boolean check for the line type. The default is ``True`` for an emission line
         :type emission: bool, optional
@@ -151,6 +159,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
                               adjacent continua array
         :type adjacent_cont: bool, optional
+
+        :param temp_line: Line electron temperature for the thermal broadening calculation.
+        :type temp_line: bool, optional
 
         """
 
@@ -219,8 +230,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         """
 
-        This function plots or prints the fitting of a line. If no line specified, the values used are those from the
-        last fitting.
+        This function plots or prints the results of a line measurement. If no line is specified, the last fitting is showed.
 
         The ``fit_report=True`` includes the `the LmFit log <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_.
 
@@ -388,10 +398,6 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             linesDF.loc[line, ['ion', 'wavelength', 'latex_label']] = ion[i], waveRef[i], latexLabel[i]
             linesDF.loc[line, 'w1':'w6'] = self.mask
 
-            # line_log = pd.Series(index=LOG_COLUMNS.keys())
-            # line_log['ion', 'wavelength', 'latex_label'] = ion[i], waveRef[i], latexLabel[i]
-            # line_log['w1': 'w6'] = self.mask
-
             # Treat every line
             for param in export_params:
 
@@ -416,71 +422,71 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
 class MaskInspector(Spectrum):
 
+    """
+    This class plots the masks from the ``log_address`` as a grid for the input spectrum. Clicking and
+    dragging the mouse within a line cell will update the line band region, both in the plot and the ``log_address``
+    file provided.
+
+    Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
+    wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
+    the interactive selection has the following rules:
+
+    * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
+      mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
+      original mask limits.
+
+    * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
+      `w3` and `w4` values.
+
+    * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
+      between `w1` and `w3` or `w4` and `w6` respectively.
+
+    The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
+    parameter can be an array of strings with the labels of the target lines or a two value integer array with the
+    interval of lines to plot.
+
+    Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
+    and greater than the blue and red wavelegnth values respectively.
+
+    :param log_address: Address for the lines log mask file.
+    :type log_address: str
+
+    :param input_wave: Wavelength array of the input spectrum.
+    :type input_wave: numpy.array
+
+    :param input_flux: Flux array for the input spectrum.
+    :type input_flux: numpy.array
+
+    :param input_err: Sigma array of the `input_flux`
+    :type input_err: numpy.array, optional
+
+    :param redshift: Spectrum redshift
+    :type redshift: float, optional
+
+    :param norm_flux: Spectrum flux normalization
+    :type norm_flux: float, optional
+
+    :param crop_waves: Wavelength limits in a two value array
+    :type crop_waves: np.array, optional
+
+    :param n_cols: Number of columns of the grid plot
+    :type n_cols: integer
+
+    :param n_rows: Number of columns of the grid plot
+    :type n_rows: integer
+
+    :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
+                           this interval must be a two value array.
+    :type lines_interval: list
+
+    :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
+                    strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
+    :type y_scale: str, optional
+
+    """
+
     def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
                  norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None, y_scale='auto'):
-
-        """
-        This class plots the masks from the ``log_address`` as a grid for the input spectrum as a grid. Clicking and
-        dragging the mouse within a line cell will update the line band region, both in the plot and the ``log_address``
-        file provided.
-
-        Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
-        wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
-        the interactive selection has the following rules:
-
-        * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
-          mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
-          original mask limits.
-
-        * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
-          `w3` and `w4` values.
-
-        * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
-          between `w1` and `w3` or `w4` and `w6` respectively.
-
-        The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
-        parameter can be an array of strings with the labels of the target lines or a two value integer array with the
-        interval of lines to plot.
-
-        Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 abd w5 smaller
-        and greater than the blue and red wavelegnth values respectively.
-
-        :param log_address: Address for the lines log mask file.
-        :type log_address: str
-
-        :param input_wave: Wavelength array of the input spectrum.
-        :type input_wave: numpy.array
-
-        :param input_flux: Flux array for the input spectrum.
-        :type input_flux: numpy.array
-
-        :param input_err: Sigma array of the `input_flux`
-        :type input_err: numpy.array, optional
-
-        :param redshift: Spectrum redshift
-        :type redshift: float, optional
-
-        :param norm_flux: Spectrum flux normalization
-        :type norm_flux: float, optional
-
-        :param crop_waves: Wavelength limits in a two value array
-        :type crop_waves: np.array, optional
-
-        :param n_cols: Number of columns of the grid plot
-        :type n_cols: integer
-
-        :param n_rows: Number of columns of the grid plot
-        :type n_rows: integer
-
-        :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
-                               this interval must be a two value array.
-        :type lines_interval: list
-
-        :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
-                        strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
-        :type y_scale: str, optional
-
-        """
 
         # Output file address
         self.linesLogAddress = Path(log_address)

@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, rcParams, rcParamsDefault, gridspec, patches, rc_context, cm, legend
-from scipy.interpolate import interp1d
+
+from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
+from astropy.wcs import WCS
+from astropy.io import fits
+
 from functools import partial
 from collections import Sequence
+from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
 from .tools import label_decomposition, kinematic_component_labelling, blended_label_from_log
@@ -60,12 +64,6 @@ STANDARD_PLOT = {**PLOT_SIZE_FONT, **PLOT_COLORS}
 
 STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
 
-FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
-FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lambda)_error', 'I(lambda)', 'I(lambda)_error']
-
-KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}{s}\right)$', r'$\sigma_{int}\left(\nicefrac{km}{s}\right)$', r'Flux $(\nicefrac{erg}{cm^{-2} s^{-1} \AA^{-1})}$']
-KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
-
 
 def latex_science_float(f, dec=2):
     float_str = f'{f:.{dec}g}'
@@ -76,7 +74,7 @@ def latex_science_float(f, dec=2):
         return float_str
 
 
-def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='-'):
+def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='none'):
 
     if rounddig_er == None: #TODO declare a universal tool
         rounddig_er = rounddig
@@ -129,104 +127,46 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_type='pdf'):
+def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', fit_conf={}):
 
     # Check pylatex is install else leave
     if pylatex_check:
         pass
     else:
-        print('\n- WARNING: pylatex is not installed. Flux table could not be generated')
+        print(f'\n- WARNING: pylatex is not installed. The table at {table_address} could not be generated')
         return
 
-    if table_type == 'pdf':
-        output_address = f'{table_address}'
-    if table_type == 'txt-ascii':
-        output_address = f'{table_address}.txt'
+    # Establish the headers for the table
+    n_columns = lines_df.columns.size
+    columns_format_list = ['Line'] + ['None'] * n_columns
+    for i, column in enumerate(lines_df.columns.values):
+        columns_format_list[i + 1] = header_format_latex[column]
 
-    # Measure line fluxes
+    if 'Components' in columns_format_list:
+        idx_blended_label = columns_format_list.index('Components')
+    else:
+        idx_blended_label = None
+
+    # Get the line latex label for the table
+    ion_array, wavelength_array, latexLabel_array = label_decomposition(lines_df.index.values, comp_dict=fit_conf)
+
+    # Create pdf
     pdf = PdfMaker()
     pdf.create_pdfDoc(pdf_type='table')
-    pdf.pdf_insert_table(FLUX_TEX_TABLE_HEADERS)
+    pdf.pdf_insert_table(columns_format_list)
 
-    # Dataframe as container as a txt file
-    tableDF = pd.DataFrame(columns=FLUX_TXT_TABLE_HEADERS[1:])
-
-    # Normalization line
-    if 'H1_4861A' in lines_df.index:
-        flux_Hbeta = lines_df.loc['H1_4861A', 'intg_flux']
-    else:
-        flux_Hbeta = scaleTable
-
+    # Loop through the lines
     obsLines = lines_df.index.values
-    for lineLabel in obsLines:
+    for i, lineLabel in enumerate(obsLines):
+        row_raw = [latexLabel_array[i]] + list(lines_df.loc[lineLabel].values)
 
-        label_entry = lines_df.loc[lineLabel, 'latex_label']
-        wavelength = lines_df.loc[lineLabel, 'wavelength']
-        eqw, eqwErr = lines_df.loc[lineLabel, 'eqw'], lines_df.loc[lineLabel, 'eqw_err']
+        # Exclude the _ from the blended label
+        if idx_blended_label is not None:
+            row_raw[idx_blended_label] = pylatex.utils.escape_latex(row_raw[idx_blended_label])
 
-        flux_intg = lines_df.loc[lineLabel, 'intg_flux'] / flux_Hbeta * scaleTable
-        flux_intgErr = lines_df.loc[lineLabel, 'intg_err'] / flux_Hbeta * scaleTable
-        flux_gauss = lines_df.loc[lineLabel, 'gauss_flux'] / flux_Hbeta * scaleTable
-        flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err'] / flux_Hbeta * scaleTable
-
-        if (lines_df.loc[lineLabel, 'profile_label'] != 'no') and ('_m' not in lineLabel):
-            flux, fluxErr = flux_gauss, flux_gaussErr
-            label_entry = label_entry + '$_{gauss}$'
-        else:
-            flux, fluxErr = flux_intg, flux_intgErr
-
-        # Correct the flux
-        if pyneb_rc is not None:
-            corr = pyneb_rc.getCorrHb(wavelength)
-            intensity, intensityErr = flux * corr, fluxErr * corr
-            intensity_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(intensity, intensityErr)
-        else:
-            intensity, intensityErr = '-', '-'
-            intensity_entry = '-'
-
-        eqw_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(eqw, eqwErr)
-        flux_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(flux, fluxErr)
-
-        # Add row of data
-        tex_row_i = [label_entry, eqw_entry, flux_entry, intensity_entry]
-        txt_row_i = [label_entry, eqw, eqwErr, flux, fluxErr, intensity, intensityErr]
-
+        # Add row to the table
         lastRow_check = True if lineLabel == obsLines[-1] else False
-        pdf.addTableRow(tex_row_i, last_row=lastRow_check)
-        tableDF.loc[lineLabel] = txt_row_i[1:]
-
-    if pyneb_rc is not None:
-
-        # Data last rows
-        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
-                         '',
-                         flux_Hbeta,
-                         flux_Hbeta * pyneb_rc.getCorr(4861)]
-
-        row_cHbeta = [r'$c(H\beta)$',
-                      '',
-                      float(pyneb_rc.cHbeta),
-                      '']
-    else:
-        # Data last rows
-        row_Hbetaflux = [r'$H\beta$ $(erg\,cm^{-2} s^{-1} \AA^{-1})$',
-                         '',
-                         flux_Hbeta,
-                         '-']
-
-        row_cHbeta = [r'$c(H\beta)$',
-                      '',
-                      '-',
-                      '']
-
-    pdf.addTableRow(row_Hbetaflux, last_row=False)
-    pdf.addTableRow(row_cHbeta, last_row=False)
-    tableDF.loc[row_Hbetaflux[0]] = row_Hbetaflux[1:] + [''] * 3
-    tableDF.loc[row_cHbeta[0]] = row_cHbeta[1:] + [''] * 3
-
-    # Format last rows
-    pdf.table.add_hline()
-    pdf.table.add_hline()
+        pdf.addTableRow(row_raw, last_row=lastRow_check)
 
     # Save the pdf table
     if table_type == 'pdf':
@@ -234,13 +174,6 @@ def table_fluxes(lines_df, table_address, pyneb_rc=None, scaleTable=1000, table_
             pdf.generate_pdf(table_address, clean_tex=True)
         except:
             print('-- PDF compilation failure')
-
-    # Save the txt table
-    if table_type == 'txt-ascii':
-        with open(output_address, 'wb') as output_file:
-            string_DF = tableDF.to_string()
-            string_DF = string_DF.replace('$', '')
-            output_file.write(string_DF.encode('UTF-8'))
 
     return
 
@@ -285,6 +218,216 @@ def mplcursors_legend(line, log, latex_label, norm_flux):
     legend_text += r'$\sigma_{{g}} = {}\pm{}\,(km/s)$'.format(sigma_vel, sigma_vel_err)
 
     return legend_text
+
+
+def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_levels, signal_band, cont_band=None,
+                           mask_ref="", output_address=None, min_level=None, show_plot=False, fits_header=None,
+                           plt_cfg={}, ax_cfg={'xlabel': 'RA', 'ylabel': 'DEC'}):
+
+    """
+    This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
+    Currently, the only one implemented is the percentile intensity. If an output address is provided, the mask is saved as a fits file
+    where each intensity level mask is stored in its corresponding page. The parameter calculation method, its intensity and mask
+    index are saved in the corresponding HDU header as PARAM, PARAMIDX and PARAMVAL.
+
+    :param image_flux: Matrix with the image flux to be spatially masked.
+    :type image_flux: np.array()
+
+    :param mask_param: Flux intensity model from which the masks are calculated. The options available are 'flux',
+           'SN_line' and 'SN_cont'.
+    :type mask_param: str, optional
+
+    :param contour_levels: Vector in decreasing order with the parameter values for the mask_param chosen.
+    :type contour_levels: np.array()
+
+    :param mask_ref: String label for the mask. If none provided the masks will be named in cardinal order.
+    :type mask_ref: str, optional
+
+    :param output_address: Output address for the mask fits file.
+    :type output_address: str, optional
+
+    :param min_level: Minimum level for the masks calculation. If none is provided the minimum value from the contour_levels
+                      vector will be used.
+    :type min_level: float, optional
+
+    :param show_plot: If true a plot will be displayed with the mask calculation. Additionally, if an output_address is
+                      provided the plot will be saved in the parent folder as image taking into consideration the
+                      mask_ref value.
+    :type show_plot: bool, optional
+
+    :param fits_header: Dictionary with key-values to be included in the output .fits file header.
+    :type fits_header: dict, optional
+
+    :return:
+    """
+
+    # TODO overwrite spatial mask file not update
+
+    # Compute the image flux from the band signal_band, cont_band
+    idcs_signal = np.searchsorted(wavelength_array, signal_band)
+
+    # Check the contour vector is in decreasing order
+    assert np.all(np.diff(contour_levels) > 0), '- ERROR contour_levels are not in increasing order for spatial mask'
+    contour_levels_r = np.flip(contour_levels)
+
+    # Check the logic for the mask calculation
+    assert mask_param in ['flux', 'SN_line', 'SN_cont'], f'\n- ERROR {mask_param} is not recognise for the spatial mask calculation'
+
+    # Compute the band slice
+    signal_slice = flux_cube[idcs_signal[0]:idcs_signal[1], :, :]
+
+    # Compute the continuum band
+    if cont_band is not None:
+        idcs_cont = np.searchsorted(wavelength_array, cont_band)
+        cont_slice = flux_cube[idcs_cont[0]:idcs_cont[1], :, :]
+
+    # Compute the mask diagnostic
+    if mask_param == 'flux':
+        default_title = 'Spaxel flux percentile masks'
+        param_image = signal_slice.sum(axis=0)
+
+    # S/N cont
+    elif mask_param == 'SN_cont':
+        default_title = 'Spaxel continuum S/N percentile masks'
+        param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
+
+    # S/N line
+    else:
+        default_title = 'Spaxel emission line S/N percentile masks'
+        N_elem = idcs_cont[1] - idcs_cont[0]
+
+        Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
+        std_image = np.nanstd(cont_slice, axis=0)
+
+        param_image = (np.sqrt(2*N_elem*np.pi)/6) * (Amp_image/std_image)
+
+    # Percentiles vector for the target parameter
+    param_array = np.nanpercentile(param_image, contour_levels_r)
+
+    # If minimum level not provided by user use lowest contour_level
+    min_level = param_array[-1] if min_level is None else min_level
+
+    # Containers for the mask parameters
+    mask_dict = {}
+    param_level = {}
+    boundary_dict = {}
+
+    # Loop throught the counter levels and compute the
+    for i, n_levels in enumerate(param_array):
+
+        # # Operation every element
+        if i == 0:
+            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                              (param_image >= min_level),
+                                               param_image)
+
+        else:
+            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                              (param_image < param_array[i - 1]) &
+                                              (param_image >= min_level),
+                                               param_image)
+
+        if np.sum(maParamImage.mask) > 0:
+            mask_dict[f'mask_{i}'] = maParamImage.mask
+            boundary_dict[f'mask_{i}'] = contour_levels_r[i]
+            param_level[f'mask_{i}'] = param_array[i]
+
+    # Output folder computed from the output address
+    fits_folder = Path(output_address).parent if output_address is not None else None
+
+    # Plot the combined masks
+    if (fits_folder is not None) or show_plot:
+
+        # Adjust default theme
+        PLT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+        AXES_CONF['title'] = default_title
+
+        # User configuration overrites user
+        PLT_CONF = {**PLT_CONF, **plt_cfg}
+        AXES_CONF = {**AXES_CONF, **ax_cfg}
+
+        with rc_context(PLT_CONF):
+
+            if fits_header is None:
+                fig, ax = plt.subplots(figsize=(12, 12))
+            else:
+                fig = plt.figure(figsize=(10, 10))
+                ax = fig.add_subplot(projection=WCS(fits_header), slices=('x', 'y'))
+
+            cmap = cm.get_cmap(colorDict['mask_map'], len(mask_dict))
+            legend_list = [None] * len(mask_dict)
+
+            for idx_region, region_items in enumerate(mask_dict.items()):
+
+                region_label, region_mask = region_items
+
+                # Inverse the mask array for the plot
+                inv_mask_array = np.ma.masked_array(region_mask.data, ~region_mask)
+
+                # Prepare the labels for each mask to add to imshow
+                ext_name = f'{mask_ref}_{region_label}'
+                percentile_ref = f'{mask_param}' + r'$_{{{}th}}$'.format(boundary_dict[region_label])
+                param_percentile = f'${latex_science_float(param_array[idx_region], dec=3)}$'
+                mask_voxels = np.sum(region_mask)
+
+                legend_text = f'{ext_name}: {percentile_ref} = {param_percentile} ({mask_voxels} voxels)'
+                legend_list[idx_region] = patches.Patch(color=cmap(idx_region), label=legend_text)
+
+                cm_i = colors.ListedColormap(['black', cmap(idx_region)])
+                ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
+
+            ax.legend(handles=legend_list, loc=2)
+            ax.set(**AXES_CONF)
+
+            if fits_folder is not None:
+
+                if mask_ref is None:
+                    output_image = fits_folder/f'mask_contours.png'
+                else:
+                    output_image = fits_folder/f'{mask_ref}_mask_contours.png'
+
+                plt.savefig(output_image)
+
+            if show_plot:
+                plt.show()
+
+            plt.close(fig)
+
+    # Save to a fits file:
+    if output_address is not None:
+
+        fits_address = Path(output_address)
+
+        for idx_region, region_items in enumerate(mask_dict.items()):
+            region_label, region_mask = region_items
+
+            # Metadata for the fits page
+            header_dict = {'PARAM': mask_param,
+                           'PARAMIDX': boundary_dict[region_label],
+                           'PARAMVAL': param_level[region_label],
+                           'NUMSPAXE': np.sum(region_mask)}
+            fits_hdr = fits.Header(header_dict)
+
+            if fits_header is not None:
+                fits_hdr.update(fits_header)
+
+            # Extension for the mask
+            mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'
+
+            # Mask HDU
+            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=fits_hdr)
+
+            if fits_address.is_file():
+                try:
+                    fits.update(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext, verify=True)
+                except KeyError:
+                    fits.append(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext)
+            else:
+                hdul = fits.HDUList([fits.PrimaryHDU(), mask_hdu])
+                hdul.writeto(fits_address, overwrite=True, output_verify='fix')
+
+    return
 
 
 class LiMePlots:
@@ -853,81 +996,6 @@ class LiMePlots:
                 plt.savefig(output_address, bbox_inches='tight')
 
             plt.close(fig)
-
-        return
-
-    def table_kinematics(self, lines_df, table_address, flux_normalization=1.0):
-
-        # TODO this could be included in sr.print
-        tex_address = f'{table_address}'
-        txt_address = f'{table_address}.txt'
-
-        # Measure line fluxes
-        pdf = PdfMaker()
-        pdf.create_pdfDoc(pdf_type='table')
-        pdf.pdf_insert_table(KIN_TEX_TABLE_HEADERS)
-
-        # Dataframe as container as a txt file
-        tableDF = pd.DataFrame(columns=KIN_TXT_TABLE_HEADERS[1:])
-
-        obsLines = lines_df.index.values
-        for lineLabel in obsLines:
-
-            if not lineLabel.endswith('_b'):
-                label_entry = lines_df.loc[lineLabel, 'latexLabel']
-
-                # Establish component:
-                blended_check = (lines_df.loc[lineLabel, 'profile_label'] != 'no') and ('_m' not in lineLabel)
-                if blended_check:
-                    blended_group = lines_df.loc[lineLabel, 'profile_label']
-                    comp = 'n1' if lineLabel.count('_') == 1 else lineLabel[lineLabel.rfind('_')+1:]
-                else:
-                    comp = 'n1'
-                comp_label, lineEmisLabel = kinematic_component_labelling(label_entry, comp)
-
-                wavelength = lines_df.loc[lineLabel, 'wavelength']
-                v_r, v_r_err =  lines_df.loc[lineLabel, 'v_r':'v_r_err']
-                sigma_vel, sigma_vel_err = lines_df.loc[lineLabel, 'sigma_vel':'sigma_vel_err']
-
-                flux_intg = lines_df.loc[lineLabel, 'intg_flux']
-                flux_intgErr = lines_df.loc[lineLabel, 'intg_err']
-                flux_gauss = lines_df.loc[lineLabel, 'gauss_flux']
-                flux_gaussErr = lines_df.loc[lineLabel, 'gauss_err']
-
-                # Format the entries
-                vr_entry = r'${:0.1f}\,\pm\,{:0.1f}$'.format(v_r, v_r_err)
-                sigma_entry = r'${:0.1f}\,\pm\,{:0.1f}$'.format(sigma_vel, sigma_vel_err)
-
-                if blended_check:
-                    flux, fluxErr = flux_gauss, flux_gaussErr
-                    label_entry = lineEmisLabel
-                else:
-                    flux, fluxErr = flux_intg, flux_intgErr
-
-                # Correct the flux
-                flux_entry = r'${:0.2f}\,\pm\,{:0.2f}$'.format(flux, fluxErr)
-
-                # Add row of data
-                tex_row_i = [label_entry, comp_label, vr_entry, sigma_entry, flux_entry]
-                txt_row_i = [lineLabel, comp_label.replace(' ', '_'), v_r, v_r_err, sigma_vel, sigma_vel_err, flux, fluxErr]
-
-                lastRow_check = True if lineLabel == obsLines[-1] else False
-                pdf.addTableRow(tex_row_i, last_row=lastRow_check)
-                tableDF.loc[lineLabel] = txt_row_i[1:]
-
-        pdf.table.add_hline()
-
-        # Save the pdf table
-        try:
-            pdf.generate_pdf(tex_address)
-        except:
-            print('-- PDF compilation failure')
-
-        # Save the txt table
-        with open(txt_address, 'wb') as output_file:
-            string_DF = tableDF.to_string()
-            string_DF = string_DF.replace('$', '')
-            output_file.write(string_DF.encode('UTF-8'))
 
         return
 

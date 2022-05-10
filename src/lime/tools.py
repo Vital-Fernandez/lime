@@ -33,20 +33,22 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                         user_format={}):
 
     """
-    This function returns the wavelength, ion and the standard transition latex from the default LiMe line notation.
 
-    :param lines: A string or array of strings with the lime transition notation, e.g. O3_5007A
+    This function returns the ion, wavelength and transition label latex from the input line list with the LiMe line
+    notation.
+
+    :param lines: A string or array of strings with the LiMe transition notation, e.g. O3_5007A
     :type lines: str, list
 
     :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
                         assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
-                        excited state
+                        excited state.
     :type recomb_atom: str, list
 
     :param comp_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
     :type comp_dict: dict, optional
 
-    :param scalar_output: Boolean for a scalar output in case of a single input line input
+    :param scalar_output: Boolean for a scalar output in case of a single input line input.
     :type scalar_output: bool, optional
 
     :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
@@ -277,12 +279,12 @@ class LineFinder:
                         poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='fixed'):
 
         """
-        This function compares a spectrum flux peaks and troughs with the lines mask in a log to confirm the presence of
+        This function compares a spectrum flux peaks and troughs with the input lines mask log to confirm the presence of
         emission or absorption lines. The user can specify the line type with the ``line_type='emission'`` or ``line_type='absorption'``
         parameter.
 
-        The user must specify a wavelength range (in the rest frame) to establish the noise standard deviation in the
-        spectrum continuum. This region must not have absorptions or emissions.
+        The user must specify a wavelength range (in the rest frame) to establish the region from which the spectrum
+        noise standard deviation is calculated. This region must not have absorptions or emissions.
 
         The treatment requires a normalized spectrum (continuum at zero). This is done by fitting the spectrum
         as a polynomial function in an iterative process. The user can specify in the ``poly_degree`` parameter as an
@@ -305,7 +307,8 @@ class LineFinder:
         for emission and absorption lines respectively. In blended lines, the w3, w4 values are not modified.
         In the ``width_mode='fix'`` setting the line masks wavelengths are not modified.
 
-        :param log: Lines log with the masks. The required columns are: line (DF index), w1, w2, w3, w4, w5 and w6.
+        :param log: Lines log with the masks. The required columns are: the line label (DF index), w1, w2, w3, w4, w5 and w6.
+                    These wavelengths must be in the rest frame.
         :type log: pandas.DataFrame
 
         :param noise_region: 2 value array with the wavelength limits for the noise region (in rest frame).

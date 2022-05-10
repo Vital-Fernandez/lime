@@ -5,20 +5,20 @@ LiMe: A Line Measuring library
     :scale: 30%
     :align: center
 
-This library provides a set of tools to fit lines from astronomical spectra. Its design aims for a simple usage for
-both single lines and Big Data observations. The library provides tools for masking, detecting and fitting lines, as
-well as storing the results. This workflow should be useful for both the posterior analysis of the spectrum chemistry
-and kinematics.
+This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
+for both single lines and Big Data observations. The library provides tools for masking, detecting and fitting lines, as
+well as, storing the results. The measurements support the posterior analysis of the object chemical composition and plasma
+kinematics.
 
 These are some of the features currently available:
 
-* Integrated and gaussian flux measurement.
+* Non-profile-dependence and Gaussian profile measurements.
 * The user can include the pixel error spectrum in the calculation.
-* Multi-Gaussian fitting for lines with user defined boundaries for the profile parameters.
-* Tools to confirm the presence of lines queried by the user.
+* Multi-Gaussian profile fitting with flexible definition for the parameters boundaries.
+* Tools to confirm the presence of lines.
 * Static and interactive plots for the visual appraisal of inputs and outputs
 * Emission line labels adhere to the `PyNeb <http://research.iac.es/proyecto/PyNeb/>`_ format.
-* The >40 parameters lines log can be stored as a multi-page *.fits* file for the batch treatment of large datasets.
+* The measurements can be saved in several formats, including multi-page *.fits*, *.asdf* and *.xlsx* files
 
 .. admonition:: Where to find what you need
    :class: hint
@@ -31,7 +31,7 @@ These are some of the features currently available:
    provide a working knowledge of the library algorithms.
 
    🌀 To learn more about the library design check the :ref:`inputs <inputs>` and :ref:`profile fitting <profileFitting>`
-   documentation. The reference manual for the library functions is found at the :ref:`API <api>`.
+   documentation. The library functions manual is found at the :ref:`API <api>`.
 
    📈 The outputs physical description can be found in the :ref:`measurements <measurements_page>` documentation.
 

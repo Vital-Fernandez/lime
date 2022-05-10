@@ -4,6 +4,9 @@
 Measurements description
 ========================
 
+  .. image:: ../_static/measurements_table.PNG
+    :align: center
+
 This section describes the parameters measured by :math:`\textsc{LiMe}`. Unless otherwise noted, these parameters have the same notation
 in the output measurements log as the attributes in the programing objects generated with the ``lime.Spectrum`` class.
 These parameter references are also the column names of the ``pandas.DataFrame`` lines log (``lime.Spectrum.log``).

@@ -1,5 +1,4 @@
 __all__ = [
-    'spatial_mask_generator',
     'load_fits',
     'save_cfg',
     'load_cfg',
@@ -7,7 +6,10 @@ __all__ = [
     'save_line_log',
     'log_to_HDU',
     'save_param_maps',
-    'COORD_ENTRIES']
+    'COORD_ENTRIES',
+    '_LOG_DTYPES_REC',
+    '_LOG_EXPORT',
+    '_LOG_COLUMNS']
 
 import os
 import configparser
@@ -22,16 +24,21 @@ from collections import Sequence
 
 from astropy.io import fits
 from astropy.table import Table
-from astropy.wcs import WCS
 
-from matplotlib import pyplot as plt, colors, cm, patches, rc_context
-from .plots import table_fluxes, colorDict, latex_science_float, STANDARD_PLOT, STANDARD_AXES
+from .plots import table_fluxes
 
 try:
     import openpyxl
     openpyxl_check = True
 except ImportError:
     openpyxl_check = False
+
+try:
+    import asdf
+    asdf_check = True
+except ImportError:
+    asdf_check = False
+
 
 # Reading file with the format and export status for the measurements
 _params_table_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'types_params.txt')
@@ -41,8 +48,11 @@ _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, head
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
                         _PARAMS_CONF_TABLE.loc[:, 'Norm_by_flux':'dtype'].values))
 
+# Parameters notation latex formatDictionary with the parameter formart
+_LOG_COLUMNS_LATEX = dict(zip(_PARAMS_CONF_TABLE.index.values,
+                          _PARAMS_CONF_TABLE.loc[:, 'latex_label'].values))
+
 # Array with the parameters to be included in the output log
-print()
 _LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.values.astype(bool)].index.values
 
 # Dictionary with the parameter dtypes
@@ -56,7 +66,6 @@ _LOG_DTYPES_REC = np.dtype(list(_LOG_TYPES_DICT.items()))
 COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
                  'CTYPE1', 'CTYPE2']
 
-# STRINGCONFKEYS = ['sampler', 'reddenig_curve', 'norm_line_label', 'norm_line_pynebCode']
 GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
 
 FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
@@ -328,8 +337,8 @@ def load_lines_log(log_address, ext='LINESLOG'):
 
     """
     This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
-    text file a ``.fits`` file and an excel file (``.xls`` or ``.xlsx``). In the case of ``.fits`` or ``.xlsx`` files the user
-    should specify the target page/sheet (the default value is ``LINESLOG``).
+    text file, a ``.fits`` file, a ``.asdf`` file and an excel file (``.xlsx``). In the case of ``.fits``, ``.asdf`` or
+    ``.xlsx`` files the user should specify the target extension/sheet name (the default one is ``LINESLOG``).
 
     :param log_address: Address of the configuration file. The function stops if the file is not found
     :type log_address: str
@@ -350,33 +359,43 @@ def load_lines_log(log_address, ext='LINESLOG'):
 
         # Fits file:
         if file_type == '.fits':
-            log = Table.read(log_address, ext, character_as_bytes=False).to_pandas()
+            log = Table.read(log_path, ext, character_as_bytes=False).to_pandas()
             log.set_index('index', inplace=True)
 
         # Excel table
         elif file_type in ['.xlsx' or '.xls']:
-            log = pd.read_excel(log_address, sheet_name=ext, header=0, index_col=0)
+            log = pd.read_excel(log_path, sheet_name=ext, header=0, index_col=0)
+
+        # ASDF file
+        elif file_type == '.asdf':
+            with asdf.open(log_path) as af:
+                log_RA = af[ext]
+                log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
+                log.set_index('index', inplace=True)
 
         # Text file
         else:
-            log = pd.read_csv(log_address, delim_whitespace=True, header=0, index_col=0)
+            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
 
     except ValueError as e:
-        exit(f'\nERROR: LiMe could not open {file_type} file at {log_address}\n{e}')
+        exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
 
     return log
 
 
-def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
+def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_header=None):
 
     """
+
     This function saves the input lines log at the location provided by the user.
 
     The function takes into consideration the extension of the output address for the log file format.
 
-    The valid output formats are .txt, .pdf, .fits and .xlsx
+    The valid output formats are .txt, .pdf, .fits, .asdf and .xlsx
 
     For .fits and excel files the user can provide an ``ext`` name for the HDU/sheet.
+
+    The user can specify the parameters to be saved in the output file
 
     For .fits files the user can provide a dictionary so that its keys-values are stored in the header.
 
@@ -386,11 +405,15 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
     :param log_address: Address for the output lines log file.
     :type log_address: str
 
+    :param parameters: List of parameters to include in the output log. By default the log includes all the parameters,
+                       default value "all"
+    :type parameters: list
+
     :param ext: Name for the HDU/sheet in output .fits and excel files. If the target file already has this extension it
                 will be overwritten. The default value is LINESLOG.
     :type ext: str, optional
 
-    :param fits_header: Dictionary with key-values to be included in the output .fits file header.
+    :param fits_header: Dictionary with key-values to be included in the output .fits or .asdf file header.
     :type fits_header: dict, optional
 
     """
@@ -400,20 +423,37 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
     assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
     file_name, file_type = log_path.name, log_path.suffix
 
+    # Slice the log if the user provides a list of columns
+    if parameters != 'all':
+        parameters_list = np.array(parameters, ndmin=1)
+        lines_log = log[parameters_list]
+        param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
+
+    else:
+        lines_log = log
+        param_dtypes = list(_LOG_TYPES_DICT.values())
+
     # Default txt log with the complete information
     if file_type == '.txt':
         with open(log_path, 'wb') as output_file:
-            string_DF = log.to_string()
+            string_DF = lines_log.to_string()
             output_file.write(string_DF.encode('UTF-8'))
 
     # Pdf fluxes table
     elif file_type == '.pdf':
-        table_fluxes(log, log_path.parent / log_path.stem)
+
+        # Recover the fit components for merged lines from the log
+        if 'profile_label' in log.columns:
+            idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
+            fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
+        else:
+            fit_conf = {}
+        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX, fit_conf=fit_conf)
 
     # Lines log in a fits file
     elif file_type == '.fits':
-        if isinstance(log, pd.DataFrame):
-            lineLogHDU = log_to_HDU(log, ext_name=ext, header_dict=fits_header)
+        if isinstance(lines_log, pd.DataFrame):
+            lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
 
             if log_path.is_file():
                 try:
@@ -436,7 +476,7 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
 
         if not log_path.is_file():
             with pd.ExcelWriter(log_path) as writer:
-                log.to_excel(writer, sheet_name=ext)
+                lines_log.to_excel(writer, sheet_name=ext)
         else:
             # THIS WORKS IN WINDOWS BUT NOT IN LINUX
             # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
@@ -447,11 +487,27 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
                 with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
                     writer.book = book
                     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    log.to_excel(writer, sheet_name=ext)
+                    lines_log.to_excel(writer, sheet_name=ext)
             else:
                 # TODO this does not write to a xlsx file
                 with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                    log.to_excel(writer, sheet_name=ext)
+                    lines_log.to_excel(writer, sheet_name=ext)
+
+    # Advance Scientific Storage Format
+    elif file_type == '.asdf':
+
+        tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
+
+        # Create new file
+        if not log_path.is_file():
+            af = asdf.AsdfFile(tree)
+            af.write_to(log_path)
+
+        # Update file
+        else:
+            with asdf.open(log_path, mode='rw') as af:
+                af.tree.update(tree)
+                af.update()
 
     else:
         print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
@@ -460,8 +516,24 @@ def save_line_log(log, log_address, ext='LINESLOG', fits_header=None):
     return
 
 
-def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
+# TODO this task should be included in log_to_HDU
+def log_to_RA(log, column_types=None):
 
+    if column_types is None: #
+        params_dtype = _LOG_TYPES_DICT
+
+    # TODO UPDATE dictionary of formats mechanics
+    else:
+        params_dtype = _LOG_TYPES_DICT.copy()
+        user_dtype = column_types.copy()
+        params_dtype.update(user_dtype)
+
+    logRA = log.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
+
+    return logRA
+
+
+def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
     # For non empty logs
     if not log.empty:
@@ -618,216 +690,6 @@ def load_fits(file_address, instrument, frame_idx=None):
         return data, header
 
 
-def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_levels, signal_band, cont_band=None,
-                           mask_ref="", output_address=None, min_level=None, show_plot=False, fits_header=None,
-                           plt_cfg={}, ax_cfg={'xlabel': 'RA', 'ylabel': 'DEC'}):
-
-    """
-    This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
-    Currently, the only one implemented is the percentile intensity. If an output address is provided, the mask is saved as a fits file
-    where each intensity level mask is stored in its corresponding page. The parameter calculation method, its intensity and mask
-    index are saved in the corresponding HDU header as PARAM, PARAMIDX and PARAMVAL.
-
-    :param image_flux: Matrix with the image flux to be spatially masked.
-    :type image_flux: np.array()
-
-    :param mask_param: Flux intensity model from which the masks are calculated. The options available are 'flux',
-           'SN_line' and 'SN_cont'.
-    :type mask_param: str, optional
-
-    :param contour_levels: Vector in decreasing order with the parameter values for the mask_param chosen.
-    :type contour_levels: np.array()
-
-    :param mask_ref: String label for the mask. If none provided the masks will be named in cardinal order.
-    :type mask_ref: str, optional
-
-    :param output_address: Output address for the mask fits file.
-    :type output_address: str, optional
-
-    :param min_level: Minimum level for the masks calculation. If none is provided the minimum value from the contour_levels
-                      vector will be used.
-    :type min_level: float, optional
-
-    :param show_plot: If true a plot will be displayed with the mask calculation. Additionally, if an output_address is
-                      provided the plot will be saved in the parent folder as image taking into consideration the
-                      mask_ref value.
-    :type show_plot: bool, optional
-
-    :param fits_header: Dictionary with key-values to be included in the output .fits file header.
-    :type fits_header: dict, optional
-
-    :return:
-    """
-
-    # TODO overwrite spatial mask file not update
-
-    # Compute the image flux from the band signal_band, cont_band
-    idcs_signal = np.searchsorted(wavelength_array, signal_band)
-
-    # Check the contour vector is in decreasing order
-    assert np.all(np.diff(contour_levels) > 0), '- ERROR contour_levels are not in increasing order for spatial mask'
-    contour_levels_r = np.flip(contour_levels)
-
-    # Check the logic for the mask calculation
-    assert mask_param in ['flux', 'SN_line', 'SN_cont'], f'\n- ERROR {mask_param} is not recognise for the spatial mask calculation'
-
-    # Compute the band slice
-    signal_slice = flux_cube[idcs_signal[0]:idcs_signal[1], :, :]
-
-    # Compute the continuum band
-    if cont_band is not None:
-        idcs_cont = np.searchsorted(wavelength_array, cont_band)
-        cont_slice = flux_cube[idcs_cont[0]:idcs_cont[1], :, :]
-
-    # Compute the mask diagnostic
-    if mask_param == 'flux':
-        default_title = 'Spaxel flux percentile masks'
-        param_image = signal_slice.sum(axis=0)
-
-    # S/N cont
-    elif mask_param == 'SN_cont':
-        default_title = 'Spaxel continuum S/N percentile masks'
-        param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
-
-    # S/N line
-    else:
-        default_title = 'Spaxel emission line S/N percentile masks'
-        N_elem = idcs_cont[1] - idcs_cont[0]
-
-        Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
-        std_image = np.nanstd(cont_slice, axis=0)
-
-        param_image = (np.sqrt(2*N_elem*np.pi)/6) * (Amp_image/std_image)
-
-    # Percentiles vector for the target parameter
-    param_array = np.nanpercentile(param_image, contour_levels_r)
-
-    # If minimum level not provided by user use lowest contour_level
-    min_level = param_array[-1] if min_level is None else min_level
-
-    # Containers for the mask parameters
-    mask_dict = {}
-    param_level = {}
-    boundary_dict = {}
-
-    # Loop throught the counter levels and compute the
-    for i, n_levels in enumerate(param_array):
-
-        # # Operation every element
-        if i == 0:
-            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
-                                              (param_image >= min_level),
-                                               param_image)
-
-        else:
-            maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
-                                              (param_image < param_array[i - 1]) &
-                                              (param_image >= min_level),
-                                               param_image)
-
-        if np.sum(maParamImage.mask) > 0:
-            mask_dict[f'mask_{i}'] = maParamImage.mask
-            boundary_dict[f'mask_{i}'] = contour_levels_r[i]
-            param_level[f'mask_{i}'] = param_array[i]
-
-    # Output folder computed from the output address
-    fits_folder = Path(output_address).parent if output_address is not None else None
-
-    # Plot the combined masks
-    if (fits_folder is not None) or show_plot:
-
-        # Adjust default theme
-        PLT_CONF = STANDARD_PLOT.copy()
-        AXES_CONF = STANDARD_AXES.copy()
-        AXES_CONF['title'] = default_title
-
-        # User configuration overrites user
-        PLT_CONF = {**PLT_CONF, **plt_cfg}
-        AXES_CONF = {**AXES_CONF, **ax_cfg}
-
-        with rc_context(PLT_CONF):
-
-            if fits_header is None:
-                fig, ax = plt.subplots(figsize=(12, 12))
-            else:
-                fig = plt.figure(figsize=(10, 10))
-                ax = fig.add_subplot(projection=WCS(fits_header), slices=('x', 'y'))
-
-            cmap = cm.get_cmap(colorDict['mask_map'], len(mask_dict))
-            legend_list = [None] * len(mask_dict)
-
-            for idx_region, region_items in enumerate(mask_dict.items()):
-
-                region_label, region_mask = region_items
-
-                # Inverse the mask array for the plot
-                inv_mask_array = np.ma.masked_array(region_mask.data, ~region_mask)
-
-                # Prepare the labels for each mask to add to imshow
-                ext_name = f'{mask_ref}_{region_label}'
-                percentile_ref = f'{mask_param}' + r'$_{{{}th}}$'.format(boundary_dict[region_label])
-                param_percentile = f'${latex_science_float(param_array[idx_region], dec=3)}$'
-                mask_voxels = np.sum(region_mask)
-
-                legend_text = f'{ext_name}: {percentile_ref} = {param_percentile} ({mask_voxels} voxels)'
-                legend_list[idx_region] = patches.Patch(color=cmap(idx_region), label=legend_text)
-
-                cm_i = colors.ListedColormap(['black', cmap(idx_region)])
-                ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1)
-
-            ax.legend(handles=legend_list, loc=2)
-            ax.set(**AXES_CONF)
-
-            if fits_folder is not None:
-
-                if mask_ref is None:
-                    output_image = fits_folder/f'mask_contours.png'
-                else:
-                    output_image = fits_folder/f'{mask_ref}_mask_contours.png'
-
-                plt.savefig(output_image)
-
-            if show_plot:
-                plt.show()
-
-            plt.close(fig)
-
-    # Save to a fits file:
-    if output_address is not None:
-
-        fits_address = Path(output_address)
-
-        for idx_region, region_items in enumerate(mask_dict.items()):
-            region_label, region_mask = region_items
-
-            # Metadata for the fits page
-            header_dict = {'PARAM': mask_param,
-                           'PARAMIDX': boundary_dict[region_label],
-                           'PARAMVAL': param_level[region_label],
-                           'NUMSPAXE': np.sum(region_mask)}
-            fits_hdr = fits.Header(header_dict)
-
-            if fits_header is not None:
-                fits_hdr.update(fits_header)
-
-            # Extension for the mask
-            mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'
-
-            # Mask HDU
-            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=fits_hdr)
-
-            if fits_address.is_file():
-                try:
-                    fits.update(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext, verify=True)
-                except KeyError:
-                    fits.append(fits_address, data=mask_hdu.data, header=mask_hdu.header, extname=mask_ext)
-            else:
-                hdul = fits.HDUList([fits.PrimaryHDU(), mask_hdu])
-                hdul.writeto(fits_address, overwrite=True, output_verify='fix')
-
-    return
-
-
 def formatStringOutput(value, key, section_label=None, float_format=None, nan_format='nan'):
 
     # TODO this one should be the default option
@@ -890,16 +752,15 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
 
     This function loads a ``.fits`` file with the line log measurements and generates a set of spatial images from a dictionary
     of parameters and lines provided by the user. For every parameter, the function generates a .fits file with multiple
-    pages (`HDUs <https://docs.astropy.org/en/stable/io/fits/api/hdus.html>`_), one per input line.
+    pages (`HDUs <https://docs.astropy.org/en/stable/io/fits/api/hdus.html>`_), one per requested line.
 
-    The ``.fits`` log pages will be queried by voxel coordinates (the default format is ``{idx_j}-{idx_i}_LINESLOG``).
-    The user can provide a spatial mask address with the spaxels for which to recover the line log measurements. If the mask
+    The ``.fits`` log is queried by voxel coordinates (the default format is ``{idx_j}-{idx_i}_LINESLOG``).
+    The user can provide a spatial mask file address with the spaxels for which to recover the line log measurements. If the mask
     ``.fits`` file contains several extensions, the user can provide a list of which ones to use. Otherwise, all will be used.
 
     .. attention::
         The user can provide an ``image_shape`` array to generate the output image size. However, in big images attempting this
-        approach, instead of providing a spatial mask with the science data location, can require a long time to inspect
-        the log measurements.
+        approach rather than spatial mask may require a long time to query the log file pages.
 
     The output ``.fits`` image maps include a header with the ``PARAM`` and ``LINE`` with the line and parameter labels
     respectively (see `measurements <documentation/measurements.html>`_).
@@ -942,7 +803,6 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     :param page_hdr: Dictionary with entries to include in the output parameter HDUs headers
     :type page_hdr: dict
 
-    :return:
     """
 
     assert Path(log_file_address).is_file(), f'- ERROR: lines log at {log_file_address} not found'
