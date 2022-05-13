@@ -189,6 +189,13 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
+def mult_err_propagation(nominal_array, err_array, result):
+
+    err_result = result * np.sqrt(np.sum(np.power(err_array/nominal_array, 2)))
+
+    return err_result
+
+
 class EmissionFitting:
 
     """Class to measure emission line fluxes and fit them as gaussian curves"""
@@ -472,6 +479,9 @@ class EmissionFitting:
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
             self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
 
+            # Check parameters error progragation from the lmfit parameter
+            self.error_propagation_check(i, line)
+
         if self.blended_check:
             self.eqw, self.eqw_err = eqw_g, eqwErr_g
         else:
@@ -546,6 +556,18 @@ class EmissionFitting:
 
         # Assign the parameter configuration to the model
         model_obj.set_param_hint(param_ref, **param_conf)
+
+        return
+
+    def error_propagation_check(self, idx_line, line_label):
+
+        # Check gaussian flux error
+        if (self.gauss_err[idx_line] == 0.0) and (self.amp_err[idx_line] != 0.0) and (self.sigma_err[idx_line] != 0.0):
+            self.gauss_err[idx_line] = mult_err_propagation(np.array([self.amp[idx_line], self.sigma[idx_line]]),
+                                                            np.array([self.amp_err[idx_line], self.sigma_err[idx_line]]),
+                                                            self.gauss_flux[idx_line])
+
+        # Check equivalent width error
 
         return
 

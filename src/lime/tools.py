@@ -251,22 +251,10 @@ def blended_label_from_log(line, log):
             blended_check = True
             profile_label = log.loc[line, 'profile_label']
     else:
+        # TODO this causes and error if we forget the '_b' componentes in the configuration file
         exit(f'\n-- ERROR: line {line} not found input lines log')
 
     return blended_check, profile_label
-
-    # first_comp, profile_label = line, None
-    # if '_b' in line:
-    #     if line[:-2] in log.index:
-    #         first_comp = line[:-2]
-    #         profile_label = log.loc[line[:-2], 'profile_label']
-    #     elif line in log.index:
-    #         first_comp = line
-    #         profile_label = log.loc[line, 'profile_label']
-    #     else:
-    #         first_comp, profile_label = None, None
-
-    return first_comp, profile_label
 
 
 class LineFinder:
