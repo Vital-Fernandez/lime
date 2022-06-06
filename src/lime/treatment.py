@@ -865,6 +865,8 @@ class CubeInspector(Spectrum):
 
         """
 
+        #TODO add frame argument
+
         # Assign attributes to the parent class
         super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1)
 

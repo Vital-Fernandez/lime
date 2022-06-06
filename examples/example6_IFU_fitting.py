@@ -65,7 +65,7 @@ hdr_coords = fits.Header(hdr_coords)
 verbose = False
 
 # Counting the number of voxels and lines
-n_voxels, n_lines = 0, 0
+n_spaxels, n_lines = 0, 0
 
 # Loop through the masks:
 for idx_region in [0, 1, 2]:
@@ -74,10 +74,10 @@ for idx_region in [0, 1, 2]:
     region_label = f'S2_6716A_B_MASK_{idx_region}'
     region_mask = fits.getdata(spatial_mask, region_label, ver=1)
     region_mask = region_mask.astype(bool)
-    n_voxels += np.sum(region_mask)
+    n_spaxels += np.sum(region_mask)
 
     # Convert the mask into an array of spaxel coordinates (idxY, idxX)
-    idcs_voxels = np.argwhere(region_mask)
+    idcs_spaxels = np.argwhere(region_mask)
 
     # Load the region spectral mask:
     mask_log_file = f'./sample_data/SHOC579_region{idx_region}_maskLog.txt'
@@ -88,7 +88,7 @@ for idx_region in [0, 1, 2]:
 
     # Loop through the spaxels
     print(f'- Treating region {idx_region}')
-    for idx_spaxel, coords_spaxel in enumerate(idcs_voxels):
+    for idx_spaxel, coords_spaxel in enumerate(idcs_spaxels):
 
         # Define a spectrum object for the current spaxel
         idxY, idxX = coords_spaxel
@@ -129,10 +129,10 @@ for idx_region in [0, 1, 2]:
         if linesHDU is not None:
             hdul_log.append(linesHDU)
 
-    # After the regions voxels have been analysed save all the measurements to a .fits file
+    # After the regions spaxels have been analysed save all the measurements to a .fits file
     hdul_log.writeto(log_address, overwrite=True, output_verify='fix')
 
-print(f'SHOC579 analysis finished with {n_lines} in {n_voxels}')
+print(f'SHOC579 analysis finished treating {n_lines} lines in {n_spaxels} spaxels')
 
 
 

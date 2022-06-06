@@ -23,6 +23,7 @@ def extract_gz_file(input_file_address, output_file_address):
                 shutil.copyfileobj(f_in, f_out)
 
 
+
 # Web link and saving location
 SHOC579_url = 'https://data.sdss.org/sas/dr17/manga/spectro/redux/v3_1_1/8626/stack/manga-8626-12704-LOGCUBE.fits.gz'
 SHOC579_gz_address = './sample_data/manga-8626-12704-LOGCUBE.fits.gz'

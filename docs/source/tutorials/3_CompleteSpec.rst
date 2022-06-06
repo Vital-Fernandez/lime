@@ -9,8 +9,8 @@ In this example we shall fit all the emission lines on the spectrum of the Green
 
 This tutorial can also be found as a python script in the `github 3rd example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example3_fit_with_external_files.py>`_.
 
-In this exercise, we are going to use the recommended :math:`\textsc{LiMe}` workflow: Using two external files with the lines masks and
-and the fitting configuration. Let's start by specifying the data location:
+In this exercise, we are going to use the recommended :math:`\textsc{LiMe}` workflow: Two external files with the lines
+masks and fitting configuration. Let's start by specifying the data location:
 
 .. code-block:: python
 
@@ -40,7 +40,7 @@ and the fitting configuration. Let's start by specifying the data location:
     # Load spectrum
     wave, flux, header = import_osiris_fits(obsFitsFile)
 
-The mask file consists in a text file where the line masks are stored as table where each row is an emission line and the
+The mask file consists in a text file where the line masks are stored as tables. Each row is an emission line and the
 columns represent the wavelengths (in the rest frame) marking the regions of the adjacent continua and the line region:
 
 .. image:: ../_static/mask_selection.jpg
@@ -152,7 +152,7 @@ Using the data on this file, we are going to define the ``lime.Spectrum`` object
     z_obj = obs_cfg['sample_data']['z_array'][2]
     norm_flux = obs_cfg['sample_data']['norm_flux']
     gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-    gp_spec.plot_spectrum()
+    gp_spec.plot_spectrum(spec_label=f'GP121903 spectrum', frame='rest')
 
 .. image:: ../_static/3_GPspec.png
 
@@ -171,7 +171,7 @@ to find the peaks of flux on the spectrum. Afterwards, these peaks location are 
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum')
+    gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum', log_scale=True, frame='rest')
 
 
 
@@ -243,7 +243,7 @@ function
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum(include_fits=True)
+    gp_spec.plot_spectrum(include_fits=True, frame='rest')
 
 .. image:: ../_static/3_profileOverplot.png
 .. image:: ../_static/3_DetailprofileOverplot.png
@@ -252,21 +252,23 @@ Or they can be plotted as a grid, including the mask selection, using the ``.plo
 
 .. code-block:: python
 
-    gp_spec.plot_line_grid(gp_spec.log)
+    gp_spec.plot_line_grid(gp_spec.log, frame='rest')
 
 .. image:: ../_static/3_lineGrid.png
 
-As a final step, we can use the ``.save_line_log`` function to save your measurements.
+Finally, the results can be saved as a table using the ``lime.save_line_log`` function. The log output format is
+determined from the user address extension. Moreover, the user can also provide a page name for multi-page files (excel, fits
+and asdf). This way the each new log will append a page to the output file or update the one already there. Finally, the
+user can provide a list of parameter to limit the measurements columns in the output file. You can find the parameters
+parameters keywords in the :ref:`measurements documentation <measurements_page>`.
 
 .. code-block:: python
 
-    # Save the results
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
-    lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf', parameters=['eqw', 'intg_flux', 'intg_err'])
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits', ext='GP121903')
     lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='GP121903')
+    lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.asdf', ext='GP121903')
 
 .. note::
-   The file extension determines the output file type. In the case of ``.fits`` and ``.xlsx`` files if you do not
-   specify the page name, the default value is 'LINESLOG'. This will overwrite the data if the 'LINESLOG' page is
-   already on the file.
+   The default page name is 'LINESLOG'. If no page name is provided this previous measurements will be overwritten.

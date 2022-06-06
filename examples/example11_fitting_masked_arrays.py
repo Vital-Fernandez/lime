@@ -83,19 +83,19 @@ for i, specName in enumerate(specNameList):
             wave_ma = np.ma.masked_array(wave, mask=idcs_mask_limits)
             flux_ma = np.ma.masked_array(flux, mask=idcs_mask_limits)
 
-            # spec = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
-            # spec.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
-            # spec.display_results()
-            # spec_mask = lime.Spectrum(wave_ma, flux_ma, redshift=zList[i], norm_flux=norm_flux)
-            # spec_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
-            # spec_mask.display_results(log_scale=False)
+            spec = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
+            spec.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), user_cfg={'S2_6716A_b': 'S2_6716A-S2_6731A'})
+            spec.display_results()
+
+            print(fit_cfg)
+            spec_mask = lime.Spectrum(wave_ma, flux_ma, redshift=zList[i], norm_flux=norm_flux)
+            spec_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
+            spec_mask.display_results(log_scale=True)
 
             spec_new_mask = lime.Spectrum(wave, flux, redshift=zList[i], norm_flux=norm_flux)
             fit_cfg['S2_6716A_b_mask'] = S2_6716A_b_mask
-            fit_cfg['S2_6731A_kinem'] = 'S2_6716A'
             spec_new_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
             spec_new_mask.display_results(log_scale=True, frame='rest')
-            lime.save_line_log(spec_new_mask.log, 'testing_masks.txt')
 
             # fig, ax = plt.subplots(figsize=(12, 12))
             # ax.step(wave, flux, where='mid')

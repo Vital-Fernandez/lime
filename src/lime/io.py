@@ -869,7 +869,7 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
             idx_j, idx_i = spaxel_list[i_spaxel]
             spaxel_ref = f'{idx_j}-{idx_i}{ext_log}'
 
-            progress_bar(i_spaxel, n_spaxels, post_text=f'spaxels treated ({n_spaxels})')
+            progress_bar(i_spaxel, n_spaxels, post_text=f'of spaxels from file ({log_file_address}) read ({n_spaxels} total spaxels)')
 
             # Confirm log extension exists
             if spaxel_ref in logHDUs:

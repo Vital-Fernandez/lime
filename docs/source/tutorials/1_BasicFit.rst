@@ -1,11 +1,11 @@
-1) Simple fit
-=============
+1) Simple line fitting
+======================
 
 In this example we perform single line fits on the emission spectrum of the Green Pea galaxy GP121903 which was observed
 with the GTC (Gran Telescopio de Canarias). You can download this spectrum from the `github examples folder <https://github.com/Vital-Fernandez/lime/tree/master/examples>`_.
 You can read more about this data set in `Fernandez et al (2021) <https://arxiv.org/abs/2110.07741>`_.
 
-This tutorial can also be found as a python script in the `github 1st example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example1_simple_fit.py>`_.
+This tutorial can also be found as a python script in the `github 1st example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example1_single_line_fit.py>`_.
 
 Loading the spectrum
 ------------------------
@@ -14,6 +14,8 @@ Once you have installed the library, you may import it into your scripts
 
 .. code-block:: python
 
+    import numpy as np
+    from astropy.io import fits
     import lime
 
 
@@ -25,34 +27,41 @@ github.
     print(lime.__version__)
 
 
-We can start opening a spectrum. We can use `Astropy fits module <https://docs.astropy.org/en/stable/io/fits/index.html>`_:
+We can start by opening the .fits file. We can use `Astropy fits module <https://docs.astropy.org/en/stable/io/fits/index.html>`_ to
+reconstruct the spectrum:
 
 .. code-block:: python
 
-    import numpy as np
-    from astropy.io import fits
+    def import_osiris_fits(file_address, ext=0):
 
-    ext = 0
-    with fits.open('./sample_data/gp121903_BR.fits') as hdul:
-        flux, header = hdul[ext].data, hdul[ext].header
+        # Open the fits file
+        with fits.open(file_address) as hdul:
+            data, header = hdul[ext].data, hdul[ext].header
 
-The spectrum wavelength can be reconstructed from the header:
+        # Reconstruct the wavelength array from the header data
+        w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'], header['NAXIS1']
+        w_max = w_min + dw * n_pix
+        wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
-.. code-block:: python
+        return wavelength, data, header
 
-    w_min = header['CRVAL1']
-    dw = header['CD1_1']
-    pixels = header['NAXIS1']
-    w_max = w_min + dw * pixels
-    wave = np.linspace(w_min, w_max, pixels, endpoint=False)
+
+    # Address of the Green Pea galaxy spectrum
+    gp_fits = './sample_data/gp121903_BR.fits'
+
+    # Load the spectrum
+    wave, flux, hdr = import_osiris_fits(gp_fits)
+
 
 Most of :math:`\textsc{LiMe}` functions are performed by the Spectrum class: This object stores your spectrum and performs the line
 fitting functions. Its obligatory inputs are the spectrum wavelength and flux. However, in order to identify and
-labeling lines a redshift value is necessary. Finally, many line fitting functions will fail in non-normalized CGS units
-commonly used in spectra. Consequently, it is recommended to introduce a normalization value. In the case of GP121903:
+labeling the lines a redshift input is likely necessary (unless z = 0). Finally, many line fitting functions will fail
+in the non-normalized CGS units commonly used in spectra. Consequently, it is recommended to introduce a normalization
+value. In the case of GP121903:
 
 .. code-block:: python
 
+    # Galaxy redshift and the flux normalization
     z_gp = 0.19531
     normFlux_gp = 1e-14
 
@@ -77,7 +86,7 @@ To display the input spectrum you can use the function:
 
 .. code-block:: python
 
-    gp_spec.plot_spectrum()
+    gp_spec.plot_spectrum(spec_label='GP121903')
 
 .. image:: ../_static/plot_spectrum.png
 
@@ -91,6 +100,7 @@ For this Green Pea spectrum the Hα mask is:
 
 .. code-block:: python
 
+   line = 'H1_6563A'
    lineWaves = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 In this array the first two values correspond to the left continuum, the third and fourth values correspond to the line
@@ -100,7 +110,7 @@ Let's fit the Hα line using the function fit_from_wavelengths
 
 .. code-block:: python
 
-    gp_spec.fit_from_wavelengths('H1_6563A', lineWaves)
+    gp_spec.fit_from_wavelengths(line, lineWaves)
 
 
 You can plot the fit using:
@@ -115,8 +125,9 @@ You can see that the fitting is not very good. Let's increase the complexity by 
 
 .. code-block:: python
 
+    line = 'H1_6563A_b'
     Halpha_conf = {'H1_6563A_b':     'H1_6563A-N2_6584A-N2_6548A',
-                   'N2_6548A_amp':   {'expr': 'N2_6584A_amp / 2.94'},
+                   'N2_6548A_amp':   {'expr': 'N2_6584A_amp/2.94'},
                    'N2_6548A_kinem': 'N2_6584A'}
 
 The dictionary above has three elements:
@@ -137,13 +148,15 @@ Now we include this information in the fitting:
 This time the fitted profile better represents the observation.
 
 Finally, the results can be saved as a table using the ``lime.save_line_log`` function. The log output format is
-determined from the user address extension
+determined from the user address extension. Moreover, the user can also provide a page name for multi-page files (excel, fits
+and asdf). This way the each new log will append a page to the output file or update the one already there. Finally, the
+user can provide a list of parameter to limit the measurements columns in the output file. You can find the parameters
+parameters keywords in the :ref:`measurements documentation <measurements_page>`.
 
 .. code-block:: python
 
-    # The measurements n
     lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
     lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP121903')
-    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf', parameters=['eqw', 'gauss_flux', 'gauss_err'])
     lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
-
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.asdf', ext='GP121903')

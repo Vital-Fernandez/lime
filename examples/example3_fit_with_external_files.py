@@ -62,7 +62,7 @@ gp_spec.plot_spectrum(include_fits=True, frame='rest')
 
 # Save the results
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf', parameters=['eqw', 'intg_flux', 'intg_err', 'gauss_flux', 'gauss_err', 'observations'])
+lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf', parameters=['eqw', 'intg_flux', 'intg_err'])
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits', ext='GP121903')
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='GP121903')
 lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.asdf', ext='GP121903')

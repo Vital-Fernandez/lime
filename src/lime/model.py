@@ -369,9 +369,6 @@ class EmissionFitting:
         n_comps = mixtureComponents.size
         ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf)
 
-        # Line redshift
-        self.z_line = self.peak_wave / theoWave_arr - 1
-
         # Pixel velocity
         self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave
 
@@ -381,8 +378,14 @@ class EmissionFitting:
         else:
             ref_wave = np.array([self.peak_wave], ndmin=1)
 
+        # Line redshift
+        # TODO calculate z_line using the label reference
+        self.z_line = self.peak_wave/ref_wave[0] - 1
+
         # Kinematics corrections
         self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
+
+        # TODO create the parameters in advance in order to remove the components order requirement
 
         # Define fitting params for each component
         fit_model = Model(linear_model)

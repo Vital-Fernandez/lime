@@ -3,7 +3,7 @@ wavelength                0                0          1           0    <f8      
 intg_flux                 1                0          0           1    <f8           $F_{intg}$
 intg_err                  1                0          0           1    <f8     $F_{err,\,intg}$
 gauss_flux                1                0          1           1    <f8          $F_{gauss}$
-gauss_err                 1                0          1           1    <f8     $F_{err,\,intg}$
+gauss_err                 1                0          1           1    <f8    $F_{err,\,gauss}$
 eqw                       0                0          1           1    <f8                $Eqw$
 eqw_err                   0                0          1           1    <f8          $Eqw_{err}$
 ion                       0                0          1           0   <U50                  Ion

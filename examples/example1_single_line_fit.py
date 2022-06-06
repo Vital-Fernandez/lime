@@ -1,14 +1,15 @@
 import numpy as np
-import lime
 from astropy.io import fits
+import lime
 
 
 def import_osiris_fits(file_address, ext=0):
 
-    # Open fits file
+    # Open the fits file
     with fits.open(file_address) as hdul:
         data, header = hdul[ext].data, hdul[ext].header
 
+    # Reconstruct the wavelength array from the header data
     w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'], header['NAXIS1']
     w_max = w_min + dw * n_pix
     wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
@@ -32,7 +33,7 @@ mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, norm_flux=normFlux_gp)
-gp_spec.plot_spectrum(frame='rest', spec_label='GP121903')
+gp_spec.plot_spectrum(spec_label='GP121903')
 
 # Run the fit
 gp_spec.fit_from_wavelengths(line, mask)
@@ -57,6 +58,6 @@ print(gp_spec.log)
 # It can be saved into different types of document using the command
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf')
+lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf', parameters=['eqw', 'gauss_flux', 'gauss_err'])
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.asdf', ext='GP121903')
