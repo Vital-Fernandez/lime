@@ -6,6 +6,11 @@ import os
 import sys
 import configparser
 
+from .config import LimeLogger
+
+# Logging tool
+_logger = LimeLogger()
+
 from .treatment import Spectrum, MaskInspector, CubeInspector
 from .io import *
 from .tools import label_decomposition, LineFinder
@@ -21,3 +26,4 @@ _setup_cfg.optionxform = str
 _setup_cfg.read(os.path.join(_dir_path, 'lime.cfg'))
 
 __version__ = _setup_cfg['metadata']['version']
+

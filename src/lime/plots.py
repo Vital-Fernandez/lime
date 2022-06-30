@@ -10,7 +10,7 @@ from collections import Sequence
 from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
-from .tools import label_decomposition, kinematic_component_labelling, blended_label_from_log
+from .tools import label_decomposition, blended_label_from_log, UNITS_LATEX_DICT, latex_science_float
 
 try:
     import pylatex
@@ -63,15 +63,6 @@ PLOT_COLORS = {}
 STANDARD_PLOT = {**PLOT_SIZE_FONT, **PLOT_COLORS}
 
 STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
-
-
-def latex_science_float(f, dec=2):
-    float_str = f'{f:.{dec}g}'
-    if "e" in float_str:
-        base, exponent = float_str.split("e")
-        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
-    else:
-        return float_str
 
 
 def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='none'):
@@ -127,7 +118,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', fit_conf={}):
+def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None):
 
     # Check pylatex is install else leave
     if pylatex_check:
@@ -148,7 +139,7 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         idx_blended_label = None
 
     # Get the line latex label for the table
-    ion_array, wavelength_array, latexLabel_array = label_decomposition(lines_df.index.values, comp_dict=fit_conf)
+    # ion_array, wavelength_array, latexLabel_array = label_decomposition(lines_df.index.values, comp_dict=fit_conf, units_wave=self.units_wave)
 
     # Create pdf
     pdf = PdfMaker()
@@ -158,7 +149,7 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
     # Loop through the lines
     obsLines = lines_df.index.values
     for i, lineLabel in enumerate(obsLines):
-        row_raw = [latexLabel_array[i]] + list(lines_df.loc[lineLabel].values)
+        row_raw = [lines_notation[i]] + list(lines_df.loc[lineLabel].values)
 
         # Exclude the _ from the blended label
         if idx_blended_label is not None:
@@ -188,7 +179,7 @@ def numberStringFormat(value, cifras=4):
     return newFormat
 
 
-def mplcursors_legend(line, log, latex_label, norm_flux):
+def mplcursors_legend(line, log, latex_label, norm_flux, units_wave):
 
     if len(latex_label) == 1:
         legend_text = latex_label[0] + '\n'
@@ -197,7 +188,7 @@ def mplcursors_legend(line, log, latex_label, norm_flux):
         legend_text = '+'.join(latex_label) + '\n'
 
     else:
-        ion, wave, latex = label_decomposition(line, scalar_output=True)
+        ion, wave, latex = label_decomposition(line, scalar_output=True, units_wave=units_wave)
         legend_text = latex + '\n'
 
     intg_flux = latex_science_float(log.loc[line, 'intg_flux']/norm_flux)
@@ -498,7 +489,11 @@ class LiMePlots:
         # Adjust default theme
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
+
         PLOT_CONF['figure.figsize'] = (10, 6)
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
 
         # User configuration overrites user
         PLT_CONF = {**PLOT_CONF, **plt_cfg}
@@ -536,7 +531,7 @@ class LiMePlots:
 
             # Shade regions of matched lines if provided
             if match_log is not None:
-                ion_array, wave_array, latex_array = label_decomposition(match_log.index.values)
+                ion_array, wave_array, latex_array = label_decomposition(match_log.index.values, units_wave=self.units_wave)
                 w3, w4 = match_log.w3.values * (1+self.redshift), match_log.w4.values * (1+self.redshift)
                 idcsLineBand = np.searchsorted(wave_plot, np.array([w3, w4]))
 
@@ -619,10 +614,6 @@ class LiMePlots:
             if log_scale:
                 ax.set_yscale('log')
 
-            # Add the axis normalization to the flux units if non provided
-            if self.norm_flux != 1.0:
-                AXES_CONF['ylabel'] = AXES_CONF['ylabel'] + r' $\,/\,{}$'.format(latex_science_float(self.norm_flux))
-
             # Add the figure labels
             ax.set(**AXES_CONF)
 
@@ -658,7 +649,9 @@ class LiMePlots:
         PLT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
         PLT_CONF['axes.labelsize'] = 14
-        AXES_CONF.pop('xlabel')
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
 
         # User configuration overrites user
         PLT_CONF = {**PLT_CONF, **plt_cfg}
@@ -668,6 +661,11 @@ class LiMePlots:
 
             # List the profile components
             list_comps = profile_label.split('-') if blended_check else [line]
+
+            # In case the input list of lines is different from the order stored in the logs, the latter takes precedence
+            log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
+            list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
+            print(list_comps, np.array_equal(list_comps, log_list))
 
             # Reference frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
@@ -731,11 +729,6 @@ class LiMePlots:
                 resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm*z_corr, err_norm*z_corr, label=label,
                                       facecolor='salmon', alpha=0.3)
 
-            # Add the flux normalization to units if non provided
-            if self.norm_flux != 1.0:
-                norm_label = AXES_CONF['ylabel'] + r' $\,/\,{}$'.format(latex_science_float(self.norm_flux))
-                AXES_CONF['ylabel'] = norm_label
-
             # Switch y_axis to logarithmic scale if requested
             if log_scale:
                 spec_ax.set_yscale('log')
@@ -746,6 +739,7 @@ class LiMePlots:
 
             # Add the figure labels
             spec_ax.set(**AXES_CONF)
+            spec_ax.set_xlabel(None)
             spec_ax.legend()
 
             # Spec upper and lower limit based on absorption or emission
@@ -765,7 +759,7 @@ class LiMePlots:
             # Residual plot labeling
             resid_ax.legend(loc='upper left')
             resid_ax.set_ylabel(label_residual, fontsize=22)
-            resid_ax.set_xlabel(r'Wavelength $(\AA)$')
+            resid_ax.set_xlabel(AXES_CONF['xlabel'])
 
             # By default plot on screen unless an output address is provided
             if output_address is None:
@@ -788,6 +782,8 @@ class LiMePlots:
         # Adjust default theme
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
         AXES_CONF['xlabel'] = 'Velocity (Km/s)'
 
         # User configuration overrites user
@@ -888,10 +884,6 @@ class LiMePlots:
             if log_scale:
                 ax.set_yscale('log')
 
-            # Add the axis normalization to the flux units if non provided
-            if self.norm_flux != 1.0:
-                AXES_CONF['ylabel'] = AXES_CONF['ylabel'] + r' $\,/\,{}$'.format(latex_science_float(self.norm_flux))
-
             # Add the figure labels
             ax.set(**AXES_CONF)
             ax.legend()
@@ -912,7 +904,7 @@ class LiMePlots:
 
         # Line labels to plot
         line_list = log.index.values
-        ion_array, wave_array, latex_array = label_decomposition(line_list)
+        ion_array, wave_array, latex_array = label_decomposition(line_list, units_wave=self.units_wave)
 
         # Define plot axes grid size
         if nrows is None:
@@ -1044,7 +1036,7 @@ class LiMePlots:
 
             idcs_lines = log.index.isin(list_comps)
             observations_list = log.loc[idcs_lines, 'observations'].values
-            ion_array, wavelength_array, latex_array = label_decomposition(list_comps)
+            ion_array, wavelength_array, latex_array = label_decomposition(list_comps, units_wave=self.units_wave)
 
             # Plot the continuum,  Usine wavelength array and continuum form the first component
             cont_wave = wave_array[:, 0]
@@ -1075,7 +1067,7 @@ class LiMePlots:
 
                 # Compute mplcursors box text
                 if mplcursors_check:
-                    label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux)
+                    label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux, self.units_wave)
                     self._legends_dict[label_complex] = line_g
 
             # Combined profile if applicable

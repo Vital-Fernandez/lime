@@ -8,7 +8,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 from .model import EmissionFitting
-from .tools import label_decomposition, LineFinder
+from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float
 from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
@@ -16,6 +16,7 @@ from .model import gaussian_profiles_computation, linear_continuum_computation
 from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
 from matplotlib.widgets import RadioButtons
+from lime import _logger
 
 try:
     import mplcursors
@@ -66,10 +67,16 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     :param inst_FWHM: Spectrum instrument FWHM
     :type inst_FWHM: float, optional
 
+    :param units_wave: Wavelength array physical units. The default value is angstrom (A)
+    :type units_wave: str, optional
+
+    :param units_flux: Flux array physical units. The default value is F_lamda (erg/cm^2/s/A)
+    :type units_flux: str, optional
+
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='erg/cm^2/s/A'):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -85,6 +92,20 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self.redshift = redshift
         self.log = None
         self.inst_FWHM = inst_FWHM
+        self.units_wave = units_wave
+        self.units_flux = units_flux
+
+        # Checks spectra units
+        for arg in ['units_wave', 'units_flux']:
+            arg_value = self.__getattribute__(arg)
+            if arg_value not in UNITS_LATEX_DICT:
+                _logger.warning(f'Input {arg} = {arg_value} is not recognized.\nPlease try to convert it to the accepted'
+                                f'units: {list(UNITS_LATEX_DICT.keys())}')
+
+        # Check if spectrum redshift and flux normalization flux are provided
+        for arg in ['norm_flux', 'redshift']:
+            if self.__getattribute__(arg) is None:
+                _logger.note(f'No value provided for the {arg}')
 
         # Start cropping the input spectrum if necessary
         if crop_waves is not None:
@@ -108,6 +129,22 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             self.flux = self.flux / self.norm_flux
             if input_err is not None:
                 self.err_flux = self.err_flux / self.norm_flux
+
+        # Check for dimensions and nan entries
+        for arg in ['wave', 'flux', 'err_flux']:
+            arg_array = self.__getattribute__(arg)
+            if arg_array is not None:
+                dimensions = len(arg_array.shape)
+                nan_entries = np.isnan(arg_array)
+                if np.any(nan_entries):
+                    _logger.warning(f'Input spectrum {arg} array has {np.sum(nan_entries)} this could bring issues in your fittings'
+                                    f'formats: {list(UNITS_LATEX_DICT.keys())}')
+                if dimensions != 1:
+                    _logger.bug(f'Input spectrum {arg} array has a number of dimensions equal to {dimensions}. Fitting issues'
+                                f' will stop the script running')
+            else:
+                if arg in ['wave', 'flux']:
+                    _logger.warning(f'No {arg} array introduced. This will bring issues in your fittings.')
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
         self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
@@ -348,8 +385,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                     print(warning_messange)
 
                 else:
-                    ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True)
-                    ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True)
+                    ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True, units_wave=self.units_wave)
+                    ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True, units_wave=self.units_wave)
 
                     # Copy v_r and sigma_vel in wavelength units
                     for param_ext in ('center', 'sigma'):
@@ -389,7 +426,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         else:
             line_components = np.array([lineLabel], ndmin=1)
 
-        ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=fit_conf)
+        ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=fit_conf, units_wave=self.units_wave)
 
         # Loop through the line components
         for i, line in enumerate(line_components):
@@ -589,7 +626,7 @@ class MaskInspector(Spectrum):
     def plot_line_region_i(self, ax, lineLabel, limitPeak=5, logscale='auto'):
 
         # Plot line region:
-        ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True)
+        ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True, units_wave=self.units_wave)
 
         # Decide type of plot
         non_nan = (~pd.isnull(self.mask)).sum()
@@ -791,7 +828,7 @@ class MaskInspector(Spectrum):
 
                 # Sort the lines by theoretical wavelength
                 lineLabels = file_DF.index.values
-                ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels)
+                ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels, units_wave=self.units_wave)
                 file_DF = file_DF.iloc[wavelength_array.argsort()]
 
         # If the file does not exist (or it is the first time)
@@ -808,7 +845,7 @@ class CubeInspector(Spectrum):
 
     def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None, color_norm=None,
                  redshift=0, lines_log_address=None, fits_header=None, plt_cfg={}, ax_cfg={},
-                 ext_suffix='_LINESLOG', mask_file=None):
+                 ext_suffix='_LINESLOG', mask_file=None, units_wave='A', units_flux='erg/cm^2/s/A'):
 
         """
         This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
@@ -863,12 +900,18 @@ class CubeInspector(Spectrum):
         :param ext_suffix: Suffix of the line logs extensions. The default value is “_LINESLOG”.
         :type ext_suffix: str, optional
 
+        :param units_wave: Wavelength array physical units. The default value is introduced as "A"
+        :type units_wave: str, optional
+
+        :param units_flux: Flux array physical units. The default value is erg/cm^2/s/A
+        :type units_flux: str, optional
+
         """
 
         #TODO add frame argument
 
         # Assign attributes to the parent class
-        super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1)
+        super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1, units_wave=units_wave, units_flux=units_flux)
 
         # Data attributes
         self.grid_mesh = None
@@ -903,10 +946,16 @@ class CubeInspector(Spectrum):
         if (image_fg is None) and (contour_levels is not None):
             self.image_fg = image_bg
 
+        # Update the axes labels to the units
+        AXES_CONF = STANDARD_AXES.copy()
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = 'Velocity (Km/s)'
+
         # State the figure and axis format
         self.fig_conf = STANDARD_PLOT.copy()
         self.axes_conf = {'image': {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'Cube flux slice'},
-                          'spectrum': STANDARD_AXES}
+                          'spectrum': AXES_CONF}
 
         # Adjust the default theme
         self.fig_conf['figure.figsize'] = (18, 6)

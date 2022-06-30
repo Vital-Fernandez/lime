@@ -448,7 +448,8 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
             fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
         else:
             fit_conf = {}
-        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX, fit_conf=fit_conf)
+        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+                     lines_notation=log.latex_label.values)
 
     # Lines log in a fits file
     elif file_type == '.fits':

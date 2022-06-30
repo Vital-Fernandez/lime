@@ -181,7 +181,7 @@ def format_line_mask_option(entry_value, wave_array):
             formatted_value[i] = element.split('-')
         else:
             element = float(element)
-            pix_width = np.diff(wave_array).mean()/2
+            pix_width = (np.diff(wave_array).mean())/2
             formatted_value[i] = [element-pix_width, element+pix_width]
 
     formatted_value = np.array(formatted_value).astype(float)
@@ -367,7 +367,7 @@ class EmissionFitting:
         # Confirm the number of gaussian components
         mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
         n_comps = mixtureComponents.size
-        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf)
+        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf, units_wave=self.units_wave)
 
         # Pixel velocity
         self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave

@@ -1,8 +1,11 @@
 import numpy as np
 import pandas as pd
+import astropy.units as au
+
 from lmfit.models import PolynomialModel
 from sys import exit
-import astropy.units as au
+
+from lime import _logger
 
 try:
     from specutils import Spectrum1D, SpectralRegion
@@ -18,6 +21,18 @@ SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
+UNITS_LATEX_DICT = {'A': '\AA',
+                    'um': '\mu\!m',
+                    'nm': 'nm',
+                    'erg/cm^2/s/A': r'erg\,cm^{-2} s^{-1} \AA^{-1}',
+                    'Jy': 'Jy',
+                    'mJy': 'mJy'}
+
+#[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
+# 2.99792458E+17 units
+# 1 Jy = 10−26 W⋅m−2⋅Hz−1
+# 1 Jy = 10−23 erg⋅s−1⋅cm−2⋅Hz−1
+# 1 nm = 2.99792458E+17
 
 def int_to_roman(num):
     i, roman_num = 0, ''
@@ -30,7 +45,7 @@ def int_to_roman(num):
 
 
 def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
-                        user_format={}):
+                        user_format={}, units_wave='A'):
 
     """
 
@@ -53,6 +68,9 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
 
     :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
     :type user_format: dict, optional
+
+    :param units_wave: Label wavelength units. The default value "A" is angstrom.
+    :type units_wave: str, optional
 
     :return: 3 arrays (or scalars) with the input transition line(s) ion, wavelength and scientific notation in latex format.
     :rtype: numpy.ndarray
@@ -78,10 +96,17 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
     ion_dict, wave_dict, latexLabel_dict = {}, {}, {}
 
     for lineLabel in lines:
-        if lineLabel not in user_format:
+
+        # Case the user provides his own format
+        if lineLabel in user_format:
+            ion_dict[lineLabel], wave_dict[lineLabel], latexLabel_dict[lineLabel] = user_format[lineLabel]
+
+        # Default format
+        else:
+
             # Check if line reference corresponds to blended component
             mixture_line = False
-            if lineLabel.endswith('_b') or lineLabel.endswith('_m'):
+            if (lineLabel[-2:] == '_b') or (lineLabel[-2:] == '_m'):
                 mixture_line = True
                 if lineLabel in comp_dict:
                     lineRef = comp_dict[lineLabel]
@@ -97,6 +122,9 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
             latexLabel = ''
             for line_i in lineComponents:
 
+                # Check that the line has the right units
+                kinem_comp_check = False if line_i.count('_') == 1 else True
+
                 # Get ion:
                 if 'r_' in line_i: # Case recombination lines
                     ion = line_i[0:line_i.find('_')-1]
@@ -104,11 +132,10 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                     ion = line_i[0:line_i.find('_')]
 
                 # Get wavelength and their units # TODO add more units and more facilities for extensions
-                ext_n = line_i.count('_')
-                if (line_i.endswith('A')) or (ext_n > 1):
-                    wavelength = line_i[line_i.find('_') + 1:line_i.rfind('A')]
-                    units = '\AA'
-                    ext = f'-{line_i[line_i.rfind("_")+1:]}' if ext_n > 1 else ''
+                if (line_i.endswith(units_wave)) or kinem_comp_check:
+                    wavelength = line_i[line_i.find('_') + 1:line_i.rfind(units_wave)]
+                    units = UNITS_LATEX_DICT[units_wave]
+                    ext = f'-{line_i[line_i.rfind("_")+1:]}' if kinem_comp_check else ''
                 else:
                     wavelength = line_i[line_i.find('_') + 1:]
                     units = ''
@@ -118,32 +145,30 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                 atom, ionization = ion[:-1], int(ion[-1])
                 ionizationRoman = int_to_roman(ionization)
 
+                # TODO add metals notation
                 # Define the label
                 if ion in recomb_atom:
-                    comp_Label = wavelength + units + '\,' + atom + ionizationRoman + ext
+                    comp_line = f'{atom}{ionizationRoman}\,{wavelength}{units}{ext}'
                 else:
-                    comp_Label = wavelength + units + '\,' + '[' + atom + ionizationRoman + ']' + ext
+                    comp_line = f'[{atom}{ionizationRoman}]\,{wavelength}{units}{ext}'
 
-                # In the case of a mixture line we take the first entry as the reference
+                # In the case of a mixture line we take component with the _b as the parent
                 if mixture_line:
-                    if len(latexLabel) == 0:
+                    if lineLabel[:-2] == line_i:
                         ion_dict[lineRef] = ion
                         wave_dict[lineRef] = float(wavelength)
-                        latexLabel += comp_Label
+                        latexLabel = comp_line if len(latexLabel) == 0 else f'{latexLabel}+{comp_line}'
                     else:
-                        latexLabel += '+' + comp_Label
+                        latexLabel = comp_line if len(latexLabel) == 0 else f'{latexLabel}+{comp_line}'
 
                 # This logic will expand the blended lines, but the output list will be larger than the input one
                 else:
                     ion_dict[line_i] = ion
                     wave_dict[line_i] = float(wavelength)
-                    latexLabel_dict[line_i] = '$'+comp_Label+'$'
+                    latexLabel_dict[line_i] = '$'+comp_line+'$'
 
             if mixture_line:
                 latexLabel_dict[lineRef] = '$'+latexLabel +'$'
-
-        else:
-            ion_dict[lineLabel], wave_dict[lineLabel], latexLabel_dict[lineLabel] = user_format[lineLabel]
 
     # Convert to arrays
     label_array = np.array([*ion_dict.keys()], ndmin=1)
@@ -155,10 +180,11 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
     assert label_array.size == latexLabel_array.size, 'Output ions do not match labels size'
 
     if ion_array.size == 1 and scalar_output:
-        return ion_array[0], wavelength_array[0], latexLabel_array[0]
+        output = (ion_array[0], wavelength_array[0], latexLabel_array[0])
     else:
-        return ion_array, wavelength_array, latexLabel_array
+        output = (ion_array, wavelength_array, latexLabel_array)
 
+    return output
 
 def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):
     """
@@ -207,35 +233,6 @@ def compute_FWHM0(idx_peak, spec_flux, delta_wave, cont_flux, emission_check=Tru
     return i
 
 
-def kinematic_component_labelling(line_latex_label, comp_ref):
-    """
-
-    :param line_latex_label:
-    :param comp_ref:
-    :return:
-    """
-    if len(comp_ref) != 2:
-        print(f'-- Warning: Components label for {line_latex_label} is {comp_ref}. Code only prepare for a 2 character description (ex. n1, w2...)')
-
-    number = comp_ref[-1]
-    letter = comp_ref[0]
-
-    if letter in ('n', 'w'):
-        if letter == 'n':
-            comp_label = f'Narrow {number}'
-        if letter == 'w':
-            comp_label = f'Wide {number}'
-    else:
-        comp_label = f'{letter}{number}'
-
-    if '-' in line_latex_label:
-        lineEmisLabel = line_latex_label.replace(f'-{comp_ref}', '')
-    else:
-        lineEmisLabel = line_latex_label
-
-    return comp_label, lineEmisLabel
-
-
 def blended_label_from_log(line, log):
 
     # Default values: single line
@@ -255,6 +252,15 @@ def blended_label_from_log(line, log):
         exit(f'\n-- ERROR: line {line} not found input lines log')
 
     return blended_check, profile_label
+
+
+def latex_science_float(f, dec=2):
+    float_str = f'{f:.{dec}g}'
+    if "e" in float_str:
+        base, exponent = float_str.split("e")
+        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
+    else:
+        return float_str
 
 
 class LineFinder:
@@ -416,7 +422,7 @@ class LineFinder:
         wave_peaks = self.wave_rest[idcsLinePeak]
 
         # Theoretical wave values
-        ion_array, waveTheory, latexLabel_array = label_decomposition(matched_DF.index.values)
+        ion_array, waveTheory, latexLabel_array = label_decomposition(matched_DF.index.values, units_wave=self.units_wave)
         matched_DF['wavelength'] = waveTheory
 
         # Match the lines with the theoretical emission
