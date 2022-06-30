@@ -746,6 +746,9 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     return
 
 
+
+
+
 def save_param_maps(log_file_address, params_list, lines_list, output_folder, spatial_mask_file=None, ext_mask='all',
                     image_shape=None, ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None,
                     page_hdr={}):

@@ -13,7 +13,7 @@ _logger = LimeLogger()
 
 from .treatment import Spectrum, MaskInspector, CubeInspector
 from .io import *
-from .tools import label_decomposition, LineFinder
+from .tools import label_decomposition, LineFinder, spectral_mask_generator
 from .plots import spatial_mask_generator
 
 # Get python version being used
@@ -23,7 +23,7 @@ __python_version__ = sys.version_info
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 _setup_cfg = configparser.ConfigParser()
 _setup_cfg.optionxform = str
-_setup_cfg.read(os.path.join(_dir_path, 'lime.cfg'))
+_setup_cfg.read(os.path.join(_dir_path, 'config.cfg'))
 
 __version__ = _setup_cfg['metadata']['version']
 

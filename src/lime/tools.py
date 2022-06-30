@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
 import astropy.units as au
-
+from astropy.units import AA
 from lmfit.models import PolynomialModel
 from sys import exit
+from pathlib import Path
 
 from lime import _logger
 
@@ -18,6 +19,11 @@ except ImportError:
 
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+
+ASTRO_UNITS_KEYS = {'A': au.AA,
+                    'um': au.um,
+                    'nm': au.nm,
+                    'flam': au.erg / au.s / au.cm ** 2 / au.AA}
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
@@ -262,6 +268,75 @@ def latex_science_float(f, dec=2):
     else:
         return float_str
 
+
+def unit_convertor(in_units, out_units, sig_fig=None):
+
+    unit_factor = 1 * ASTRO_UNITS_KEYS[in_units]
+    unit_factor = unit_factor.to(ASTRO_UNITS_KEYS[out_units])
+
+    if sig_fig is None:
+        return unit_factor.value
+    else:
+        return np.round(unit_factor.value, sig_fig)
+
+
+def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, z_range=None,
+                            parent_mask_address=None, units_wave='A', sig_fig=4):
+
+    # Use the default lime mask if none provided
+    if parent_mask_address is None:
+        parent_mask_address = Path(__file__).parent/'parent_mask.txt'
+
+    # Check that the file exists:
+    if not Path(parent_mask_address).is_file():
+        _logger.warning(f'Parent mask file not found. The input user address was {parent_mask_address}')
+
+    # Load the parent mask
+    mask_df = pd.read_csv(parent_mask_address, delim_whitespace=True, header=0, index_col=0)
+
+    # Recover line label components
+    ion_array, wave_array, latex_array = label_decomposition(mask_df.index.values)
+    mask_df['wave'], mask_df['ion'], mask_df['latex'] = wave_array, ion_array, latex_array
+    idcs_rows = np.ones(mask_df.index.size).astype(bool)
+
+    # Convert the output mask to the units requested by the user
+    if units_wave != 'A':
+
+        conversion_factor = unit_convertor('A', units_wave, sig_fig)
+        mask_df.loc[:, 'w1':'w6'] = mask_df.loc[:, 'w1':'w6'] * conversion_factor
+
+        wave_array = wave_array * conversion_factor if sig_fig is None else np.round(wave_array * conversion_factor, sig_fig)
+
+        # Reconstruct the line labels for the new units
+        labels_array = np.core.defchararray.add(ion_array, '_')
+        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
+        labels_array = np.core.defchararray.add(labels_array, units_wave)
+
+        # Rename the indeces
+        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
+
+    # First slice by wavelength and redshift
+    if wave_interval is not None:
+        w_min, w_max = wave_interval[0], wave_interval[-1]
+
+        if z_range is not None:
+            z_range = np.array(z_range, ndmin=1)
+            w_min, w_max = w_min * (1 + z_range[0]), w_max * (1 + z_range[-1])
+
+        idcs_rows = idcs_rows & (wave_array >= w_min) & (wave_array <= w_max)
+
+    # Second slice by ion
+    if ion_list is not None:
+        idcs_rows = idcs_rows & mask_df.ion.isin(ion_list)
+
+    # Finally slice by the name of the lines
+    if lines_list is not None:
+        idcs_rows = idcs_rows & mask_df.index.isin(lines_list)
+
+    # Return the sliced the parent mask
+    output_mask = mask_df.loc[idcs_rows, 'w1':'w6']
+
+    return output_mask
 
 class LineFinder:
 
