@@ -63,7 +63,7 @@ value. In the case of GP121903:
 
     # Galaxy redshift and the flux normalization
     z_gp = 0.19531
-    normFlux_gp = 1e-14
+    normFlux_gp = 1e-18
 
 .. note::
 

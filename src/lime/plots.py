@@ -663,17 +663,22 @@ class LiMePlots:
             list_comps = profile_label.split('-') if blended_check else [line]
 
             # In case the input list of lines is different from the order stored in the logs, the latter takes precedence
-            log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
-            list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
-            print(list_comps, np.array_equal(list_comps, log_list))
+            if blended_check:
+                log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
+                list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
 
             # Reference frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
-            # Determine the line region
+            # Determine the line region # WARNING it needs to be a bit larger than original mask
             w1 = self.log.loc[line, 'w1'] * (1 + self.redshift)
             w6 = self.log.loc[line, 'w6'] * (1 + self.redshift)
-            idcs_plot = ((w1 - 5) <= wave_plot) & (wave_plot <= (w6 + 5))
+            idx1, idx6 = np.searchsorted(wave_plot, (w1, w6))
+            idcs_plot = np.full(wave_plot.size, False)
+
+            idx_low = idx1 - 1 if idx1-1 >= 0 else idx1
+            idx_high = idx6 + 1 if idx6+1 < wave_plot.size else idx6
+            idcs_plot[idx_low:idx_high] = True
 
             # Continuum level
             cont_level = self.log.loc[line, 'cont']

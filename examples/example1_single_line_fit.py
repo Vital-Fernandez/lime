@@ -25,7 +25,7 @@ wave, flux, hdr = import_osiris_fits(gp_fits)
 
 # Galaxy redshift and the flux normalization
 z_gp = 0.19531
-normFlux_gp = 1e-14
+normFlux_gp = 1e-18
 
 # Line name and its location mask in the rest frame
 line = 'H1_6563A'

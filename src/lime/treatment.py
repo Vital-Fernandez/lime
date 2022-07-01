@@ -222,6 +222,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         # Global fit parameters
         self._emission_check = emission
         self._cont_from_adjacent = adjacent_cont
+        self._decimal_wave = True if '.' in self.line else False
 
         # Get spectrum line and continua band indeces
         idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift), line_mask_entry=fit_conf.get(f'{self.line}_mask'))
@@ -237,8 +238,9 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 self.observations = 'Small_line_band'
             else:
                 self.observations += 'Small_line_band'
-            print(f'-- WARNING: Line band mask is too small for line {line}')
+            _logger.warning(f'- Line {line} mask band is too small ({emisWave.size} value array): {emisWave}')
 
+        # Non-parametric measurements
         self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
 
         # Check if blended line
@@ -381,8 +383,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                 # Case we want to copy from previous line and the data is not available
                 if (parent_label not in self.log.index) and (not self.blended_check):
-                    warning_messange = f'-- WARNING: {parent_label} has not been measured. Its kinematics were not copied to {child_label}'
-                    print(warning_messange)
+                    _logger.warning(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
                 else:
                     ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True, units_wave=self.units_wave)
@@ -394,14 +395,14 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
                         # Warning overwritten existing configuration
                         if param_label_child in user_conf:
-                            print(f'-- WARNING: {param_label_child} overwritten by {parent_label} kinematics in configuration input')
+                            _logger.warning('{param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                         # Case where parent and child are in blended group
                         if parent_label in childs_list:
-                            param_label_parent = f'{parent_label}_{param_ext}'
+                            param_label_parent = f'{parent_label.replace(".", "dot")}_{param_ext}'
                             param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
 
-                            user_conf[param_label_child] = {'expr': param_expr_parent}
+                            user_conf[param_label_child.replace(".", "dot")] = {'expr': param_expr_parent}
 
                         # Case we want to copy from previously measured line
                         else:
@@ -413,8 +414,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                             else:
                                 param_value = wtheo_child / wtheo_parent * sigma_parent
 
-                            user_conf[param_label_child] = {'value': param_value[0], 'vary': False}
-                            user_conf[f'{param_label_child}_err'] = param_value[1]
+                            user_conf[param_label_child.replace(".", "dot")] = {'value': param_value[0], 'vary': False}
+                            user_conf[f'{param_label_child.replace(".", "dot")}_err'] = param_value[1]
 
         return
 

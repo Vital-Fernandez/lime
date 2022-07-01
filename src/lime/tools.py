@@ -138,6 +138,7 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                     ion = line_i[0:line_i.find('_')]
 
                 # Get wavelength and their units # TODO add more units and more facilities for extensions
+                # TODO warning if label does not have those units
                 if (line_i.endswith(units_wave)) or kinem_comp_check:
                     wavelength = line_i[line_i.find('_') + 1:line_i.rfind(units_wave)]
                     units = UNITS_LATEX_DICT[units_wave]

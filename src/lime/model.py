@@ -72,10 +72,12 @@ def gauss_func(ind_params, a, mu, sigma):
     return a * np.exp(-((x - mu) * (x - mu)) / (2 * (sigma * sigma))) + z
 
 
-def gaussian_profiles_computation(line_list, log, z_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+def gaussian_profiles_computation(line_list, log, z_corr, res_factor=100, interval=('w3', 'w4'), x_array=None):
 
     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
     # and starting at interval[0] values beyond interval[0] are masked
+
+    #TODO Resfactor should be a lime parameter
     if x_array is None:
 
         idcs_lines = (log.index.isin(line_list))
@@ -88,7 +90,7 @@ def gaussian_profiles_computation(line_list, log, z_corr, res_factor=10, interva
         wmax_array = log.loc[idcs_lines, interval[1]].values * z_corr
         w_mean = np.max(wmax_array - wmin_array)
 
-        x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
+        x_zero = np.linspace(0, w_mean, res_factor)
         x_array = np.add(np.c_[x_zero], wmin_array)
 
         gaussian_array = gaussian_model(x_array, amp_array, center_array, sigma_array)
@@ -118,7 +120,7 @@ def gaussian_profiles_computation(line_list, log, z_corr, res_factor=10, interva
         return gaussian_array
 
 
-def linear_continuum_computation(line_list, log, z_corr, res_factor=10, interval=('w3', 'w4'), x_array=None):
+def linear_continuum_computation(line_list, log, z_corr, res_factor=100, interval=('w3', 'w4'), x_array=None):
 
     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
     # and starting at interval[0] values beyond interval[0] are masked
@@ -132,7 +134,7 @@ def linear_continuum_computation(line_list, log, z_corr, res_factor=10, interval
         wmax_array = log.loc[idcs_lines, interval[1]].values * z_corr
         w_mean = np.max(wmax_array - wmin_array)
 
-        x_zero = np.linspace(0, w_mean, int(w_mean * res_factor))
+        x_zero = np.linspace(0, w_mean, res_factor)
         x_array = np.add(np.c_[x_zero], wmin_array)
 
         cont_array = m_array * x_array + n_array
@@ -207,8 +209,8 @@ class EmissionFitting:
 
     _AMP_ABS_PAR = dict(value=None, min=-np.inf, max=0, vary=True, expr=None)
 
-    _SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
-    _INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
+    _SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+    _INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
 
     _SLOPE_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
     _INTER_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
@@ -253,6 +255,7 @@ class EmissionFitting:
         self.temp_line = None
         self._emission_check = True
         self._cont_from_adjacent = True
+        self._decimal_wave = False
 
         return
 
@@ -367,6 +370,8 @@ class EmissionFitting:
         # Confirm the number of gaussian components
         mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
         n_comps = mixtureComponents.size
+
+        # TODO maybe we need this operation just once and create self.ion, self.trans_array, self.latex_label
         ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf, units_wave=self.units_wave)
 
         # Pixel velocity
@@ -385,15 +390,16 @@ class EmissionFitting:
         # Kinematics corrections
         self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
 
-        # TODO create the parameters in advance in order to remove the components order requirement
-
         # Define fitting params for each component
         fit_model = Model(linear_model)
         for idx_comp, comp in enumerate(mixtureComponents):
 
+            # Security check for labels with decimal wavelengths
+            comp = comp.replace('.', 'dot')
+
             # Linear
             if idx_comp == 0:
-                fit_model.prefix = f'{comp}_cont_' # For a blended line the continuum conf is defined by first line
+                fit_model.prefix = f'{comp}_cont_' # For a blended line the continuum conf is defined by first line # TODO this should be the component _b
 
                 SLOPE_PAR = self._SLOPE_PAR if self._cont_from_adjacent else self._SLOPE_FIX_PAR
                 INTER_PAR = self._INTER_PAR if self._cont_from_adjacent else self._INTER_FIX_PAR
@@ -410,7 +416,7 @@ class EmissionFitting:
             # Define the curve parameters # TODO include the normalization here
             self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
             self.define_param(fit_model, comp, 'center', ref_wave[idx_comp], self._CENTER_PAR, user_conf, z_cor=(1+z_obj))
-            self.define_param(fit_model, comp, 'sigma', 1.0, self._SIG_PAR, user_conf)
+            self.define_param(fit_model, comp, 'sigma', 2*self.pixelWidth, self._SIG_PAR, user_conf)
             self.define_param(fit_model, comp, 'area', comp, self._AREA_PAR, user_conf)
 
         # Unpack the mask
@@ -443,7 +449,7 @@ class EmissionFitting:
         self.v_r, self.v_r_err = np.empty(n_comps), np.empty(n_comps)
         self.sigma_vel, self.sigma_vel_err = np.empty(n_comps), np.empty(n_comps)
         self.gauss_flux, self.gauss_err = np.empty(n_comps), np.empty(n_comps)
-        self.z_line = np.empty(n_comps)
+        # self.z_line = np.empty(n_comps)
         self.FWHM_g = np.empty(n_comps)
         self.sigma_thermal = np.empty(n_comps)
 
@@ -452,38 +458,41 @@ class EmissionFitting:
         self.aic, self.bic = self.fit_output.aic, self.fit_output.bic
 
         # Store lmfit measurements
-        for i, line in enumerate(mixtureComponents):
+        for i, comp in enumerate(mixtureComponents):
+
+            # Security check for labels with decimal wavelengths
+            comp = comp.replace('.', 'dot')
 
             # Gaussian parameters
             for j, param in enumerate(['amp', 'center', 'sigma']):
-                param_fit = self.fit_output.params[f'{line}_{param}']
+                param_fit = self.fit_output.params[f'{comp}_{param}']
                 term_mag = getattr(self, param)
                 term_mag[i] = param_fit.value
                 term_err = getattr(self, f'{param}_err')
                 term_err[i] = param_fit.stderr
 
-                # Case with error propagation
-                if (term_err[i] == 0) and (f'{line}_{param}_err' in user_conf):
-                    term_err[i] = user_conf[f'{line}_{param}_err']
+                # Case with error propagation from _kinem command
+                if (term_err[i] == 0) and (f'{comp}_{param}_err' in user_conf):
+                    term_err[i] = user_conf[f'{comp}_{param}_err'] # TODO do I need this one here, can I use the one below
 
             # Gaussian area
-            self.gauss_flux[i] = self.fit_output.params[f'{line}_area'].value
-            self.gauss_err[i] = self.fit_output.params[f'{line}_area'].stderr
+            self.gauss_flux[i] = self.fit_output.params[f'{comp}_area'].value
+            self.gauss_err[i] = self.fit_output.params[f'{comp}_area'].stderr
 
             # Equivalent with gaussian flux for blended components TODO compute self.cont from linear fit
             if self.blended_check:
                 eqw_g[i], eqwErr_g[i] = self.gauss_flux[i] / self.cont, self.gauss_err[i] / self.cont
 
             # Kinematics
-            self.v_r[i] = c_KMpS * (self.center[i] - ref_wave[i])/ref_wave[i] # wavelength_to_vel(self.center[i] - theoWave_arr[i], theoWave_arr[i])#self.v_r[i] =
-            self.v_r_err[i] = c_KMpS * (self.center_err[i])/ref_wave[i] # np.abs(wavelength_to_vel(self.center_err[i], theoWave_arr[i]))
-            self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i] # wavelength_to_vel(self.sigma[i], theoWave_arr[i])
-            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i] # wavelength_to_vel(self.sigma_err[i], theoWave_arr[i])
+            self.v_r[i] = c_KMpS * (self.center[i] - ref_wave[i])/ref_wave[i]
+            self.v_r_err[i] = c_KMpS * (self.center_err[i])/ref_wave[i]
+            self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]
+            self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
             self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
 
             # Check parameters error progragation from the lmfit parameter
-            self.error_propagation_check(i, line)
+            self.error_propagation_check(i, comp)
 
         if self.blended_check:
             self.eqw, self.eqw_err = eqw_g, eqwErr_g
@@ -571,6 +580,10 @@ class EmissionFitting:
                                                             self.gauss_flux[idx_line])
 
         # Check equivalent width error
+        # for param in
+
+
+        # Check the error from the _kinem command imports
 
         return
 
