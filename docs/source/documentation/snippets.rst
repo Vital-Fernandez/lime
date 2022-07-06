@@ -1,0 +1,11 @@
+Code blocks
++++++++++++
+
+.. code-block:: python
+
+    # The measurements log can be saved into different formats using the command
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf', parameters=['eqw', 'gauss_flux'])
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP121903')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
+    lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.asdf', ext='GP121903')
