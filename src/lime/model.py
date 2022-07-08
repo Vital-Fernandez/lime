@@ -30,6 +30,7 @@ ATOMIC_MASS = {'H': (1.00784+1.00811)/2 * amu,
                'Ar': (39.792 + 39.963)/2 * amu,
                'Fe': 55.845 * amu}
 
+
 def wavelength_to_vel(delta_lambda, lambda_wave, light_speed=c_KMpS):
     return light_speed * (delta_lambda/lambda_wave)
 
@@ -42,7 +43,7 @@ def iraf_snr(input_y):
 
 
 def signal_to_noise(flux_line, sigma_noise, n_pixels):
-
+    # TODO this formula should be the complete one?
     snr = flux_line / (sigma_noise * np.sqrt(n_pixels))
 
     return snr
