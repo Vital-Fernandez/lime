@@ -8,3 +8,4 @@ lmfit~=1.0.2
 scipy~=1.7.3
 specutils~=1.1.1
 setuptools~=52.0.0
+nbsphinx
