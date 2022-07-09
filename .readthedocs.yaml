@@ -13,7 +13,6 @@ python:
   system_packages: true
 
 formats:
-  - epub
   - pdf
 
 sphinx:
