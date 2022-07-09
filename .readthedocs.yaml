@@ -12,6 +12,9 @@ python:
     - requirements: docs/requirements.txt
   system_packages: true
 
+formats:
+  - epub
+  - pdf
 
 sphinx:
   fail_on_warning: true
