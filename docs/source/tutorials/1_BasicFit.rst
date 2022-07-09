@@ -1,4 +1,4 @@
-1) Simple line fitting
+1) Single line fitting
 ======================
 
 In this example we perform single line fits on the emission spectrum of the Green Pea galaxy GP121903 which was observed

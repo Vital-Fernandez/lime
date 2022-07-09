@@ -43,11 +43,12 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.imgmath',
     'matplotlib.sphinxext.plot_directive',
-    'sphinx.ext.imgmath'
+    'sphinx.ext.imgmath',
+    'nbsphinx'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ['_templates', '_build']
 
 autodoc_member_order = 'bysource'
 
