@@ -12,6 +12,9 @@ python:
       extra_requirements:
         - lmfit
         - nbsphinx
+    - requirements: docs/requirements.txt
+  system_packages: true
+
 
 sphinx:
   fail_on_warning: true
