@@ -44,6 +44,7 @@ These are some of the features currently available:
 
    documentation/installation
    documentation/fitting
+   documentation/plots
    documentation/measurements
    documentation/api
 
@@ -59,5 +60,4 @@ These are some of the features currently available:
    tutorials/5_IFU_masks
    tutorials/6_IFU_fittings
    tutorials/7_IFU_results
-   tutorials/8_LiMe_Notebooks
 

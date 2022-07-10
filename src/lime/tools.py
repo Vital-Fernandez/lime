@@ -339,6 +339,9 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
     return output_mask
 
+
+
+
 class LineFinder:
 
     def __init__(self):

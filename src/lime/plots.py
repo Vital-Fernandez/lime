@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd
+import sys
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 from astropy.wcs import WCS
@@ -371,6 +371,7 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
             ax.legend(handles=legend_list, loc=2)
             ax.set(**AXES_CONF)
 
+            # Save the mask image
             if fits_folder is not None:
 
                 if mask_ref is None:
@@ -380,12 +381,12 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
 
                 plt.savefig(output_image)
 
+            # Display the mask if requested
             if show_plot:
-                plt.show()
+                save_close_fig_swicth(None, 'tight', fig)
 
-            plt.close(fig)
 
-    # Save to a fits file:
+    # Save the mask to a fits file:
     if output_address is not None:
 
         fits_address = Path(output_address)
@@ -417,6 +418,30 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
             else:
                 hdul = fits.HDUList([fits.PrimaryHDU(), mask_hdu])
                 hdul.writeto(fits_address, overwrite=True, output_verify='fix')
+
+    return
+
+
+def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None):
+
+    # By default plot on screen unless an output address is provided
+    if file_path is None:
+
+        if bbox_inches is not None:
+            plt.tight_layout()
+
+        plt.show()
+
+    else:
+        plt.savefig(file_path, bbox_inches=bbox_inches)
+
+        # Close the figure in the case of printing
+        if fig_obj is not None:
+            plt.close(fig_obj)
+
+    # # Close the figure before leaving
+    # if plt.get_backend() not in ["Qt5Agg", "nbagg"]:
+    #     plt.close(fig)
 
     return
 
@@ -622,14 +647,7 @@ class LiMePlots:
                 ax.legend()
 
             # By default plot on screen unless an output address is provided
-            if output_address is None:
-                plt.tight_layout()
-                plt.show()
-            else:
-                plt.savefig(output_address, bbox_inches='tight')
-
-            # Close the figure before leaving
-            plt.close(fig)
+            save_close_fig_swicth(output_address, 'tight', fig)
 
         return
 
@@ -767,11 +785,7 @@ class LiMePlots:
             resid_ax.set_xlabel(AXES_CONF['xlabel'])
 
             # By default plot on screen unless an output address is provided
-            if output_address is None:
-                plt.tight_layout()
-                plt.show()
-            else:
-                plt.savefig(output_address, bbox_inches='tight')
+            save_close_fig_swicth(output_address, 'tight', fig_obj=None)
 
         return
 
@@ -894,14 +908,7 @@ class LiMePlots:
             ax.legend()
 
             # By default plot on screen unless an output address is provided
-            if output_address is None:
-                plt.tight_layout()
-                plt.show()
-            else:
-                plt.savefig(output_address, bbox_inches='tight')
-
-            # Close the figure before leaving
-            plt.close(fig)
+            save_close_fig_swicth(output_address, 'tight', fig)
 
         return
 
@@ -986,13 +993,7 @@ class LiMePlots:
                     mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
 
             # By default plot on screen unless an output address is provided
-            if output_address is None:
-                plt.tight_layout()
-                plt.show()
-            else:
-                plt.savefig(output_address, bbox_inches='tight')
-
-            plt.close(fig)
+            save_close_fig_swicth(output_address, 'tight', fig)
 
         return
 

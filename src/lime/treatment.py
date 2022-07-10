@@ -9,11 +9,11 @@ from astropy.wcs import WCS
 
 from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float
-from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict
+from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
 
-from matplotlib import pyplot as plt, rcParams, colors, cm, gridspec, rc_context
+from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
 from matplotlib.widgets import RadioButtons
 from lime import _logger
@@ -360,11 +360,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Fitting plot
         if plot:
-
-            if output_address is None:
-                self.plot_fit_components(log_scale=log_scale, frame=frame)
-            else:
-                self.plot_fit_components(log_scale=log_scale, frame=frame, output_address=output_address)
+            self.plot_fit_components(log_scale=log_scale, frame=frame, output_address=output_address)
 
         return
 
@@ -589,12 +585,14 @@ class MaskInspector(Spectrum):
             try:
                 manager = plt.get_current_fig_manager()
                 manager.window.showMaximized()
-            except: #TODO add exception
+
+            # TODO add exception
+            except:
                 print()
 
-            plt.tight_layout()
-            plt.show()
-            plt.close(self.fig)
+            # Show the image
+            save_close_fig_swicth(None, 'tight', self.fig)
+
 
         return
 
@@ -1035,8 +1033,8 @@ class CubeInspector(Spectrum):
             if self.mask_file is not None:
                 radio.on_clicked(self.mask_selection)
 
-            # Display the figures
-            plt.show()
+            # Display the figure
+            save_close_fig_swicth()
 
             # Close the lines log if it has been opened
             if isinstance(self.hdul_linelog, fits.hdu.HDUList):
