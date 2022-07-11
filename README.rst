@@ -2,9 +2,10 @@
 Line Measurer (LiMe)
 ####################
 
-This library provides a set of tools to fit emission lines from ionized spectra. Its design aims for a simple usage in both
-a single line and Big Data observations. The emission labeling supports a multi-gaussian component fitting.
-The measurements can be stored in several formats to facilitate the posterior analysis of the gas chemistry and kinematics.
+This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
+for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
+and storing the results. The output measurements support both the posterior analysis of the object's chemical composition
+and plasma kinematics.
 
 Please check the `online documentation <https://lime-stable.readthedocs.io/>`_.
 

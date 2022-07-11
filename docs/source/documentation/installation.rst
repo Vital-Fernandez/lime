@@ -16,7 +16,7 @@ To update the library to its latest version you can run this command:
 Dependencies
 ------------
 
-The current version of LiMe has these dependencies:
+The current version of :math:`\textsc{LiMe}` has these dependencies:
 
 * Numpy_
 * Pandas_
@@ -24,10 +24,10 @@ The current version of LiMe has these dependencies:
 * LmFit_ (fitting library)
 * Astropy_ (loading and saving *.fits* files)
 
-The following libraries are not necessary but they provide a richer experience for the library inputs and outputs:
+The following dependencies are not compulsory but they provide more options for the library inputs/outputs:
 
 * Specutils_ (Functions to detect line peaks and troughs)
-* mplcursors_ (Measurements pop-ups in plots)
+* mplcursors_ (Interactive pop-ups in plots)
 * asdf_ (Saving the logs as *.asdf* files)
 * PyLatex_ (Saving the logs as *.pdf* files)
 * openpyxl_ (Saving the logs as *.xlsx* files)
@@ -36,7 +36,7 @@ Development
 -----------
 
 :math:`\textsc{LiMe}` is currently in a beta release. Please check its github_ for the latest version news and tutorials.
-Any comment/issue/request can be added as an issue on the github_ page.
+Any comments/problems/request can be added as an issue on the github_ page.
 
 .. _pip: https://pypi.org/project/lime-stable/
 .. _github: https://github.com/Vital-Fernandez/lime

@@ -1,10 +1,10 @@
 2) Tests on a synthetic spectrum
 ================================
 
-In this tutorial we perform some fits on a synthetic spectrum. This is a good exercise to test the accuracy and precision
+In this tutorial, we perform some fits on a synthetic spectrum. This is a good exercise to test the accuracy and precision
 of :math:`\textsc{LiMe}`.
 
-This tutorial can also be found as a python script in the `github 2nd example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example2_synthetic_spectrum_fit.py>`_.
+This tutorial can also be found as a python script on `github <https://github.com/Vital-Fernandez/lime/blob/master/examples/example2_synthetic_spectrum_fit.py>`_.
 
 Let's start by defining the units, wavelength range and some lines for the synthetic spectrum:
 
@@ -42,14 +42,13 @@ Let's start by defining the units, wavelength range and some lines for the synth
                            'H1_6563A': [225.75, 6563.0, 2.456],
                            'H1_6563A_w1': [225.75, 6566.0, 5.615]}
 
-Even though this spectrum lines don't have physical profiles, it provides a wider variety of tests. Now we can import
-the gaussian model and combine all the lines and continuum
+Now we can import the ``gaussian_model`` and combine all the components.
 
 .. code-block:: python
 
     from lime.model import gaussian_model
 
-    # Adding continuum as a linear function
+    # Modelling the continuum as a linear function
     flux_obs = wave_obs * cont_coeffs[0] + cont_coeffs[1]
 
     # Adding emission lines
@@ -79,7 +78,7 @@ We can plot the spectrum using the ``.plot_spectrum()`` attribute:
 .. image:: ../_static/2_synthSpec.png
 
 Before fitting the lines, however, :math:`\textsc{LiMe}` needs you to provide the line location. :math:`\textsc{LiMe}`
-masks consist in a 6 wavelengths array in increasing order:
+masks consist in 6 value arrays, in increasing order:
 
 .. image:: ../_static/mask_selection.jpg
    :align: center
@@ -103,7 +102,7 @@ with the emission lines masks:
                        [6438.0, 6508.6, 6535.10, 6600.9, 6627.69, 6661.8]])
     mask_df = pd.DataFrame(data=table_data, index=index_labels, columns=column_labels)
 
-Our mask dataframe looks like:
+Our masks dataframe looks like:
 
 .. code-block:: python
 
@@ -144,6 +143,7 @@ The table data can be accessed as numpy arrays or floats using the pandas notati
    # Getting a cell
    print(mask_df.loc['H1_4861A_b', 'w1'])
    print(mask_df.loc['H1_4861A_b'].w1)
+
 .. code-block::
 
     4809.8
@@ -152,7 +152,7 @@ The table data can be accessed as numpy arrays or floats using the pandas notati
 Any user is encouraged to check the `pandas documentation <https://pandas.pydata.org/docs/>`_ to take advantage of the
 flexibility of these tables.
 
-Finally, we need to state the components of the blended and/or merged lines so they can be properly analysed:
+Finally, we need to state the components of the blended lines:
 
 .. code-block:: python
 
@@ -163,7 +163,7 @@ Finally, we need to state the components of the blended and/or merged lines so t
                'H1_6563A_w1_sigma': {'expr': '>1*H1_6563A_sigma'}}
 
 The last entry in the configuration dict provides one constrain on the fitting of the wide component of Hα line: It must be
-wider than the narrow component (H1_6563A). This is a common constrain in order to make sure that the component with the larger
+wider than the narrow component (``H1_6563A``). This is a common constrain in order to make sure that the component with the larger
 velocity dispersion keeps the same label suffix (w1) across different lines and spectra.
 
 Finally, we perform the line fitting looping through the line masks:
@@ -177,7 +177,7 @@ Finally, we perform the line fitting looping through the line masks:
         wave_regions = mask_df.loc[lineLabel, 'w1':'w6'].values
         synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
 
-        # Displays the results
+        # Display the results
         synth_spec.display_results(show_fit_report=True)
         synth_spec.plot_line_velocity()
 
@@ -203,13 +203,15 @@ In the code above, after the measurements we have two functions to plot the resu
 
     synth_spec.display_results()
 
-This function provides several options. The attribute ``show_plot`` brings a windows with the
-plot of the current fitting:
+This function provides several options. The attribute ``plot`` opens a windows with the plot of the current fitting
+(the default value is True):
 
 .. image:: ../_static/2_Halpha_deblend.png
 
-Additionally you can set the attribute ``show_fit_report`` as ``True`` to display a summary of the fitting alongside the
+Additionally you can set the attribute ``fit_report`` as ``True`` to display a summary of the fitting alongside the
 `LmFit report <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_:
+
+Finally, you can also provide an address to save the output file instead via the `output_address` attribute.
 
 .. code-block:: python
 
@@ -277,9 +279,9 @@ Additionally you can set the attribute ``show_fit_report`` as ``True`` to displa
 
 .. note::
 
-    The user is encouraged to read `the LmFit documentation <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_
-    regarding the goodness of the fit analysis. If the fitting has not converged, this report can provide warnings on those
-    parameters which weren't properly sampled.
+    If the fitting has not converged, this report can provide warnings on those parameters which weren't properly sampled.
+    The user is encouraged to read the `LmFit documentation <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_
+    regarding the goodness of the fit analysis.
 
 The function ``.plot_line_velocity()`` plots the current line in the velocity frame (with respect to the line peak). The plot
 vertical lines include the median velocity alongside velocity percentiles to diagnosis the symmetry of the lines:
@@ -290,7 +292,7 @@ vertical lines include the median velocity alongside velocity percentiles to dia
 
 .. image:: ../_static/2_Halpha_velocity.png
 
-At this point we can compare the Gaussian parameters measured against the true values. There are two ways to access the
+At this point, we can compare the Gaussian parameters measured against the true values. There are two ways to access the
 :math:`\textsc{LiMe}` measurements after a fitting. The first one is directly from the inherited attributes of the ``lime.io.EmissionFitting``
 class in the ``lime.Spectrum`` objects.
 
@@ -335,5 +337,5 @@ Hence, the comparison between the true values and those measured is:
     True sigma: 5.615, sigma attribute 5.614700138194948, sigma dataframe 5.614700138194948
 
 At this point the reader is encouraged to check the :ref:`measurements documentation <measurements_page>`, where more
-details are provided on the measurements reported by :math:`\textsc{LiMe}` and how they are stored.
+details are provided on the measurements reported by :math:`\textsc{LiMe}`.
 

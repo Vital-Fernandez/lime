@@ -6,19 +6,19 @@ LiMe: A Line Measuring library
     :align: center
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
-for both single lines and Big Data observations. The library provides tools for masking, detecting and fitting lines, as
-well as, storing the results. The measurements support the posterior analysis of the object chemical composition and plasma
-kinematics.
+for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
+and storing the results. The output measurements support both the posterior analysis of the object's chemical composition
+and plasma kinematics.
 
 These are some of the features currently available:
 
-* Non-profile-dependence and Gaussian profile measurements.
+* Non-profile and Gaussian profile emission and absorption line measurements.
 * The user can include the pixel error spectrum in the calculation.
-* Multi-Gaussian profile fitting with flexible definition for the parameters boundaries.
+* The Multi-Gaussian profile parameters can be constrained by the user during the fitting.
 * Tools to confirm the presence of lines.
 * Static and interactive plots for the visual appraisal of inputs and outputs
-* Emission line labels adhere to the `PyNeb <http://research.iac.es/proyecto/PyNeb/>`_ format.
-* The measurements can be saved in several formats, including multi-page *.fits*, *.asdf* and *.xlsx* files
+* Line labels adhere to the `PyNeb <http://research.iac.es/proyecto/PyNeb/>`_ format.
+* The measurements can be saved in several file types, including multi-page *.fits*, *.asdf* and *.xlsx* files
 
 .. admonition:: Where to find what you need
    :class: hint
@@ -31,9 +31,9 @@ These are some of the features currently available:
    provide a working knowledge of the library algorithms.
 
    🌀 To learn more about the library design check the :ref:`inputs <inputs>` and :ref:`profile fitting <profileFitting>`
-   documentation. The library functions manual is found at the :ref:`API <api>`.
+   documentation. The library functions description can be found at the :ref:`API <api>`.
 
-   📈 The outputs physical description can be found in the :ref:`measurements <measurements_page>` documentation.
+   📈 The outputs physical description is available in the :ref:`measurements <measurements_page>` documentation.
 
 .. :ref:`doc-tree`
 

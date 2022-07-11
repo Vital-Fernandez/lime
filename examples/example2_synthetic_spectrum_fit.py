@@ -75,7 +75,7 @@ for lineLabel in mask_df.index.values:
     wave_regions = mask_df.loc[lineLabel, 'w1':'w6'].values
     synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
 
-    # Displays the results
+    # Display the results
     synth_spec.display_results(plot=True)
     synth_spec.plot_line_velocity()
 

@@ -3,7 +3,7 @@
 3) Fitting a complete spectrum
 ==============================
 
-In this example we shall fit all the emission lines on the spectrum of the Green Pea galaxy GP121903
+In this example, we shall fit all the emission lines on the spectrum of the Green Pea galaxy GP121903
 `(see Fernandez et al. 2021) <https://arxiv.org/abs/2110.07741>`_. You can download this spectrum from the
 `github examples folder <https://github.com/Vital-Fernandez/lime/tree/master/examples>`_.
 
@@ -97,30 +97,30 @@ This mask is loaded as a `pandas dataframe <https://pandas.pydata.org/docs/refer
     O2_7319A_m   7288.71  7299.17  7304.26  7345.90  7349.35  7365.31
     Ar3_7751A    7707.43  7727.61  7742.09  7762.86  7765.73  7776.38
 
-Afterwards we ned to read the configuration file. This is a text file which uses the
+Afterwards we need to read the configuration file. This is a text file which uses the
 `conventional ini configuration format <https://en.wikipedia.org/wiki/INI_file>`_:
 
 .. image:: ../_static/3_conf_file.png
 
-These files are organised in sections which are written with squared brackets in the text files. Each section can have
+These files are organised in sections, which are written with squared brackets in the text files. Each section can have
 several options whose value is assigned with the equal symbol.
 
   .. note::
      In most cases, the names for the configuration file sections and options does not matter, nor do they need to be related
      to the :math:`\textsc{LiMe}` tasks. Nonetheless, the user is recommended to use some keywords in order to take advantage of :math:`\textsc{LiMe}`
-     automation.
+     automations.
 
 Beyond the default formatting done by the configparser library `configparser library <https://docs.python.org/3/library/configparser.html>`_,
 :math:`\textsc{LiMe}` converts variable types if the following keywords are found:
 
 * Option values which contain commas (,) will be converted into an array. This is done by splitting the text string by the commas.
 * Option names with the _list or _array will be converted into a ``list` of strings or a float ``numpy.array`` respectively.
-  This applies even if there are no commas (hence a single value array).
-* Option names with the _check suffix will be converted to a boolean. The text string needs to follow the values acepted by
+  This applies even if there are no commas (for a single value array).
+* Option names with the _check suffix will be converted to a boolean. The text string needs to follow the values accepted by
   the strtobool `strtobool function <https://docs.python.org/3/distutils/apiref.html>`_:
 * Options names with the _folder or _file suffices will be left as strings.
-* Section names containing the keyword line_fitting have an special treatment:
-    * If the option value contains colons (:) it will be converted into a dictionary where each new dictionary entry is
+* Section names containing the keyword ``_line_fitting`` have an special treatment:
+    * If the option value contains colons (:) it will be converted into a dictionary, where each new dictionary entry is
       determined from the presence of commas (,).
     * If the option values which contain colons have a keyword matching the `LmFit Parameter <https://lmfit.github.io/lmfit-py/parameters.html>`_
       attributes (value, vary, min, max, expr) it will be converted to the expected variable type.
@@ -181,7 +181,7 @@ If we zoom on the right hand side of this spectrum:
 
 .. image:: ../_static/3_DetailMatchSpec.png
 
-In this image the purple circles represent the emission peaks detected by the ``.find_lines_derivative`` function. The green
+In this image, the purple circles represent the emission peaks detected by the ``.find_lines_derivative`` function. The green
 regions represent the lines in the input mask, which have matched with the detected emission peaks.
 
 The output from the ``.match_line_mask`` includes two variables:
@@ -192,7 +192,7 @@ The output from the ``.match_line_mask`` includes two variables:
 * The second one is a mask DataFrame with the matched lines. By default this function tries to compute the width of the line
   region for non-blended lines.
 
-To save the new mask you can use the ``.save_line_log`` function:
+To save the new mask, you can use the ``.save_line_log`` function:
 
 .. code-block:: python
 
@@ -212,7 +212,7 @@ Using the GP121903 specific line mask we can start fitting the lines:
         gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
 
 
-In code above, the first step was extracting the line fitting configuration of GP121903:
+In code above, the first step was extracting fitting configuration of GP121903:
 
 .. code-block:: python
 
@@ -236,7 +236,7 @@ the Gaussian parameters.
 
 .. note::
    As you analyse a line using the ``.fit_from_wavelengths`` function you can introduce the fitting configuration
-   for all the lines. :math:`\textsc{LiMe}` will known which settings apply at each case.
+   for all the lines. :math:`\textsc{LiMe}` will known which settings apply to each case.
 
 The fitted profiles can be over-plotted on the input spectrum using the ``profile_fittings=True`` parameter on the ``plot_spectrum``
 function
@@ -257,10 +257,10 @@ Or they can be plotted as a grid, including the mask selection, using the ``.plo
 .. image:: ../_static/3_lineGrid.png
 
 Finally, the results can be saved as a table using the ``lime.save_line_log`` function. The log output format is
-determined from the user address extension. Moreover, the user can also provide a page name for multi-page files (excel, fits
-and asdf). This way the each new log will append a page to the output file or update the one already there. Finally, the
-user can provide a list of parameter to limit the measurements columns in the output file. You can find the parameters
-parameters keywords in the :ref:`measurements documentation <measurements_page>`.
+determined from the user address extension. Moreover, the user can also provide a sheet name for multi-page files (excel, fits
+and asdf). This way the each new log will append a new sheet to the output file or update the one already there. Finally,
+user can constrain the output measurements with a list of parameters. You can find the parameters keywords in the
+:ref:`measurements documentation <measurements_page>`.
 
 .. code-block:: python
 
