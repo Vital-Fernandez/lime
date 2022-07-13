@@ -32,7 +32,7 @@ print(f'Cumulative voxels: {np.cumsum(voxels_array)} voxels')
 # fig = plt.figure(figsize=(10, 10))
 # ax = fig.add_subplot()
 # im = ax.plot(np.cumsum(minutes_array), np.cumsum(lines_array))
-|# plt.show()
+# plt.show()
 #
 # # Create the plot
 # rcParams.update(STANDARD_PLOT)

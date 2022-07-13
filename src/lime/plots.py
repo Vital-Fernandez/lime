@@ -1103,6 +1103,53 @@ class LiMePlots:
 
         return
 
+    def _plot_continuum_fit(self, continuum_fit, mask_cont, low_lim, high_lim, plot_title=''):
+
+        PLOT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
+        AXES_CONF['title'] = plot_title
+
+        with rc_context(PLOT_CONF):
+            fig, ax = plt.subplots()
+            ax.axhline(np.median(self.flux[mask_cont]), label='Median flux', linestyle=':', color='black')
+            ax.axhspan(low_lim, high_lim, alpha=0.2, label=r'$16^{th}-84^{th} percentiles band$')
+            ax.step(self.wave, self.flux, label='Input spectrum')
+            ax.scatter(self.wave[~mask_cont], self.flux[~mask_cont], label='Masked pixels')
+            ax.plot(self.wave, continuum_fit, label='Fitted continuum')
+            ax.update(AXES_CONF)
+            ax.legend()
+            plt.show()
+
+        return
+
+    def _plot_peak_detection(self, continuum, mask_cont, peak_idcs, detect_limit, plot_title=''):
+
+        PLOT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
+        AXES_CONF['title'] = plot_title
+
+        continuum = continuum if continuum is not None else np.zeros(self.flux.size)
+
+        with rc_context(PLOT_CONF):
+
+            fig, ax = plt.subplots()
+            ax.step(self.wave, self.flux)
+            ax.scatter(self.wave[peak_idcs], self.flux[peak_idcs], marker='o', label='Peaks', color=self._color_dict['peak'], facecolors='none')
+            ax.fill_between(self.wave, continuum, detect_limit, facecolor=self._color_dict['line_band'], label='Noise_region', alpha=0.5)
+            ax.legend()
+            ax.update(AXES_CONF)
+            plt.tight_layout()
+            plt.show()
+
+        return
 
 class PdfMaker:
 

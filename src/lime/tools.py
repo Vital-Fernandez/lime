@@ -5,6 +5,7 @@ from astropy.units import AA
 from lmfit.models import PolynomialModel
 from sys import exit
 from pathlib import Path
+from scipy import signal
 
 from lime import _logger
 
@@ -340,11 +341,72 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
     return output_mask
 
 
-
-
 class LineFinder:
 
     def __init__(self):
+
+        return
+
+    def continuum_fitting(self, degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 2],
+                          exclude_zero=False, exclude_neg=False, plot_results=False, return_std=False):
+
+        clear_reg = None
+        idcs_clear_reg = np.searchsorted(np.wave, clear_reg) if clear_reg is not None else (0, self.flux.size - 1)
+        mask_cont = np.ones(self.flux.size).astype(bool)
+
+        # Set 0 entries to False in the mask
+        if exclude_zero:
+            idcs = self.flux == 0
+            mask_cont[idcs] = False
+
+        # Set negative entries to False in the mask
+        if exclude_neg:
+            idcs = self.flux < 0
+            mask_cont[idcs] = False
+
+        for i, degree in enumerate(degree_list):
+
+            # Establishing the flux limits
+            low_lim, high_lim = np.percentile(self.flux[mask_cont], (16, 84))
+            low_lim, high_lim = low_lim / threshold_list[i], high_lim * threshold_list[i]
+
+            # Mask the array
+            mask_cont = mask_cont & (self.flux >= low_lim) & (self.flux <= high_lim)
+            wave_masked, flux_masked = self.wave[mask_cont], self.flux[mask_cont]
+
+            poly3Mod = PolynomialModel(prefix=f'poly_{degree}', degree=degree)
+            poly3Params = poly3Mod.guess(flux_masked, x=wave_masked)
+            poly3Out = poly3Mod.fit(flux_masked, poly3Params, x=wave_masked)
+
+            # Compute the contiuum and assign replace the value outside the bands the new continuum
+            continuum_fit = poly3Out.eval(x=self.wave)
+
+            if plot_results:
+                title = f'Continuum fitting. Iteration ({i}/{len(degree_list)})'
+                self._plot_continuum_fit(continuum_fit, mask_cont, low_lim, high_lim, title)
+
+        # Include the standard deviation of the spectrum for the unmasked pixels
+        if return_std:
+            std_spec = np.std((self.flux-continuum_fit)[mask_cont])
+            output_params = (continuum_fit, std_spec)
+        else:
+            output_params = continuum_fit
+
+        return output_params
+
+    def peak_detection(self, limit_threshold=None, continuum=None, distance=4, mask_valid=None, plot_results=False):
+
+        # No user imput provided compute the intensity threshold from the 84th percentil
+        limit_threshold = np.percentile(self.flux, 84) if limit_threshold is None else limit_threshold
+        limit_threshold = limit_threshold + continuum if continuum is not None else limit_threshold
+
+        # Index the intensity peaks
+        mask_valid = mask_valid if mask_valid is not None else np.ones(self.flux.size).astype(bool)
+        peak_fp, _ = signal.find_peaks(self.flux[mask_valid], height=limit_threshold, distance=distance)
+
+        # Plot the results
+        if plot_results:
+            self._plot_peak_detection(continuum, mask_valid, peak_fp, limit_threshold, plot_title='')
 
         return
 
