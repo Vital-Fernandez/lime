@@ -8,7 +8,8 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 from .model import EmissionFitting
-from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float
+from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
+                   FLUX_DENSITY_UNITS, unit_convertor
 from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
@@ -76,7 +77,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='erg/cm^2/s/A'):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam'):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -446,6 +447,44 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                     param_value = param_value * self.norm_flux
 
                 linesDF.loc[line, param] = param_value
+
+        return
+
+    def convert_units(self, units_wave=None, units_flux=None, norm_flux=None):
+
+        if units_wave is not None:
+
+            if units_wave in DISPERSION_UNITS:
+                self.wave = unit_convertor(self.units_wave, units_wave, wave_array=self.wave)
+                self.wave_rest = self.wave/(1+self.redshift)
+            else:
+                _logger.warning(f'- Dispersion units {units_wave} not recognized for conversion. '
+                                f'Please use {DISPERSION_UNITS} to convert from {self.units_wave}')
+
+            # Reflect the new units
+            self.units_wave = units_wave
+
+
+        if units_flux is not None:
+
+            if units_flux in FLUX_DENSITY_UNITS:
+                self.flux = unit_convertor(self.units_flux, units_flux, wave_array=self.wave, flux_array=self.flux,
+                                           dispersion_units=self.units_wave)
+            else:
+                _logger.warning(f'- Dispersion units {units_flux} not recognized for conversion. '
+                                f'Please use {FLUX_DENSITY_UNITS} to convert from {self.units_flux}')
+
+            # Reflect the new units
+            self.units_flux = units_flux
+
+        if norm_flux is not None:
+
+            # Undo previous normalization
+            self.flux = self.flux * self.norm_flux
+
+            # New normalization
+            self.norm_flux = norm_flux
+            self.flux = self.flux/self.norm_flux
 
         return
 

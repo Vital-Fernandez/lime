@@ -544,15 +544,27 @@ class LiMePlots:
                 ax.step(wave_plot/z_corr, comp_array, label='Sigma Continuum', linestyle=':', where='mid')
 
             # Plot peaks and troughs if provided
-            if peaks_table is not None:
+            if (peaks_table is not None) or (match_log is not None):
+
                 color_peaks = (self._color_dict['peak'], self._color_dict['trough'])
+                labels = ('Peaks', 'Troughs')
                 line_types = ('emission', 'absorption')
                 labels = ('Peaks', 'Troughs')
-                for i in range(2):
-                    idcs_emission = peaks_table['line_type'] == line_types[i]
-                    idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
-                    ax.scatter(wave_plot[idcs_linePeaks]/z_corr, flux_plot[idcs_linePeaks]*z_corr, label=labels[i],
-                               facecolors='none', edgecolors=color_peaks[i])
+
+                if peaks_table is not None:
+                    line_types = ('emission', 'absorption')
+                    for i in range(2):
+                        idcs_emission = peaks_table['line_type'] == line_types[i]
+                        idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
+                        ax.scatter(wave_plot[idcs_linePeaks]/z_corr, flux_plot[idcs_linePeaks]*z_corr, label=labels[i],
+                                   facecolors='none', edgecolors=color_peaks[i])
+
+                else:
+                    if 'signal_peak' in match_log:
+                        idcs_linePeaks = match_log['signal_peak'].values.astype(int)
+                        ax.scatter(wave_plot[idcs_linePeaks] / z_corr, flux_plot[idcs_linePeaks] * z_corr, label='Peaks',
+                                   facecolors='none', edgecolors=self._color_dict['peak'])
+
 
             # Shade regions of matched lines if provided
             if match_log is not None:
@@ -1116,12 +1128,13 @@ class LiMePlots:
         with rc_context(PLOT_CONF):
             fig, ax = plt.subplots()
             ax.axhline(np.median(self.flux[mask_cont]), label='Median flux', linestyle=':', color='black')
-            ax.axhspan(low_lim, high_lim, alpha=0.2, label=r'$16^{th}-84^{th} percentiles band$')
+            ax.axhspan(low_lim, high_lim, alpha=0.2, label=r'$16^{th}-84^{th}$ percentiles band')
             ax.step(self.wave, self.flux, label='Input spectrum')
             ax.scatter(self.wave[~mask_cont], self.flux[~mask_cont], label='Masked pixels')
             ax.plot(self.wave, continuum_fit, label='Fitted continuum')
             ax.update(AXES_CONF)
             ax.legend()
+            plt.tight_layout()
             plt.show()
 
         return

@@ -24,16 +24,31 @@ SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I
 ASTRO_UNITS_KEYS = {'A': au.AA,
                     'um': au.um,
                     'nm': au.nm,
-                    'flam': au.erg / au.s / au.cm ** 2 / au.AA}
-
-WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
+                    'Hz': au.Hz,
+                    'cm': au.cm,
+                    'mm': au.mm,
+                    'Flam': au.erg/au.s/au.cm**2/au.AA,
+                    'Fnu': au.erg/au.s/au.cm**2/au.Hz,
+                    'Jy': au.Jy,
+                    'mJy': au.mJy}
 
 UNITS_LATEX_DICT = {'A': '\AA',
                     'um': '\mu\!m',
                     'nm': 'nm',
-                    'erg/cm^2/s/A': r'erg\,cm^{-2} s^{-1} \AA^{-1}',
+                    'Hz': 'Hz',
+                    'cm': 'cm',
+                    'mm': 'mm',
+                    'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
+                    'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
                     'Jy': 'Jy',
                     'mJy': 'mJy'}
+
+DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
+
+FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy')
+
+WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
+
 
 #[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
 # 2.99792458E+17 units
@@ -271,15 +286,23 @@ def latex_science_float(f, dec=2):
         return float_str
 
 
-def unit_convertor(in_units, out_units, sig_fig=None):
+def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, sig_fig=None):
 
-    unit_factor = 1 * ASTRO_UNITS_KEYS[in_units]
-    unit_factor = unit_factor.to(ASTRO_UNITS_KEYS[out_units])
+    if (in_units in DISPERSION_UNITS) and (out_units in DISPERSION_UNITS):
+        input_array = wave_array * ASTRO_UNITS_KEYS[in_units]
+        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units])
+
+    elif (in_units in FLUX_DENSITY_UNITS) and (out_units in FLUX_DENSITY_UNITS):
+        input_array = flux_array * ASTRO_UNITS_KEYS[in_units]
+        wave_array = wave_array * ASTRO_UNITS_KEYS[dispersion_units]
+        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units], au.spectral_density(wave_array))
+    else:
+        _logger.warning(f'Input units {in_units} could not be converted to {out_units}')
 
     if sig_fig is None:
-        return unit_factor.value
+        return output_array.value
     else:
-        return np.round(unit_factor.value, sig_fig)
+        return np.round(output_array.value, sig_fig)
 
 
 def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, z_range=None,
@@ -304,7 +327,7 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
     # Convert the output mask to the units requested by the user
     if units_wave != 'A':
 
-        conversion_factor = unit_convertor('A', units_wave, sig_fig)
+        conversion_factor = unit_convertor('A', units_wave,  wave_array=1, dispersion_units='dispersion axis', sig_fig=sig_fig)
         mask_df.loc[:, 'w1':'w6'] = mask_df.loc[:, 'w1':'w6'] * conversion_factor
 
         wave_array = wave_array * conversion_factor if sig_fig is None else np.round(wave_array * conversion_factor, sig_fig)
@@ -408,7 +431,29 @@ class LineFinder:
         if plot_results:
             self._plot_peak_detection(continuum, mask_valid, peak_fp, limit_threshold, plot_title='')
 
-        return
+        return peak_fp
+
+    def line_detection(self, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3, lines_log=None,
+                          line_type='emission', width_tol=5, width_mode='fixed', plot_cont_comp=False, exclude_neg=True,
+                          exclude_zero=True, plot_peak=True, return_peak_idcs=False):
+
+        # Fit the continuum
+        cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
+                                                     exclude_neg=exclude_neg, exclude_zero=exclude_zero, return_std=True,
+                                                     plot_results=plot_cont_comp)
+
+        # Check for the peaks of the emission lines
+        detec_min = noise_sigma_factor * cond_Std
+        idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak)
+
+        # Compare against the theoretical values
+        if lines_log is not None:
+
+            # Match peaks with theoretical lines
+            matched_DF = self.label_peaks(idcs_peaks, lines_log, width_tol=width_tol, width_mode=width_mode,
+                                          line_type=line_type)
+
+        return matched_DF
 
     def match_line_mask(self, log, noise_region, detect_threshold=3, emis_threshold=(4, 4), abs_threshold=(1.5, 1.5),
                         poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='fixed'):
@@ -552,14 +597,22 @@ class LineFinder:
         # TODO auto param should be changed to boolean
 
         matched_DF = pd.DataFrame.copy(mask_df)
+        matched_DF['signal_peak'] = np.nan
 
         # Security check for case no lines detected
         if len(peak_table) == 0:
             return pd.DataFrame(columns=matched_DF.columns)
 
-        # Query the lines from the astropy finder tables #
-        idcsLineType = peak_table['line_type'] == line_type
-        idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
+        # Numpy array
+        if isinstance(peak_table, np.ndarray):
+            idcsLinePeak = peak_table
+
+        # Specutils table
+        else:
+            # Query the lines from the astropy finder tables #
+            idcsLineType = peak_table['line_type'] == line_type
+            idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
+
         wave_peaks = self.wave_rest[idcsLinePeak]
 
         # Theoretical wave values
@@ -589,6 +642,7 @@ class LineFinder:
 
                 row_index = matched_DF.index[matched_DF.wavelength == waveTheory[idx_array[0][0]]]
                 matched_DF.loc[row_index, 'observation'] = 'detected'
+                matched_DF.loc[row_index, 'signal_peak'] = idcsLinePeak[i]
                 theoLineLabel = row_index[0]
 
                 blended_check = True if '_b' in theoLineLabel else False
