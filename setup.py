@@ -34,7 +34,7 @@ setup(
                 ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
-    package_data={'': ['config.cfg', 'types_params.txt', 'parent_mask.txt']},
+    package_data={'': ['config.cfg', 'types_params.txt', 'parent_mask.txt', '*.joblib', 'GradientDescent_v2_cost1_logNorm.joblib']},
     include_package_data=True,
     install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'specutils', 'pylatex', 'openpyxl'],
     )

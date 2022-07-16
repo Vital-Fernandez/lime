@@ -393,11 +393,17 @@ class LineFinder:
 
             poly3Mod = PolynomialModel(prefix=f'poly_{degree}', degree=degree)
             poly3Params = poly3Mod.guess(input_flux[mask_cont], x=input_wave[mask_cont])
-            poly3Out = poly3Mod.fit(input_flux[mask_cont], poly3Params, x=input_wave[mask_cont])
 
-            # Compute the contiuum and assign replace the value outside the bands the new continuum
-            continuum_fit = poly3Out.eval(x=input_wave)
+            try:
+                poly3Out = poly3Mod.fit(input_flux[mask_cont], poly3Params, x=input_wave[mask_cont])
+                continuum_fit = poly3Out.eval(x=input_wave)
 
+            except TypeError:
+                _logger.warning(f'- The continuum fitting polynomial as degree ({degree}) is larger than data points'
+                                f' number')
+                continuum_fit = np.full(input_wave.size, np.nan)
+
+            # Compute the continuum and assign replace the value outside the bands the new continuum
             if plot_results:
                 title = f'Continuum fitting, iteration ({i}/{len(degree_list)})'
                 continuum_full = poly3Out.eval(x=self.wave.data)
