@@ -77,7 +77,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam'):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', masked_pixels=None):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -95,6 +95,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self.inst_FWHM = inst_FWHM
         self.units_wave = units_wave
         self.units_flux = units_flux
+        self._masked_inputs = False
 
         # Checks spectra units
         for arg in ['units_wave', 'units_flux']:
@@ -110,11 +111,13 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Start cropping the input spectrum if necessary
         if crop_waves is not None:
-            idcs_cropping = (input_wave >= crop_waves[0]) & (input_wave <= crop_waves[1])
-            input_wave = input_wave[idcs_cropping]
-            input_flux = input_flux[idcs_cropping]
+            idcs_crop = np.searchsorted(input_wave, crop_waves)
+            input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
+            input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
             if input_err is not None:
-                input_err = input_err[idcs_cropping]
+                input_err = input_err[idcs_crop[0]:idcs_crop[1]]
+            if masked_pixels is not None:
+                masked_pixels = masked_pixels[idcs_crop[0]:idcs_crop[1]]
 
         # Apply the redshift correction
         if input_wave is not None:
@@ -146,6 +149,26 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             else:
                 if arg in ['wave', 'flux']:
                     _logger.warning(f'No {arg} array introduced. This will bring issues in your fittings.')
+
+        # Masked the arrays if requested
+        if masked_pixels is not None:
+            self.wave = np.ma.masked_array(self.wave, masked_pixels)
+            self.wave_rest = np.ma.masked_array(self.wave_rest, masked_pixels)
+            self.flux = np.ma.masked_array(self.flux, masked_pixels)
+
+            if self.err_flux is not None:
+                self.err_flux = np.ma.masked_array(self.err_flux, masked_pixels)
+
+        # Check for masked arrays
+        check_mask = np.zeros(3).astype(bool)
+        for i, arg in enumerate(['wave', 'wave_rest', 'flux']):
+            if np.ma.is_masked(self.__getattribute__(arg)):
+                check_mask[i] = True
+
+        if np.any(check_mask):
+            self._masked_inputs = True
+            if ~np.all(check_mask):
+                _logger.warning(f'Make sure *both* your input wavelength and flux array are masked arrays')
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
         self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
@@ -226,15 +249,25 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         self._decimal_wave = True if '.' in self.line else False
 
         # Get spectrum line and continua band indeces
-        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift), line_mask_entry=fit_conf.get(f'{self.line}_mask'))
+        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift),
+                                               line_mask_entry=fit_conf.get(f'{self.line}_mask'))
 
         # Integrated line properties
         emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
         contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
         err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
 
+        # Review the transition bands before
+        emis_band_lengh = emisWave.size if not np.ma.is_masked(emisWave) else np.sum(~emisWave.mask)
+        cont_band_length = contWave.size if not np.ma.is_masked(contWave) else np.sum(~contWave.mask)
+        if emis_band_lengh/emisWave.size < 0.5:
+            _logger.warning(f'The line band for {self.line} has very few valid pixels')
+
+        if cont_band_length/contWave.size < 0.5:
+            _logger.warning(f'The continuum band for {self.line} has very few valid pixels')
+
         # Store error very small mask
-        if emisWave.size <= 1:
+        if emis_band_lengh <= 1:
             if self.observations == 'no':
                 self.observations = 'Small_line_band'
             else:
@@ -883,7 +916,7 @@ class CubeInspector(Spectrum):
 
     def __init__(self, wave, cube_flux, image_bg, image_fg=None, contour_levels=None, color_norm=None,
                  redshift=0, lines_log_address=None, fits_header=None, plt_cfg={}, ax_cfg={},
-                 ext_suffix='_LINESLOG', mask_file=None, units_wave='A', units_flux='erg/cm^2/s/A'):
+                 ext_suffix='_LINESLOG', mask_file=None, units_wave='A', units_flux='Flam'):
 
         """
         This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:

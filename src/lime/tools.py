@@ -370,43 +370,38 @@ class LineFinder:
 
         return
 
-    def continuum_fitting(self, degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 2],
-                          exclude_zero=False, exclude_neg=False, plot_results=False, return_std=False):
+    def continuum_fitting(self, degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 2], plot_results=False,
+                          return_std=False):
 
-        clear_reg = None
-        idcs_clear_reg = np.searchsorted(np.wave, clear_reg) if clear_reg is not None else (0, self.flux.size - 1)
-        mask_cont = np.ones(self.flux.size).astype(bool)
+        # Check for a masked array
+        if np.ma.is_masked(self.flux):
+            mask_cont = ~self.flux.mask
+            input_wave, input_flux = self.wave.data, self.flux.data
+        else:
+            mask_cont = np.ones(self.flux.size).astype(bool)
+            input_wave, input_flux = self.wave, self.flux
 
-        # Set 0 entries to False in the mask
-        if exclude_zero:
-            idcs = self.flux == 0
-            mask_cont[idcs] = False
-
-        # Set negative entries to False in the mask
-        if exclude_neg:
-            idcs = self.flux < 0
-            mask_cont[idcs] = False
-
+        # Loop throught the fitting degree
         for i, degree in enumerate(degree_list):
 
             # Establishing the flux limits
-            low_lim, high_lim = np.percentile(self.flux[mask_cont], (16, 84))
+            low_lim, high_lim = np.percentile(input_flux[mask_cont], (16, 84))
             low_lim, high_lim = low_lim / threshold_list[i], high_lim * threshold_list[i]
 
-            # Mask the array
-            mask_cont = mask_cont & (self.flux >= low_lim) & (self.flux <= high_lim)
-            wave_masked, flux_masked = self.wave[mask_cont], self.flux[mask_cont]
+            # Add new entries to the mask
+            mask_cont = mask_cont & (input_flux >= low_lim) & (input_flux <= high_lim)
 
             poly3Mod = PolynomialModel(prefix=f'poly_{degree}', degree=degree)
-            poly3Params = poly3Mod.guess(flux_masked, x=wave_masked)
-            poly3Out = poly3Mod.fit(flux_masked, poly3Params, x=wave_masked)
+            poly3Params = poly3Mod.guess(input_flux[mask_cont], x=input_wave[mask_cont])
+            poly3Out = poly3Mod.fit(input_flux[mask_cont], poly3Params, x=input_wave[mask_cont])
 
             # Compute the contiuum and assign replace the value outside the bands the new continuum
-            continuum_fit = poly3Out.eval(x=self.wave)
+            continuum_fit = poly3Out.eval(x=input_wave)
 
             if plot_results:
-                title = f'Continuum fitting. Iteration ({i}/{len(degree_list)})'
-                self._plot_continuum_fit(continuum_fit, mask_cont, low_lim, high_lim, title)
+                title = f'Continuum fitting, iteration ({i}/{len(degree_list)})'
+                continuum_full = poly3Out.eval(x=self.wave.data)
+                self._plot_continuum_fit(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         if return_std:
@@ -424,27 +419,28 @@ class LineFinder:
         limit_threshold = limit_threshold + continuum if continuum is not None else limit_threshold
 
         # Index the intensity peaks
-        mask_valid = mask_valid if mask_valid is not None else np.ones(self.flux.size).astype(bool)
-        peak_fp, _ = signal.find_peaks(self.flux[mask_valid], height=limit_threshold, distance=distance)
+        # input_flux = self.flux.data if np.ma.is_masked()
+        # mask_valid = ~self.flux.mask if np.ma.is_masked(self.flux) else np.ones(self.flux.data.size).astype(bool)
+        # peak_fp, _ = signal.find_peaks(self.flux.data[mask_valid], height=limit_threshold[mask_valid], distance=distance)
+
+        peak_fp, _ = signal.find_peaks(self.flux, height=limit_threshold, distance=distance)
 
         # Plot the results
         if plot_results:
-            self._plot_peak_detection(continuum, mask_valid, peak_fp, limit_threshold, plot_title='')
+            self._plot_peak_detection(peak_fp, limit_threshold, continuum, plot_title='')
 
         return peak_fp
 
     def line_detection(self, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3, lines_log=None,
-                          line_type='emission', width_tol=5, width_mode='fixed', plot_cont_comp=False, exclude_neg=True,
-                          exclude_zero=True, plot_peak=True, return_peak_idcs=False):
+                          line_type='emission', width_tol=5, width_mode='fixed', plot_cont_calc=False, plot_peak_calc=True):
 
         # Fit the continuum
         cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
-                                                     exclude_neg=exclude_neg, exclude_zero=exclude_zero, return_std=True,
-                                                     plot_results=plot_cont_comp)
+                                                     return_std=True, plot_results=plot_cont_calc)
 
         # Check for the peaks of the emission lines
         detec_min = noise_sigma_factor * cond_Std
-        idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak)
+        idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc)
 
         # Compare against the theoretical values
         if lines_log is not None:
@@ -453,7 +449,11 @@ class LineFinder:
             matched_DF = self.label_peaks(idcs_peaks, lines_log, width_tol=width_tol, width_mode=width_mode,
                                           line_type=line_type)
 
-        return matched_DF
+            return matched_DF
+
+        else:
+
+            return
 
     def match_line_mask(self, log, noise_region, detect_threshold=3, emis_threshold=(4, 4), abs_threshold=(1.5, 1.5),
                         poly_degree=(3, 7), width_tol=5, line_type='emission', width_mode='fixed'):
@@ -595,25 +595,26 @@ class LineFinder:
     def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, width_mode='auto', detect_check=False):
 
         # TODO auto param should be changed to boolean
-
-        matched_DF = pd.DataFrame.copy(mask_df)
-        matched_DF['signal_peak'] = np.nan
-
-        # Security check for case no lines detected
-        if len(peak_table) == 0:
-            return pd.DataFrame(columns=matched_DF.columns)
-
-        # Numpy array
+        # Establish the type of input values for the peak indexes, first numpy array
         if isinstance(peak_table, np.ndarray):
             idcsLinePeak = peak_table
 
         # Specutils table
         else:
             # Query the lines from the astropy finder tables #
-            idcsLineType = peak_table['line_type'] == line_type
-            idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
+            if len(peak_table) != 0:
+                idcsLineType = peak_table['line_type'] == line_type
+                idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
+            else:
+                idcsLinePeak = np.array([])
 
-        wave_peaks = self.wave_rest[idcsLinePeak]
+        # Security check in case no lines detected
+        if len(idcsLinePeak) == 0:
+            return pd.DataFrame(columns=mask_df.columns)
+
+        # Prepare dataframe to stored the matched lines
+        matched_DF = pd.DataFrame.copy(mask_df)
+        matched_DF['signal_peak'] = np.nan
 
         # Theoretical wave values
         ion_array, waveTheory, latexLabel_array = label_decomposition(matched_DF.index.values, units_wave=self.units_wave)
@@ -621,8 +622,16 @@ class LineFinder:
 
         # Match the lines with the theoretical emission
         tolerance = np.diff(self.wave_rest).mean() * width_tol
-        matched_DF['observation'] = 'not detected'
+        matched_DF['observation'] = 'not_detected'
         unidentifiedLine = dict.fromkeys(matched_DF.columns.values, np.nan)
+
+        # Get the wavelength peaks
+        wave_peaks = self.wave_rest[idcsLinePeak]
+
+        # Only treat pixels outisde the masks
+        if np.ma.is_masked(wave_peaks):
+            idcsLinePeak = idcsLinePeak[~wave_peaks.mask]
+            wave_peaks = wave_peaks[~wave_peaks.mask].data
 
         for i in np.arange(wave_peaks.size):
 
@@ -658,15 +667,11 @@ class LineFinder:
                         matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
         # Include_only_detected
-        idcs_unknown = matched_DF['observation'] == 'not detected'
+        idcs_unknown = matched_DF['observation'] == 'not_detected'
         matched_DF.drop(index=matched_DF.loc[idcs_unknown].index.values, inplace=True)
 
         # Sort by wavelength
         matched_DF.sort_values('wavelength', inplace=True)
         matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
-
-        # Latex labels
-        # ion_array, wavelength_array, latexLabel_array = label_decomposition(matched_DF.index.values)
-        # matched_DF['latexLabel'] = latexLabel_array
 
         return matched_DF

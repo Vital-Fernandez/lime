@@ -456,7 +456,7 @@ class LiMePlots:
         return
 
     def plot_spectrum(self, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
-                      log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='spectrum', output_address=None,
+                      log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Object spectrum', output_address=None,
                       include_fits=False, log=None, frame='observed'):
 
         """
@@ -565,7 +565,6 @@ class LiMePlots:
                         ax.scatter(wave_plot[idcs_linePeaks] / z_corr, flux_plot[idcs_linePeaks] * z_corr, label='Peaks',
                                    facecolors='none', edgecolors=self._color_dict['peak'])
 
-
             # Shade regions of matched lines if provided
             if match_log is not None:
                 ion_array, wave_array, latex_array = label_decomposition(match_log.index.values, units_wave=self.units_wave)
@@ -646,6 +645,12 @@ class LiMePlots:
             if mplcursors_check and include_fits:
                 for label, lineProfile in self._legends_dict.items():
                     mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
+
+            # Plot the masked pixels
+            if self._masked_inputs:
+                idcs_mask = self.flux.mask
+                ax.scatter(wave_plot[idcs_mask]/z_corr, flux_plot[idcs_mask]*z_corr, marker='x', label='Masked pixels',
+                           color=self._color_dict['mask_marker'])
 
             # Switch y_axis to logarithmic scale if requested
             if log_scale:
@@ -752,7 +757,8 @@ class LiMePlots:
             if idcs_mask is not None:
                 x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
                 y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
-                spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'])
+                spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'],
+                                label='Masked pixels')
 
             # Plot masked pixels if possible
             self.mask_pixels_plotting(list_comps[0], wave_plot, flux_plot, z_corr, spec_ax, self.log)
@@ -1021,10 +1027,9 @@ class LiMePlots:
         if np.ma.is_masked(wave_obs):
             idcs_mask = wave_obs.mask
             wave_plot, flux_plot = wave_obs.data, flux_obs.data
-            flux_plot[idcs_mask] = flux_plot[idcs_mask]/self.norm_flux
 
         else:
-            idcs_mask = None
+            idcs_mask = np.zeros(flux_obs.size).astype(bool)
             wave_plot, flux_plot = wave_obs, flux_obs
 
         return wave_plot, flux_plot, z_corr, idcs_mask
@@ -1115,7 +1120,7 @@ class LiMePlots:
 
         return
 
-    def _plot_continuum_fit(self, continuum_fit, mask_cont, low_lim, high_lim, plot_title=''):
+    def _plot_continuum_fit(self, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor, plot_title=''):
 
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
@@ -1125,13 +1130,29 @@ class LiMePlots:
         AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
         AXES_CONF['title'] = plot_title
 
+        wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, 'observed')
+
         with rc_context(PLOT_CONF):
+
             fig, ax = plt.subplots()
-            ax.axhline(np.median(self.flux[mask_cont]), label='Median flux', linestyle=':', color='black')
-            ax.axhspan(low_lim, high_lim, alpha=0.2, label=r'$16^{th}-84^{th}$ percentiles band')
-            ax.step(self.wave, self.flux, label='Input spectrum')
-            ax.scatter(self.wave[~mask_cont], self.flux[~mask_cont], label='Masked pixels')
-            ax.plot(self.wave, continuum_fit, label='Fitted continuum')
+
+            # Object spectrum
+            ax.step(wave_plot, flux_plot, label='Object spectrum', color=self._color_dict['fg'])
+
+            # Band limits
+            label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
+            ax.axhspan(low_lim, high_lim, alpha=0.2, label=label, color=self._color_dict['line_band'])
+            ax.axhline(np.median(flux_plot[idcs_cont]), label='Median flux', linestyle=':', color='black')
+
+            # Masked and rectected pixels
+            ax.scatter(wave_plot[~idcs_cont], flux_plot[~idcs_cont], label='Rejected pixels',
+                       color=self._color_dict['peak'], facecolor='none')
+            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], marker='x', label='Masked pixels',
+                       color=self._color_dict['mask_marker'])
+
+            # Output continuum
+            ax.plot(wave_plot, continuum_fit, label='Continuum')
+
             ax.update(AXES_CONF)
             ax.legend()
             plt.tight_layout()
@@ -1139,7 +1160,7 @@ class LiMePlots:
 
         return
 
-    def _plot_peak_detection(self, continuum, mask_cont, peak_idcs, detect_limit, plot_title=''):
+    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum=None, plot_title=''):
 
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
@@ -1148,21 +1169,31 @@ class LiMePlots:
         AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
         AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
         AXES_CONF['title'] = plot_title
+
+        wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, 'observed')
 
         continuum = continuum if continuum is not None else np.zeros(self.flux.size)
 
         with rc_context(PLOT_CONF):
 
             fig, ax = plt.subplots()
-            ax.step(self.wave, self.flux)
-            ax.scatter(self.wave[peak_idcs], self.flux[peak_idcs], marker='o', label='Peaks', color=self._color_dict['peak'], facecolors='none')
-            ax.fill_between(self.wave, continuum, detect_limit, facecolor=self._color_dict['line_band'], label='Noise_region', alpha=0.5)
+            ax.step(wave_plot, flux_plot, color=self._color_dict['fg'], label='Object spectrum')
+            ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=self._color_dict['peak'], facecolors='none')
+            ax.fill_between(wave_plot, continuum, detect_limit, facecolor=self._color_dict['line_band'], label='Noise_region', alpha=0.5)
+
+            if continuum is not None:
+                ax.plot(wave_plot, continuum, label='Continuum')
+
+            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], label='Masked pixels', marker='x',
+                       color=self._color_dict['mask_marker'])
+
             ax.legend()
             ax.update(AXES_CONF)
             plt.tight_layout()
             plt.show()
 
         return
+
 
 class PdfMaker:
 

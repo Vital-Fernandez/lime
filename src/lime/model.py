@@ -301,6 +301,8 @@ class EmissionFitting:
                               ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
                                wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
 
+
+
             return idcsLineRegion, idcsContRegion
 
         # Return left and right continua in separated arrays
@@ -425,7 +427,7 @@ class EmissionFitting:
             idcs_good = ~x.mask
             x_in = x.data[idcs_good]
             y_in = y.data[idcs_good]
-            weights_in = weights[idcs_good]# if np.ma.is_masked(weights) else weights# TODO this should be mask if possible
+            weights_in = weights[idcs_good]
         else:
             x_in, y_in, weights_in = x, y, weights
 
@@ -588,9 +590,12 @@ class EmissionFitting:
 
         return
 
-    def velocity_percentiles_calculations(self, vel_array, line_flux, cont_flux):
+    def velocity_percentiles_calculations(self, vel_array, line_flux, cont_flux, min_array_dim=15):
 
-        if vel_array.size > 15:
+        # Only compute the velocity percentiles for line bands with more than 15 pixels
+        valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
+
+        if valid_pixels > min_array_dim:
 
             peakIdx = np.argmax(line_flux)
 
