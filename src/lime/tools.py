@@ -50,7 +50,7 @@ FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy')
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
-MACHINE_PATH = Path(__file__).parent/'resources/LogitistRegression_v2_cost1_logNorm.joblib'
+MACHINE_PATH = Path(__file__).parent/'LogitistRegression_v2_cost1_logNorm.joblib'
 
 #[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
 # 2.99792458E+17 units

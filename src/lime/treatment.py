@@ -79,7 +79,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', masked_pixels=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -118,8 +118,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
             if input_err is not None:
                 input_err = input_err[idcs_crop[0]:idcs_crop[1]]
-            if masked_pixels is not None:
-                masked_pixels = masked_pixels[idcs_crop[0]:idcs_crop[1]]
+            if pixel_mask is not None:
+                pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
 
         # Apply the redshift correction
         if input_wave is not None:
@@ -143,23 +143,23 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 dimensions = len(arg_array.shape)
                 nan_entries = np.isnan(arg_array)
                 if np.any(nan_entries):
-                    _logger.warning(f'Input spectrum {arg} array has {np.sum(nan_entries)} this could bring issues in your fittings'
-                                    f'formats: {list(UNITS_LATEX_DICT.keys())}')
+                    _logger.warning(f'Input spectrum {arg} array has {np.sum(nan_entries)} nan entries. Try to mask '
+                                    f'these pixels to avoid issues with the measurements')
                 if dimensions != 1:
-                    _logger.warning(f'Input spectrum {arg} array has a number of dimensions equal to {dimensions}. Fitting issues'
-                                f' will stop the script running')
+                    _logger.warning(f'The input spectrum {arg} array has a number of dimensions {dimensions} > 1. This '
+                                    f'will cause issues in the measurements')
             else:
                 if arg in ['wave', 'flux']:
-                    _logger.warning(f'No {arg} array introduced. This may bring issues in your fittings.')
+                    _logger.warning(f'No {arg} array introduced. This may bring issues in the measurement.')
 
         # Masked the arrays if requested
-        if masked_pixels is not None:
-            self.wave = np.ma.masked_array(self.wave, masked_pixels)
-            self.wave_rest = np.ma.masked_array(self.wave_rest, masked_pixels)
-            self.flux = np.ma.masked_array(self.flux, masked_pixels)
+        if pixel_mask is not None:
+            self.wave = np.ma.masked_array(self.wave, pixel_mask)
+            self.wave_rest = np.ma.masked_array(self.wave_rest, pixel_mask)
+            self.flux = np.ma.masked_array(self.flux, pixel_mask)
 
             if self.err_flux is not None:
-                self.err_flux = np.ma.masked_array(self.err_flux, masked_pixels)
+                self.err_flux = np.ma.masked_array(self.err_flux, pixel_mask)
 
         # Check for masked arrays
         check_mask = np.zeros(3).astype(bool)
