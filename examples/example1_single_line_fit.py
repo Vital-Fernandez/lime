@@ -61,14 +61,3 @@ lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP12
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf', parameters=['eqw', 'gauss_flux', 'gauss_err'])
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
 lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.asdf', ext='GP121903')
-
-
-# If no magic command the backkend is matplotlib_inline.backend_inline
-# If %matplotlib notebook the backkend is nbAgg
-# If %matplotlib widget the backkend is ipympl.backend_nbagg
-# If %matplotlib ipympl the backkend is ipympl.backend_nbagg
-# If %matplotlib gt the backkend is Qt5Agg and it happends in an outside window
-# plt.switch_backend('Qt5Agg')
-
-
-

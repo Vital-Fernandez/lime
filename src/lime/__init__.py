@@ -1,15 +1,20 @@
 """
-LiMe - A python package for measuring emission lines to study ionized gas chemical and dynamical properties
+LiMe - A python package for measuring lines in astronomical spectra
 """
 
 import os
 import sys
 import configparser
+import logging
 
-from .config import LimeLogger
+# Creating the lime logger
+_logger = logging.getLogger("LiMe")
+_logger.setLevel(logging.INFO)
 
-# Logging tool
-_logger = LimeLogger()
+# Outputting format
+consoleHandle = logging.StreamHandler()
+consoleHandle.setFormatter(logging.Formatter('%(name)s %(levelname)s: %(message)s'))
+_logger.addHandler(consoleHandle)
 
 from .treatment import Spectrum, MaskInspector, CubeInspector
 from .io import *
@@ -27,3 +32,5 @@ _setup_cfg.read(os.path.join(_dir_path, 'config.cfg'))
 
 __version__ = _setup_cfg['metadata']['version']
 
+# Logging configuration
+_logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')

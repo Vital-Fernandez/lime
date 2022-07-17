@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -17,7 +18,8 @@ from .model import gaussian_profiles_computation, linear_continuum_computation
 from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
 from matplotlib.widgets import RadioButtons
-from lime import _logger
+
+_logger = logging.getLogger('LiMe')
 
 try:
     import mplcursors
@@ -107,7 +109,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         # Check if spectrum redshift and flux normalization flux are provided
         for arg in ['norm_flux', 'redshift']:
             if self.__getattribute__(arg) is None:
-                _logger.note(f'No value provided for the {arg}')
+                _logger.debug(f'No value provided for the {arg}')
 
         # Start cropping the input spectrum if necessary
         if crop_waves is not None:
@@ -144,11 +146,11 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                     _logger.warning(f'Input spectrum {arg} array has {np.sum(nan_entries)} this could bring issues in your fittings'
                                     f'formats: {list(UNITS_LATEX_DICT.keys())}')
                 if dimensions != 1:
-                    _logger.bug(f'Input spectrum {arg} array has a number of dimensions equal to {dimensions}. Fitting issues'
+                    _logger.warning(f'Input spectrum {arg} array has a number of dimensions equal to {dimensions}. Fitting issues'
                                 f' will stop the script running')
             else:
                 if arg in ['wave', 'flux']:
-                    _logger.warning(f'No {arg} array introduced. This will bring issues in your fittings.')
+                    _logger.warning(f'No {arg} array introduced. This may bring issues in your fittings.')
 
         # Masked the arrays if requested
         if masked_pixels is not None:
@@ -982,7 +984,7 @@ class CubeInspector(Spectrum):
         #TODO add frame argument
 
         # Assign attributes to the parent class
-        super().__init__(wave, input_flux=None, redshift=redshift, norm_flux=1, units_wave=units_wave, units_flux=units_flux)
+        super().__init__(input_wave=np.zeros(1), input_flux=np.zeros(1), redshift=redshift, norm_flux=1, units_wave=units_wave, units_flux=units_flux)
 
         # Data attributes
         self.grid_mesh = None
@@ -1030,8 +1032,6 @@ class CubeInspector(Spectrum):
 
         # Adjust the default theme
         self.fig_conf['figure.figsize'] = (18, 6)
-        # self.fig_conf['ytick.labelsize'] = 10
-        # self.fig_conf['xtick.labelsize'] = 10
 
         # Update to the user configuration
         self.fig_conf = {**self.fig_conf, **plt_cfg}

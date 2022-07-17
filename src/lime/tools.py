@@ -1,13 +1,14 @@
+import logging
 import numpy as np
 import pandas as pd
+import joblib
 import astropy.units as au
-from astropy.units import AA
 from lmfit.models import PolynomialModel
 from sys import exit
 from pathlib import Path
 from scipy import signal
 
-from lime import _logger
+_logger = logging.getLogger('LiMe')
 
 try:
     from specutils import Spectrum1D, SpectralRegion
@@ -49,6 +50,7 @@ FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy')
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
+MACHINE_PATH = Path(__file__).parent/'resources/LogitistRegression_v2_cost1_logNorm.joblib'
 
 #[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
 # 2.99792458E+17 units
@@ -366,7 +368,9 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
 class LineFinder:
 
-    def __init__(self):
+    def __init__(self, machine_model_path=MACHINE_PATH):
+
+        self.ml_model = joblib.load(machine_model_path)
 
         return
 
@@ -405,7 +409,7 @@ class LineFinder:
 
             # Compute the continuum and assign replace the value outside the bands the new continuum
             if plot_results:
-                title = f'Continuum fitting, iteration ({i}/{len(degree_list)})'
+                title = f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'
                 continuum_full = poly3Out.eval(x=self.wave.data)
                 self._plot_continuum_fit(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
 
@@ -418,7 +422,7 @@ class LineFinder:
 
         return output_params
 
-    def peak_detection(self, limit_threshold=None, continuum=None, distance=4, mask_valid=None, plot_results=False):
+    def peak_detection(self, limit_threshold=None, continuum=None, distance=4, ml_mask=None, plot_results=False):
 
         # No user imput provided compute the intensity threshold from the 84th percentil
         limit_threshold = np.percentile(self.flux, 84) if limit_threshold is None else limit_threshold
@@ -433,20 +437,48 @@ class LineFinder:
 
         # Plot the results
         if plot_results:
-            self._plot_peak_detection(peak_fp, limit_threshold, continuum, plot_title='')
+            self._plot_peak_detection(peak_fp, limit_threshold, continuum, ml_mask=ml_mask,
+                                      plot_title='Peak detection results ')
 
         return peak_fp
 
+    def ml_line_detection(self, continuum, box_width=11):
+
+        # Normalize the flux
+        input_flux = self.flux if not np.ma.is_masked(self.flux) else self.flux.data
+        input_flux = np.log10((input_flux/continuum - 1) + 10)
+
+        # Reshape to the training dimensions
+        input_flux = np.array(input_flux, ndmin=2)
+
+        # Container for the true pixels
+        detection_mask = np.zeros(self.flux.size).astype(bool)
+
+        # Case of 1D
+        spectrum_pixels = input_flux.shape[1]
+        for i in np.arange(spectrum_pixels):
+            if i + box_width <= spectrum_pixels:
+                y = input_flux[:, i:i + box_width]
+                if not np.any(np.isnan(y)):
+                    detection_mask[i:i + box_width] = detection_mask[i:i + box_width] | self.ml_model.predict(y)[0]
+                    # print(f'y {i} ({np.sum(y)}): {self.ml_model.predict(y)[0]}')
+
+        return detection_mask
+
     def line_detection(self, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3, lines_log=None,
-                          line_type='emission', width_tol=5, width_mode='fixed', plot_cont_calc=False, plot_peak_calc=True):
+                       line_type='emission', width_tol=5, width_mode='fixed', ml_detection=False, plot_cont_calc=False,
+                       plot_peak_calc=True):
 
         # Fit the continuum
         cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
                                                      return_std=True, plot_results=plot_cont_calc)
 
+        # Check via machine learning algorithm
+        ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
+
         # Check for the peaks of the emission lines
         detec_min = noise_sigma_factor * cond_Std
-        idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc)
+        idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
         if lines_log is not None:

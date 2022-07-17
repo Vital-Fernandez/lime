@@ -1,5 +1,4 @@
 import numpy as np
-import sys
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 from astropy.wcs import WCS
@@ -10,7 +9,7 @@ from collections import Sequence
 from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
-from .tools import label_decomposition, blended_label_from_log, UNITS_LATEX_DICT, latex_science_float
+from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float
 
 try:
     import pylatex
@@ -179,7 +178,7 @@ def numberStringFormat(value, cifras=4):
     return newFormat
 
 
-def mplcursors_legend(line, log, latex_label, norm_flux, units_wave):
+def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):
 
     if len(latex_label) == 1:
         legend_text = latex_label[0] + '\n'
@@ -191,22 +190,25 @@ def mplcursors_legend(line, log, latex_label, norm_flux, units_wave):
         ion, wave, latex = label_decomposition(line, scalar_output=True, units_wave=units_wave)
         legend_text = latex + '\n'
 
+    units_line_flux = ASTRO_UNITS_KEYS[units_wave] * ASTRO_UNITS_KEYS[units_flux]
+    line_flux_latex = f'{units_line_flux:latex}'
+    normFlux_latex = f' $({latex_science_float(norm_flux)})$' if norm_flux != 1 else ''
+
     intg_flux = latex_science_float(log.loc[line, 'intg_flux']/norm_flux)
     intg_err = latex_science_float(log.loc[line, 'intg_err']/norm_flux)
-    normFlux = latex_science_float(norm_flux)
-    legend_text += r'$F_{{intg}} = {}\pm{}\,({})$'.format(intg_flux, intg_err, normFlux) + '\n'
+    legend_text += r'$F_{{intg}} = {}\pm{}\,$'.format(intg_flux, intg_err) + line_flux_latex + normFlux_latex + '\n'
 
     gauss_flux = latex_science_float(log.loc[line, 'gauss_flux']/norm_flux)
     gauss_err = latex_science_float(log.loc[line, 'gauss_err']/norm_flux)
-    legend_text += r'$F_{{gauss}} = {}\pm{}\,({})$'.format(gauss_flux, gauss_err, normFlux) + '\n'
+    legend_text += r'$F_{{gauss}} = {}\pm{}\,$'.format(gauss_flux, gauss_err) + line_flux_latex + normFlux_latex + '\n'
 
     v_r = r'{:.1f}'.format(log.loc[line, 'v_r'])
     v_r_err = r'{:.1f}'.format(log.loc[line, 'v_r_err'])
-    legend_text += r'$v_{{r}} = {}\pm{}\,(km/s)$'.format(v_r, v_r_err) + '\n'
+    legend_text += r'$v_{{r}} = {}\pm{}\,\frac{{km}}{{s}}$'.format(v_r, v_r_err) + '\n'
 
     sigma_vel = r'{:.1f}'.format(log.loc[line, 'sigma_vel'])
     sigma_vel_err = r'{:.1f}'.format(log.loc[line, 'sigma_vel_err'])
-    legend_text += r'$\sigma_{{g}} = {}\pm{}\,(km/s)$'.format(sigma_vel, sigma_vel_err)
+    legend_text += r'$\sigma_{{g}} = {}\pm{}\,\frac{{km}}{{s}}$'.format(sigma_vel, sigma_vel_err)
 
     return legend_text
 
@@ -739,7 +741,7 @@ class LiMePlots:
 
             # Plot the gauss curve elements
             self.gaussian_profiles_plotting(list_comps, self.log, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
-                                            axis=spec_ax, frame=frame, peak_check=True, cont_bands=True,
+                                            axis=spec_ax, frame=frame, peak_check=False, cont_bands=True,
                                             wave_array=wave_array, cont_array=cont_array, gaussian_array=gaussian_array,
                                             mplcursors_active=True)
 
@@ -754,7 +756,7 @@ class LiMePlots:
             resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
 
             # Marked masked pixels if they are there
-            if idcs_mask is not None:
+            if np.any(idcs_mask):
                 x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
                 y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
                 spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'],
@@ -1090,7 +1092,7 @@ class LiMePlots:
 
                 # Compute mplcursors box text
                 if mplcursors_check:
-                    label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux, self.units_wave)
+                    label_complex = mplcursors_legend(line, log, latex_array, self.norm_flux, self.units_wave, self.units_flux)
                     self._legends_dict[label_complex] = line_g
 
             # Combined profile if applicable
@@ -1160,7 +1162,7 @@ class LiMePlots:
 
         return
 
-    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum=None, plot_title=''):
+    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum=None, plot_title='', ml_mask=None):
 
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
@@ -1178,6 +1180,11 @@ class LiMePlots:
 
             fig, ax = plt.subplots()
             ax.step(wave_plot, flux_plot, color=self._color_dict['fg'], label='Object spectrum')
+
+            if ml_mask is not None:
+                if np.any(ml_mask):
+                    ax.scatter(wave_plot[ml_mask], flux_plot[ml_mask], label='ML detection', color='palegreen')
+
             ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=self._color_dict['peak'], facecolors='none')
             ax.fill_between(wave_plot, continuum, detect_limit, facecolor=self._color_dict['line_band'], label='Noise_region', alpha=0.5)
 
@@ -1186,6 +1193,8 @@ class LiMePlots:
 
             ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], label='Masked pixels', marker='x',
                        color=self._color_dict['mask_marker'])
+
+
 
             ax.legend()
             ax.update(AXES_CONF)
