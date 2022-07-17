@@ -32,9 +32,11 @@ setup(
                 "Programming Language :: Python :: 3",
                 "Programming Language :: Python :: 3.7",
                 ],
-    packages=find_packages('src'),
+    packages=find_packages(where='src'),
     package_dir={'': 'src'},
-    package_data={'': ['config.cfg', 'types_params.txt', 'parent_mask.txt', 'src/resources/*']},
+    # package_data={'': ['config.cfg', 'types_params.txt', 'parent_mask.txt', 'src/resources/*']},
+    package_data={'':          ['config.cfg', 'types_params.txt', 'parent_mask.txt', 'resources/GradientDescent_v2_cost1_logNorm.joblib'],
+                  'resources': ['resources/*']},
     include_package_data=True,
     install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'specutils', 'pylatex', 'openpyxl', 'joblib'],
     )
