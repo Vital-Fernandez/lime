@@ -452,7 +452,6 @@ class EmissionFitting:
         self.v_r, self.v_r_err = np.empty(n_comps), np.empty(n_comps)
         self.sigma_vel, self.sigma_vel_err = np.empty(n_comps), np.empty(n_comps)
         self.gauss_flux, self.gauss_err = np.empty(n_comps), np.empty(n_comps)
-        # self.z_line = np.empty(n_comps)
         self.FWHM_g = np.empty(n_comps)
         self.sigma_thermal = np.empty(n_comps)
 
