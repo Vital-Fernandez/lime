@@ -64,6 +64,16 @@ STANDARD_PLOT = {**PLOT_SIZE_FONT, **PLOT_COLORS}
 STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
 
 
+def onclick_coord(event, units_wave=None, units_flux=None):
+
+    print(f'{event.xdata}')
+        # print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+        #       ('double' if event.dblclick else 'single', event.button,
+        #        event.x, event.y, event.xdata, event.ydata))
+
+    return
+
+
 def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='none'):
 
     if rounddig_er == None: #TODO declare a universal tool
@@ -459,7 +469,7 @@ class LiMePlots:
 
     def plot_spectrum(self, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
                       log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Object spectrum', output_address=None,
-                      include_fits=False, log=None, frame='observed'):
+                      include_fits=False, log=None, frame='observed', click_for_coord=False):
 
         """
 
@@ -564,6 +574,7 @@ class LiMePlots:
                 else:
                     if 'signal_peak' in match_log:
                         idcs_linePeaks = match_log['signal_peak'].values.astype(int)
+
                         ax.scatter(wave_plot[idcs_linePeaks] / z_corr, flux_plot[idcs_linePeaks] * z_corr, label='Peaks',
                                    facecolors='none', edgecolors=self._color_dict['peak'])
 
@@ -664,6 +675,9 @@ class LiMePlots:
             # Add or remove legend according to the plot type:
             if legend_check:
                 ax.legend()
+
+            if click_for_coord:
+                cid = fig.canvas.mpl_connect('button_press_event', onclick_coord)
 
             # By default plot on screen unless an output address is provided
             save_close_fig_swicth(output_address, 'tight', fig)
@@ -932,19 +946,26 @@ class LiMePlots:
 
         return
 
-    def plot_line_grid(self, log, plt_cfg={}, ncols=10, nrows=None, output_address=None, log_scale=True, frame='observed'):
+    def plot_line_grid(self, log=None, plt_cfg={}, n_cols=5, n_rows=None, output_address=None, log_scale=True, frame='observed',
+                       print_flux=False):
 
+
+        # TODO case only one line flatten fails
         # Line labels to plot
         line_list = log.index.values
         ion_array, wave_array, latex_array = label_decomposition(line_list, units_wave=self.units_wave)
 
-        # Define plot axes grid size
-        if nrows is None:
-            nrows = int(np.ceil(line_list.size / ncols))
+        # Establish the grid shape
+        if line_list.size > n_cols:
+            if n_rows is None:
+                n_rows = int(np.ceil(line_list.size / n_cols))
+        else:
+            n_cols = line_list.size
+            n_rows = 1
 
         # Increasing the size according to the row number
         STANDARD_PLOT_grid = STANDARD_PLOT.copy()
-        STANDARD_PLOT_grid['figure.figsize'] = (ncols * 3, nrows * 3)
+        STANDARD_PLOT_grid['figure.figsize'] = (n_cols*5, n_rows*5)
         STANDARD_PLOT_grid['axes.titlesize'] = 12
 
         # New configuration overrites the old
@@ -952,16 +973,24 @@ class LiMePlots:
 
         with rc_context(plt_cfg):
 
-            n_axes, n_lines = ncols * nrows, line_list.size
+            n_axes, n_lines = n_cols * n_rows, line_list.size
 
             # Reference frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
+            # w1 = self.log.w1.values * (1 + self.redshift)
+            # w6 = self.log.w6.values * (1 + self.redshift)
+            # idcsLines = ((w1 - 5) <= wave_plot[:, None]) & (wave_plot[:, None] <= (w6 + 5))
+
+            # Determine the line region # WARNING it needs to be a bit larger than original mask
             w1 = self.log.w1.values * (1 + self.redshift)
             w6 = self.log.w6.values * (1 + self.redshift)
-            idcsLines = ((w1 - 5) <= wave_plot[:, None]) & (wave_plot[:, None] <= (w6 + 5))
+            idx1, idx6 = np.searchsorted(wave_plot, (w1, w6))
 
-            fig, ax = plt.subplots(nrows=nrows, ncols=ncols)
+            idx_low = idx1 - 1
+            idx_high = idx6 + 1
+
+            fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
             axesList = ax.flatten()
 
             # Compute the gaussian profiles
@@ -975,7 +1004,8 @@ class LiMePlots:
 
                     # Plot the spectrum
                     color = self._color_dict['fg']
-                    ax_i.step(wave_plot[idcsLines[:, i]]/z_corr, flux_plot[idcsLines[:, i]]*z_corr, where='mid', color=color)
+                    ax_i.step(wave_plot[idx_low[i]:idx_high[i]]/z_corr, flux_plot[idx_low[i]:idx_high[i]]*z_corr,
+                              where='mid', color=color)
 
                     # Plot the gauss curve elements
                     wave_i = wave_array[:, i][..., None]
@@ -983,14 +1013,34 @@ class LiMePlots:
                     gauss_i = gaussian_array[:, i][..., None]
 
                     self.gaussian_profiles_plotting([line_list[i]], self.log,
-                                                    wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]], z_corr,
-                                                    axis=ax_i, frame=frame, cont_bands=True,
+                                                    wave_plot[idx_low[i]:idx_high[i]], flux_plot[idx_low[i]:idx_high[i]],
+                                                    z_corr, axis=ax_i, frame=frame, cont_bands=True,
                                                     wave_array=wave_i, cont_array=cont_i,
                                                     gaussian_array=gauss_i)
 
                     # Plot masked pixels if possible
-                    self.mask_pixels_plotting(line_list[i], wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]],
+                    self.mask_pixels_plotting(line_list[i], wave_plot[idx_low[i]:idx_high[i]], flux_plot[idx_low[i]:idx_high[i]],
                                               z_corr, ax_i, self.log)
+
+                    # Display flux if neccesary
+                    if print_flux:
+
+                        units_line_flux = ASTRO_UNITS_KEYS[self.units_wave] * ASTRO_UNITS_KEYS[self.units_flux]
+                        units_flux_latex = f'{units_line_flux:latex}'
+                        normFlux_latex = f' ${latex_science_float(self.norm_flux)}$' if self.norm_flux != 1 else ''
+
+                        intg_flux = latex_science_float(log.loc[line_list[i], 'intg_flux'] / self.norm_flux, dec=3)
+                        intg_err = latex_science_float(log.loc[line_list[i], 'intg_err'] / self.norm_flux, dec=3)
+
+                        gauss_flux = latex_science_float(log.loc[line_list[i], 'gauss_flux'] / self.norm_flux, dec=3)
+                        gauss_err = latex_science_float(log.loc[line_list[i], 'gauss_err'] / self.norm_flux, dec=3)
+
+                        box_text = r'$F_{{intg}} = {}\pm{}\,$'.format(intg_flux, intg_err)
+                        box_text += f'({normFlux_latex}) {units_flux_latex}\n'
+                        box_text += r'$F_{{gauss}} = {}\pm{}\,$'.format(gauss_flux, gauss_err)
+                        box_text += f'({normFlux_latex}) {units_flux_latex} '
+
+                        ax_i.text(0.01, 0.9, box_text, transform=ax_i.transAxes)
 
                     # Axis format
                     ax_i.yaxis.set_major_locator(plt.NullLocator())
@@ -1037,12 +1087,12 @@ class LiMePlots:
         return wave_plot, flux_plot, z_corr, idcs_mask
 
     def gaussian_profiles_plotting(self, list_comps, log, x, y, z_corr, axis, frame='observed', peak_check=False,
-                                   cont_bands=None, wave_array=None, cont_array=None, gaussian_array=None, mplcursors_active=True):
+                                   cont_bands=True, wave_array=None, cont_array=None, gaussian_array=None, mplcursors_active=True):
 
         cmap = cm.get_cmap(self._color_dict['comps_map'])
 
         # Shade band regions if provided
-        if cont_bands is not None:
+        if cont_bands:
             mask = self.log.loc[list_comps[0], 'w1':'w6'].values
             idcsLine, idcsBlue, idcsRed = self.define_masks(x/(1 + self.redshift), mask, merge_continua=False)
             shade_line, shade_cont = self._color_dict['line_band'], self._color_dict['cont_band']
@@ -1139,7 +1189,7 @@ class LiMePlots:
             fig, ax = plt.subplots()
 
             # Object spectrum
-            ax.step(wave_plot, flux_plot, label='Object spectrum', color=self._color_dict['fg'])
+            ax.step(wave_plot, flux_plot, label='Object spectrum', color=self._color_dict['fg'], where='mid')
 
             # Band limits
             label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
@@ -1179,7 +1229,7 @@ class LiMePlots:
         with rc_context(PLOT_CONF):
 
             fig, ax = plt.subplots()
-            ax.step(wave_plot, flux_plot, color=self._color_dict['fg'], label='Object spectrum')
+            ax.step(wave_plot, flux_plot, color=self._color_dict['fg'], label='Object spectrum', where='mid')
 
             if ml_mask is not None:
                 if np.any(ml_mask):

@@ -136,6 +136,15 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             if input_err is not None:
                 self.err_flux = self.err_flux / self.norm_flux
 
+        # Masked the arrays if requested
+        if pixel_mask is not None:
+            self.wave = np.ma.masked_array(self.wave, pixel_mask)
+            self.wave_rest = np.ma.masked_array(self.wave_rest, pixel_mask)
+            self.flux = np.ma.masked_array(self.flux, pixel_mask)
+
+            if self.err_flux is not None:
+                self.err_flux = np.ma.masked_array(self.err_flux, pixel_mask)
+
         # Check for dimensions and nan entries
         for arg in ['wave', 'flux', 'err_flux']:
             arg_array = self.__getattribute__(arg)
@@ -152,14 +161,6 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
                 if arg in ['wave', 'flux']:
                     _logger.warning(f'No {arg} array introduced. This may bring issues in the measurement.')
 
-        # Masked the arrays if requested
-        if pixel_mask is not None:
-            self.wave = np.ma.masked_array(self.wave, pixel_mask)
-            self.wave_rest = np.ma.masked_array(self.wave_rest, pixel_mask)
-            self.flux = np.ma.masked_array(self.flux, pixel_mask)
-
-            if self.err_flux is not None:
-                self.err_flux = np.ma.masked_array(self.err_flux, pixel_mask)
 
         # Check for masked arrays
         check_mask = np.zeros(3).astype(bool)
@@ -170,7 +171,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         if np.any(check_mask):
             self._masked_inputs = True
             if ~np.all(check_mask):
-                _logger.warning(f'Make sure *both* your input wavelength and flux array are masked arrays')
+                _logger.warning(f'Make sure *all* your input wavelength, flux and uncertainty are masked arrays')
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
         self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
@@ -230,8 +231,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Security checks for the mask wavelengths
         assert np.all(np.diff(mask) >= 0), f'\n- Error: the {line} mask is not sorted'
-        assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest frame limit (w_min = {self.wave_rest[0]:.2f})'
-        assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest frame limit (w_min = {self.wave_rest[-1]:.2f})'
+        # assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest frame limit (w_min = {self.wave_rest[0]:.2f})'
+        # assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest frame limit (w_min = {self.wave_rest[-1]:.2f})'
 
         # For security previous measurement is cleared and a copy of the user configuration is used
         self.clear_fit()
@@ -490,7 +491,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         if units_wave is not None:
 
             if units_wave in DISPERSION_UNITS:
-                self.wave = unit_convertor(self.units_wave, units_wave, wave_array=self.wave)
+                self.wave = unit_convertor(self.units_wave, units_wave, wave_array=self.wave, mask_check=np.ma.is_masked(self.wave))
                 self.wave_rest = self.wave/(1+self.redshift)
             else:
                 _logger.warning(f'- Dispersion units {units_wave} not recognized for conversion. '
@@ -499,12 +500,17 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             # Reflect the new units
             self.units_wave = units_wave
 
-
         if units_flux is not None:
 
             if units_flux in FLUX_DENSITY_UNITS:
                 self.flux = unit_convertor(self.units_flux, units_flux, wave_array=self.wave, flux_array=self.flux,
-                                           dispersion_units=self.units_wave)
+                                           dispersion_units=self.units_wave, mask_check=np.ma.is_masked(self.flux))
+
+                if self.err_flux is not None:
+                    self.err_flux = unit_convertor(self.units_flux, units_flux, wave_array=self.wave,
+                                                   flux_array=self.err_flux, dispersion_units=self.units_wave,
+                                                   mask_check=np.ma.is_masked(self.err_flux))
+
             else:
                 _logger.warning(f'- Dispersion units {units_flux} not recognized for conversion. '
                                 f'Please use {FLUX_DENSITY_UNITS} to convert from {self.units_flux}')
@@ -512,14 +518,17 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
             # Reflect the new units
             self.units_flux = units_flux
 
+        # Switch the normalization
         if norm_flux is not None:
 
             # Undo previous normalization
             self.flux = self.flux * self.norm_flux
+            self.err_flux = self.err_flux * self.norm_flux if self.err_flux is not None else None
 
             # New normalization
             self.norm_flux = norm_flux
             self.flux = self.flux/self.norm_flux
+            self.err_flux = self.err_flux/self.norm_flux if self.err_flux is not None else None
 
         return
 
@@ -609,8 +618,7 @@ class MaskInspector(Spectrum):
 
         # Lines log not provide code ends
         else:
-            print(f'- ERROR: No lines log provided by the user nor can be found the lines log file at address:'
-                  f' {log_address}')
+            _logger.warning(f'No lines log file found at {log_address}. Leaving the script')
             exit()
 
         # Only plotting the lines in the lines interval
@@ -624,7 +632,6 @@ class MaskInspector(Spectrum):
             if isinstance(lines_interval[0], str):
                 n_lines = len(lines_interval)
                 self.target_lines = np.array(lines_interval, ndmin=1)
-
             # Array of integers
             else:
                 n_lines = lines_interval[1] - lines_interval[0]
@@ -717,7 +724,7 @@ class MaskInspector(Spectrum):
             waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
 
             # Plot the line region
-            ax.step(waveLine, fluxLine)
+            ax.step(waveLine, fluxLine, where='mid')
 
             # Fill the user selections
             if non_nan == 2:
@@ -765,16 +772,18 @@ class MaskInspector(Spectrum):
         ax.update({'title': lineLabel})
         ax.yaxis.set_ticklabels([])
         ax.axes.yaxis.set_visible(False)
+        try:
+            idxPeakFlux = np.argmax(fluxPeak)
+            ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
 
-        idxPeakFlux = np.argmax(fluxPeak)
-        ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
-
-        if logscale == 'auto':
-            if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
-                ax.set_yscale('log')
-        else:
-            if logscale == 'log':
-                ax.set_yscale('log')
+            if logscale == 'auto':
+                if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
+                    ax.set_yscale('log')
+            else:
+                if logscale == 'log':
+                    ax.set_yscale('log')
+        except:
+            print(f'fail at {self.line}')
 
 
         return

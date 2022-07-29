@@ -388,7 +388,7 @@ class EmissionFitting:
 
         # Line redshift
         # TODO calculate z_line using the label reference
-        self.z_line = self.peak_wave/ref_wave[0] - 1
+        self.z_line = self.peak_wave/theoWave_arr[0] - 1
 
         # Kinematics corrections
         self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
@@ -519,7 +519,6 @@ class EmissionFitting:
             param_conf['value'] = param_value
 
         else:
-
             # Special case inequalities: H1_6563A_w1_sigma = '>1.5*H1_6563A_sigma'
             if param_conf['expr'] is not None:
                 if ('<' in param_conf['expr']) or ('>' in param_conf['expr']):
@@ -527,7 +526,7 @@ class EmissionFitting:
                     # Create additional parameter
                     ineq_name = f'{param_ref}_ineq'
                     ineq_operation = '*' # TODO add remaining operations
-
+                    print('----------------------------------PASAMOS----------------------------')
                     # Split number and ref
                     ineq_expr = param_conf['expr'].replace('<', '').replace('>', '')
                     ineq_items = ineq_expr.split(ineq_operation)

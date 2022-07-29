@@ -31,7 +31,8 @@ ASTRO_UNITS_KEYS = {'A': au.AA,
                     'Flam': au.erg/au.s/au.cm**2/au.AA,
                     'Fnu': au.erg/au.s/au.cm**2/au.Hz,
                     'Jy': au.Jy,
-                    'mJy': au.mJy}
+                    'mJy': au.mJy,
+                    'nJy': au.nJy}
 
 UNITS_LATEX_DICT = {'A': '\AA',
                     'um': '\mu\!m',
@@ -42,11 +43,12 @@ UNITS_LATEX_DICT = {'A': '\AA',
                     'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
                     'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
                     'Jy': 'Jy',
-                    'mJy': 'mJy'}
+                    'mJy': 'mJy',
+                    'nJy': 'nJy'}
 
 DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
 
-FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy')
+FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
@@ -288,23 +290,36 @@ def latex_science_float(f, dec=2):
         return float_str
 
 
-def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, sig_fig=None):
+def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, sig_fig=None,
+                   mask_check=False):
 
+    # Converting the wavelength array
     if (in_units in DISPERSION_UNITS) and (out_units in DISPERSION_UNITS):
+        input_mask = wave_array.mask if mask_check else None
         input_array = wave_array * ASTRO_UNITS_KEYS[in_units]
         output_array = input_array.to(ASTRO_UNITS_KEYS[out_units])
 
+    # Converting the flux array
     elif (in_units in FLUX_DENSITY_UNITS) and (out_units in FLUX_DENSITY_UNITS):
+        input_mask = flux_array.mask if mask_check else None
         input_array = flux_array * ASTRO_UNITS_KEYS[in_units]
-        wave_array = wave_array * ASTRO_UNITS_KEYS[dispersion_units]
-        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units], au.spectral_density(wave_array))
+        wave_unit_array = wave_array * ASTRO_UNITS_KEYS[dispersion_units]
+        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units], au.spectral_density(wave_unit_array))
+
+    # Not recognized units
     else:
         _logger.warning(f'Input units {in_units} could not be converted to {out_units}')
 
-    if sig_fig is None:
-        return output_array.value
+    # Reapply the mask if necessary
+    if mask_check:
+        output_array = np.ma.masked_array(output_array.value, input_mask)
     else:
-        return np.round(output_array.value, sig_fig)
+        output_array = output_array.value
+
+    if sig_fig is None:
+        return output_array
+    else:
+        return np.round(output_array, sig_fig)
 
 
 def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, z_range=None,
@@ -467,7 +482,7 @@ class LineFinder:
 
     def line_detection(self, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3, lines_log=None,
                        line_type='emission', width_tol=5, width_mode='fixed', ml_detection=False, plot_cont_calc=False,
-                       plot_peak_calc=True):
+                       plot_peak_calc=False):
 
         # Fit the continuum
         cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
