@@ -525,7 +525,7 @@ class EmissionFitting:
                     # Create additional parameter
                     ineq_name = f'{param_ref}_ineq'
                     ineq_operation = '*' # TODO add remaining operations
-                    print('----------------------------------PASAMOS----------------------------')
+
                     # Split number and ref
                     ineq_expr = param_conf['expr'].replace('<', '').replace('>', '')
                     ineq_items = ineq_expr.split(ineq_operation)

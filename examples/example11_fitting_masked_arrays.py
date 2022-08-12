@@ -74,7 +74,7 @@ for i, specName in enumerate(specNameList):
             # # # Adjust mask to object
             obj_mask_file = dataFolder/objList[i]/f'{objList[i]}_{arm}_mask.txt'
             # # # shu_copy(refMask, obj_mask)
-            # lime.MaskInspector(obj_mask_file, wave, flux, redshift=zList[i], norm_flux=norm_flux, y_scale='linear')
+            # lime.MaskInspector(obj_mask_file, wave, flux, redshift=zList[i], norm_flux=norm_flux, _y_scale='linear')
             mask = lime.load_lines_log(obj_mask_file)
             line_mask = mask.loc['S2_6716A_b', 'w1':'w6'].values * (1+zList[i])
 
@@ -97,11 +97,11 @@ for i, specName in enumerate(specNameList):
             spec_new_mask.fit_from_wavelengths('S2_6716A_b', line_mask/(1+zList[i]), fit_cfg)
             spec_new_mask.display_results(log_scale=True, frame='rest')
 
-            # fig, ax = plt.subplots(figsize=(12, 12))
-            # ax.step(wave, flux, where='mid')
-            # ax.step(wave_ma, flux_ma, where='mid')
+            # _fig, _ax = plt.subplots(figsize=(12, 12))
+            # _ax.step(wave, flux, where='mid')
+            # _ax.step(wave_ma, flux_ma, where='mid')
             #
-            # ax.scatter(wave[~idcs_mask_limits], flux[~idcs_mask_limits], color='red')
-            # ax.set_xlim(line_mask[0], line_mask[-1])
-            # # ax.set_yscale('log')
+            # _ax.scatter(wave[~idcs_mask_limits], flux[~idcs_mask_limits], color='red')
+            # _ax.set_xlim(line_mask[0], line_mask[-1])
+            # # _ax.set_yscale('log')
             # plt.show()

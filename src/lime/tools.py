@@ -54,6 +54,10 @@ WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.
 
 MACHINE_PATH = Path(__file__).parent/'LogitistRegression_v2_cost1_logNorm.joblib'
 
+_REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'C3]_1980A', 'Mg2_2800A', '[O3]_3727A', 'H1_3889A', 'H1_4861A',
+                             '[O3]_5007A', 'H1_6563A', 'S3_9531A', 'He1_10830A', 'H1_12820A', 'H1_18750A'])
+
+
 #[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
 # 2.99792458E+17 units
 # 1 Jy = 10−26 W⋅m−2⋅Hz−1
@@ -115,8 +119,12 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
     lines = np.array(lines, ndmin=1)
 
     # TODO current workflow breaks if repeated labels
-    uniq, count = np.unique(lines, return_counts=True)
-    assert not np.any(count > 1), '- ERROR: The input line labels in lime.label_decomposition includes repeated entries, please remove them'
+    try:
+        uniq, count = np.unique(lines, return_counts=True)
+        assert not np.any(count > 1)
+    except AssertionError as err:
+        _logger.critical('The input line list has repeated line names')
+        raise err
 
     # Containers for input data
     ion_dict, wave_dict, latexLabel_dict = {}, {}, {}
@@ -152,10 +160,14 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                 kinem_comp_check = False if line_i.count('_') == 1 else True
 
                 # Get ion:
-                if 'r_' in line_i: # Case recombination lines
-                    ion = line_i[0:line_i.find('_')-1]
-                else:
-                    ion = line_i[0:line_i.find('_')]
+                ion = line_i[0:line_i.find('_')]
+                square_brackets = [bracket for bracket in ion if bracket in ['[', ']']]
+                n_brackets = len(square_brackets)
+
+                # if 'r_' in line_i: # Case recombination lines
+                #     ion = line_i[0:line_i.find('_')-1]
+                # else:
+                #     ion = line_i[0:line_i.find('_')]
 
                 # Get wavelength and their units # TODO add more units and more facilities for extensions
                 # TODO warning if label does not have those units
@@ -168,16 +180,31 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
                     units = ''
                     ext = ''
 
-                # Get classical ion notation
-                atom, ionization = ion[:-1], int(ion[-1])
-                ionizationRoman = int_to_roman(ionization)
+                # Define the label # TODO Remove first check and make the anotation compulsary # Add option to exclude brackets or provide status, ionization element appart
+                if n_brackets == 0:
 
-                # TODO add metals notation
-                # Define the label
-                if ion in recomb_atom:
-                    comp_line = f'{atom}{ionizationRoman}\,{wavelength}{units}{ext}'
+                    atom, ionization = ion[:-1], int(ion[-1])
+                    ionizationRoman = int_to_roman(ionization)
+
+                    if ion in recomb_atom:
+                        comp_line = f'{atom}{ionizationRoman}'
+                    else:
+                        comp_line = f'[{atom}{ionizationRoman}]'
+
+                # Forbidden line
+                elif n_brackets == 2:
+                    atom, ionization = ion[1:-2], int(ion[-2])
+                    ionizationRoman = int_to_roman(ionization)
+                    comp_line = f'[{atom}{ionizationRoman}]'
+
+                # Semi-forbidden line
                 else:
-                    comp_line = f'[{atom}{ionizationRoman}]\,{wavelength}{units}{ext}'
+                    atom, ionization = ion[0:-2], int(ion[-2])
+                    ionizationRoman = int_to_roman(ionization)
+                    comp_line = f'{atom}{ionizationRoman}]'
+
+                # Adding the wavelength and units
+                comp_line += f'\,{wavelength}{units}{ext}'
 
                 # In the case of a mixture line we take component with the _b as the parent
                 if mixture_line:
@@ -203,15 +230,18 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
     wavelength_array = np.array([*wave_dict.values()], ndmin=1)
     latexLabel_array = np.array([*latexLabel_dict.values()], ndmin=1)
 
-    assert label_array.size == wavelength_array.size, 'Output ions do not match wavelengths size'
-    assert label_array.size == latexLabel_array.size, 'Output ions do not match labels size'
+    # Check if the number of output lines is the same
+    if not label_array.size == wavelength_array.size:
+        _logger.critical(f'Number of input lines is different from number of output lines')
 
+    # If requested and single line, return the input as a scalar
     if ion_array.size == 1 and scalar_output:
         output = (ion_array[0], wavelength_array[0], latexLabel_array[0])
     else:
         output = (ion_array, wavelength_array, latexLabel_array)
 
     return output
+
 
 def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):
     """
@@ -322,14 +352,39 @@ def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, disper
         return np.round(output_array, sig_fig)
 
 
+def air_to_vacuum_function(input_array, sig_fig=0):
+
+    input_array = np.array(input_array, ndmin=1)
+
+    if 'U' in str(input_array.dtype): #TODO finde better way
+        ion_array, wave_array, latex_array = label_decomposition(input_array)
+        air_wave = wave_array
+    else:
+        air_wave = input_array
+
+    output_array = (air_wave*0.0001 * (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) +
+                                                          0.01360/np.power(air_wave*0.0001, 4)))) * 10000
+
+    if sig_fig == 0:
+        output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
+
+    if 'U' in str(input_array.dtype):
+        vacuum_wave = output_array.astype(str)
+        output_array = np.core.defchararray.add(ion_array, '_')
+        output_array = np.core.defchararray.add(output_array, vacuum_wave)
+        output_array = np.core.defchararray.add(output_array, 'A')
+
+    return output_array
+
+
 def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, z_range=None,
-                            parent_mask_address=None, units_wave='A', sig_fig=4):
+                            parent_mask_address=None, units_wave='A', sig_fig=4, vacuum_conversion=False):
 
     # Use the default lime mask if none provided
     if parent_mask_address is None:
         parent_mask_address = Path(__file__).parent/'parent_mask.txt'
 
-    # Check that the file exists:
+    # Check that the file exists: #TODO remove blended, merged extensions from parent mask (or recover them here)
     if not Path(parent_mask_address).is_file():
         _logger.warning(f'Parent mask file not found. The input user address was {parent_mask_address}')
 
@@ -338,16 +393,39 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
     # Recover line label components
     ion_array, wave_array, latex_array = label_decomposition(mask_df.index.values)
-    mask_df['wave'], mask_df['ion'], mask_df['latex'] = wave_array, ion_array, latex_array
     idcs_rows = np.ones(mask_df.index.size).astype(bool)
+
+    # Convert to vacuum wavelengths if requested
+    if vacuum_conversion:
+
+        # First the table data
+        mask_df = mask_df.apply(air_to_vacuum_function)
+
+        # The line headers
+        wave_array = air_to_vacuum_function(wave_array)
+        if sig_fig is not None:
+            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
+
+        # Reconstruct the line labels for the new units
+        labels_array = np.core.defchararray.add(ion_array, '_')
+        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
+        labels_array = np.core.defchararray.add(labels_array, units_wave)
+
+        # Rename the indeces
+        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
+
+    # Momentarily add columns with the transition wavelength, ion and latex notation
+    mask_df['wave'], mask_df['ion'], mask_df['latex'] = wave_array, ion_array, latex_array
 
     # Convert the output mask to the units requested by the user
     if units_wave != 'A':
 
         conversion_factor = unit_convertor('A', units_wave,  wave_array=1, dispersion_units='dispersion axis', sig_fig=sig_fig)
         mask_df.loc[:, 'w1':'w6'] = mask_df.loc[:, 'w1':'w6'] * conversion_factor
+        wave_array = wave_array * conversion_factor
 
-        wave_array = wave_array * conversion_factor if sig_fig is None else np.round(wave_array * conversion_factor, sig_fig)
+        if sig_fig is not None:
+            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
 
         # Reconstruct the line labels for the new units
         labels_array = np.core.defchararray.add(ion_array, '_')
@@ -516,7 +594,7 @@ class LineFinder:
         emission or absorption lines. The user can specify the line type with the ``line_type='emission'`` or ``line_type='absorption'``
         parameter.
 
-        The user must specify a wavelength range (in the rest frame) to establish the region from which the spectrum
+        The user must specify a wavelength range (in the rest _frame) to establish the region from which the spectrum
         noise standard deviation is calculated. This region must not have absorptions or emissions.
 
         The treatment requires a normalized spectrum (continuum at zero). This is done by fitting the spectrum
@@ -541,10 +619,10 @@ class LineFinder:
         In the ``width_mode='fix'`` setting the line masks wavelengths are not modified.
 
         :param log: Lines log with the masks. The required columns are: the line label (DF index), w1, w2, w3, w4, w5 and w6.
-                    These wavelengths must be in the rest frame.
+                    These wavelengths must be in the rest _frame.
         :type log: pandas.DataFrame
 
-        :param noise_region: 2 value array with the wavelength limits for the noise region (in rest frame).
+        :param noise_region: 2 value array with the wavelength limits for the noise region (in rest _frame).
         :type noise_region: numpy.array
 
         :param detect_threshold: Intensity factor for the continuum signal for an emission/absorption detection.
@@ -576,7 +654,7 @@ class LineFinder:
         # Remove the continuum
         if specutils_check:
 
-            # Convert the noise region to the the observed frame
+            # Convert the noise region to the the observed _frame
             noise_region_obs = noise_region * (1 + self.redshift)
 
             # Normalize the continuum to zero

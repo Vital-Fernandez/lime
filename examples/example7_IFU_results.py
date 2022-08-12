@@ -114,9 +114,9 @@ lime.CubeInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redsh
 #     hdr = fits.getheader(fits_file, lines[0])
 #
 #     # Create the plot
-#     fig = plt.figure(figsize=(10, 10))
-#     ax = fig.add_subplot(projection=WCS(hdr), slices=('x', 'y'))
-#     im = ax.imshow(ratio_map)
-#     cbar = fig.colorbar(im, ax=ax)
-#     ax.update({'title': f'SHOC579 flux ratio: {latex_array[0]} / {latex_array[1]}', 'xlabel': r'RA', 'ylabel': r'DEC'})
+#     _fig = plt.figure(figsize=(10, 10))
+#     _ax = _fig.add_subplot(projection=WCS(hdr), slices=('x', 'y'))
+#     im = _ax.imshow(ratio_map)
+#     cbar = _fig.colorbar(im, _ax=_ax)
+#     _ax.update({'title': f'SHOC579 flux ratio: {latex_array[0]} / {latex_array[1]}', 'xlabel': r'RA', 'ylabel': r'DEC'})
 #     plt.show()

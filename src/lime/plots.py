@@ -1,21 +1,20 @@
+import logging
 import numpy as np
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
+from matplotlib.widgets import SpanSelector, RadioButtons
 from astropy.wcs import WCS
 from astropy.io import fits
-
-from functools import partial
 from collections import Sequence
+
+import pandas as pd
 from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
 from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float
+from .io import load_lines_log, save_line_log
 
-try:
-    import pylatex
-    pylatex_check = True
-except ImportError:
-    pylatex_check = False
+_logger = logging.getLogger('LiMe')
 
 try:
     import mplcursors
@@ -62,130 +61,6 @@ PLOT_COLORS = {}
 STANDARD_PLOT = {**PLOT_SIZE_FONT, **PLOT_COLORS}
 
 STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
-
-
-def onclick_coord(event, units_wave=None, units_flux=None):
-
-    print(f'{event.xdata}')
-        # print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-        #       ('double' if event.dblclick else 'single', event.button,
-        #        event.x, event.y, event.xdata, event.ydata))
-
-    return
-
-
-def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False, nan_format='none'):
-
-    if rounddig_er == None: #TODO declare a universal tool
-        rounddig_er = rounddig
-
-    # Check None entry
-    if entry != None:
-
-        # Check string entry
-        if isinstance(entry, (str, bytes)):
-            formatted_entry = entry
-
-        elif isinstance(entry, (pylatex.MultiColumn, pylatex.MultiRow, pylatex.utils.NoEscape)):
-            formatted_entry = entry
-
-        # Case of Numerical entry
-        else:
-
-            # Case of an array
-            scalarVariable = True
-            if isinstance(entry, (Sequence, np.ndarray)):
-
-                # Confirm is not a single value array
-                if len(entry) == 1:
-                    entry = entry[0]
-                # Case of an array
-                else:
-                    scalarVariable = False
-                    formatted_entry = '_'.join(entry)  # we just put all together in a "_' joined string
-
-            # Case single scalar
-            if scalarVariable:
-
-                # Case with error quantified # TODO add uncertainty protocol for table
-                # if isinstance(entry, UFloat):
-                #     formatted_entry = round_sig(nominal_values(entry), rounddig,
-                #                                 scien_notation=scientific_notation) + r'$\pm$' + round_sig(
-                #         std_devs(entry), rounddig_er, scien_notation=scientific_notation)
-
-                # Case single float
-                if np.isnan(entry):
-                    formatted_entry = nan_format
-
-                # Case single float
-                else:
-                    formatted_entry = numberStringFormat(entry, rounddig)
-    else:
-        # None entry is converted to None
-        formatted_entry = 'None'
-
-    return formatted_entry
-
-
-def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None):
-
-    # Check pylatex is install else leave
-    if pylatex_check:
-        pass
-    else:
-        print(f'\n- WARNING: pylatex is not installed. The table at {table_address} could not be generated')
-        return
-
-    # Establish the headers for the table
-    n_columns = lines_df.columns.size
-    columns_format_list = ['Line'] + ['None'] * n_columns
-    for i, column in enumerate(lines_df.columns.values):
-        columns_format_list[i + 1] = header_format_latex[column]
-
-    if 'Components' in columns_format_list:
-        idx_blended_label = columns_format_list.index('Components')
-    else:
-        idx_blended_label = None
-
-    # Get the line latex label for the table
-    # ion_array, wavelength_array, latexLabel_array = label_decomposition(lines_df.index.values, comp_dict=fit_conf, units_wave=self.units_wave)
-
-    # Create pdf
-    pdf = PdfMaker()
-    pdf.create_pdfDoc(pdf_type='table')
-    pdf.pdf_insert_table(columns_format_list)
-
-    # Loop through the lines
-    obsLines = lines_df.index.values
-    for i, lineLabel in enumerate(obsLines):
-        row_raw = [lines_notation[i]] + list(lines_df.loc[lineLabel].values)
-
-        # Exclude the _ from the blended label
-        if idx_blended_label is not None:
-            row_raw[idx_blended_label] = pylatex.utils.escape_latex(row_raw[idx_blended_label])
-
-        # Add row to the table
-        lastRow_check = True if lineLabel == obsLines[-1] else False
-        pdf.addTableRow(row_raw, last_row=lastRow_check)
-
-    # Save the pdf table
-    if table_type == 'pdf':
-        try:
-            pdf.generate_pdf(table_address, clean_tex=True)
-        except:
-            print('-- PDF compilation failure')
-
-    return
-
-
-def numberStringFormat(value, cifras=4):
-
-    if value > 0.001:
-        newFormat = f'{value:.{cifras}f}'
-    else:
-        newFormat = f'{value:.{cifras}e}'
-
-    return newFormat
 
 
 def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):
@@ -453,14 +328,583 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None):
 
     # # Close the figure before leaving
     # if plt.get_backend() not in ["Qt5Agg", "nbagg"]:
-    #     plt.close(fig)
+    #     plt.close(_fig)
 
     return
 
 
-class LiMePlots:
+def save_redshift_table(object, redshift, file_address):
+
+    if redshift != 0:
+        filePath = Path(file_address)
+
+        if filePath.parent.is_dir():
+
+            # Create a new dataframe and save it
+            if not filePath.is_file():
+                df = pd.DataFrame(data=redshift, index=[object], columns=['redshift'])
+
+            # Replace or append to dataframe
+            else:
+                df = pd.read_csv(filePath, delim_whitespace=True, header=0, index_col=0)
+                df.loc[object, 'redshift'] = redshift
+
+            # Save back
+            with open(filePath, 'wb') as output_file:
+                string_DF = df.to_string()
+                output_file.write(string_DF.encode('UTF-8'))
+
+        else:
+            _logger.warning(f'Output redshift table folder does not exist at {file_address}')
+
+    return
+
+
+class IntMaskInspector:
 
     def __init__(self):
+
+        self._y_scale = None
+        self._ref_name = None
+        self._log_address = None
+
+        self._lineList = None
+        self._lineTitles = None
+        self._activeLines = None
+
+        self._user_point = None
+        self._ref_wave = None
+        self._redshift_pred = None
+
+        self._fig, self._ax = None, None
+        self._idx_ax = None
+        self._frame = None
+        self._color_bg = {True: 'white',
+                          False: 'xkcd:salmon'}
+        self._ax_labels = None
+
+
+        return
+
+    def inspect_line_mask(self, lines_mask, output_log_address, parent_log=None, y_scale='auto', n_cols=5, n_rows=None,
+                          frame='observed'):
+
+        # Assign the attribute values
+        self._y_scale = y_scale
+        self._log_address = None if output_log_address is None else Path(output_log_address)
+        self._frame = frame
+
+        # Establish the parent log path
+        if parent_log is None:
+            parent_log = Path(__file__).parent / 'resources/parent_mask.txt'
+        elif isinstance(parent_log, (str, Path)):
+            parent_log = Path(parent_log)
+        else:
+            _logger.warning(f'Parent lines mask file variable format is not recognized. Please use a pandas dataframe, string or Path')
+
+        # Load the parent mask (even if we are not going to use it)
+        if parent_log.is_file():
+            parent_mask = load_lines_log(parent_log)
+            if ('w3' not in parent_mask.columns) and ('w3' not in parent_mask.columns):
+                _logger.warning('Input line mask must be a Pandas Dataframe with the line wavelength headers w1 -> w6')
+        else:
+            _logger.warning(f'Parent lines mask file not found at {parent_log.as_posix()}')
+
+        # Adjust to the inputs: If input lines mask is a DataFrame, no need for more:
+        if isinstance(lines_mask, pd.DataFrame):
+            idx_rows = (lines_mask.w3 > self.wave_rest[0]) & (lines_mask.w4 > self.wave_rest[-1])
+            self.log = lines_mask.loc[idx_rows]
+
+        # If it is a list of lines, compare with the parent log to get the bands wavelengths
+        elif isinstance(lines_mask, (list, Sequence, np.array)):
+            idx_rows = (parent_mask.w3 > self.wave_rest[0]) & (parent_mask.w4 > self.wave_rest[-1]) & (parent_mask.index.isin(lines_mask))
+            self.log = parent_mask.loc[idx_rows]
+
+        # If it is a file we load it as pandas dataframe
+        elif isinstance(lines_mask, (str, Path)):
+            input_log_address = Path(lines_mask)
+            if input_log_address.is_file():
+                lines_mask = load_lines_log(input_log_address)
+            else:
+                _logger.warning(f'The input lines mas address was not found at {lines_mask}')
+
+            idx_rows = (lines_mask.w3 > self.wave_rest[0]) & (lines_mask.w4 > self.wave_rest[-1])
+            self.log = lines_mask.loc[idx_rows]
+
+        # If it is none, we use all the lines form the parent mask
+        elif lines_mask is None:
+            idx_rows = (parent_mask.w3 > self.wave_rest[0]) & (parent_mask.w4 > self.wave_rest[-1])
+            self.log = parent_mask.loc[idx_rows]
+
+        else:
+            _logger.warning(f'The input lines mask variable is not recognized. Type = {type(lines_mask)}')
+
+        # Proceed if there are lines in the mask for the object spectrum wavelength range
+        if len(self.log.index) > 0:
+
+            # Establish the initial list of lines
+            self._lineList = self.log.index.values
+            n_lines = self._lineList.size
+            self._activeLines = np.ones(n_lines, dtype=bool)
+
+            # Plot configuration
+            if n_lines > n_cols:
+                if n_rows is None:
+                    n_rows = int(np.ceil(n_lines / n_cols))
+            else:
+                n_cols, n_rows = n_lines, 1
+            n_grid = n_cols * n_rows
+
+            PLOT_CONF, AXES_CONF = STANDARD_PLOT.copy(), STANDARD_AXES.copy()
+            PLOT_CONF['figure.figsize'] = (n_cols * 4, n_rows * 4)
+            AXES_CONF.pop('xlabel')
+
+            # Launch the interative figure
+            with rc_context(PLOT_CONF):
+
+                # Figure attributes
+                self._fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
+                ax_list = ax.flatten() if n_lines > 1 else [ax]
+
+                # Generate plot
+                spanSelectDict = {}
+                for i in range(n_grid):
+                    if i < n_lines:
+                        self.line = self._lineList[i]
+                        self.mask = self.log.loc[self.line, 'w1':'w6'].values
+                        self._plot_line_i(ax_list[i], self.line, self._frame, self._y_scale)
+                        spanSelectDict[f'spanner_{i}'] = SpanSelector(ax_list[i],
+                                                                      self._on_select_MI,
+                                                                      'horizontal',
+                                                                      useblit=True,
+                                                                      rectprops=dict(alpha=0.5, facecolor='tab:blue'),
+                                                                      button=1)
+                    else:
+                        # Clear not filled axes
+                        self._fig.delaxes(ax_list[i])
+
+                # Connecting the figure to the interactive widgets
+                self._fig.canvas.mpl_connect('button_press_event', self._on_click_MI)
+                self._fig.canvas.mpl_connect('axes_enter_event', self._on_enter_axes_MI)
+
+                # Show the image
+                save_close_fig_swicth(None, 'tight', self._fig)
+
+        else:
+            _logger.warning(f'No lines found in the lines mask for the object wavelentgh range')
+
+        return
+
+    def _plot_line_i(self, ax, line, frame, y_scale='auto'):
+
+        if self.mask.size == 6:
+
+            # Reference _frame for the plot
+            wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
+
+            idcs_limits = np.searchsorted(wave_plot, self.mask * (1 + self.redshift))
+            idx_low, idx_high = idcs_limits[0] - 5, idcs_limits[-1] + 5
+
+            # Plot the flux
+            ax.step(wave_plot[idx_low:idx_high]/z_corr, flux_plot[idx_low:idx_high]*z_corr, where='mid',
+                    color=self._color_dict['fg'])
+
+            # BACKGROUND for selected lines
+            active_check = self._activeLines[self._lineList == line][0]
+            ax.set_facecolor(self._color_bg[active_check])
+
+            # Plot the bands
+            self.gaussian_profiles_plotting([self.line], self.log,
+                                            wave_plot[idx_low:idx_high], flux_plot[idx_low:idx_high], z_corr,
+                                            axis=ax, frame=frame, cont_bands=active_check)
+
+            # Marked masked pixels if they are there
+            if np.any(idcs_mask[idx_low:idx_high]): # TODO this check should be for the line region
+                x_mask = wave_plot[idx_low:idx_high][idcs_mask[idx_low:idx_high]]
+                y_mask = flux_plot[idx_low:idx_high][idcs_mask[idx_low:idx_high]]
+                ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'])
+
+            # Plot masked pixels if possible
+            self.mask_pixels_plotting(self.line, wave_plot[idx_low:idx_high], flux_plot[idx_low:idx_high],
+                                      z_corr, ax, self.log)
+
+            # Formatting the figure
+            ax.yaxis.set_major_locator(plt.NullLocator())
+            ax.xaxis.set_major_locator(plt.NullLocator())
+
+            ax.update({'title': line})
+            ax.yaxis.set_ticklabels([])
+            ax.axes.yaxis.set_visible(False)
+
+            # Plot limits #TODO rest frame causes weird plot limits
+            y = flux_plot[idx_low:idx_high][~idcs_mask[idx_low:idx_high]]
+            y_max = np.max(y)
+            std = y.std()
+            ax.set_ylim(ymin=np.min(y) - std, ymax=y_max + std)
+
+            # Scale for the y axis
+            if y_scale == 'auto':
+
+                if np.all(y > 1e-10) and (y_max > 10 * y.mean()):
+                    ax.set_yscale('log')
+                else:
+                    ax.set_yscale('linear')
+            else:
+                ax.set_yscale(y_scale)
+
+    def _on_select_MI(self, w_low, w_high):
+
+        # Check we are not just clicking on the plot
+        if w_low != w_high:
+
+            # Convert the wavelengths to the rest frame if necessary
+            if self._frame == 'observed':
+                w_low, w_high = w_low/(1 + self.redshift), w_high/(1 + self.redshift)
+
+            # Case we have all selections
+            if self.mask.size == 6:
+
+                # Correcting line band
+                if w_low > self.mask[1] and w_high < self.mask[4]:
+                    self.mask[2] = w_low
+                    self.mask[3] = w_high
+
+                # Correcting blue band
+                elif w_low < self.mask[2] and w_high < self.mask[2]:
+                    self.mask[0] = w_low
+                    self.mask[1] = w_high
+
+                # Correcting Red
+                elif w_low > self.mask[3] and w_high > self.mask[3]:
+                    self.mask[4] = w_low
+                    self.mask[5] = w_high
+
+                # Removing line
+                elif w_low < self.mask[0] and w_high > self.mask[5]:
+                    print(f'\n-- The line {self.line} mask has been removed')
+
+                # Weird case
+                else:
+                    print('- WARNING: Unsucessful line selection:')
+                    print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
+
+            # Save the new selection to the lines log
+            self.log.loc[self.line, 'w1':'w6'] = self.mask
+            # self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
+
+            # Save the log to the file
+            save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
+
+            # Redraw the line measurement
+            self._ax.clear()
+            self._plot_line_i(self._ax, self.line, frame=self._frame, y_scale=self._y_scale)
+            self._fig.canvas.draw()
+
+        return
+
+    def _on_enter_axes_MI(self, event):
+
+        # Assign current line and axis
+        self._ax = event.inaxes
+        self.line = self._ax.get_title()
+        self._idx_ax = np.where(self._lineList == self.line)
+        self.mask = self.log.loc[self.line, 'w1':'w6']
+
+    def _on_click_MI(self, event):
+
+        if event.button == 3:
+
+            # Invert the line type
+            self._activeLines[self._idx_ax] = np.invert(self._activeLines[self._idx_ax])
+
+            # Save the log to the file
+            save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
+
+            # Plot the line selection with the new Background
+            self._ax.clear()
+            self._plot_line_i(self._ax, self.line, self._frame, self._y_scale)
+            self._fig.canvas.draw()
+
+    def check_redshift(self, obj_reference, reference_lines, output_file=None, plt_cfg={}, ax_cfg={}):
+
+        self._ref_name = obj_reference
+        self._log_address = output_file
+
+        # Adjust default theme
+        PLOT_CONF, AXES_CONF = STANDARD_PLOT.copy(), STANDARD_AXES.copy()
+
+        PLOT_CONF['figure.figsize'] = (10, 6)
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
+
+        # User configuration overrites user
+        PLT_CONF = {**PLOT_CONF, **plt_cfg}
+        self._ax_labels = {**AXES_CONF, **ax_cfg}
+
+        ion_array, self._lineWave, self._lineList = label_decomposition(reference_lines)
+        idcs_sorted = np.argsort(self._lineWave)
+        self._lineWave, self._lineList = self._lineWave[idcs_sorted], self._lineList[idcs_sorted]
+
+        # Sort by wavelength for easier reference
+
+        # Make the figure
+        with rc_context(PLT_CONF):
+
+            # Global figure
+            # self._fig, self._ax = plt.subplots()
+            self._fig = plt.figure()
+
+            # to put it into the upper left corner for example:
+            try:
+                mngr = plt.get_current_fig_manager()
+                mngr.window.setGeometry(1100, 300, mngr.canvas.width(), mngr.canvas.height())
+            except:
+                _logger.debug(f'Unable to center plot window')
+
+            gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[2, 0.5], height_ratios=[1])
+
+            # Spectrum axis
+            self._ax = self._fig.add_subplot(gs[0])
+            self._ax.set(**self._ax_labels)
+
+            # Line Selection axis
+            buttoms_ax = self._fig.add_subplot(gs[1])
+            buttons_list = [r'$None$'] + list(self._lineList) + [r'$Unknown$']
+            radio = RadioButtons(buttoms_ax, buttons_list)
+            for circle in radio.circles:  # Make the buttons a bit more round
+                circle.set_height(0.025)
+                circle.set_width(0.075)
+
+            # Plot the spectrum
+            self._plot_spectrum_ZI(self._ax, spec_label=obj_reference)
+
+            # Connect the widgets
+            radio.on_clicked(self._button_ZI)
+            self._fig.canvas.mpl_connect('button_press_event', self._on_click_ZI)
+
+            # Plot on screen unless an output address is provided
+            save_close_fig_swicth(None, 'tight', self._fig)
+
+    def _launch_plots_ZI(self):
+
+        # Compute the new redshift
+        if self._ref_wave is None or self._user_point is None:
+            self._redshift_pred = 0
+        else:
+            self._redshift_pred = self._user_point[0] / self._ref_wave - 1
+
+        xlim, ylim = self._ax.get_xlim(), self._ax.get_ylim()
+        self._ax.clear()
+        self._plot_spectrum_ZI(self._ax, spec_label=self._ref_name)
+        self._plot_line_labels_ZI(self._ax, self._user_point)
+        self._ax.set_xlim(xlim)
+        self._ax.set_ylim(ylim)
+        self._ax.set(**self._ax_labels)
+        self._fig.canvas.draw()
+
+        # Save to database if provided
+        save_redshift_table(self._ref_name, self._redshift_pred, self._log_address)
+
+    def _plot_spectrum_ZI(self, ax, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
+                      log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Object spectrum', output_address=None,
+                      include_fits=False, log=None, frame='observed'):
+
+        # Reference _frame for the plot
+        wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, 'observed')
+
+        # Plot the spectrum
+        ax.step(wave_plot/z_corr, flux_plot*z_corr, label=spec_label, where='mid', color=self._color_dict['fg'])
+
+        # Plot the continuum if available
+        if comp_array is not None:
+            assert len(comp_array) == len(wave_plot), '- ERROR: comp_array and wavelength array have mismatching length'
+            ax.step(wave_plot/z_corr, comp_array, label='Sigma Continuum', linestyle=':', where='mid')
+
+        # Plot peaks and troughs if provided
+        if (peaks_table is not None) or (match_log is not None):
+
+            color_peaks = (self._color_dict['peak'], self._color_dict['trough'])
+            labels = ('Peaks', 'Troughs')
+            line_types = ('emission', 'absorption')
+            labels = ('Peaks', 'Troughs')
+
+            if peaks_table is not None:
+                line_types = ('emission', 'absorption')
+                for i in range(2):
+                    idcs_emission = peaks_table['line_type'] == line_types[i]
+                    idcs_linePeaks = np.array(peaks_table[idcs_emission]['line_center_index'])
+                    ax.scatter(wave_plot[idcs_linePeaks]/z_corr, flux_plot[idcs_linePeaks]*z_corr, label=labels[i],
+                               facecolors='none', edgecolors=color_peaks[i])
+
+            else:
+                if 'signal_peak' in match_log:
+                    idcs_linePeaks = match_log['signal_peak'].values.astype(int)
+
+                    ax.scatter(wave_plot[idcs_linePeaks] / z_corr, flux_plot[idcs_linePeaks] * z_corr, label='Peaks',
+                               facecolors='none', edgecolors=self._color_dict['peak'])
+
+        # Shade regions of matched lines if provided
+        if match_log is not None:
+            ion_array, wave_array, latex_array = label_decomposition(match_log.index.values, units_wave=self.units_wave)
+            w3, w4 = match_log.w3.values * (1+self.redshift), match_log.w4.values * (1+self.redshift)
+            idcsLineBand = np.searchsorted(wave_plot, np.array([w3, w4]))
+
+            first_check = True
+            for i in np.arange(latex_array.size):
+                label = 'Matched line' if first_check else '_'
+                max_region = np.max(flux_plot[idcsLineBand[0, i]:idcsLineBand[1, i]])
+                ax.axvspan(w3[i]/z_corr, w4[i]/z_corr, label=label, alpha=0.30, color=self._color_dict['matched_line'])
+                ax.text(wave_array[i] * (1+self.redshift)/z_corr, max_region * 0.9 * z_corr, latex_array[i], rotation=270)
+                first_check = False
+
+        # Shade noise region if provided
+        if noise_region is not None:
+            ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
+
+        # Plot the line fittings
+        if include_fits:
+
+            legend_check = False
+            w3_array, w4_array = self.log.w3.values, self.log.w4.values
+
+            # Compute the individual profiles
+            wave_array, gaussian_array = gaussian_profiles_computation(log.index.values, log, (1 + self.redshift))
+            wave_array, cont_array = linear_continuum_computation(log.index.values, log, (1 + self.redshift))
+
+            # Separating blended from unblended lines
+            idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label == 'no').values
+
+            # Plot single lines
+            line_list = self.log.loc[idcs_nonBlended].index
+            for line in line_list:
+
+                i = self.log.index.get_loc(line)
+
+                # Determine the line region
+                idcs_plot = ((w3_array[i] - 5) * z_corr <= wave_plot) & (wave_plot <= (w4_array[i] + 5) * z_corr)
+
+                # Plot the gaussian profiles
+                wave_i = wave_array[:, i][..., None]
+                cont_i = cont_array[:, i][..., None]
+                gauss_i = gaussian_array[:, i][..., None]
+
+                self.gaussian_profiles_plotting([line], self.log,
+                                                wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                axis=ax, frame=frame, cont_bands=None,
+                                                wave_array=wave_i, cont_array=cont_i,
+                                                gaussian_array=gauss_i)
+
+                # Plot masked pixels if possible
+                self.mask_pixels_plotting(line, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr, ax, self.log)
+
+            # Plot combined lines
+            profile_list = self.log.loc[~idcs_nonBlended, 'profile_label'].unique()
+            for profile_group in profile_list:
+
+                idcs_group = (self.log.profile_label == profile_group)
+                i_group = np.where(idcs_group)[0]
+
+                # Determine the line region
+                idcs_plot = ((w3_array[i_group[0]] - 1) * z_corr <= wave_plot) & (wave_plot <= (w4_array[i_group[0]] + 1) * z_corr)
+
+                # Plot the gauss curve elements
+                wave_i = wave_array[:, i_group[0]:i_group[-1]+1]
+                cont_i = cont_array[:, i_group[0]:i_group[-1]+1]
+                gauss_i = gaussian_array[:, i_group[0]:i_group[-1]+1]
+
+                line_comps = profile_group.split('-')
+                self.gaussian_profiles_plotting(line_comps, self.log,
+                                                wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                axis=ax, frame=frame, cont_bands=None,
+                                                wave_array=wave_i, cont_array=cont_i,
+                                                gaussian_array=gauss_i)
+
+            # Add the mplcursors legend
+            if mplcursors_check:
+                for label, lineProfile in self._legends_dict.items():
+                    mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
+
+        # Plot the masked pixels
+        if self._masked_inputs:
+            idcs_mask = self.flux.mask
+            ax.scatter(wave_plot[idcs_mask]/z_corr, flux_plot[idcs_mask]*z_corr, marker='x', label='Masked pixels',
+                       color=self._color_dict['mask_marker'])
+
+        # Switch y_axis to logarithmic scale if requested
+        if log_scale:
+            ax.set_yscale('log')
+
+        # Add or remove legend according to the plot type:
+        ax.legend()
+
+        return
+
+    def _plot_line_labels_ZI(self, ax, click_coord):
+
+        if click_coord is not None:
+            ax.scatter(click_coord[0], click_coord[1], s=20, marker=r'o', color=self._color_dict['error'])
+
+        if self._redshift_pred is not None:
+            if not np.isnan(self._redshift_pred):
+
+                # Remove mask for better limit plotting
+                if np.ma.isMaskedArray(self.wave):
+                    wave_plot, flux_plot = self.wave.data, self.flux.data
+                else:
+                    wave_plot, flux_plot = self.wave, self.flux
+
+                idcs_in_range = np.logical_and(self._lineWave*(1 + self._redshift_pred) >= wave_plot[0],
+                                               self._lineWave*(1 + self._redshift_pred) <= wave_plot[-1])
+                linesRange = self._lineWave[idcs_in_range]
+
+                idx_in_spec = np.searchsorted(wave_plot, linesRange*(1 + self._redshift_pred))
+
+                for i, lineWave in enumerate(linesRange):
+                    ax.annotate(self._lineList[idcs_in_range][i],
+                                xy=(wave_plot[idx_in_spec][i], flux_plot[idx_in_spec][i]),
+                                xytext=(wave_plot[idx_in_spec][i], 0.8),
+                                horizontalalignment="center",
+                                rotation=90,
+                                xycoords='data', textcoords=("data", "axes fraction"),
+                                arrowprops=dict(arrowstyle="->"))
+
+
+
+        return
+
+    def _on_click_ZI(self, event, tolerance=3):
+
+        if event.button == 3:
+            idx_selec = np.searchsorted(self.wave, event.xdata)
+            idx_max = idx_selec + np.argmax(self.flux[idx_selec-tolerance:idx_selec+tolerance]) - tolerance
+            self._user_point = (self.wave[idx_max], self.flux[idx_max])
+
+            # Replot the figure
+            self._launch_plots_ZI()
+
+        return
+
+    def _button_ZI(self, line_selection):
+
+        # Confirm the input line
+        if line_selection not in [f'$None$', r'$Unknown$']:
+            idx_line = self._lineList == line_selection
+            self.line = line_selection
+            self._ref_wave = self._lineWave[idx_line][0]
+        else:
+            self.line = None
+            self._ref_wave = 0 if line_selection is f'$None$' else np.nan
+
+        # Replot the figure
+        self._launch_plots_ZI()
+
+        return
+
+
+class LiMePlots:
+
+    def __init__(self, ):
 
         self._color_dict = colorDict
         self._legends_dict = {}
@@ -469,7 +913,7 @@ class LiMePlots:
 
     def plot_spectrum(self, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
                       log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Object spectrum', output_address=None,
-                      include_fits=False, log=None, frame='observed', click_for_coord=False):
+                      include_fits=False, log=None, frame='observed'):
 
         """
 
@@ -481,7 +925,7 @@ class LiMePlots:
         function to plot the emission peaks and the matched lines. Moreover, if the parameter ``include_fits=True`` the plot
         will include the gaussian profiles stored in the lines ``.log``.
 
-        The user can specify the plot frame of reference via the ``frame='obs'`` or ``frame='rest'`` parameter. Moreover,
+        The user can specify the plot _frame of reference via the ``_frame='obs'`` or ``_frame='rest'`` parameter. Moreover,
         the user can provide dictionaries for the matplotlib `figure <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams>`_
         and `axis <https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set.html#matplotlib.axes.Axes.set>`_ styles.
 
@@ -519,7 +963,7 @@ class LiMePlots:
         :type include_fits: Check to include the gaussian profile fittings in the plot.
 
         :param frame: Frame of reference for the spectrum plot: "observed" or "rest". The default value is observed.
-        :param frame: str, optional
+        :param _frame: str, optional
 
         """
 
@@ -543,8 +987,9 @@ class LiMePlots:
         with rc_context(PLT_CONF):
 
             fig, ax = plt.subplots()
+            ax.set(**AXES_CONF)
 
-            # Reference frame for the plot
+            # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
             # Plot the spectrum
@@ -669,15 +1114,12 @@ class LiMePlots:
             if log_scale:
                 ax.set_yscale('log')
 
-            # Add the figure labels
-            ax.set(**AXES_CONF)
+            # # Add the figure labels
+            # ax.set(**AXES_CONF)
 
             # Add or remove legend according to the plot type:
             if legend_check:
                 ax.legend()
-
-            if click_for_coord:
-                cid = fig.canvas.mpl_connect('button_press_event', onclick_coord)
 
             # By default plot on screen unless an output address is provided
             save_close_fig_swicth(output_address, 'tight', fig)
@@ -718,7 +1160,7 @@ class LiMePlots:
                 log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
                 list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
 
-            # Reference frame for the plot
+            # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
             # Determine the line region # WARNING it needs to be a bit larger than original mask
@@ -770,7 +1212,7 @@ class LiMePlots:
             resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
 
             # Marked masked pixels if they are there
-            if np.any(idcs_mask):
+            if np.any(idcs_mask): # TODO this check should be for the line region Combine with next
                 x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
                 y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
                 spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'],
@@ -851,7 +1293,7 @@ class LiMePlots:
         m_cont, n_cont = self.log.loc[line, 'm_cont'], self.log.loc[line, 'n_cont']
         latex_label = self.log.loc[line, 'latex_label']
 
-        # Reference frame for the plot
+        # Reference _frame for the plot
         wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, user_choice='observed')
 
         # Velocity spectrum for the line region
@@ -975,7 +1417,7 @@ class LiMePlots:
 
             n_axes, n_lines = n_cols * n_rows, line_list.size
 
-            # Reference frame for the plot
+            # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, frame)
 
             # w1 = self.log.w1.values * (1 + self.redshift)
@@ -1069,10 +1511,10 @@ class LiMePlots:
 
     def frame_mask_switch(self, wave_obs, flux_obs, redshift, user_choice, flux_coeff=1):
 
-        assert user_choice in ['observed', 'rest'], f'- ERROR: frame of reference {user_choice} not recognized. ' \
+        assert user_choice in ['observed', 'rest'], f'- ERROR: _frame of reference {user_choice} not recognized. ' \
                                                     f'Please use "observed" or "rest".'
 
-        # Doppler factor for rest frame plots
+        # Doppler factor for rest _frame plots
         z_corr = (1 + redshift) if user_choice == 'rest' else 1
 
         # Remove mask from plots and recover bad indeces
@@ -1254,240 +1696,3 @@ class LiMePlots:
         return
 
 
-class PdfMaker:
-
-    def __init__(self):
-        """
-
-        """
-        self.pdf_type = None
-        self.pdf_geometry_options = {'right': '1cm',
-                                     'left': '1cm',
-                                     'top': '1cm',
-                                     'bottom': '2cm'}
-        self.table = None
-        self.theme_table = None
-
-        # TODO add dictionary with numeric formats for tables depending on the variable
-
-    def create_pdfDoc(self, pdf_type=None, geometry_options=None, document_class=u'article', theme='white'):
-        """
-
-        :param pdf_type:
-        :param geometry_options:
-        :param document_class:
-        :param theme:
-        :return:
-        """
-        # TODO integrate this into the init
-        # Case for a complete .pdf or .tex
-        self.theme_table = theme
-
-        if pdf_type is not None:
-
-            self.pdf_type = pdf_type
-
-            # Update the geometry if necessary (we coud define a dictionary distinction)
-            if pdf_type == 'graphs':
-                pdf_format = {'landscape': 'true'}
-                self.pdf_geometry_options.update(pdf_format)
-
-            elif pdf_type == 'table':
-                pdf_format = {'landscape': 'true',
-                              'paperwidth': '30in',
-                              'paperheight': '30in'}
-                self.pdf_geometry_options.update(pdf_format)
-
-            if geometry_options is not None:
-                self.pdf_geometry_options.update(geometry_options)
-
-            # Generate the doc
-            self.pdfDoc = pylatex.Document(documentclass=document_class, geometry_options=self.pdf_geometry_options)
-
-            if theme == 'dark':
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{background}{rgb}{0.169, 0.169, 0.169}'))
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{foreground}{rgb}{0.702, 0.780, 0.847}'))
-                self.pdfDoc.append(pylatex.NoEscape(r'\arrayrulecolor{foreground}'))
-
-            if pdf_type == 'table':
-                self.pdfDoc.packages.append(pylatex.Package('preview', options=['active', 'tightpage', ]))
-                self.pdfDoc.packages.append(pylatex.Package('hyperref', options=['unicode=true', ]))
-                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
-                self.pdfDoc.packages.append(pylatex.Package('nicefrac'))
-                self.pdfDoc.packages.append(pylatex.Package('siunitx'))
-                self.pdfDoc.packages.append(pylatex.Package('makecell'))
-                # self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
-                self.pdfDoc.packages.append(pylatex.Package('colortbl', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
-                self.pdfDoc.packages.append(pylatex.Package('xcolor', options=['table']))
-
-            elif pdf_type == 'longtable':
-                self.pdfDoc.append(pylatex.NoEscape(r'\pagenumbering{gobble}'))
-
-        return
-
-    def pdf_create_section(self, caption, add_page=False):
-
-        with self.pdfDoc.create(pylatex.Section(caption)):
-            if add_page:
-                self.pdfDoc.append(pylatex.NewPage())
-
-    def add_page(self):
-
-        self.pdfDoc.append(pylatex.NewPage())
-
-        return
-
-    def pdf_insert_image(self, image_address, fig_loc='htbp', width=r'1\textwidth'):
-
-        with self.pdfDoc.create(pylatex.Figure(position='h!')) as fig_pdf:
-            fig_pdf.add_image(image_address, pylatex.NoEscape(width))
-
-        return
-
-    def pdf_insert_table(self, column_headers=None, table_format=None, addfinalLine=True, color_font=None,
-                         color_background=None):
-
-        # Set the table format
-        if table_format is None:
-            table_format = 'l' + 'c' * (len(column_headers) - 1)
-
-        # Case we want to insert the table in a pdf
-        if self.pdf_type != None:
-
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
-
-                # Initiate the table
-                with self.pdfDoc.create(pylatex.Tabular(table_format)) as self.table:
-                    if column_headers != None:
-                        self.table.add_hline()
-                        # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
-                        output_row = list(map(partial(format_for_table), column_headers))
-
-                        # if color_font is not None:
-                        #     for i, item in enumerate(output_row):
-                        #         output_row[i] = NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-                        #
-                        # if color_background is not None:
-                        #     for i, item in enumerate(output_row):
-                        #         output_row[i] = NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-                        if (color_font is not None) or (self.theme_table != 'white'):
-                            if self.theme_table == 'dark' and color_font is None:
-                                color_font = 'foreground'
-
-                            for i, item in enumerate(output_row):
-                                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-
-                        if (color_background is not None) or (self.theme_table != 'white'):
-                            if self.theme_table == 'dark' and color_background is None:
-                                color_background = 'background'
-
-                            for i, item in enumerate(output_row):
-                                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-                        self.table.add_row(output_row, escape=False, strict=False)
-                        if addfinalLine:
-                            self.table.add_hline()
-
-            elif self.pdf_type == 'longtable':
-
-                # Initiate the table
-                with self.pdfDoc.create(pylatex.LongTable(table_format)) as self.table:
-                    if column_headers != None:
-                        self.table.add_hline()
-                        self.table.add_row(list(map(str, column_headers)), escape=False)
-                        if addfinalLine:
-                            self.table.add_hline()
-
-        # Table .tex without preamble
-        else:
-            self.table = pylatex.Tabu(table_format)
-            if column_headers != None:
-                self.table.add_hline()
-                # self.table.add_row(list(map(str, column_headers)), escape=False, strict=False)
-                output_row = list(map(partial(format_for_table), column_headers))
-                self.table.add_row(output_row, escape=False, strict=False)
-                if addfinalLine:
-                    self.table.add_hline()
-
-        return
-
-    def pdf_insert_longtable(self, column_headers=None, table_format=None):
-
-        # Set the table format
-        if table_format is None:
-            table_format = 'l' + 'c' * (len(column_headers) - 1)
-
-        # Case we want to insert the table in a pdf
-        if self.pdf_type != None:
-
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\begin{preview}'))
-
-                # Initiate the table
-            with self.pdfDoc.create(pylatex.Tabu(table_format)) as self.table:
-                if column_headers != None:
-                    self.table.add_hline()
-                    self.table.add_row(map(str, column_headers), escape=False)
-                    self.table.add_hline()
-
-                    # Table .tex without preamble
-        else:
-            self.table = pylatex.LongTable(table_format)
-            if column_headers != None:
-                self.table.add_hline()
-                self.table.add_row(list(map(str, column_headers)), escape=False)
-                self.table.add_hline()
-
-    def addTableRow(self, input_row, row_format='auto', rounddig=4, rounddig_er=None, last_row=False, color_font=None,
-                    color_background=None):
-
-        # Default formatting
-        if row_format == 'auto':
-            output_row = list(map(partial(format_for_table, rounddig=rounddig), input_row))
-
-        # TODO clean this theming to default values
-        if (color_font is not None) or (self.theme_table != 'white'):
-            if self.theme_table == 'dark' and color_font is None:
-                color_font = 'foreground'
-
-            for i, item in enumerate(output_row):
-                output_row[i] = pylatex.NoEscape(r'\color{{{}}}{}'.format(color_font, item))
-
-        if (color_background is not None) or (self.theme_table != 'white'):
-            if self.theme_table == 'dark' and color_background is None:
-                color_background = 'background'
-
-            for i, item in enumerate(output_row):
-                output_row[i] = pylatex.NoEscape(r'\cellcolor{{{}}}{}'.format(color_background, item))
-
-        # Append the row
-        self.table.add_row(output_row, escape=False, strict=False)
-
-        # Case of the final row just add one line
-        if last_row:
-            self.table.add_hline()
-
-    def fig_to_pdf(self, label=None, fig_loc='htbp', width=r'1\textwidth', add_page=False, *args, **kwargs):
-
-        with self.pdfDoc.create(pylatex.Figure(position=fig_loc)) as plot:
-            plot.add_plot(width=pylatex.NoEscape(width), placement='h', *args, **kwargs)
-
-            if label is not None:
-                plot.add_caption(label)
-
-        if add_page:
-            self.pdfDoc.append(pylatex.NewPage())
-
-    def generate_pdf(self, output_address, clean_tex=True):
-
-        if self.pdf_type is None:
-            self.table.generate_tex(str(output_address))
-
-        else:
-            if self.pdf_type == 'table':
-                self.pdfDoc.append(pylatex.NoEscape(r'\end{preview}'))
-            self.pdfDoc.generate_pdf(filepath=str(output_address), clean_tex=clean_tex, compiler='pdflatex')
-
-        return

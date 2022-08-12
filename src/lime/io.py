@@ -25,7 +25,7 @@ from collections import Sequence
 from astropy.io import fits
 from astropy.table import Table
 
-from .plots import table_fluxes
+from .tables import table_fluxes
 
 try:
     import openpyxl
@@ -604,7 +604,7 @@ def load_fits(file_address, instrument, frame_idx=None):
 
     elif instrument == 'OSIRIS':
 
-        # Default frame index
+        # Default _frame index
         if frame_idx is None:
             frame_idx = 0
 
@@ -644,7 +644,7 @@ def load_fits(file_address, instrument, frame_idx=None):
 
     elif instrument == 'xshooter':
 
-        # Default frame index
+        # Default _frame index
         if frame_idx is None:
             frame_idx = 1
 
@@ -664,7 +664,7 @@ def load_fits(file_address, instrument, frame_idx=None):
 
     elif instrument == 'MEGARA':
 
-        # Default frame index
+        # Default _frame index
         if frame_idx is None:
             frame_idx = 1
 

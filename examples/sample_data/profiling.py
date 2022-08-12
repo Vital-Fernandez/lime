@@ -29,17 +29,17 @@ print(f'Cumulative voxels: {np.cumsum(voxels_array)} voxels')
 
 # # Create the plot
 # rcParams.update(STANDARD_PLOT)
-# fig = plt.figure(figsize=(10, 10))
-# ax = fig.add_subplot()
-# im = ax.plot(np.cumsum(minutes_array), np.cumsum(lines_array))
+# _fig = plt.figure(figsize=(10, 10))
+# _ax = _fig.add_subplot()
+# im = _ax.plot(np.cumsum(minutes_array), np.cumsum(lines_array))
 # plt.show()
 #
 # # Create the plot
 # rcParams.update(STANDARD_PLOT)
-# fig = plt.figure(figsize=(10, 10))
-# ax = fig.add_subplot()
-# im = ax.plot(np.cumsum(minutes_array), np.cumsum(voxels_array))
-# ax.update({'title': f'LiMe algorithms speed', 'xlabel': 'Time (minutes)', 'ylabel': 'Number of voxels'})
+# _fig = plt.figure(figsize=(10, 10))
+# _ax = _fig.add_subplot()
+# im = _ax.plot(np.cumsum(minutes_array), np.cumsum(voxels_array))
+# _ax.update({'title': f'LiMe algorithms speed', 'xlabel': 'Time (minutes)', 'ylabel': 'Number of voxels'})
 # plt.show()
 
 

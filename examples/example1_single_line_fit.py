@@ -27,7 +27,7 @@ wave, flux, hdr = import_osiris_fits(gp_fits)
 z_gp = 0.19531
 normFlux_gp = 1e-18
 
-# Line name and its location mask in the rest frame
+# Line name and its location mask in the rest _frame
 line = 'H1_6563A'
 mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 

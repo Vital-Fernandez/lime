@@ -58,7 +58,7 @@ wave, flux, hdr = import_osiris_fits(gp_fits)
 z_gp = 0.19531
 normFlux_gp = 1e-14
 
-# Line name and its location mask in the rest frame
+# Line name and its location mask in the rest _frame
 line = 'H1_6563A'
 mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
@@ -72,34 +72,34 @@ fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
 
 gp_spec.fit_from_wavelengths('H1_6563A', mask, user_cfg=fit_conf)
 # gp_spec.display_results()
-# gp_spec.display_results(frame='rest')
+# gp_spec.display_results(_frame='rest')
 
 # x_range = np.linspace(mask[0]*(1+z_gp), mask[-1]*(1+z_gp), 400)
 # gauss_prof = gauss_calcu(gp_spec.log, x_range, 'H1_6563A')
 # y_cont = cont_calcu(gp_spec.log, x_range, 'H1_6563A')
 #
-# fig, ax = plt.subplots(figsize=(12, 12))
-# ax.step(wave, flux)
-# ax.plot(x_range, gauss_prof+y_cont)
-# ax.plot(x_range, y_cont)
-# ax.set_xlim(mask[0]*(1+z_gp), mask[-1]*(1+z_gp))
-# ax.set_yscale('log')
+# _fig, _ax = plt.subplots(figsize=(12, 12))
+# _ax.step(wave, flux)
+# _ax.plot(x_range, gauss_prof+y_cont)
+# _ax.plot(x_range, y_cont)
+# _ax.set_xlim(mask[0]*(1+z_gp), mask[-1]*(1+z_gp))
+# _ax.set_yscale('log')
 # plt.show()
 
 # z_corr = 1 + z_gp
 # x_range = np.linspace(mask[0], mask[-1], 400)
-# gauss_prof = gauss_calcu(gp_spec.log, x_range, 'H1_6563A', frame='rest', z_cor=z_corr)
-# y_cont = cont_calcu(gp_spec.log, x_range, 'H1_6563A', frame='rest', z_cor=z_corr)
+# gauss_prof = gauss_calcu(gp_spec.log, x_range, 'H1_6563A', _frame='rest', z_cor=z_corr)
+# y_cont = cont_calcu(gp_spec.log, x_range, 'H1_6563A', _frame='rest', z_cor=z_corr)
 #
-# fig, ax = plt.subplots(figsize=(12, 12))
-# ax.step(wave/z_corr, flux, label='No flux correction')
-# ax.step(wave/z_corr, flux*z_corr, label='Flux correction')
+# _fig, _ax = plt.subplots(figsize=(12, 12))
+# _ax.step(wave/z_corr, flux, label='No flux correction')
+# _ax.step(wave/z_corr, flux*z_corr, label='Flux correction')
 #
-# ax.plot(x_range, y_cont)
-# ax.plot(x_range, gauss_prof+y_cont, ':')
-# ax.set_xlim(mask[0], mask[-1])
-# ax.set_yscale('log')
-# ax.legend()
+# _ax.plot(x_range, y_cont)
+# _ax.plot(x_range, gauss_prof+y_cont, ':')
+# _ax.set_xlim(mask[0], mask[-1])
+# _ax.set_yscale('log')
+# _ax.legend()
 # plt.show()
 
 x_range = np.linspace(mask[0]*(1+z_gp), mask[-1]*(1+z_gp), 400)

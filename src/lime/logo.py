@@ -15,18 +15,18 @@
 # right = left + width
 # top = bottom + height
 #
-# fig = plt.figure()
-# ax = fig.add_axes([0, 0, 1, 1])
+# _fig = plt.figure()
+# _ax = _fig.add_axes([0, 0, 1, 1])
 #
 # rcParams['font.family'] = ['MTF Saxy']
 #
-# ax.text(0.5*(left+right), 0.5*(bottom+top), 'LiMe',
+# _ax.text(0.5*(left+right), 0.5*(bottom+top), 'LiMe',
 #         horizontalalignment='center',
 #         verticalalignment='center',
 #         fontsize=200, color='red',
-#         transform=ax.transAxes)
+#         transform=_ax.transAxes)
 #
-# ax.set_axis_off()
+# _ax.set_axis_off()
 # plt.show()
 
 import numpy as np
@@ -72,7 +72,7 @@ ax.step(wave, residual, where='mid', color='black')
 
 ax.fill_between(wave, -err+cont+dodge, err+cont+dodge, facecolor='tab:red', alpha=0.5)
 
-# ax.text(-1, 0.9, 'LiMe',
+# _ax.text(-1, 0.9, 'LiMe',
 #         horizontalalignment='center',
 #         verticalalignment='center',
 #         fontsize=200, color='red', alpha=0.5)

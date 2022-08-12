@@ -11,7 +11,7 @@ from astropy.wcs import WCS
 from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
                    FLUX_DENSITY_UNITS, unit_convertor
-from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth
+from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
 
@@ -32,7 +32,7 @@ if mplcursors_check:
     popupProps['bbox']['alpha'] = 0.9
 
 
-class Spectrum(EmissionFitting, LiMePlots, LineFinder):
+class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
 
     """
     This class defines a spectrum object from which the lines can be measured. The required inputs for the spectrum definition
@@ -45,7 +45,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
     the class functions.
 
     The user can also provide a two value array with the same wavelength limits. This array must be in the
-    same units and frame of reference as the ``.wave``.
+    same units and _frame of reference as the ``.wave``.
 
     The user can also include the spectrum instrumental FWHM so it can be taken into account during the measurements.
 
@@ -85,6 +85,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         LineFinder.__init__(self)
         EmissionFitting.__init__(self)
         LiMePlots.__init__(self)
+        IntMaskInspector.__init__(self)
 
         # Class attributes
         self.wave = None
@@ -187,7 +188,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
 
         The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
-        adjacent continua. These wavelengths must be sorted by increasing order and in the rest frame.
+        adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
 
         The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
         the documentation for the complete description.
@@ -231,8 +232,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 
         # Security checks for the mask wavelengths
         assert np.all(np.diff(mask) >= 0), f'\n- Error: the {line} mask is not sorted'
-        # assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest frame limit (w_min = {self.wave_rest[0]:.2f})'
-        # assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest frame limit (w_min = {self.wave_rest[-1]:.2f})'
+        # assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest _frame limit (w_min = {self.wave_rest[0]:.2f})'
+        # assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest _frame limit (w_min = {self.wave_rest[-1]:.2f})'
 
         # For security previous measurement is cleared and a copy of the user configuration is used
         self.clear_fit()
@@ -326,7 +327,7 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
         :param log_scale: Check for the scale of the flux (vertical) axis in the plot. The default value is ``True``
         :type log_scale: bool, optional
 
-        :param frame: Frame of reference for the plot. The default value is the observation frame ``frame='obs'``
+        :param frame: Frame of reference for the plot. The default value is the observation _frame ``_frame='obs'``
         :type frame: str, optional
 
         :param output_address: Output address for the measurement report and/or plot. If provided the results will be stored
@@ -540,8 +541,8 @@ class Spectrum(EmissionFitting, LiMePlots, LineFinder):
 class MaskInspector(Spectrum):
 
     """
-    This class plots the masks from the ``log_address`` as a grid for the input spectrum. Clicking and
-    dragging the mouse within a line cell will update the line band region, both in the plot and the ``log_address``
+    This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
+    dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
     file provided.
 
     Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
@@ -666,8 +667,6 @@ class MaskInspector(Spectrum):
             try:
                 manager = plt.get_current_fig_manager()
                 manager.window.showMaximized()
-
-            # TODO add exception
             except:
                 print()
 
@@ -990,7 +989,7 @@ class CubeInspector(Spectrum):
 
         """
 
-        #TODO add frame argument
+        #TODO add _frame argument
 
         # Assign attributes to the parent class
         super().__init__(input_wave=np.zeros(1), input_flux=np.zeros(1), redshift=redshift, norm_flux=1, units_wave=units_wave, units_flux=units_flux)
@@ -1168,7 +1167,7 @@ class CubeInspector(Spectrum):
                 # Plot all lines encountered in the voxel log
                 line_list = self.log.index.values
 
-                # Reference frame for the plot
+                # Reference _frame for the plot
                 wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, flux_voxel, self.redshift, frame)
 
                 # Compute the individual profiles
