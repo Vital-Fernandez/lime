@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation, format_line_mask_option
 from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float
+from .tools import _REFERENCE_LINES
 from .io import load_lines_log, save_line_log
 
 _logger = logging.getLogger('LiMe')
@@ -360,12 +361,23 @@ def save_redshift_table(object, redshift, file_address):
     return
 
 
+def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6']):
+    print(np.sum(activeLines), activeLines)
+    if np.sum(activeLines) == 0:
+        if log_address.is_file():
+            log_address.unlink()
+    else:
+        save_line_log(log.loc[activeLines], log_address, parameters=log_parameters)
+
+    return
+
+
 class IntMaskInspector:
 
     def __init__(self):
 
         self._y_scale = None
-        self._ref_name = None
+        self._spec_name = None
         self._log_address = None
 
         self._lineList = None
@@ -410,15 +422,21 @@ class IntMaskInspector:
         else:
             _logger.warning(f'Parent lines mask file not found at {parent_log.as_posix()}')
 
+        # Establish the lower and upper wavelenght limits
+        if np.ma.isMaskedArray(self.wave_rest):
+            w_min, w_max = self.wave_rest.data[0]/(1+self.redshift), self.wave_rest.data[-1]/(1+self.redshift)
+        else:
+            w_min, w_max = self.wave_rest[0]/(1+self.redshift), self.wave_rest[-1]/(1+self.redshift)
+
         # Adjust to the inputs: If input lines mask is a DataFrame, no need for more:
         if isinstance(lines_mask, pd.DataFrame):
-            idx_rows = (lines_mask.w3 > self.wave_rest[0]) & (lines_mask.w4 > self.wave_rest[-1])
+            idx_rows = (lines_mask.w3 > w_min) & (lines_mask.w4 < w_max)
             self.log = lines_mask.loc[idx_rows]
 
         # If it is a list of lines, compare with the parent log to get the bands wavelengths
         elif isinstance(lines_mask, (list, Sequence, np.array)):
-            idx_rows = (parent_mask.w3 > self.wave_rest[0]) & (parent_mask.w4 > self.wave_rest[-1]) & (parent_mask.index.isin(lines_mask))
-            self.log = parent_mask.loc[idx_rows]
+            idx_rows = (parent_mask.w3 > w_min) & (parent_mask.w4 < w_max) & (parent_mask.index.isin(lines_mask))
+            self.log = parent_mask.loc[idx_rows].copy()
 
         # If it is a file we load it as pandas dataframe
         elif isinstance(lines_mask, (str, Path)):
@@ -434,7 +452,7 @@ class IntMaskInspector:
         # If it is none, we use all the lines form the parent mask
         elif lines_mask is None:
             idx_rows = (parent_mask.w3 > self.wave_rest[0]) & (parent_mask.w4 > self.wave_rest[-1])
-            self.log = parent_mask.loc[idx_rows]
+            self.log = parent_mask.loc[idx_rows].copy()
 
         else:
             _logger.warning(f'The input lines mask variable is not recognized. Type = {type(lines_mask)}')
@@ -585,15 +603,16 @@ class IntMaskInspector:
 
                 # Weird case
                 else:
-                    print('- WARNING: Unsucessful line selection:')
-                    print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
+
+                    _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Save the new selection to the lines log
             self.log.loc[self.line, 'w1':'w6'] = self.mask
             # self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
 
             # Save the log to the file
-            save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
+            save_or_clear_log(self.log, self._log_address, self._activeLines)
+            # save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
 
             # Redraw the line measurement
             self._ax.clear()
@@ -618,17 +637,19 @@ class IntMaskInspector:
             self._activeLines[self._idx_ax] = np.invert(self._activeLines[self._idx_ax])
 
             # Save the log to the file
-            save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
+            save_or_clear_log(self.log, self._log_address, self._activeLines)
+            # save_line_log(self.log.loc[self._activeLines], self._log_address, parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'])
 
             # Plot the line selection with the new Background
             self._ax.clear()
             self._plot_line_i(self._ax, self.line, self._frame, self._y_scale)
             self._fig.canvas.draw()
 
-    def check_redshift(self, obj_reference, reference_lines, output_file=None, plt_cfg={}, ax_cfg={}):
+    def check_redshift(self, obj_reference, reference_lines, output_file=None, plt_cfg={}, ax_cfg={}, visits=None):
 
-        self._ref_name = obj_reference
+        self._spec_name = obj_reference
         self._log_address = output_file
+        self._visits_array = visits
 
         # Adjust default theme
         PLOT_CONF, AXES_CONF = STANDARD_PLOT.copy(), STANDARD_AXES.copy()
@@ -657,10 +678,16 @@ class IntMaskInspector:
 
             # to put it into the upper left corner for example:
             try:
-                mngr = plt.get_current_fig_manager()
-                mngr.window.setGeometry(1100, 300, mngr.canvas.width(), mngr.canvas.height())
+                manager = plt.get_current_fig_manager()
+                manager.window.showMaximized()
             except:
-                _logger.debug(f'Unable to center plot window')
+                _logger.debug(f'Unable to maximize the window')
+
+                try:
+                    mngr = plt.get_current_fig_manager()
+                    mngr.window.setGeometry(1100, 300, mngr.canvas.width(), mngr.canvas.height())
+                except:
+                    _logger.debug(f'Unable to center plot window')
 
             gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[2, 0.5], height_ratios=[1])
 
@@ -677,7 +704,7 @@ class IntMaskInspector:
                 circle.set_width(0.075)
 
             # Plot the spectrum
-            self._plot_spectrum_ZI(self._ax, spec_label=obj_reference)
+            self._plot_spectrum_ZI(self._ax, spec_label=obj_reference, visits=self._visits_array)
 
             # Connect the widgets
             radio.on_clicked(self._button_ZI)
@@ -696,7 +723,7 @@ class IntMaskInspector:
 
         xlim, ylim = self._ax.get_xlim(), self._ax.get_ylim()
         self._ax.clear()
-        self._plot_spectrum_ZI(self._ax, spec_label=self._ref_name)
+        self._plot_spectrum_ZI(self._ax, spec_label=self._spec_name, visits=self._visits_array)
         self._plot_line_labels_ZI(self._ax, self._user_point)
         self._ax.set_xlim(xlim)
         self._ax.set_ylim(ylim)
@@ -704,11 +731,11 @@ class IntMaskInspector:
         self._fig.canvas.draw()
 
         # Save to database if provided
-        save_redshift_table(self._ref_name, self._redshift_pred, self._log_address)
+        save_redshift_table(self._spec_name, self._redshift_pred, self._log_address)
 
     def _plot_spectrum_ZI(self, ax, comp_array=None, peaks_table=None, match_log=None, noise_region=None,
                       log_scale=False, plt_cfg={}, ax_cfg={}, spec_label='Object spectrum', output_address=None,
-                      include_fits=False, log=None, frame='observed'):
+                      include_fits=False, log=None, frame='observed', visits=None):
 
         # Reference _frame for the plot
         wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, self.flux, self.redshift, 'observed')
@@ -830,6 +857,11 @@ class IntMaskInspector:
             idcs_mask = self.flux.mask
             ax.scatter(wave_plot[idcs_mask]/z_corr, flux_plot[idcs_mask]*z_corr, marker='x', label='Masked pixels',
                        color=self._color_dict['mask_marker'])
+
+        if visits is not None:
+            for spec in visits:
+                wave_i, flux_i = spec
+                ax.step(wave_i, flux_i)
 
         # Switch y_axis to logarithmic scale if requested
         if log_scale:

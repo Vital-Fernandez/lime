@@ -61,7 +61,7 @@ mask_df = pd.DataFrame(data=table_data, index=index_labels, columns=column_label
 # Fit configuration for the blended lines
 cfg_dict = {'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
             'H1_6563A_b': 'H1_6563A-H1_6563A_w1',
-            'H1_4861A_w1_sigma': {'expr': '>1* H1_4861A_sigma'},
+            'H1_4861A_w1_sigma': {'expr': '>1*H1_4861A_sigma'},
             'H1_6563A_w1_sigma': {'expr': '>1*H1_6563A_sigma'}}
 
 # Define line measuring object

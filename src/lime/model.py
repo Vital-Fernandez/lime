@@ -1,8 +1,11 @@
+import logging
 import numpy as np
 from lmfit.models import Model
 from scipy import stats, optimize
 from scipy.interpolate import interp1d
 from .tools import label_decomposition, compute_FWHM0
+
+_logger = logging.getLogger('LiMe')
 
 c_KMpS = 299792.458  # Speed of light in Km/s (https://en.wikipedia.org/wiki/Speed_of_light)
 
@@ -29,6 +32,8 @@ ATOMIC_MASS = {'H': (1.00784+1.00811)/2 * amu,
                'Cl': (35.446 + 35.457)/2 * amu,
                'Ar': (39.792 + 39.963)/2 * amu,
                'Fe': 55.845 * amu}
+
+g_params = np.array(['amp', 'center', 'sigma', 'cont_slope', 'cont_intercept'])
 
 
 def wavelength_to_vel(delta_lambda, lambda_wave, light_speed=c_KMpS):
@@ -358,6 +363,9 @@ class EmissionFitting:
         self.FWZI = velocArray[-1] - velocArray[0]
         self.velocity_percentiles_calculations(velocArray, emisFlux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
 
+        # Pixel velocity # TODO we are not using this one
+        self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave
+
         # Equivalent width computation
         lineContinuumMatrix = lineLinearCont + normalNoise
         eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
@@ -365,20 +373,17 @@ class EmissionFitting:
 
         return
 
-    def gauss_lmfit(self, line_label, x, y, weights, user_conf={}, lines_df=None, z_obj=0):
+    def gauss_lmfit(self, line_label, x, y, weights, user_conf={}, z_obj=0):
 
         # Check if line is in a blended group
         line_ref = self.profile_label if self.blended_check else line_label
 
         # Confirm the number of gaussian components
-        mixtureComponents = np.array(line_ref.split('-'), ndmin=1)
-        n_comps = mixtureComponents.size
+        compList = np.array(line_ref.split('-'), ndmin=1)
+        n_comps = compList.size
 
         # TODO maybe we need this operation just once and create self.ion, self.trans_array, self.latex_label
-        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(mixtureComponents, comp_dict=user_conf, units_wave=self.units_wave)
-
-        # Pixel velocity
-        self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave
+        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(compList, comp_dict=user_conf, units_wave=self.units_wave)
 
         # Compute the line redshift and reference wavelength
         if self.blended_check:
@@ -386,43 +391,32 @@ class EmissionFitting:
         else:
             ref_wave = np.array([self.peak_wave], ndmin=1)
 
-        # Line redshift
-        # TODO calculate z_line using the label reference
+        # Line redshift # TODO calculate z_line using the label reference
         self.z_line = self.peak_wave/theoWave_arr[0] - 1
 
-        # Kinematics corrections
-        self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
-
-        # Define fitting params for each component
         fit_model = Model(linear_model)
-        for idx_comp, comp in enumerate(mixtureComponents):
+        fit_model.prefix = f'line0_'
+        SLOPE_PAR = self._SLOPE_PAR if self._cont_from_adjacent else self._SLOPE_FIX_PAR
+        INTER_PAR = self._INTER_PAR if self._cont_from_adjacent else self._INTER_FIX_PAR
+        self.define_param(0, compList, fit_model, 'slope', self.m_cont, SLOPE_PAR, user_conf)
+        self.define_param(0, compList, fit_model, 'intercept', self.n_cont, INTER_PAR, user_conf)
 
-            # Security check for labels with decimal wavelengths
-            comp = comp.replace('.', 'dot')
-
-            # Linear
-            if idx_comp == 0:
-                fit_model.prefix = f'{comp}_cont_' # For a blended line the continuum conf is defined by first line # TODO this should be the component _b
-
-                SLOPE_PAR = self._SLOPE_PAR if self._cont_from_adjacent else self._SLOPE_FIX_PAR
-                INTER_PAR = self._INTER_PAR if self._cont_from_adjacent else self._INTER_FIX_PAR
-
-                self.define_param(fit_model, comp, 'cont_slope', self.m_cont, SLOPE_PAR, user_conf)
-                self.define_param(fit_model, comp, 'cont_intercept', self.n_cont, INTER_PAR, user_conf)
+        # Add one gaussian per component
+        for idx, comp in enumerate(compList):
 
             # Gaussian
-            fit_model += Model(gaussian_model, prefix=f'{comp}_')
+            fit_model += Model(gaussian_model, prefix=f'line{idx}_')
 
             # Amplitude default configuration changes according and emission or absorption feature
             AMP_PAR = self._AMP_PAR if self._emission_check else self._AMP_ABS_PAR
 
             # Define the curve parameters # TODO include the normalization here
-            self.define_param(fit_model, comp, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
-            self.define_param(fit_model, comp, 'center', ref_wave[idx_comp], self._CENTER_PAR, user_conf, z_cor=(1+z_obj))
-            self.define_param(fit_model, comp, 'sigma', 2*self.pixelWidth, self._SIG_PAR, user_conf)
-            self.define_param(fit_model, comp, 'area', comp, self._AREA_PAR, user_conf)
+            self.define_param(idx, compList, fit_model, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
+            self.define_param(idx, compList, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
+            self.define_param(idx, compList, fit_model, 'sigma', 2*self.pixelWidth, self._SIG_PAR, user_conf)
+            self.define_param(idx, compList, fit_model, 'area', None, self._AREA_PAR, user_conf)
 
-        # Unpack the mask
+        # Unpack the mask for LmFit analysis
         if np.ma.is_masked(x):
             idcs_good = ~x.mask
             x_in = x.data[idcs_good]
@@ -440,7 +434,7 @@ class EmissionFitting:
                 self.observations = 'No_errorbars'
             else:
                 self.observations += 'No_errorbars'
-            print(f'-- WARNING: Parameter(s) uncertainty could not be measured for line {line_label}')
+            _logger.warning(f'Gaussian fit uncertainty estimation failed for {line_label}')
 
         # Generate containers for the results
         eqw_g, eqwErr_g = np.empty(n_comps), np.empty(n_comps)
@@ -459,11 +453,14 @@ class EmissionFitting:
         self.chisqr, self.redchi = self.fit_output.chisqr, self.fit_output.redchi
         self.aic, self.bic = self.fit_output.aic, self.fit_output.bic
 
-        # Store lmfit measurements
-        for i, comp in enumerate(mixtureComponents):
+        # Instrumental sigma
+        self.sigma_instr = k_FWHM/self.inst_FWHM if not np.isnan(self.inst_FWHM) else None
 
-            # Security check for labels with decimal wavelengths
-            comp = comp.replace('.', 'dot')
+        # Store lmfit measurements
+        for i, user_ref in enumerate(compList):
+
+            # Recover using the lmfit name
+            comp = f'line{i}'
 
             # Gaussian parameters
             for j, param in enumerate(['amp', 'center', 'sigma']):
@@ -474,8 +471,8 @@ class EmissionFitting:
                 term_err[i] = param_fit.stderr
 
                 # Case with error propagation from _kinem command
-                if (term_err[i] == 0) and (f'{comp}_{param}_err' in user_conf):
-                    term_err[i] = user_conf[f'{comp}_{param}_err'] # TODO do I need this one here, can I use the one below
+                if (term_err[i] == 0) and (f'{user_ref}_{param}_err' in user_conf):
+                    term_err[i] = user_conf[f'{user_ref}_{param}_err'] # TODO do I need this one here, can I use the one below
 
             # Gaussian area
             self.gauss_flux[i] = self.fit_output.params[f'{comp}_area'].value
@@ -503,18 +500,33 @@ class EmissionFitting:
 
         return
 
-    def define_param(self, model_obj, line_label, param_label, param_value, default_conf={}, user_conf={}, z_cor=1):
+    def define_param(self, idx, comps, model_obj, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
 
-        param_ref = f'{line_label}_{param_label}'
+        # Line name i.e. H1_6563A_w1, H1_6563A_w1_amp
+        line_label = comps[idx]
+
+        # LmFit reference line0, line0_amp
+        user_ref = f'{line_label}_{param_label}'
+        param_ref = f'line{idx}_{param_label}'
 
         # Overwrite default by the one provided by the user
-        if param_ref in user_conf:
-            param_conf = {**default_conf, **user_conf[param_ref]}
+        if user_ref in user_conf:
+            param_conf = {**default_conf, **user_conf[user_ref]}
         else:
             param_conf = default_conf.copy()
 
+        # Convert from LiMe -> LmFit label configuration in the expr entries if necessary
+        if param_conf['expr'] is not None:
+
+            # TODO this one could be faster
+            expr = param_conf['expr']
+            for i, comp in enumerate(comps):
+                for g_param in g_params:
+                    expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
+            param_conf['expr'] = expr
+
         # Set initial value estimation from spectrum if not provided by the user
-        if param_ref not in user_conf:
+        if user_ref not in user_conf:
             param_conf['value'] = param_value
 
         else:
@@ -557,15 +569,15 @@ class EmissionFitting:
         if '_area' in param_ref:
             if (param_conf['expr'] is None) and (param_conf['value'] == param_value):
                 param_conf['value'] = None
-                param_conf['expr'] = f'{param_value}_amp*2.5066282746*{param_value}_sigma'
+                param_conf['expr'] = f'line{idx}_amp*2.5066282746*line{idx}_sigma'
 
         # Additional preparation for center parameter: Multiply value, min, max by redshift
         if '_center' in param_ref:
-            if param_ref in user_conf:
-                param_user_conf = user_conf[param_ref]
+            if user_ref in user_conf:
+                param_user_conf = user_conf[user_ref]
                 for param_conf_entry in ('value', 'min', 'max'):
                     if param_conf_entry in param_user_conf:
-                        param_conf[param_conf_entry] = param_conf[param_conf_entry] * z_cor
+                        param_conf[param_conf_entry] = param_conf[param_conf_entry] * (1 + z_obj)
 
         # Assign the parameter configuration to the model
         model_obj.set_param_hint(param_ref, **param_conf)

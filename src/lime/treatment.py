@@ -295,7 +295,7 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         x_array = self.wave[idcsLine]
         y_array = self.flux[idcsLine]
         w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size, 1.0 / self.std_cont)
-        self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, self.log, z_obj=self.redshift)
+        self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, z_obj=self.redshift)
 
         # Safe the results to log DF
         self.results_to_database(self.line, self.log, fit_conf)
@@ -429,14 +429,14 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
 
                         # Warning overwritten existing configuration
                         if param_label_child in user_conf:
-                            _logger.warning('{param_label_child} overwritten by {parent_label} kinematics in configuration input')
+                            _logger.warning(f'{param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                         # Case where parent and child are in blended group
                         if parent_label in childs_list:
-                            param_label_parent = f'{parent_label.replace(".", "dot")}_{param_ext}'
+                            param_label_parent = f'{parent_label}_{param_ext}'
                             param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
 
-                            user_conf[param_label_child.replace(".", "dot")] = {'expr': param_expr_parent}
+                            user_conf[param_label_child] = {'expr': param_expr_parent}
 
                         # Case we want to copy from previously measured line
                         else:
@@ -448,8 +448,8 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
                             else:
                                 param_value = wtheo_child / wtheo_parent * sigma_parent
 
-                            user_conf[param_label_child.replace(".", "dot")] = {'value': param_value[0], 'vary': False}
-                            user_conf[f'{param_label_child.replace(".", "dot")}_err'] = param_value[1]
+                            user_conf[param_label_child] = {'value': param_value[0], 'vary': False}
+                            user_conf[f'{param_label_child}_err'] = param_value[1]
 
         return
 

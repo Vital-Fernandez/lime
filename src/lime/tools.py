@@ -52,10 +52,13 @@ FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
 
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
-MACHINE_PATH = Path(__file__).parent/'LogitistRegression_v2_cost1_logNorm.joblib'
+MACHINE_PATH = Path(__file__).parent/'resources'/'LogitistRegression_v2_cost1_logNorm.joblib'
 
-_REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'C3]_1980A', 'Mg2_2800A', '[O3]_3727A', 'H1_3889A', 'H1_4861A',
-                             '[O3]_5007A', 'H1_6563A', 'S3_9531A', 'He1_10830A', 'H1_12820A', 'H1_18750A'])
+_REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'He2_1640A', 'O3]_1666A', 'C3]_1980A', 'Mg2_2800A', '[O3]_3727A',
+                             '[Ne3]_3869A', 'H1_3889A', 'H1_3970A', 'H1_4341A',
+                             'H1_4861A', '[O3]_5007A', 'H1_6563A', 'S3_9069A', 'S3_9531A', 'H1_10050A', 'He1_10830A', 'H1_10940A',  'H1_12820A',
+                              'Fe2_16440A', 'H1_18756A', 'H1_19450A', 'Si6_19620A', 'He1_20590A', 'H2_21210A', 'H1_21661A', 'H2_24070A',
+                              'Si6_24830A', 'H1_26259A',  'H1_32970A', 'PAH1_33000A', 'H1_37406A', 'H1_40522A', 'H1_46539A'])
 
 
 #[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
@@ -382,7 +385,7 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
     # Use the default lime mask if none provided
     if parent_mask_address is None:
-        parent_mask_address = Path(__file__).parent/'parent_mask.txt'
+        parent_mask_address = Path(__file__).parent/'_parent_mask.txt'
 
     # Check that the file exists: #TODO remove blended, merged extensions from parent mask (or recover them here)
     if not Path(parent_mask_address).is_file():

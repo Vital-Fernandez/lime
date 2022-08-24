@@ -1,23 +1,37 @@
-from numpy import exp, linspace, random
-from lmfit import Model
+import numpy as np
+
+comps = np.array(['H1_6563A', 'H1_6563A_k1', 'H1_6563A_k2'])
+expr = '>1.5*H1_6563A_k1_amp + H1_6563A_sigma * H1_6563A_k2_center'
+gausss_params = ['amp', 'center', 'sigma', 'cont_slope', 'cont_intercept']
 
 
-def gaussian(x, amp, cen, sigma):
-    return amp * exp(-(x-cen)**2 / sigma)
+print(expr)
+for i, comp in enumerate(comps):
+    for g_param in gausss_params:
+        expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
 
+print(expr)
 
-gmodel = Model(gaussian, prefix='H1_6563A_')
-print(f'parameter names: {gmodel.param_names}')
-print(f'independent variables: {gmodel.independent_vars}')
-
-param_conf = {'expr': 'H1_6563A_sigma'}
-gmodel.set_param_hint('N2_6584A_sigma', **param_conf)
-
-gmodel += Model(gaussian, prefix='N2_6584A_')
-print(f'parameter names: {gmodel.param_names}')
-print(f'independent variables: {gmodel.independent_vars}')
-
-gmodel.make_params()
+# from numpy import exp, linspace, random
+# from lmfit import Model
+#
+#
+# def gaussian(x, amp, cen, sigma):
+#     return amp * exp(-(x-cen)**2 / sigma)
+#
+#
+# gmodel = Model(gaussian, prefix='H1_6563A_')
+# print(f'parameter names: {gmodel.param_names}')
+# print(f'independent variables: {gmodel.independent_vars}')
+#
+# param_conf = {'expr': 'H1_6563A_sigma'}
+# gmodel.set_param_hint('N2_6584A_sigma', **param_conf)
+#
+# gmodel += Model(gaussian, prefix='N2_6584A_')
+# print(f'parameter names: {gmodel.param_names}')
+# print(f'independent variables: {gmodel.independent_vars}')
+#
+# gmodel.make_params()
 # import asdf
 # import numpy as np
 # import pandas as pd
