@@ -14,6 +14,7 @@ __all__ = [
 import os
 import configparser
 import copy
+import logging
 import numpy as np
 import pandas as pd
 
@@ -39,9 +40,10 @@ try:
 except ImportError:
     asdf_check = False
 
+_logger = logging.getLogger('LiMe')
 
 # Reading file with the format and export status for the measurements
-_params_table_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'types_params.txt')
+_params_table_file = Path(__file__).parent/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
 
 # Dictionary with the parameter formart
@@ -352,7 +354,8 @@ def load_lines_log(log_address, ext='LINESLOG'):
 
     # Check file is at path
     log_path = Path(log_address)
-    assert log_path.is_file(), f'- Error: lines log not found at {log_address}'
+    # assert log_path.is_file(), f'- Error: lines log not found at {log_address}'
+    assert log_path.is_file(), _logger.critical(f'No lines log found at {log_address}\n')
     file_name, file_type = log_path.name, log_path.suffix
 
     try:

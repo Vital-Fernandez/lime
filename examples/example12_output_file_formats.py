@@ -1,16 +1,52 @@
 import numpy as np
+import lime
+import pandas as pd
 
-comps = np.array(['H1_6563A', 'H1_6563A_k1', 'H1_6563A_k2'])
-expr = '>1.5*H1_6563A_k1_amp + H1_6563A_sigma * H1_6563A_k2_center'
-gausss_params = ['amp', 'center', 'sigma', 'cont_slope', 'cont_intercept']
+pd.set_option("display.max_rows", None)
+pd.set_option("display.max_columns", None)
+
+print(lime.tools.air_to_vacuum_function([5008.240, 6549.86, 6585.27]))
+
+vac_waves = np.array([5008.240, 6549.86, 6585.27])
+n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+air_vac = vac_waves/n_array
+print(air_vac)
+
+# Load the parents mask
+master_mask_dir = f'{lime._dir_path}/resources'
+mask_df = lime.load_lines_log(f'{master_mask_dir}/parent_mask.txt')
+
+# # Converting the vacuum wavelengths to air
+# vac_waves = mask_df.wave_vac.values
+# n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+# air_vac = vac_waves/n_array
+# mask_df.wave_obs = np.round(air_vac, 4)
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
+#
+# # Setting the line label using the standard notation (vacum wavelentghs for < 2000 or > 20000 angstrons and rest air)
+# idcs_vac = (mask_df.wave_vac < 2000) | (mask_df.wave_vac > 20000)
+# mask_df.loc[idcs_vac, 'mixed_waves'] = mask_df.loc[idcs_vac, 'wave_vac']
+# mask_df.loc[~idcs_vac, 'mixed_waves'] = mask_df.loc[~idcs_vac, 'wave_obs']
+# mixed_waves = np.round(mask_df.mixed_waves.values, 0).astype(int)
+# ion_array, wave_array, latex_array = lime.label_decomposition(mask_df.index.values)
+# output_array = np.core.defchararray.add(ion_array, '_')
+# output_array = np.core.defchararray.add(output_array, mixed_waves.astype(str))
+# output_array = np.core.defchararray.add(output_array, 'A')
+# mask_df.rename(index=dict(zip(mask_df.index.values, output_array)), inplace=True)
+# mask_df.drop('mixed_waves', inplace=True, axis=1)
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
+# print(mask_df)
+
+# # Converting the vacuum wavelengths to air
+# vac_waves = mask_df.wave_vac.values
+# n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+# air_vac = vac_waves/n_array
+# mask_df.wave_obs = np.round(air_vac, 4)
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
 
 
-print(expr)
-for i, comp in enumerate(comps):
-    for g_param in gausss_params:
-        expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
 
-print(expr)
 
 # from numpy import exp, linspace, random
 # from lmfit import Model

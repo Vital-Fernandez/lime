@@ -488,7 +488,7 @@ class EmissionFitting:
             self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]
             self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
-            self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            self.sigma_thermal[i] = np.nan #np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
 
             # Check parameters error progragation from the lmfit parameter
             self.error_propagation_check(i, comp)
@@ -508,6 +508,8 @@ class EmissionFitting:
         # LmFit reference line0, line0_amp
         user_ref = f'{line_label}_{param_label}'
         param_ref = f'line{idx}_{param_label}'
+
+        # TODO if min max provided the value should be in the middle
 
         # Overwrite default by the one provided by the user
         if user_ref in user_conf:

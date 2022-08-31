@@ -362,7 +362,7 @@ def save_redshift_table(object, redshift, file_address):
 
 
 def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6']):
-    print(np.sum(activeLines), activeLines)
+
     if np.sum(activeLines) == 0:
         if log_address.is_file():
             log_address.unlink()
@@ -395,10 +395,66 @@ class IntMaskInspector:
                           False: 'xkcd:salmon'}
         self._ax_labels = None
 
-
         return
 
-    def inspect_line_mask(self, lines_mask, output_log_address, parent_log=None, y_scale='auto', n_cols=5, n_rows=None,
+    def _check_previous_mask(self, input_mask, user_mask=None, wave_rest=None):
+
+        # Establish the lower and upper wavelenght limits
+        if np.ma.isMaskedArray(wave_rest):
+            w_min, w_max = wave_rest.data[0], wave_rest.data[-1]
+        else:
+            w_min, w_max = wave_rest[0], wave_rest[-1]
+
+        # Add the lines from the input mask to the user mask and treat them as inactive
+        if user_mask is not None:
+            idcsNoMatch = ~input_mask.index.isin(user_mask.index)
+
+            active_lines = np.zeros(user_mask.index.size + np.sum(idcsNoMatch)).astype(bool)
+            active_lines[:user_mask.index.size] = True
+            user_mask = pd.concat([user_mask, input_mask.loc[idcsNoMatch]])
+
+            idx_array = np.argsort(user_mask.w3.values)
+            user_mask = user_mask.iloc[idx_array]
+            active_lines = active_lines[idx_array]
+
+        # Use all mask and treat them as active
+        else:
+            user_mask = input_mask
+            active_lines = np.ones(len(user_mask.index)).astype(bool)
+
+
+        # # Adjust to the inputs: If input lines mask is a DataFrame, no need for more:
+        # if isinstance(lines_mask, pd.DataFrame):
+        #     idx_rows = (lines_mask.w1 > w_min) & (lines_mask.w6 < w_max)
+        #     log = lines_mask.loc[idx_rows]
+        #
+        # # If it is a list of lines, compare with the parent log to get the bands wavelengths
+        # elif isinstance(lines_mask, (list, Sequence, np.array)):
+        #     idx_rows = (parent_mask.w1 > w_min) & (parent_mask.w6 < w_max) & (parent_mask.index.isin(lines_mask))
+        #     log = parent_mask.loc[idx_rows].copy()
+        #
+        # # If it is a file we load it as pandas dataframe
+        # elif isinstance(lines_mask, (str, Path)):
+        #     input_log_address = Path(lines_mask)
+        #     if input_log_address.is_file():
+        #         lines_mask = load_lines_log(input_log_address)
+        #     else:
+        #         _logger.warning(f'The input lines mas address was not found at {lines_mask}')
+        #
+        #     idx_rows = (lines_mask.w1 > w_min) & (lines_mask.w6 < w_max)
+        #     log = lines_mask.loc[idx_rows]
+        #
+        # # If it is none, we use all the lines form the parent mask
+        # elif lines_mask is None:
+        #     idx_rows = (parent_mask.w1 > w_min) & (parent_mask.w6 < w_max)
+        #     log = parent_mask.loc[idx_rows].copy()
+        #
+        # else:
+        #     _logger.warning(f'The input lines mask variable is not recognized. Type = {type(lines_mask)}')
+
+        return user_mask, active_lines
+
+    def inspect_line_mask(self, input_mask, output_log_address, y_scale='auto', n_cols=5, n_rows=None,
                           frame='observed'):
 
         # Assign the attribute values
@@ -406,56 +462,12 @@ class IntMaskInspector:
         self._log_address = None if output_log_address is None else Path(output_log_address)
         self._frame = frame
 
-        # Establish the parent log path
-        if parent_log is None:
-            parent_log = Path(__file__).parent / 'resources/parent_mask.txt'
-        elif isinstance(parent_log, (str, Path)):
-            parent_log = Path(parent_log)
-        else:
-            _logger.warning(f'Parent lines mask file variable format is not recognized. Please use a pandas dataframe, string or Path')
+        # If provided, open the previous mask
+        if self._log_address is not None:
+            parent_mask = load_lines_log(self._log_address)
 
-        # Load the parent mask (even if we are not going to use it)
-        if parent_log.is_file():
-            parent_mask = load_lines_log(parent_log)
-            if ('w3' not in parent_mask.columns) and ('w3' not in parent_mask.columns):
-                _logger.warning('Input line mask must be a Pandas Dataframe with the line wavelength headers w1 -> w6')
-        else:
-            _logger.warning(f'Parent lines mask file not found at {parent_log.as_posix()}')
-
-        # Establish the lower and upper wavelenght limits
-        if np.ma.isMaskedArray(self.wave_rest):
-            w_min, w_max = self.wave_rest.data[0]/(1+self.redshift), self.wave_rest.data[-1]/(1+self.redshift)
-        else:
-            w_min, w_max = self.wave_rest[0]/(1+self.redshift), self.wave_rest[-1]/(1+self.redshift)
-
-        # Adjust to the inputs: If input lines mask is a DataFrame, no need for more:
-        if isinstance(lines_mask, pd.DataFrame):
-            idx_rows = (lines_mask.w3 > w_min) & (lines_mask.w4 < w_max)
-            self.log = lines_mask.loc[idx_rows]
-
-        # If it is a list of lines, compare with the parent log to get the bands wavelengths
-        elif isinstance(lines_mask, (list, Sequence, np.array)):
-            idx_rows = (parent_mask.w3 > w_min) & (parent_mask.w4 < w_max) & (parent_mask.index.isin(lines_mask))
-            self.log = parent_mask.loc[idx_rows].copy()
-
-        # If it is a file we load it as pandas dataframe
-        elif isinstance(lines_mask, (str, Path)):
-            input_log_address = Path(lines_mask)
-            if input_log_address.is_file():
-                lines_mask = load_lines_log(input_log_address)
-            else:
-                _logger.warning(f'The input lines mas address was not found at {lines_mask}')
-
-            idx_rows = (lines_mask.w3 > self.wave_rest[0]) & (lines_mask.w4 > self.wave_rest[-1])
-            self.log = lines_mask.loc[idx_rows]
-
-        # If it is none, we use all the lines form the parent mask
-        elif lines_mask is None:
-            idx_rows = (parent_mask.w3 > self.wave_rest[0]) & (parent_mask.w4 > self.wave_rest[-1])
-            self.log = parent_mask.loc[idx_rows].copy()
-
-        else:
-            _logger.warning(f'The input lines mask variable is not recognized. Type = {type(lines_mask)}')
+        # Establish the reference lines log to inspect the mask
+        self.log, self._activeLines = self._check_previous_mask(input_mask, parent_mask, self.wave_rest)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
@@ -463,7 +475,7 @@ class IntMaskInspector:
             # Establish the initial list of lines
             self._lineList = self.log.index.values
             n_lines = self._lineList.size
-            self._activeLines = np.ones(n_lines, dtype=bool)
+            # self._activeLines = np.ones(n_lines, dtype=bool)
 
             # Plot configuration
             if n_lines > n_cols:
@@ -488,6 +500,7 @@ class IntMaskInspector:
                 spanSelectDict = {}
                 for i in range(n_grid):
                     if i < n_lines:
+                        print(self._lineList[i])
                         self.line = self._lineList[i]
                         self.mask = self.log.loc[self.line, 'w1':'w6'].values
                         self._plot_line_i(ax_list[i], self.line, self._frame, self._y_scale)
@@ -556,14 +569,19 @@ class IntMaskInspector:
 
             # Plot limits #TODO rest frame causes weird plot limits
             y = flux_plot[idx_low:idx_high][~idcs_mask[idx_low:idx_high]]
-            y_max = np.max(y)
-            std = y.std()
-            ax.set_ylim(ymin=np.min(y) - std, ymax=y_max + std)
+
+            # Limits for the axes
+            y_max, y_min = np.nanmax(y), np.nanmin(y)
+            std = np.nanmedian(y) # y.std()
+            high_limit = y_max + std
+            low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - std # Case with a very strong line and the std brings to negative low limit
+            ax.set_ylim(ymin=low_limit, ymax=high_limit)
+
 
             # Scale for the y axis
             if y_scale == 'auto':
 
-                if np.all(y > 1e-10) and (y_max > 10 * y.mean()):
+                if np.all(y > 1e-10) and (high_limit > 10 * y.mean()):
                     ax.set_yscale('log')
                 else:
                     ax.set_yscale('linear')
@@ -630,6 +648,9 @@ class IntMaskInspector:
         self.mask = self.log.loc[self.line, 'w1':'w6']
 
     def _on_click_MI(self, event):
+
+        if event.button == 2:
+            print(f'- Rest frame wavelength = {event.xdata/(1 + self.redshift):.3f} {self.units_wave}, at line {self.line} plot')
 
         if event.button == 3:
 
@@ -1570,9 +1591,10 @@ class LiMePlots:
             mask = self.log.loc[list_comps[0], 'w1':'w6'].values
             idcsLine, idcsBlue, idcsRed = self.define_masks(x/(1 + self.redshift), mask, merge_continua=False)
             shade_line, shade_cont = self._color_dict['line_band'], self._color_dict['cont_band']
-            axis.fill_between(x[idcsBlue]/z_corr, 0, y[idcsBlue]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
-            axis.fill_between(x[idcsLine]/z_corr, 0, y[idcsLine]*z_corr, facecolor=shade_line, step='mid', alpha=0.25)
-            axis.fill_between(x[idcsRed]/z_corr, 0, y[idcsRed]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
+            low_lim = np.min(y*z_corr)
+            axis.fill_between(x[idcsBlue]/z_corr, low_lim, y[idcsBlue]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
+            axis.fill_between(x[idcsLine]/z_corr, low_lim, y[idcsLine]*z_corr, facecolor=shade_line, step='mid', alpha=0.25)
+            axis.fill_between(x[idcsRed]/z_corr, low_lim, y[idcsRed]*z_corr, facecolor=shade_cont, step='mid', alpha=0.25)
 
         # Plot the peak flux if requested
         if peak_check and (log is not None):

@@ -308,8 +308,9 @@ def blended_label_from_log(line, log):
             blended_check = True
             profile_label = log.loc[line, 'profile_label']
     else:
-        # TODO this causes and error if we forget the '_b' componentes in the configuration file
-        exit(f'\n-- ERROR: line {line} not found input lines log')
+        # TODO this causes and error if we forget the '_b' componentes in the configuration file need to check input cfg
+        _logger.warning(f'The line {line} was not found on the input log. If you are specifying the components of a '
+                        f'blended line in the fitting configuration, make sure you are not missing the "_b" subscript')
 
     return blended_check, profile_label
 
@@ -355,6 +356,12 @@ def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, disper
         return np.round(output_array, sig_fig)
 
 
+def refraction_index_air_vacuum(wavelength_array, units='A'):
+
+    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887 / np.power(wavelength_array * 0.0001, 2) + 0.01360 / np.power(wavelength_array * 0.0001, 4)))
+
+    return refraction_index
+
 def air_to_vacuum_function(input_array, sig_fig=0):
 
     input_array = np.array(input_array, ndmin=1)
@@ -365,8 +372,8 @@ def air_to_vacuum_function(input_array, sig_fig=0):
     else:
         air_wave = input_array
 
-    output_array = (air_wave*0.0001 * (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) +
-                                                          0.01360/np.power(air_wave*0.0001, 4)))) * 10000
+    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
+    output_array = (air_wave * 0.0001 * refraction_index) * 10000
 
     if sig_fig == 0:
         output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
@@ -385,7 +392,7 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
     # Use the default lime mask if none provided
     if parent_mask_address is None:
-        parent_mask_address = Path(__file__).parent/'_parent_mask.txt'
+        parent_mask_address = Path(__file__).parent/'resources'/'parent_mask.txt'
 
     # Check that the file exists: #TODO remove blended, merged extensions from parent mask (or recover them here)
     if not Path(parent_mask_address).is_file():
@@ -440,7 +447,12 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
 
     # First slice by wavelength and redshift
     if wave_interval is not None:
-        w_min, w_max = wave_interval[0], wave_interval[-1]
+
+        # Establish the lower and upper wavelenght limits
+        if np.ma.isMaskedArray(wave_interval):
+            w_min, w_max = wave_interval.data[0], wave_interval.data[-1]
+        else:
+            w_min, w_max = wave_interval[0], wave_interval[-1]
 
         if z_range is not None:
             z_range = np.array(z_range, ndmin=1)

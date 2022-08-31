@@ -42,10 +42,10 @@ gp_spec.fit_from_wavelengths(line, mask)
 gp_spec.display_results()
 
 # Fit configuration
-line = 'H1_6563.24A_b'
-fit_conf = {'H1_6563.24A_b': 'H1_6563.24A-N2_6584.24A-N2_6548.24A',
-            'N2_6548.24A_amp': {'expr': 'N2_6584.24A_amp / 2.94'},
-            'N2_6548.24A_kinem': 'N2_6584.24A'}
+line = 'H1_6563A_b'
+fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
+            'N2_6548A_amp': {'expr': 'N2_6584A_amp/2.94'},
+            'N2_6548A_kinem': 'N2_6584A'}
 
 # Second attempt including the fit configuration
 gp_spec.fit_from_wavelengths(line, mask, fit_conf)
