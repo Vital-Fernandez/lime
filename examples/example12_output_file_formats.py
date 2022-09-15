@@ -1,21 +1,87 @@
 import numpy as np
+from astropy.io import fits
 import lime
-import pandas as pd
 
-pd.set_option("display.max_rows", None)
-pd.set_option("display.max_columns", None)
+# Specify the file structure
+spec_file = '/user/sample_folder/obj1.fits'
+config_file = '/user/treatment/sample_cfg.txt'
+outputs_folder = '/user/treatment/outputs'
 
-print(lime.tools.air_to_vacuum_function([5008.240, 6549.86, 6585.27]))
+# Load your data
+sample_cfg = lime.load_cfg(config_file)
+z_obj, norm_obj = sample_cfg['obj1']['z'], sample_cfg['obj1']['norm_flux']
+wave, flux = fits.getdata(spec_file, extname='WAVE'), fits.getdata(spec_file, extname='FLUX')
+err = fits.getdata(spec_file, extname='SIGMA')
 
-vac_waves = np.array([5008.240, 6549.86, 6585.27])
-n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
-air_vac = vac_waves/n_array
-print(air_vac)
+# Import default line bands table (pandas dataframe)
+bands = lime.spectral_mask_generator(wave_interval=(3300, 9500))
 
-# Load the parents mask
-master_mask_dir = f'{lime._dir_path}/resources'
-mask_df = lime.load_lines_log(f'{master_mask_dir}/parent_mask.txt')
+# Define the LiMe spectrum
+spec = lime.Spectrum(wave, flux, err, redshift=z_obj, pixel_mask=np.isnan(flux))
 
+# Convert the units (default values are angstroms and Flam = erg cm-2 s-1 A-1)
+spec.convert_units('A', 'Flam', norm_flux=norm_obj)
+
+# Fit a line
+line_label = 'N2_6583.3513A'
+line_band = bands.loc[line_label, 'w1':'w6'].values
+fit_conf = sample_cfg['line_fitting']
+spec.fit_from_wavelengths(line_label, line_band, fit_conf)
+
+# Save the results to an external file
+lime.save_line_log(spec.log, f'{outputs_folder}/results_log.txt')
+lime.save_line_log(spec.log, f'{outputs_folder}/results_log.pdf', parameters=['eqw', 'intg_flux', 'intg_err'])
+lime.save_line_log(spec.log, f'{outputs_folder}/results_log.xlsx', ext='obj1')
+lime.save_line_log(spec.log, f'{outputs_folder}/results_log.fits', ext='obj1')
+
+
+# pd.set_option("display.max_rows", None)
+# pd.set_option("display.max_columns", None)
+#
+# print(lime.tools.air_to_vacuum_function([5008.240, 6549.86, 6585.27]))
+#
+# vac_waves = np.array([5008.240, 6549.86, 6585.27])
+# n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+# air_vac = vac_waves/n_array
+# print(air_vac)
+#
+# # Load the parents mask
+# master_mask_dir = f'{lime._dir_path}/resources'
+# mask_df = lime.load_lines_log(f'{master_mask_dir}/parent_mask.txt')
+#
+# # Converting the vacuum wavelengths to air
+# vac_waves = mask_df.wave_vac.values
+# n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+# air_vac = vac_waves/n_array
+# mask_df.wave_obs = np.round(air_vac, 4)
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
+#
+# # Setting the line label using the standard notation (vacum wavelentghs for < 2000 or > 20000 angstrons and rest air)
+# idcs_vac = (mask_df.wave_vac < 2000) | (mask_df.wave_vac > 20000)
+# mask_df.loc[idcs_vac, 'mixed_waves'] = mask_df.loc[idcs_vac, 'wave_vac']
+# mask_df.loc[~idcs_vac, 'mixed_waves'] = mask_df.loc[~idcs_vac, 'wave_obs']
+# mixed_waves = np.round(mask_df.mixed_waves.values, 0).astype(int)
+# ion_array, wave_array, latex_array = lime.label_decomposition(mask_df.index.values)
+# output_array = np.core.defchararray.add(ion_array, '_')
+# output_array = np.core.defchararray.add(output_array, mixed_waves.astype(str))
+# output_array = np.core.defchararray.add(output_array, 'A')
+# mask_df.rename(index=dict(zip(mask_df.index.values, output_array)), inplace=True)
+# mask_df.drop('mixed_waves', inplace=True, axis=1)
+# lime.save_line_log(mask_df, f'{master_mask_dir}/parent_mask.txt')
+# print(mask_df)pd.set_option("display.max_rows", None)
+# pd.set_option("display.max_columns", None)
+#
+# print(lime.tools.air_to_vacuum_function([5008.240, 6549.86, 6585.27]))
+#
+# vac_waves = np.array([5008.240, 6549.86, 6585.27])
+# n_array = lime.tools.refraction_index_air_vacuum(vac_waves)
+# air_vac = vac_waves/n_array
+# print(air_vac)
+#
+# # Load the parents mask
+# master_mask_dir = f'{lime._dir_path}/resources'
+# mask_df = lime.load_lines_log(f'{master_mask_dir}/parent_mask.txt')
+#
 # # Converting the vacuum wavelengths to air
 # vac_waves = mask_df.wave_vac.values
 # n_array = lime.tools.refraction_index_air_vacuum(vac_waves)

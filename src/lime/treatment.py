@@ -10,8 +10,9 @@ from astropy.wcs import WCS
 
 from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
-                   FLUX_DENSITY_UNITS, unit_convertor
-from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth
+                   FLUX_DENSITY_UNITS, unit_convertor, define_masks
+
+from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
 
@@ -99,6 +100,9 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         self.units_wave = units_wave
         self.units_flux = units_flux
         self._masked_inputs = False
+
+        # Plotting object
+        self.plot = LimeFigures(self)
 
         # Checks spectra units
         for arg in ['units_wave', 'units_flux']:
@@ -253,8 +257,8 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         self._decimal_wave = True if '.' in self.line else False
 
         # Get spectrum line and continua band indeces
-        idcsEmis, idcsCont = self.define_masks(self.wave, self.mask*(1 + self.redshift),
-                                               line_mask_entry=fit_conf.get(f'{self.line}_mask'))
+        self.pixel_mask = fit_conf.get(f'{self.line}_mask', 'no')
+        idcsEmis, idcsCont = define_masks(self.wave, self.mask*(1 + self.redshift), line_mask_entry=self.pixel_mask)
 
         # Integrated line properties
         emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
@@ -1057,7 +1061,7 @@ class CubeInspector(Spectrum):
         AXES_CONF = STANDARD_AXES.copy()
         norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
         AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
-        AXES_CONF['xlabel'] = 'Velocity (Km/s)'
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
 
         # State the figure and axis format
         self.fig_conf = STANDARD_PLOT.copy()
@@ -1194,7 +1198,7 @@ class CubeInspector(Spectrum):
                 line_list = self.log.index.values
 
                 # Reference _frame for the plot
-                wave_plot, flux_plot, z_corr, idcs_mask = self.frame_mask_switch(self.wave, flux_voxel, self.redshift, frame)
+                wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self.wave, flux_voxel, self.redshift, frame)
 
                 # Compute the individual profiles
                 wave_array, gaussian_array = gaussian_profiles_computation(line_list, self.log, (1 + self.redshift))
@@ -1222,11 +1226,11 @@ class CubeInspector(Spectrum):
                     gauss_i = gaussian_array[:, i][..., None]
 
                     line_comps = [line]
-                    self.gaussian_profiles_plotting(line_comps, self.log,
-                                                    wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]], z_corr,
-                                                    axis=self.ax1, frame=frame, cont_bands=None,
-                                                    wave_array=wave_i, cont_array=cont_i,
-                                                    gaussian_array=gauss_i)
+                    self._gaussian_profiles_plotting(line_comps, self.log,
+                                                     wave_plot[idcsLines[:, i]], flux_plot[idcsLines[:, i]], z_corr,
+                                                     axis=self.ax1, cont_bands=None,
+                                                     wave_array=wave_i, cont_array=cont_i,
+                                                     gaussian_array=gauss_i)
 
                 # Plot combined lines
                 profile_list = self.log.loc[~idcs_nonBlended, 'profile_label'].unique()
@@ -1244,11 +1248,11 @@ class CubeInspector(Spectrum):
                     gauss_i = gaussian_array[:, i_group[0]:i_group[-1]+1]
 
                     line_comps = profile_group.split('-')
-                    self.gaussian_profiles_plotting(line_comps, self.log,
-                                                    wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
-                                                    axis=self.ax1, frame=frame, cont_bands=None,
-                                                    wave_array=wave_i, cont_array=cont_i,
-                                                    gaussian_array=gauss_i)
+                    self._gaussian_profiles_plotting(line_comps, self.log,
+                                                     wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+                                                     axis=self.ax1, cont_bands=None,
+                                                     wave_array=wave_i, cont_array=cont_i,
+                                                     gaussian_array=gauss_i)
 
         # Overplot the mask region
         if self.mask_file is not None:

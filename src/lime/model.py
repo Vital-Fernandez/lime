@@ -1,4 +1,6 @@
 import logging
+
+import matplotlib.pyplot as plt
 import numpy as np
 from lmfit.models import Model
 from scipy import stats, optimize
@@ -178,30 +180,12 @@ def is_digit(x):
         return False
 
 
-def format_line_mask_option(entry_value, wave_array):
-
-    # Check if several entries
-    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
-
-    # Check if interval or single pixel mask
-    for i, element in enumerate(formatted_value):
-        if '-' in element:
-            formatted_value[i] = element.split('-')
-        else:
-            element = float(element)
-            pix_width = (np.diff(wave_array).mean())/2
-            formatted_value[i] = [element-pix_width, element+pix_width]
-
-    formatted_value = np.array(formatted_value).astype(float)
-
-    return formatted_value
-
-
 def mult_err_propagation(nominal_array, err_array, result):
 
     err_result = result * np.sqrt(np.sum(np.power(err_array/nominal_array, 2)))
 
     return err_result
+
 
 
 class EmissionFitting:
@@ -265,64 +249,16 @@ class EmissionFitting:
 
         return
 
-    def define_masks(self, wavelength_array, masks_array, merge_continua=True, line_mask_entry=None):
-
-        # Make sure it is a matrix
-        masks_array = np.array(masks_array, ndmin=2)
-
-        # Check if it is a masked array
-        if np.ma.is_masked(wavelength_array):
-            wave_arr = wavelength_array.data
-        else:
-            wave_arr = wavelength_array
-
-        # Remove masked pixels from this function wavelength array
-        if line_mask_entry is not None:
-
-            # Convert cfg mask string to limits
-            line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
-
-            # Get masked indeces
-            idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
-            idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
-
-            # Store the line pixel mask in the log
-            self.pixel_mask = line_mask_entry
-
-        else:
-            idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
-
-        # Find indeces for six points in spectrum
-        idcsW = np.searchsorted(wave_arr, masks_array)
-
-        # Emission region
-        idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
-
-        # Return left and right continua merged in one array
-        if merge_continua:
-
-            idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
-                              (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
-                              ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-                               wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
-
-
-
-            return idcsLineRegion, idcsContRegion
-
-        # Return left and right continua in separated arrays
-        else:
-
-            idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
-            idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
-
-            return idcsLineRegion, idcsContLeft, idcsContRight
-
     def line_properties(self, emisWave, emisFlux, contWave, contFlux, emisErr = None, bootstrap_size=500):
 
         # Gradient and interception of linear continuum using adjacent regions
         if self._cont_from_adjacent:
-            self.m_cont, self.n_cont, r_value, p_value, std_err = stats.linregress(contWave, contFlux)
+            if np.ma.isMaskedArray(contFlux):
+                input_wave, input_flux = contWave.data[contWave.mask == False], contFlux.data[contFlux.mask == False]
+            else:
+                input_wave, input_flux = contWave, contFlux
+
+            self.m_cont, self.n_cont, r_value, p_value, std_err = stats.linregress(input_wave, input_flux)
 
         # Using line first and last point
         else:
@@ -353,10 +289,22 @@ class EmissionFitting:
         self.snr_line = signal_to_noise(self.intg_flux, self.std_cont, emisWave.size)
         self.snr_cont = self.cont/self.std_cont
 
+
         # Line width to the pixel below the continuum (or mask size if not happening)
         idx_0 = compute_FWHM0(peakIdx, emisFlux, -1, lineLinearCont, self._emission_check)
         idx_f = compute_FWHM0(peakIdx, emisFlux, 1, lineLinearCont, self._emission_check)
         self.w_i, self.w_f = emisWave[idx_0], emisWave[idx_f]
+
+        # Warning if continuum above or below line peak/through
+        if self._emission_check and (lineLinearCont[peakIdx] > emisFlux[peakIdx]):
+            _logger.warning(f'Line {self.line} introduced as an emission but the line peak is below the continuum level')
+
+        if not self._emission_check and (lineLinearCont[peakIdx] > emisFlux[peakIdx]):
+            _logger.warning(f'Line {self.line} introduced as an absorption but the line peak is below the continuum level')
+
+        # _fig, _ax = plt.subplots()
+        # _ax.plot(emisWave, emisFlux)
+        # plt.show()
 
         # Velocity calculations
         velocArray = c_KMpS * (emisWave[idx_0:idx_f] - self.peak_wave) / self.peak_wave
@@ -488,7 +436,7 @@ class EmissionFitting:
             self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]
             self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
-            self.sigma_thermal[i] = np.nan #np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
 
             # Check parameters error progragation from the lmfit parameter
             self.error_propagation_check(i, comp)
@@ -580,6 +528,13 @@ class EmissionFitting:
                 for param_conf_entry in ('value', 'min', 'max'):
                     if param_conf_entry in param_user_conf:
                         param_conf[param_conf_entry] = param_conf[param_conf_entry] * (1 + z_obj)
+
+        # Check the limits on the fitting # TODO some params (blended lines) do not have initial value amp wide
+        param_value = param_conf.get('value')
+        # if param_value is not None:
+        #     if (param_value < param_conf['min']) or (param_value > param_conf['max']):
+        #         _logger.warning(f'Initial value for {param_ref} is outside min-max boundaries: '
+        #                         f'{param_conf["min"]} < {param_value} < {param_conf["max"]}')
 
         # Assign the parameter configuration to the model
         model_obj.set_param_hint(param_ref, **param_conf)

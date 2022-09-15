@@ -174,13 +174,13 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
 
 
 # Function to load SpecSyzer configuration file #TODO change default name default_line_fitting
-def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='line_fitting'):
+def load_cfg(file_address, obj_list=None, mask_section=None, def_cfg_sec='line_fitting'):
 
     """
     This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
     check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
 
-    If the user provides a list of objects (via the ``obj_section`` parameter) this function will update each object fitting
+    If the user provides a list of objects (via the ``obj_list`` parameter) this function will update each object fitting
     configuration to include the default configuration. If there are shared entries, the object configuration takes precedence.
     The object section must have have the "objectName_line_fitting" notation, where the "objectName" is obtained from
     the object list.
@@ -208,8 +208,8 @@ def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='lin
     :param file_address: configuration file location
     :type file_address: str or ~pathlib.Path
 
-    :param obj_section: the section:option location for the list of objects, e.g. {'sample data': 'obj_list'}
-    :type obj_section: dict, optional
+    :param obj_list: the section:option location for the list of objects, e.g. {'sample data': 'obj_list'}
+    :type obj_list: dict, optional # TODO this one could be a section.option, file, list/array
 
     :param mask_section: the section:option location of the spatial masks, e.g. {'sample data': 'obj_mask_list'}
     :type mask_section: dict, optional
@@ -239,29 +239,39 @@ def load_cfg(file_address, obj_section=None, mask_section=None, def_cfg_sec='lin
             cfg_lime[section][option_key] = format_option_value(option_value, option_key, section)
 
     # Update the object line fitting sections if provided by user
-    if obj_section is not None:
+    if obj_list is not None:
 
-        for sec_objs, opt_objs in obj_section.items():
+        # Get the default configuration
+        assert def_cfg_sec in cfg_lime, f'- ERROR: No {def_cfg_sec} section in file {file_address}'
+        global_cfg = cfg_lime[def_cfg_sec]
 
-            # Get the list of objects
-            assert sec_objs in cfg_lime, f'- ERROR: No {sec_objs} section in file {file_address}'
-            assert opt_objs in cfg_lime[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
-            objList = cfg_lime[sec_objs][opt_objs]
+        if isinstance(obj_list, dict):
 
-            # Get the default configuration
-            assert def_cfg_sec in cfg_lime, f'- ERROR: No {def_cfg_sec} section in file {file_address}'
-            global_cfg = cfg_lime[def_cfg_sec]
+            for sec_objs, opt_objs in obj_list.items():
 
-            # Loop through the objects
-            for obj in objList:
-                global_dict = copy.deepcopy(global_cfg)
+                # Get the list of objects
+                assert sec_objs in cfg_lime, f'- ERROR: No {sec_objs} section in file {file_address}'
+                assert opt_objs in cfg_lime[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
+                objList = cfg_lime[sec_objs][opt_objs]
 
-                local_label = f'{obj}_line_fitting'
-                local_dict = cfg_lime[local_label] if local_label in cfg_lime else {}
+        elif isinstance(obj_list, (Sequence, np.ndarray)):
+            objList = obj_list
 
-                # Local configuration overwriting global
-                global_dict.update(local_dict)
-                cfg_lime[local_label] = global_dict
+        else:
+            _logger.warning(f'The input obj_list variable type ({type(obj_list)}) is not recognized. Please use a dictionary, a string for an output'
+                            f'file or a list/array of objects')
+            raise
+
+        # Loop through the objects
+        for obj in objList:
+            global_dict = copy.deepcopy(global_cfg)
+
+            local_label = f'{obj}_line_fitting'
+            local_dict = cfg_lime[local_label] if local_label in cfg_lime else {}
+
+            # Local configuration overwriting global
+            global_dict.update(local_dict)
+            cfg_lime[local_label] = global_dict
 
     return cfg_lime
 
@@ -747,9 +757,6 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     stdout.flush()
 
     return
-
-
-
 
 
 def save_param_maps(log_file_address, params_list, lines_list, output_folder, spatial_mask_file=None, ext_mask='all',

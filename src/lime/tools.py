@@ -67,6 +67,7 @@ _REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'He2_1640A', 'O3]_1666A', '
 # 1 Jy = 10−23 erg⋅s−1⋅cm−2⋅Hz−1
 # 1 nm = 2.99792458E+17
 
+
 def int_to_roman(num):
     i, roman_num = 0, ''
     while num > 0:
@@ -362,6 +363,7 @@ def refraction_index_air_vacuum(wavelength_array, units='A'):
 
     return refraction_index
 
+
 def air_to_vacuum_function(input_array, sig_fig=0):
 
     input_array = np.array(input_array, ndmin=1)
@@ -474,11 +476,79 @@ def spectral_mask_generator(wave_interval=None, lines_list=None, ion_list=None, 
     return output_mask
 
 
+def format_line_mask_option(entry_value, wave_array):
+
+    # Check if several entries
+    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
+
+    # Check if interval or single pixel mask
+    for i, element in enumerate(formatted_value):
+        if '-' in element:
+            formatted_value[i] = element.split('-')
+        else:
+            element = float(element)
+            pix_width = (np.diff(wave_array).mean())/2
+            formatted_value[i] = [element-pix_width, element+pix_width]
+
+    formatted_value = np.array(formatted_value).astype(float)
+
+    return formatted_value
+
+
+def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no'):
+
+    # Make sure it is a matrix
+    masks_array = np.array(masks_array, ndmin=2)
+
+    # Check if it is a masked array
+    if np.ma.is_masked(wavelength_array):
+        wave_arr = wavelength_array.data
+    else:
+        wave_arr = wavelength_array
+
+    # Remove masked pixels from this function wavelength array
+    if line_mask_entry != 'no':
+
+        # Convert cfg mask string to limits
+        line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
+
+        # Get masked indeces
+        idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+        idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
+
+    else:
+        idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
+
+    # Find indeces for six points in spectrum
+    idcsW = np.searchsorted(wave_arr, masks_array)
+
+    # Emission region
+    idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
+    
+    # Return left and right continua merged in one array
+    if merge_continua:
+
+        idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
+                          (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
+                          ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+                           wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
+
+        return idcsLineRegion, idcsContRegion
+
+    # Return left and right continua in separated arrays
+    else:
+
+        idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
+        idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
+
+        return idcsLineRegion, idcsContLeft, idcsContRight
+
+
 class LineFinder:
 
     def __init__(self, machine_model_path=MACHINE_PATH):
 
-        self.ml_model = joblib.load(machine_model_path)
+        # self.ml_model = joblib.load(machine_model_path) # THIS CAN be warning at opening the file
 
         return
 
@@ -582,7 +652,11 @@ class LineFinder:
                                                      return_std=True, plot_results=plot_cont_calc)
 
         # Check via machine learning algorithm
-        ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
+        if ml_detection:
+            self.ml_model = joblib.load(MACHINE_PATH)
+            ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
+        else:
+            ml_mask = None
 
         # Check for the peaks of the emission lines
         detec_min = noise_sigma_factor * cond_Std

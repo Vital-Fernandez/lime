@@ -74,7 +74,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
 
 def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None):
 
-    # Check pylatex is install else leave
+    # Check pylatex is installed else leave
     if pylatex_check:
         pass
     else:
