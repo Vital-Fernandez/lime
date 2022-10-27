@@ -29,40 +29,29 @@ mask = lime.load_lines_log(lineMaskFile)
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)
+fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Declare line measuring object
 z_obj = obs_cfg['sample_data']['z_array'][2]
 norm_flux = obs_cfg['sample_data']['norm_flux']
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot_spectrum(spec_label=f'GP121903 spectrum', frame='rest')
 
 # Find lines
 peaks_table, matched_masks_DF = gp_spec.match_line_mask(mask, obs_cfg['sample_data']['noiseRegion_array'])
-gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum', log_scale=True, frame='rest')
-
-# Correct line region
-corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'
-lime.save_line_log(matched_masks_DF, corrected_mask_file)
-
-# Object line fitting configuration
-fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
-for i, lineLabel in enumerate(matched_masks_DF.index):
+for i, lineLabel in enumerate(matched_masks_DF.index.values):
     wave_regions = matched_masks_DF.loc[lineLabel, 'w1':'w6'].values
     gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
-    # gp_spec.display_results(log_scale=True, frame='rest')
-
-# Display fits in grid
-gp_spec.plot_line_grid(gp_spec.log, frame='rest')
-
-# Display fits along the spectrum
-gp_spec.plot_spectrum(include_fits=True, frame='rest')
 
 # Save the results
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf', parameters=['eqw', 'intg_flux', 'intg_err'])
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.asdf', ext='GP121903')
+lime.save_line_log(gp_spec.log, './sample_data/example_3.txt')
 
+# Add new parameters to the log
+parameters = ['eqw_gaussian',
+              'eqw_gaussian_err']
+
+formulation = ['gauss_flux/cont',
+               '(gauss_flux/cont) * sqrt((gauss_err/gauss_flux)**2 + (std_cont/cont)**2)']
+
+lime.log_parameters_calculation('./sample_data/example_3.txt', parameters, formulation)

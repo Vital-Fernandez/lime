@@ -53,7 +53,7 @@ for curve, params in curve_dict.items():
         flux_dict[curve] = gaussian_model(wave, **params)
 flux_comb = flux_dict['comp1'] + flux_dict['comp2'] + cont + noise
 
-fig, ax = plt.subplots(dpi=300)
+fig, ax = plt.subplots(dpi=600)
 
 w3, w4 = 0, -1
 w3, w4 = np.searchsorted(wave, (-3.0, 11))
@@ -103,4 +103,5 @@ plt.tight_layout()
 doc_images_folder = Path('../../docs/source/_static/')
 plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)
 plt.savefig(doc_images_folder/'logo_white.png', bbox_inches='tight')
-plt.show()
+print(f'Saving {doc_images_folder}')
+# plt.show()

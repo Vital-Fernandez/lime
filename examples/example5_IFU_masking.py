@@ -88,7 +88,7 @@ output_mask_file = './sample_data/SHOC579_mask.fits'
 lime.spatial_mask_generator('flux', wave, flux_cube, percentile_array, signal_band=(w3_SII, w4_SII),
                             mask_ref='S2_6716A_b', output_address=output_mask_file,
                             fits_header=hdr_coords, show_plot=True)
-#
+
 # w1_SII, w2_SII = mask_log.loc['S2_6716A', 'w1':'w2'].values * (1 + z_SHOC579)
 # output_mask_file = './sample_data/SHOC579_mask.fits'
 # lime.spatial_mask_generator('SN_cont', wave, flux_cube, percentile_array, signal_band=(w1_SII, w2_SII),

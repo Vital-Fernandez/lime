@@ -340,7 +340,7 @@ class EmissionFitting:
             ref_wave = np.array([self.peak_wave], ndmin=1)
 
         # Line redshift # TODO calculate z_line using the label reference
-        self.z_line = self.peak_wave/theoWave_arr[0] - 1
+        self.z_line = self.peak_wave/(ref_wave[0] * (1 + z_obj)) - 1
 
         fit_model = Model(linear_model)
         fit_model.prefix = f'line0_'

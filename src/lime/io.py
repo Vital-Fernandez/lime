@@ -4,6 +4,7 @@ __all__ = [
     'load_cfg',
     'load_lines_log',
     'save_line_log',
+    'log_parameters_calculation',
     'log_to_HDU',
     'save_param_maps',
     'COORD_ENTRIES',
@@ -526,6 +527,38 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
     else:
         print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
         exit()
+
+    return
+
+
+def log_parameters_calculation(input_log, parameter_list, formulae_list):
+
+    # Load the log if necessary file:
+    file_check = False
+    if isinstance(input_log, pd.DataFrame):
+        log_df = input_log
+
+    elif isinstance(input_log, (str, Path)):
+        file_check = True
+        log_df = load_lines_log(input_log)
+
+    else:
+        _logger.critical(
+            f'Not a recognize log format. Please use a pandas dataframe or a string/Path object for file {log}')
+        exit(1)
+
+    # Parse the combined expression
+    expr = ''
+    for col, formula in zip(parameter_list, formulae_list):
+        expr += f'{col}={formula}\n'
+
+    # Compute the new parameters
+    log_df.eval(expr=expr, inplace=True)
+
+    # Save to the previous location
+    if file_check:
+        save_line_log(log_df, input_log)
+
 
     return
 

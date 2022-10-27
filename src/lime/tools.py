@@ -239,6 +239,7 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
         _logger.critical(f'Number of input lines is different from number of output lines')
 
     # If requested and single line, return the input as a scalar
+    # TODO add warnings if output arrays are empty
     if ion_array.size == 1 and scalar_output:
         output = (ion_array[0], wavelength_array[0], latexLabel_array[0])
     else:
@@ -298,16 +299,19 @@ def blended_label_from_log(line, log):
 
     # Default values: single line
     blended_check = False
+    profile_label = 'no'
 
     if line in log.index:
 
-        if log.loc[line, 'profile_label'] == 'no':
-            profile_label = 'no'
-        elif line.endswith('_m'):
-            profile_label = log.loc[line, 'profile_label']
-        else:
-            blended_check = True
-            profile_label = log.loc[line, 'profile_label']
+        if 'profile_label' in log.columns:
+
+            if log.loc[line, 'profile_label'] == 'no':
+                profile_label = 'no'
+            elif line.endswith('_m'):
+                profile_label = log.loc[line, 'profile_label']
+            else:
+                blended_check = True
+                profile_label = log.loc[line, 'profile_label']
     else:
         # TODO this causes and error if we forget the '_b' componentes in the configuration file need to check input cfg
         _logger.warning(f'The line {line} was not found on the input log. If you are specifying the components of a '
@@ -542,6 +546,9 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
         idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
 
         return idcsLineRegion, idcsContLeft, idcsContRight
+
+
+
 
 
 class LineFinder:

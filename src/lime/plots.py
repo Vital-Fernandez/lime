@@ -301,13 +301,20 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
     return
 
 
-def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None):
+def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximize=False):
 
     # By default, plot on screen unless an output address is provided
     if file_path is None:
 
         if bbox_inches is not None:
             plt.tight_layout()
+
+        if maximize:
+            try:
+                manager = plt.get_current_fig_manager()
+                manager.window.showMaximized()
+            except:
+                _logger.debug(f'Unable to maximize the window')
 
         plt.show()
 
@@ -397,6 +404,23 @@ def frame_mask_switch_2(wave_obs, flux_obs, redshift, user_choice):
         wave_plot, flux_plot = wave_obs, flux_obs
 
     return wave_plot, flux_plot, z_corr, idcs_mask
+
+
+def maximize_center_matplotlib_fig():
+
+    try:
+        manager = plt.get_current_fig_manager()
+        manager.window.showMaximized()
+    except:
+        _logger.debug(f'Unable to maximize the window')
+
+        try:
+            mngr = plt.get_current_fig_manager()
+            mngr.window.setGeometry(1100, 300, mngr.canvas.width(), mngr.canvas.height())
+        except:
+            _logger.debug(f'Unable to center plot window')
+
+    return
 
 
 class IntMaskInspector:
@@ -1503,7 +1527,10 @@ class LiMePlots:
             idx_high = idx6 + 1
 
             fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-            axesList = ax.flatten()
+            if (n_rows + n_cols) > 2:
+                axesList = ax.flatten()
+            else:
+                axesList = [ax]
 
             # Compute the gaussian profiles
             wave_array, cont_array = linear_continuum_computation(line_list, self.log, (1+self.redshift))
@@ -1760,7 +1787,9 @@ class Plotter:
 
     def _plot_container(self, fig, ax, ax_cfg={}, gfit_type=False):
 
+        #Plot for residual axis
         if gfit_type is True:
+
             # Two axes figure, upper one for the line lower for the residual
             gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
             spec_ax = plt.subplot(gs[0])
@@ -1769,6 +1798,7 @@ class Plotter:
 
         # Default plot
         else:
+
             if (fig is None) and (ax is None):
                 fig, ax = plt.subplots()
 
@@ -1824,16 +1854,20 @@ class Plotter:
 
         return
 
-    def _bands_plot(self, axis, x, y, z_corr, idcs_mask):
+    def _bands_plot(self, axis, x, y, z_corr, idcs_mask, label):
 
         cont_dict = {'facecolor': self._color_dict['cont_band'], 'step': 'mid', 'alpha': 0.25}
         line_dict = {'facecolor': self._color_dict['line_band'], 'step': 'mid', 'alpha': 0.25}
 
         # Plot
-        low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
-        axis.fill_between(x[idcs_mask[0]:idcs_mask[1]]/z_corr, low_lim*z_corr, y[idcs_mask[0]:idcs_mask[1]]*z_corr, **cont_dict)
-        axis.fill_between(x[idcs_mask[2]:idcs_mask[3]]/z_corr, low_lim*z_corr, y[idcs_mask[2]:idcs_mask[3]]*z_corr, **line_dict)
-        axis.fill_between(x[idcs_mask[4]:idcs_mask[5]]/z_corr, low_lim*z_corr, y[idcs_mask[4]:idcs_mask[5]]*z_corr, **cont_dict)
+        if len(y[idcs_mask[0]:idcs_mask[5]]) > 1:
+            low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
+            low_lim = 0 if np.isnan(low_lim) else low_lim
+            axis.fill_between(x[idcs_mask[0]:idcs_mask[1]]/z_corr, low_lim*z_corr, y[idcs_mask[0]:idcs_mask[1]]*z_corr, **cont_dict)
+            axis.fill_between(x[idcs_mask[2]:idcs_mask[3]]/z_corr, low_lim*z_corr, y[idcs_mask[2]:idcs_mask[3]]*z_corr, **line_dict)
+            axis.fill_between(x[idcs_mask[4]:idcs_mask[5]]/z_corr, low_lim*z_corr, y[idcs_mask[4]:idcs_mask[5]]*z_corr, **cont_dict)
+        else:
+            _logger.warning(f'The {label} band plot interval contains less than 1 pixel')
 
         return
 
@@ -1885,44 +1919,70 @@ class Plotter:
                          color=self._color_dict['mask_marker'])
 
         # Line masks
-        if line_list is not None:
-            for i, line in enumerate(line_list):
-                pixel_mask = log.loc[line, 'pixel_mask']
-                if pixel_mask != 'no':
-                    line_mask_limits = format_line_mask_option(pixel_mask, x)
-                    idcsMask = (x[:, None] >= line_mask_limits[:, 0]) & (x[:, None] <= line_mask_limits[:, 1])
-                    idcsMask = idcsMask.sum(axis=1).astype(bool)
-                    if np.sum(idcsMask) >= 1:
-                        axis.scatter(x[idcsMask]/z_corr, y[idcsMask]*z_corr, marker="x",
-                                     color=self._color_dict['mask_marker'])
+        if 'pixel_mask' in log.columns:
+            if line_list is not None:
+                for i, line in enumerate(line_list):
+                    pixel_mask = log.loc[line, 'pixel_mask']
+                    if pixel_mask != 'no':
+                        line_mask_limits = format_line_mask_option(pixel_mask, x)
+                        idcsMask = (x[:, None] >= line_mask_limits[:, 0]) & (x[:, None] <= line_mask_limits[:, 1])
+                        idcsMask = idcsMask.sum(axis=1).astype(bool)
+                        if np.sum(idcsMask) >= 1:
+                            axis.scatter(x[idcsMask]/z_corr, y[idcsMask]*z_corr, marker="x",
+                                         color=self._color_dict['mask_marker'])
 
         return
 
     def _auto_flux_scale(self, axis, y, y_scale):
 
+        # If non-provided auto-decide
         if y_scale == 'auto':
 
-            # Limits for the axes
-            y_max, y_min = np.nanmax(y), np.nanmin(y)
-            std = np.nanmedian(y)  # y.std()
-            high_limit = y_max + std
-            low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - std
-            axis.set_ylim(ymin=low_limit, ymax=high_limit)
-
-            # Scale for the y axis
-            if y_scale == 'auto':
-
-                if np.all(y > 1e-10) and (high_limit > 10 * y.mean()):
-                    axis.set_yscale('log')
+            # Limits for the axes, ignore the divide by zero warning
+            with np.errstate(divide='ignore', invalid='ignore'):
+                neg_check = np.any(y < 0)
+                y_max, y_min = np.nanmax(y), np.nanmin(y)
+                # cont, std = np.nanmedian(y), np.nanstd(y)
+                # high_limit = y_max + 2 * std
+                # low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - 2 * std
+                # axis.set_ylim(ymin=low_limit, ymax=high_limit)
+                if np.abs(y_max/y_min) > 55:
+                    if neg_check:
+                        y_scale = 'symlog'
+                    else:
+                        y_scale = 'log'
                 else:
-                    axis.set_yscale('linear')
-            else:
-                axis.set_yscale(y_scale)
+                    y_scale = 'linear'
 
-        else:
-            axis.set_yscale(y_scale)
+        axis.set_yscale(y_scale)
 
         return
+
+    # def _auto_flux_scale(self, axis, y, y_scale):
+    #
+    #     if y_scale == 'auto':
+    #
+    #         # Limits for the axes
+    #         y_max, y_min = np.nanmax(y), np.nanmin(y)
+    #         cont, std = np.nanmedian(y), np.nanstd(y)
+    #         high_limit = y_max + 2 * std
+    #         low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - 2 * std
+    #         # axis.set_ylim(ymin=low_limit, ymax=high_limit)
+    #
+    #         # Scale for the y axis
+    #         if y_scale == 'auto':
+    #
+    #             if np.all(y > 1e-10) and (high_limit > 10 * y.mean()):
+    #                 axis.set_yscale('log')
+    #             else:
+    #                 axis.set_yscale('linear')
+    #         else:
+    #             axis.set_yscale(y_scale)
+    #
+    #     else:
+    #         axis.set_yscale(y_scale)
+    #
+    #     return
 
 
 class LimeFigures(Plotter):
@@ -1939,7 +1999,8 @@ class LimeFigures(Plotter):
         self._fig, self._ax = None, None
 
     def spectrum(self, extra_comp=None, lines_query_df=None, spec_label=None, noise_region=None, log_scale=False,
-                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}):
+                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={},
+                 maximize=False):
 
         """
 
@@ -2007,7 +2068,7 @@ class LimeFigures(Plotter):
 
             # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                          self._spec.redshift, rest_frame)
+                                                                          self._spec.redshift, rest_frame, )
 
             # Plot the spectrum
             self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=spec_label, where='mid', color=self._color_dict['fg'])
@@ -2064,7 +2125,7 @@ class LimeFigures(Plotter):
                 self._ax.legend()
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', self._fig)
+            save_close_fig_swicth(output_address, 'tight', self._fig, maximize)
 
         return
 
@@ -2120,7 +2181,7 @@ class LimeFigures(Plotter):
                 wave_array, cont_array = linear_continuum_computation(list_comps, self._spec.log, (1 + self._spec.redshift))
 
                 # Continuum bands
-                self._bands_plot(self._ax[0], wave_plot, flux_plot, z_corr, idcsM)
+                self._bands_plot(self._ax[0], wave_plot, flux_plot, z_corr, idcsM, line)
 
                 # Gaussian profiles
                 idcs_lines = self._spec.log.index.isin(list_comps)
@@ -2258,3 +2319,86 @@ class LimeFigures(Plotter):
                 mplcursors.cursor(line_g).connect("add", lambda sel, label=label_complex: sel.annotation.set_text(label))
 
         return
+
+
+class SampleFigures(Plotter):
+
+    def __init__(self, sample):
+
+        # Instantiate the dependencies
+        Plotter.__init__(self)
+
+        # Lime spectrum object with the scientific data
+        self._sample = sample
+
+        # Container for the matplotlib figures
+        self._fig, self._ax = None, None
+
+        return
+
+    def spectra(self, log_scale=False, output_address=None, rest_frame=False, include_fits=False,
+                in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}):
+
+        # Set figure format with the user inputs overwriting the default conf
+        legend_check = True
+        plt_cfg.setdefault('figure.figsize', (10, 6))
+        PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._sample.norm_flux,
+                                                  units_wave=self._sample.units_wave, units_flux=self._sample.units_flux)
+
+        # Create and fill the figure
+        with rc_context(PLT_CONF):
+
+            # Generate the figure object and figures
+            self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
+
+            # Loop through the spectra in the sample
+            for obj_label, spec in self._sample.items():
+
+                # Reference _frame for the plot
+                wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,
+                                                                              rest_frame)
+
+                # Plot the spectrum
+                self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=obj_label, where='mid')
+
+                # List of lines in the log
+                line_list = spec.log.index.values
+
+                # Plot the fittings
+                if include_fits:
+
+                    # Do not include the legend as the labels are necessary for mplcursors
+                    legend_check = False
+
+                    if line_list.size > 0:
+
+                        wave_array, gaussian_array = gaussian_profiles_computation(line_list, spec.log, (1 + spec.redshift))
+                        wave_array, cont_array = linear_continuum_computation(line_list, spec.log, (1 + spec.redshift))
+
+                        # Single component lines
+                        line_g_list = self._gaussian_line_profiler(self._ax, line_list,
+                                                                   wave_array, gaussian_array, cont_array,
+                                                                   z_corr, spec.log, spec.norm_flux)
+
+                        # Add the interactive pop-ups
+                        self._mplcursor_parser(line_g_list, line_list, spec.log, spec.norm_flux, spec.units_wave,
+                                               spec.units_flux)
+
+                # Plot the masked pixels
+                self._masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, spec.log, idcs_mask)
+
+            # Switch y_axis to logarithmic scale if requested
+            if log_scale:
+                self._ax.set_yscale('log')
+
+            # Add or remove legend according to the plot type:
+            # TODO we should be able to separate labels from sample objects from line fits
+            if legend_check:
+                self._ax.legend()
+
+            # By default, plot on screen unless an output address is provided
+            save_close_fig_swicth(output_address, 'tight', self._fig)
+
+        return
+
+

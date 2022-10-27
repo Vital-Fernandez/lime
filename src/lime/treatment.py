@@ -12,9 +12,11 @@ from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks
 
-from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures
+from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures, SampleFigures
+from .plots_interactive import SpectrumCheck
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
+from .transitions import Line
 
 from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
@@ -77,10 +79,13 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
     :param units_flux: Flux array physical units. The default value is F_lamda (erg/cm^2/s/A)
     :type units_flux: str, optional
 
+    :param label: Name for the spectrum object
+    :type label: str, optional
+
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, label=None):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -89,6 +94,7 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         IntMaskInspector.__init__(self)
 
         # Class attributes
+        self.label = label
         self.wave = None
         self.wave_rest = None
         self.flux = None
@@ -101,8 +107,9 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         self.units_flux = units_flux
         self._masked_inputs = False
 
-        # Plotting object
+        # Plotting objects
         self.plot = LimeFigures(self)
+        self.check = SpectrumCheck(self)
 
         # Checks spectra units
         for arg in ['units_wave', 'units_flux']:
@@ -565,6 +572,180 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
 
     def clear_fit(self):
         super().__init__()
+        return
+
+
+class Sample(dict):
+
+    def __init__(self, spec_dict={}):
+
+        # Inherit the default dictionary properties
+        super().__init__(spec_dict)
+
+        # Attributes
+        self.obj_list = np.array([])
+        self.plot = SampleFigures(self)
+        self.norm_flux = None
+        self.units_wave = None
+        self.units_flux = None
+
+        return
+
+    def add_object(self, label, obs_type='spectrum', **kwargs):
+
+        # Establish the type of observations
+        if obs_type == 'spectrum':
+
+            lime_obj = Spectrum(label=label, **kwargs)
+
+        # Add object to the container
+        self[label] = lime_obj
+
+        # Renew the list of objects
+        self.obj_list = np.array(list(self.keys()))
+
+        # Check if the units and normalizations match
+        if len(self.keys()) == 1:
+            print('ALOMOJOR')
+            self.norm_flux = lime_obj.norm_flux
+            self.units_wave, self.units_flux = lime_obj.units_wave, lime_obj.units_flux
+
+        else:
+            for prop in ['norm_flux', 'units_wave', 'units_flux']:
+                if self.__getattribute__(prop) != lime_obj.__getattribute__(prop):
+                    _logger.warning(f'The {prop} of object {label} do not match those in the sample:'
+                                    f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
+
+
+class LineTreatment(EmissionFitting):
+
+    def __init__(self, spectrum):
+
+        # Instantiate the dependencies
+        EmissionFitting.__init__(self)
+
+        # Lime spectrum object with the scientific data
+        self._spec = spectrum
+
+    def band(self, line, mask=None, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True, temp_line=10000.0):
+
+        """
+
+        This function fits a line given its line and spectral mask. The line notation consists in the transition
+        ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
+
+        The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
+        adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
+
+        The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
+        the documentation for the complete description.
+
+        The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+
+        By default, the algorithm assumes an emission line. The user can set the parameter ``emission=False`` for an
+        absorption.
+
+        If the sigma spectrum was not provided, the fitting estimates the pixel uncertainty from the adjacent continua flux
+        standard deviation assuming a linear profile. If the parameter ``adjacent_cont=True`` the adjacent continua is also
+        use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
+        first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
+
+        For the calculation of the thermal broadening on the emission lines the user can include the line electron
+        temperature in Kelvin. The default value is 10000 K
+
+        :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
+        :type line: string
+
+        :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
+        :type mask: numpy.ndarray
+
+        :param user_cfg: Dictionary with the fitting configuration.
+        :type user_cfg: dict, optional
+
+        :param fit_method: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
+        :type fit_method: str, optional
+
+        :param emission: Boolean check for the line type. The default is ``True`` for an emission line
+        :type emission: bool, optional
+
+        :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
+                              adjacent continua array
+        :type adjacent_cont: bool, optional
+
+        :param temp_line: Line electron temperature for the thermal broadening calculation.
+        :type temp_line: bool, optional
+
+        """
+
+        # Security checks for the mask wavelengths
+        if np.all(np.diff(mask) >= 0):
+            _logger.warning(f'The {line} bands are not sorted: {mask}')
+
+        # Interpret the line from the analysis
+        line = Line(line, mask)
+
+        # For security previous measurement is cleared and a copy of the user configuration is used
+        fit_conf = user_cfg.copy()
+
+        # Label the current measurement
+        self.mask = mask
+        self.temp_line = temp_line
+
+        # Global fit parameters
+        self._emission_check = emission
+        self._cont_from_adjacent = adjacent_cont
+        self._decimal_wave = True if '.' in self.line else False
+
+        # Get spectrum line and continua band indeces
+        self.pixel_mask = fit_conf.get(f'{self.line}_mask', 'no')
+        idcsEmis, idcsCont = define_masks(self.wave, self.mask * (1 + self.redshift),
+                                          line_mask_entry=self.pixel_mask)
+
+        # Integrated line properties
+        emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
+        contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
+        err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
+
+        # Review the transition bands before
+        emis_band_lengh = emisWave.size if not np.ma.is_masked(emisWave) else np.sum(~emisWave.mask)
+        cont_band_length = contWave.size if not np.ma.is_masked(contWave) else np.sum(~contWave.mask)
+        if emis_band_lengh / emisWave.size < 0.5:
+            _logger.warning(f'The line band for {self.line} has very few valid pixels')
+
+        if cont_band_length / contWave.size < 0.5:
+            _logger.warning(f'The continuum band for {self.line} has very few valid pixels')
+
+        # Store error very small mask
+        if emis_band_lengh <= 1:
+            if self.observations == 'no':
+                self.observations = 'Small_line_band'
+            else:
+                self.observations += 'Small_line_band'
+            _logger.warning(f'- Line {line} mask band is too small ({emisWave.size} value array): {emisWave}')
+
+        # Non-parametric measurements
+        self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
+
+        # Check if blended line
+        if self.line in fit_conf:
+            self.profile_label = fit_conf[self.line]
+            if '_b' in self.line:
+                self.blended_check = True
+
+        # Import kinematics if requested
+        self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
+
+        # Gaussian fitting # TODO Add logic for very small lines
+        idcsLine = idcsEmis + idcsCont
+        x_array = self.wave[idcsLine]
+        y_array = self.flux[idcsLine]
+        w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size,
+                                                                                          1.0 / self.std_cont)
+        self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, z_obj=self.redshift, fit_method=fit_method)
+
+        # Safe the results to log DF
+        self.results_to_database(self.line, self.log, fit_conf)
+
         return
 
 
