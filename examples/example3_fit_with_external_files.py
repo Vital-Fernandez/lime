@@ -18,51 +18,40 @@ def import_osiris_fits(file_address, ext=0):
 
 # State the data files
 obsFitsFile = './sample_data/gp121903_BR.fits'
-lineMaskFile = './sample_data/osiris_mask.txt'
+lineMaskFile = './sample_data/osiris_bands.txt'
 cfgFile = './sample_data/config_file.cfg'
 
 # Load spectrum
 wave, flux, header = import_osiris_fits(obsFitsFile)
 
-# Load mask
-mask = lime.load_lines_log(lineMaskFile)
+# Load line bands
+bands = lime.load_lines_log(lineMaskFile)
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)
-
-# Declare line measuring object
 z_obj = obs_cfg['sample_data']['z_array'][2]
 norm_flux = obs_cfg['sample_data']['norm_flux']
+
+# Declare line measuring object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot_spectrum(spec_label=f'GP121903 spectrum', frame='rest')
+gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
 
 # Find lines
-peaks_table, matched_masks_DF = gp_spec.match_line_mask(mask, obs_cfg['sample_data']['noiseRegion_array'])
-gp_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_masks_DF, spec_label=f'GP121903 spectrum', log_scale=True, frame='rest')
+match_bands = gp_spec.line_detection(bands, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 0.7])
+gp_spec.plot.spectrum(label='GP121903 matched lines', line_bands=match_bands, log_scale=True)
 
-# Correct line region
-corrected_mask_file = './sample_data/gp121903_BR_mask_corrected.txt'
-lime.save_line_log(matched_masks_DF, corrected_mask_file)
+# Saving the object mask
+obj_bands_file = './sample_data/gp121903_bands.txt'
+lime.save_line_log(match_bands, obj_bands_file)
 
 # Object line fitting configuration
 fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
-for i, lineLabel in enumerate(matched_masks_DF.index):
-    wave_regions = matched_masks_DF.loc[lineLabel, 'w1':'w6'].values
-    gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
-    # gp_spec.display_results(log_scale=True, frame='rest')
+gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='bar')
 
 # Display fits in grid
-gp_spec.plot_line_grid(gp_spec.log, frame='rest')
+gp_spec.plot.grid(gp_spec.log, rest_frame=True)
 
-# Display fits along the spectrum
-gp_spec.plot_spectrum(include_fits=True, frame='rest')
-
-# Save the results
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.txt')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_flux_table.pdf', parameters=['eqw', 'intg_flux', 'intg_err'])
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.fits', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.xlsx', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/gp121903_linelog.asdf', ext='GP121903')
+lime.save_line_log(gp_spec.log, './sample_data/example3_linelog.txt', ext='GP121903')
 

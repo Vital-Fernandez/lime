@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 from matplotlib.widgets import RadioButtons, SpanSelector
 from pathlib import Path
 from .io import load_lines_log, save_line_log
-from .plots import Plotter, maximize_center_matplotlib_fig, frame_mask_switch_2, save_close_fig_swicth
+from .plots import Plotter, maximize_center_fig, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale
 from .tools import label_decomposition, blended_label_from_log
 from lime import _lines_database_path
 
@@ -36,7 +36,7 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
 
     # Use all mask and treat them as active
     else:
-        user_mask = input_mask
+        user_mask = input_mask.copy()
         active_lines = np.ones(len(user_mask.index)).astype(bool)
 
     # Establish the lower and upper wavelength limits
@@ -249,7 +249,7 @@ class BandsInspection:
             # Plot the spectrum
             ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=self._color_dict['fg'])
 
-            # # Continuum bands
+            # Continuum bands
             self._bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line)
 
             # Plot the masked pixels
@@ -264,7 +264,7 @@ class BandsInspection:
             ax.axes.yaxis.set_visible(False)
 
             # Scale each
-            self._auto_flux_scale(ax, flux_plot[idxL:idxH]*z_corr, y_scale)
+            _auto_flux_scale(ax, flux_plot[idxL:idxH]*z_corr, y_scale)
 
             return
 
@@ -304,6 +304,7 @@ class BandsInspection:
                     _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Save the new selection to the lines log
+            print('bicho', type(self.mask))
             self.log.loc[self.line, 'w1':'w6'] = self.mask
 
             # Save the log to the file

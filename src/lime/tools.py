@@ -650,7 +650,7 @@ class LineFinder:
 
         return detection_mask
 
-    def line_detection(self, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3, lines_log=None,
+    def line_detection(self, bands_log=None, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3,
                        line_type='emission', width_tol=5, width_mode='fixed', ml_detection=False, plot_cont_calc=False,
                        plot_peak_calc=False):
 
@@ -670,10 +670,10 @@ class LineFinder:
         idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
-        if lines_log is not None:
+        if bands_log is not None:
 
             # Match peaks with theoretical lines
-            matched_DF = self.label_peaks(idcs_peaks, lines_log, width_tol=width_tol, width_mode=width_mode,
+            matched_DF = self.label_peaks(idcs_peaks, bands_log, width_tol=width_tol, width_mode=width_mode,
                                           line_type=line_type)
 
             return matched_DF

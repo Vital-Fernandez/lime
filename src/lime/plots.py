@@ -306,16 +306,14 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
     # By default, plot on screen unless an output address is provided
     if file_path is None:
 
+        # Tight layout
         if bbox_inches is not None:
             plt.tight_layout()
 
-        if maximize:
-            try:
-                manager = plt.get_current_fig_manager()
-                manager.window.showMaximized()
-            except:
-                _logger.debug(f'Unable to maximize the window')
+        # Window positioning and size
+        maximize_center_fig(maximize)
 
+        # Display
         plt.show()
 
     else:
@@ -400,25 +398,64 @@ def frame_mask_switch_2(wave_obs, flux_obs, redshift, user_choice):
         wave_plot, flux_plot = wave_obs.data, flux_obs.data
 
     else:
-        idcs_mask = None
+        idcs_mask = np.zeros(wave_obs.size).astype(bool)
         wave_plot, flux_plot = wave_obs, flux_obs
 
     return wave_plot, flux_plot, z_corr, idcs_mask
 
 
-def maximize_center_matplotlib_fig():
+def maximize_center_fig(maximize_check=False, center_check=False):
 
-    try:
-        manager = plt.get_current_fig_manager()
-        manager.window.showMaximized()
-    except:
-        _logger.debug(f'Unable to maximize the window')
+    # mng = plt.get_current_fig_manager()
+    # mng.resize(*mng.window.maxsize())
+
+    if maximize_check:
+
+        # Windows maximize
+        mng = plt.get_current_fig_manager()
+
+        try:
+            mng.window.showMaximized()
+        except:
+            try:
+                mng.resize(*mng.window.maxsize())
+            except:
+                _logger.debug(f'Unable to maximize the window')
+
+    if center_check:
 
         try:
             mngr = plt.get_current_fig_manager()
             mngr.window.setGeometry(1100, 300, mngr.canvas.width(), mngr.canvas.height())
         except:
             _logger.debug(f'Unable to center plot window')
+
+    return
+
+
+def _auto_flux_scale(axis, y, y_scale):
+
+    # If non-provided auto-decide
+    if y_scale == 'auto':
+
+        # Limits for the axes, ignore the divide by zero warning
+        with np.errstate(divide='ignore', invalid='ignore'):
+            neg_check = np.any(y < 0)
+            y_max, y_min = np.nanmax(y), np.nanmin(y)
+            # cont, std = np.nanmedian(y), np.nanstd(y)
+            # high_limit = y_max + 2 * std
+            # low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - 2 * std
+            # axis.set_ylim(ymin=low_limit, ymax=high_limit)
+            ratio = np.abs(y_max/y_min)
+            if (ratio > 25) or (ratio < 0.06):
+                if neg_check:
+                    y_scale = 'symlog'
+                else:
+                    y_scale = 'log'
+            else:
+                y_scale = 'linear'
+
+    axis.set_yscale(y_scale)
 
     return
 
@@ -503,10 +540,10 @@ class IntMaskInspector:
         self._frame = frame
 
         # If provided, open the previous mask
+        parent_mask = None
         if self._log_address is not None:
-            parent_mask = load_lines_log(self._log_address)
-        else:
-            parent_mask = None
+            if self._log_address.is_file():
+                parent_mask = load_lines_log(self._log_address)
 
         # Establish the reference lines log to inspect the mask
         self.log, self._activeLines = self._check_previous_mask(input_mask, parent_mask, self.wave_rest)
@@ -1483,7 +1520,7 @@ class LiMePlots:
         return
 
     def plot_line_grid(self, log=None, plt_cfg={}, n_cols=5, n_rows=None, output_address=None, log_scale=True, frame='observed',
-                       print_flux=False):
+                       print_flux=False, y_scale='auto'):
 
 
         # TODO case only one line flatten fails
@@ -1589,8 +1626,9 @@ class LiMePlots:
                     ax_i.set_title(latex_array[i])
 
                     # Switch y_axis to logarithmic scale if requested
-                    if log_scale:
-                        ax_i.set_yscale('log')
+                    _auto_flux_scale(ax_i, flux_plot[idx_low[i]:idx_high[i]], y_scale)
+                    # if log_scale:
+                    #     ax_i.set_yscale('log')
 
                 # Clear not filled axes
                 else:
@@ -1914,7 +1952,7 @@ class Plotter:
     def _masks_plot(self, axis, line_list,  x, y, z_corr, log, spectrum_mask):
 
         # Spectrum mask
-        if spectrum_mask is not None:
+        if np.any(spectrum_mask):
             axis.scatter(x[spectrum_mask]/z_corr, y[spectrum_mask]*z_corr, marker='x', label='Masked pixels',
                          color=self._color_dict['mask_marker'])
 
@@ -1930,31 +1968,6 @@ class Plotter:
                         if np.sum(idcsMask) >= 1:
                             axis.scatter(x[idcsMask]/z_corr, y[idcsMask]*z_corr, marker="x",
                                          color=self._color_dict['mask_marker'])
-
-        return
-
-    def _auto_flux_scale(self, axis, y, y_scale):
-
-        # If non-provided auto-decide
-        if y_scale == 'auto':
-
-            # Limits for the axes, ignore the divide by zero warning
-            with np.errstate(divide='ignore', invalid='ignore'):
-                neg_check = np.any(y < 0)
-                y_max, y_min = np.nanmax(y), np.nanmin(y)
-                # cont, std = np.nanmedian(y), np.nanstd(y)
-                # high_limit = y_max + 2 * std
-                # low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - 2 * std
-                # axis.set_ylim(ymin=low_limit, ymax=high_limit)
-                if np.abs(y_max/y_min) > 55:
-                    if neg_check:
-                        y_scale = 'symlog'
-                    else:
-                        y_scale = 'log'
-                else:
-                    y_scale = 'linear'
-
-        axis.set_yscale(y_scale)
 
         return
 
@@ -1998,138 +2011,7 @@ class LimeFigures(Plotter):
         # Container for the matplotlib figures
         self._fig, self._ax = None, None
 
-    def spectrum(self, extra_comp=None, lines_query_df=None, spec_label=None, noise_region=None, log_scale=False,
-                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={},
-                 maximize=False):
-
-        """
-
-        This function plots the spectrum defined by the `Spectrum class <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum>`_
-
-        The user can include an additional flux array (for example the uncertainty spectrum) to be plotted.
-
-        Additionally, the user can include the outputs from the `.match_line_mask <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
-        function to plot the emission peaks and the matched lines. Moreover, if the parameter ``include_fits=True`` the plot
-        will include the gaussian profiles stored in the lines ``.log``.
-
-        The user can specify the plot _frame of reference via the ``_frame='obs'`` or ``_frame='rest'`` parameter. Moreover,
-        the user can provide dictionaries for the matplotlib `figure <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams>`_
-        and `axis <https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set.html#matplotlib.axes.Axes.set>`_ styles.
-
-        Finally, if the user provides an ``output_address``, the spectrum will be saved as an image instead of being displayed.
-
-        :param comp_array: Additional flux array to be plotted alongside the spectrum flux.
-        :type comp_array: numpy.array, optional
-
-        :param peaks_table: Table with the emission and absorptions detected by the `.match_line_mask function <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
-        :type peaks_table: astropy.Table, optional
-
-        :param match_log: Lines log with the emission/absorptions which have matched the peaks/trough by the .match_line_mask.
-        :type match_log: pandas.Dataframe, optional
-
-        :param noise_region: 2 value array with the wavelength limits. This region will be shaded in the output plot.
-        :type noise_region: np.array, optional
-
-        :param log_scale: Set to True for a vertical (flux) axis logarithmic scale. The default value is False
-        :type log_scale: bool, optional
-
-        :param plt_cfg: Dictionary with the configuration for the matplotlib `rcParams routine <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
-        :type plt_cfg: bool, optional
-
-        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
-        :type ax_cfg: bool, optional
-
-        :param spec_label: Label for the spectrum plot legend, The default value is 'Observed spectrum'
-        :type spec_label: str, optional
-
-        :param output_address: File location to store the plot as an image. If provided, the plot won't be displayed on
-                               the screen.
-        :type output_address: str, optional
-
-        :param include_fits: Check to include the gaussian profile fittings in the plot. The default value is False.
-        :type include_fits: Check to include the gaussian profile fittings in the plot.
-
-        :param frame: Frame of reference for the spectrum plot: "observed" or "rest". The default value is observed.
-        :param _frame: str, optional
-
-        """
-
-        # Set figure format with the user inputs overwriting the default conf
-        legend_check = True if spec_label is not None else False
-        plt_cfg.setdefault('figure.figsize', (10, 6))
-        PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
-                                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
-
-        # Create and fill the figure
-        with rc_context(PLT_CONF):
-
-            # Generate the figure object and figures
-            self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
-
-            # Reference _frame for the plot
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                          self._spec.redshift, rest_frame, )
-
-            # Plot the spectrum
-            self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=spec_label, where='mid', color=self._color_dict['fg'])
-
-            # Ass extra spectra if requested # TODO a more complex mechanic would be usefull
-            if extra_comp is not None:
-                if len(extra_comp) == len(wave_plot):
-                    self._ax.step(wave_plot / z_corr, extra_comp, label='Sigma Continuum', linestyle=':', where='mid')
-                else:
-                    _logger.warning('The extra component array has different length than the spectrum wavelength array. '
-                                    'It could not be plotted')
-
-            # Plot peaks and troughs if provided
-            if lines_query_df is not None:
-                self._line_matching_plot(self._ax, lines_query_df, wave_plot, flux_plot, z_corr, self._spec.redshift,
-                                         self._spec.units_wave)
-
-            # Shade noise region if provided # TODO state colors for this one
-            if noise_region is not None:
-                self._ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
-
-            # List of lines in the log
-            line_list = self._spec.log.index.values
-
-            # Plot the fittings
-            if include_fits:
-
-                # Do not include the legend as the labels are necessary for mplcursors
-                legend_check = False
-
-                if line_list.size > 0:
-
-                    wave_array, gaussian_array = gaussian_profiles_computation(line_list, self._spec.log, (1 + self._spec.redshift))
-                    wave_array, cont_array = linear_continuum_computation(line_list, self._spec.log, (1 + self._spec.redshift))
-
-                    # Single component lines
-                    line_g_list = self._gaussian_line_profiler(self._ax, line_list,
-                                                               wave_array, gaussian_array, cont_array,
-                                                               z_corr, self._spec.log, self._spec.norm_flux)
-
-                    # Add the interactive pop-ups
-                    self._mplcursor_parser(line_g_list, line_list, self._spec.log, self._spec.norm_flux,
-                                           self._spec.units_wave, self._spec.units_flux)
-
-            # Plot the masked pixels
-            self._masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, self._spec.log, idcs_mask)
-
-            # Switch y_axis to logarithmic scale if requested
-            if log_scale:
-                self._ax.set_yscale('log')
-
-            # Add or remove legend according to the plot type:
-            if legend_check:
-                self._ax.legend()
-
-            # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', self._fig, maximize)
-
-        return
-
-    def line(self, line=None, include_fits=True, rest_frame=False, y_scale='linear', in_fig=None, in_axis=None,
+    def line(self, line=None, include_fits=True, rest_frame=False, y_scale='auto', in_fig=None, in_axis=None,
              plt_cfg={}, ax_cfg={}, output_address=None):
 
         # If no line is provided we used the one from the last fitting
@@ -2141,7 +2023,10 @@ class LimeFigures(Plotter):
 
         # Confirm the line is in log
         else:
-            if line not in self._spec.line.index:
+            if line.endswith('_b'):
+                line = line[:-2]
+
+            if line not in self._spec.log.index:
                 _logger.warning(f'The input line {line} was not found in measurements log')
                 line = None
 
@@ -2210,12 +2095,252 @@ class LimeFigures(Plotter):
             self._ax[0].legend()
 
             # Set the scale
-            self._auto_flux_scale(self._ax[0], y=flux_plot[idcsM[0]:idcsM[5]] * z_corr, y_scale=y_scale)
+            _auto_flux_scale(self._ax[0], y=flux_plot[idcsM[0]:idcsM[5]] * z_corr, y_scale=y_scale)
 
             # By default, plot on screen unless an output address is provided
             save_close_fig_swicth(output_address, 'tight', fig_obj=None)
 
             return
+
+    def spectrum(self, extra_comp=None, line_bands=None, label=None, noise_region=None, log_scale=False,
+                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={},
+                 maximize=False):
+
+        """
+
+        This function plots the spectrum defined by the `Spectrum class <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum>`_
+
+        The user can include an additional flux array (for example the uncertainty spectrum) to be plotted.
+
+        Additionally, the user can include the outputs from the `.match_line_mask <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
+        function to plot the emission peaks and the matched lines. Moreover, if the parameter ``include_fits=True`` the plot
+        will include the gaussian profiles stored in the lines ``.log``.
+
+        The user can specify the plot _frame of reference via the ``_frame='obs'`` or ``_frame='rest'`` parameter. Moreover,
+        the user can provide dictionaries for the matplotlib `figure <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams>`_
+        and `axis <https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set.html#matplotlib.axes.Axes.set>`_ styles.
+
+        Finally, if the user provides an ``output_address``, the spectrum will be saved as an image instead of being displayed.
+
+        :param comp_array: Additional flux array to be plotted alongside the spectrum flux.
+        :type comp_array: numpy.array, optional
+
+        :param peaks_table: Table with the emission and absorptions detected by the `.match_line_mask function <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
+        :type peaks_table: astropy.Table, optional
+
+        :param match_log: Lines log with the emission/absorptions which have matched the peaks/trough by the .match_line_mask.
+        :type match_log: pandas.Dataframe, optional
+
+        :param noise_region: 2 value array with the wavelength limits. This region will be shaded in the output plot.
+        :type noise_region: np.array, optional
+
+        :param log_scale: Set to True for a vertical (flux) axis logarithmic scale. The default value is False
+        :type log_scale: bool, optional
+
+        :param plt_cfg: Dictionary with the configuration for the matplotlib `rcParams routine <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
+        :type plt_cfg: bool, optional
+
+        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
+        :type ax_cfg: bool, optional
+
+        :param label: Label for the spectrum plot legend, The default value is 'Observed spectrum'
+        :type label: str, optional
+
+        :param output_address: File location to store the plot as an image. If provided, the plot won't be displayed on
+                               the screen.
+        :type output_address: str, optional
+
+        :param include_fits: Check to include the gaussian profile fittings in the plot. The default value is False.
+        :type include_fits: Check to include the gaussian profile fittings in the plot.
+
+        :param frame: Frame of reference for the spectrum plot: "observed" or "rest". The default value is observed.
+        :param _frame: str, optional
+
+        """
+
+        # Set figure format with the user inputs overwriting the default conf
+        legend_check = True if label is not None else False
+        plt_cfg.setdefault('figure.figsize', (10, 6))
+        PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
+                                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
+
+        # Create and fill the figure
+        with rc_context(PLT_CONF):
+
+            # Generate the figure object and figures
+            self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
+
+            # Reference _frame for the plot
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
+                                                                          self._spec.redshift, rest_frame, )
+
+            # Plot the spectrum
+            self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=self._color_dict['fg'])
+
+            # Ass extra spectra if requested # TODO a more complex mechanic would be usefull
+            if extra_comp is not None:
+                if len(extra_comp) == len(wave_plot):
+                    self._ax.step(wave_plot / z_corr, extra_comp, label='Sigma Continuum', linestyle=':', where='mid')
+                else:
+                    _logger.warning('The extra component array has different length than the spectrum wavelength array. '
+                                    'It could not be plotted')
+
+            # Plot peaks and troughs if provided
+            if line_bands is not None:
+                self._line_matching_plot(self._ax, line_bands, wave_plot, flux_plot, z_corr, self._spec.redshift,
+                                         self._spec.units_wave)
+
+            # Shade noise region if provided # TODO state colors for this one
+            if noise_region is not None:
+                self._ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
+
+            # List of lines in the log
+            line_list = self._spec.log.index.values
+
+            # Plot the fittings
+            if include_fits:
+
+                # Do not include the legend as the labels are necessary for mplcursors
+                legend_check = False
+
+                if line_list.size > 0:
+
+                    wave_array, gaussian_array = gaussian_profiles_computation(line_list, self._spec.log, (1 + self._spec.redshift))
+                    wave_array, cont_array = linear_continuum_computation(line_list, self._spec.log, (1 + self._spec.redshift))
+
+                    # Single component lines
+                    line_g_list = self._gaussian_line_profiler(self._ax, line_list,
+                                                               wave_array, gaussian_array, cont_array,
+                                                               z_corr, self._spec.log, self._spec.norm_flux)
+
+                    # Add the interactive pop-ups
+                    self._mplcursor_parser(line_g_list, line_list, self._spec.log, self._spec.norm_flux,
+                                           self._spec.units_wave, self._spec.units_flux)
+
+            # Plot the masked pixels
+            self._masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, self._spec.log, idcs_mask)
+
+            # Switch y_axis to logarithmic scale if requested
+            if log_scale:
+                self._ax.set_yscale('log')
+
+            # Add or remove legend according to the plot type:
+            if legend_check:
+                self._ax.legend()
+
+            # By default, plot on screen unless an output address is provided
+            save_close_fig_swicth(output_address, 'tight', self._fig, maximize)
+
+        return
+
+    def grid(self, log=None, rest_frame=True, y_scale='auto', include_fits=True, output_address=None, n_cols=6,
+             n_rows=None, col_row_scale=(2, 1.5), maximize=False, plt_cfg={}, ax_cfg={}):
+
+        # If not mask provided use the log
+        if log is None:
+            log = self._spec.log
+
+        # Check that the log type and content
+        if not isinstance(log, pd.DataFrame):
+            _logger.critical('The bands log for the grid plot must be a pandas dataframe')
+
+        # Proceed
+        if len(log.index) > 0:
+
+            lineList = log.index
+            n_lines = lineList.size
+
+            # Compute the number of rows configuration
+            if n_lines > n_cols:
+                if n_rows is None:
+                    n_rows = int(np.ceil(n_lines / n_cols))
+            else:
+                n_cols, n_rows = n_lines, 1
+            n_grid = n_cols * n_rows
+
+            # Set the plot format where the user's overwrites the default
+            default_fig_cfg = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1]),
+                               'axes.titlesize': 12}
+            default_fig_cfg.update(plt_cfg)
+            PLT_CONF, AXES_CONF = self._figure_format(default_fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
+                                                      units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
+            AXES_CONF.pop('xlabel')
+
+            # Launch the interative figure
+            with rc_context(PLT_CONF):
+
+                # Figure attributes
+                self._fig, ax_g = plt.subplots(nrows=n_rows, ncols=n_cols)
+                self._ax = ax_g.flatten() if n_lines > 1 else [ax_g]
+
+                for i in np.arange(n_grid):
+
+                    if i < n_lines:
+
+                        # Check components
+                        line_i = lineList[i]
+                        blended_check, profile_label = blended_label_from_log(line_i, log)
+                        list_comps = profile_label.split('-') if blended_check else [line_i]
+
+                        # Reference _frame for the plot
+                        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
+                                                                                      self._spec.redshift, rest_frame)
+
+                        # Establish the limits for the line spectrum plot
+                        mask = log.loc[list_comps[0], 'w1':'w6'] * (1 + self._spec.redshift)
+                        idcsM = np.searchsorted(wave_plot, mask)
+                        idxL = idcsM[0] - 5 if idcsM[0] > 5 else idcsM[0]
+                        idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
+
+                        # Plot the spectrum
+                        self._ax[i].step(wave_plot[idxL:idxH] / z_corr, flux_plot[idxL:idxH] * z_corr, where='mid',
+                                        color=self._color_dict['fg'])
+
+                        # Continuum bands
+                        self._bands_plot(self._ax[i], wave_plot, flux_plot, z_corr, idcsM, line_i)
+
+                        # Plot the masked pixels
+                        self._masks_plot(self._ax[i], [line_i], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, log,
+                                         idcs_mask[idxL:idxH])
+
+                        # Plot the fitting results
+                        if include_fits:
+
+                            wave_array, gaussian_array = gaussian_profiles_computation([line_i], self._spec.log,
+                                                                                       (1 + self._spec.redshift))
+                            wave_array, cont_array = linear_continuum_computation([line_i], self._spec.log,
+                                                                                  (1 + self._spec.redshift))
+
+                            # Single component lines
+                            line_g_list = self._gaussian_line_profiler(self._ax[i], [line_i],
+                                                                       wave_array, gaussian_array, cont_array,
+                                                                       z_corr, self._spec.log, self._spec.norm_flux)
+
+                            # Add the interactive pop-ups
+                            self._mplcursor_parser(line_g_list, [line_i], self._spec.log, self._spec.norm_flux,
+                                                   self._spec.units_wave, self._spec.units_flux)
+
+                        # Formatting the figure
+                        self._ax[i].yaxis.set_major_locator(plt.NullLocator())
+                        self._ax[i].xaxis.set_major_locator(plt.NullLocator())
+
+                        self._ax[i].update({'title': log.loc[line_i, 'latex_label']})
+                        self._ax[i].yaxis.set_ticklabels([])
+                        self._ax[i].axes.yaxis.set_visible(False)
+
+                        # Scale each
+                        _auto_flux_scale(self._ax[i], flux_plot[idxL:idxH] * z_corr, y_scale)
+
+                    else:
+                        self._fig.delaxes(self._ax[i])
+
+                # Show the image
+                save_close_fig_swicth(output_address, 'tight', self._fig, maximize=maximize)
+
+        else:
+            _logger.info('The bands log does not contain lines')
+
+        return
 
     def _gaussian_line_profiler(self, axis, line_list, wave_array, gaussian_array, cont_array, z_corr, log, norm_flux):
 
@@ -2229,7 +2354,7 @@ class LimeFigures(Plotter):
 
             # Check if blended or single/merged
             idcs_comp = None
-            if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] != 'no'):
+            if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] != 'no') and (len(line_list) > 1):
                 profile_comps = log.loc[line, 'profile_label'].split('-')
                 idx_line = profile_comps.index(line)
                 n_comps = len(profile_comps)

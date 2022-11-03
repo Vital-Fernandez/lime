@@ -187,6 +187,34 @@ def mult_err_propagation(nominal_array, err_array, result):
     return err_result
 
 
+def review_err_propagation(line, idx_line, comp):
+
+    # Check gaussian flux error
+    if (line.gauss_err[idx_line] == 0.0) and (line.amp_err[idx_line] != 0.0) and (line.sigma_err[idx_line] != 0.0):
+        line.gauss_err[idx_line] = mult_err_propagation(np.array([line.amp[idx_line], line.sigma[idx_line]]),
+                                                        np.array([line.amp_err[idx_line], line.sigma_err[idx_line]]),
+                                                        line.gauss_flux[idx_line])
+
+    # Check equivalent width error
+    # for param in
+
+
+    # Check the error from the _kinem command imports
+
+    return
+
+
+def review_fitting(line, fit_output):
+
+    if not fit_output.errorbars:
+        if line.observations == 'no':
+            line.observations = 'No_errorbars'
+        else:
+            line.observations += 'No_errorbars'
+        _logger.warning(f'Gaussian fit uncertainty estimation failed for {line.label}')
+
+    return
+
 
 class EmissionFitting:
 
@@ -246,6 +274,7 @@ class EmissionFitting:
         self._emission_check = True
         self._cont_from_adjacent = True
         self._decimal_wave = False
+        self._narrow_line = False
 
         return
 
@@ -358,7 +387,14 @@ class EmissionFitting:
             # Amplitude default configuration changes according and emission or absorption feature
             AMP_PAR = self._AMP_PAR if self._emission_check else self._AMP_ABS_PAR
 
+            if self._narrow_line:
+            #     AMP_PAR.update({'min': (self.peak_flux - self.cont)*0.80, 'max': (self.peak_flux - self.cont)*1.20})
+            # else:
+                AMP_PAR = {**AMP_PAR, **{'min': (self.peak_flux - self.cont)*0.80, 'max': (self.peak_flux - self.cont)*1.20}}
+
             # Define the curve parameters # TODO include the normalization here
+            # print('Seguro', AMP_PAR)
+            # print(self._AMP_PAR)
             self.define_param(idx, compList, fit_model, 'amp', self.peak_flux - self.cont, AMP_PAR, user_conf)
             self.define_param(idx, compList, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
             self.define_param(idx, compList, fit_model, 'sigma', 2*self.pixelWidth, self._SIG_PAR, user_conf)
@@ -436,7 +472,10 @@ class EmissionFitting:
             self.sigma_vel[i] = c_KMpS * self.sigma[i]/ref_wave[i]
             self.sigma_vel_err[i] = c_KMpS * self.sigma_err[i]/ref_wave[i]
             self.FWHM_g[i] = k_FWHM * self.sigma_vel[i]
-            self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            try:
+                self.sigma_thermal[i] = np.sqrt(k_Boltzmann * self.temp_line / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            except:
+                self.sigma_thermal[i] = np.nan
 
             # Check parameters error progragation from the lmfit parameter
             self.error_propagation_check(i, comp)
@@ -598,4 +637,388 @@ class EmissionFitting:
         return
 
 
+class LineFitting:
 
+    """Class to measure emission line fluxes and fit them as gaussian curves"""
+
+    _AMP_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+    _CENTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
+    _SIG_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+    _AREA_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
+
+    _AMP_ABS_PAR = dict(value=None, min=-np.inf, max=0, vary=True, expr=None)
+
+    _SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+    _INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+
+    _SLOPE_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+    _INTER_FIX_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=False, expr=None)
+
+    _minimize_method = 'leastsq'
+
+    _atomic_mass_dict = ATOMIC_MASS
+
+    # Switch for emission and absorption lines
+
+    def __init__(self):
+
+        self.fit_params = {}
+        self.fit_output = None
+
+        return
+
+    def integrated_properties(self, line, emis_wave, emis_flux, cont_wave, cont_flux, emis_err=None, n_steps=1000):
+
+        # Gradient and interception of linear continuum using adjacent regions
+        if line._cont_from_adjacent:
+            if np.ma.isMaskedArray(cont_flux): # TODO check if this is == or is
+                input_wave, input_flux = cont_wave.data[cont_wave.mask == False], cont_flux.data[cont_flux.mask == False]
+            else:
+                input_wave, input_flux = cont_wave, cont_flux
+
+            line.m_cont, line.n_cont, r_value, p_value, std_err = stats.linregress(input_wave, input_flux)
+
+        # Using line first and last point
+        else:
+            w2, w3 = emis_wave[0], emis_wave[-1]
+            f2, f3 = emis_flux[0], emis_flux[-1]
+            line.m_cont = (f3 - f2) / (w3 - w2)
+            line.n_cont = f3 - line.m_cont * w3
+
+        # Compute continuum
+        continuaFit = cont_wave * line.m_cont + line.n_cont
+        lineLinearCont = emis_wave * line.m_cont + line.n_cont
+
+        # Peak or through index
+        peakIdx = np.argmax(emis_flux) if line._emission_check else np.argmin(emis_flux)
+
+        # Assign values
+        line.peak_wave = emis_wave[peakIdx]
+        line.peak_flux = emis_flux[peakIdx]
+        line.pixelWidth = np.diff(emis_wave).mean()
+
+        line.cont = line.peak_wave * line.m_cont + line.n_cont
+        line.std_cont = np.std(cont_flux - continuaFit)
+
+        # Establish the pixel sigma error
+        err_array = line.std_cont if emis_err is None else emis_err
+
+        # Monte Carlo to measure line flux and uncertainty
+        normalNoise = np.random.normal(0.0, err_array, (n_steps, emis_flux.size))
+        lineFluxMatrix = emis_flux + normalNoise
+        areasArray = (lineFluxMatrix.sum(axis=1) - lineLinearCont.sum()) * line.pixelWidth
+
+        # Assign values
+        line.intg_flux = areasArray.mean()
+        line.intg_err = areasArray.std()
+        line.snr_line = signal_to_noise(line.intg_flux, line.std_cont, emis_wave.size)
+        line.snr_cont = line.cont/line.std_cont
+
+        # Line width to the pixel below the continuum (or mask size if not happening)
+        idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, line._emission_check)
+        idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, line._emission_check)
+
+        line.w_i = emis_wave[idx_0]
+        line.w_f = emis_wave[idx_f]
+
+        # Warning if continuum above or below line peak/through
+        if line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+            _logger.warning(f'Line {line.line} introduced as an emission but the line peak is below the continuum level')
+
+        if not line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+            _logger.warning(f'Line {line.line} introduced as an absorption but the line peak is below the continuum level')
+
+        # Velocity calculations
+        velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
+        self.velocity_profile_calc(line, velocArray, emis_flux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
+
+        # Pixel velocity # TODO we are not using this one
+        line.pixel_vel = c_KMpS * line.pixelWidth/line.peak_wave
+
+        # Equivalent width computation (it must be an 1d array to avoid conflict in blended lines)
+        lineContinuumMatrix = lineLinearCont + normalNoise
+        eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
+
+        line.eqw = np.array(eqwMatrix.mean(), ndmin=1)
+        line.eqw_err = np.array(eqwMatrix.std(), ndmin=1)
+
+        return
+
+    def profile_fitting(self, line, x, y, weights, z_obj=0, fit_method='leastsq', temp=10000.0, units_wave='A',
+                        inst_FWHM=np.nan):
+
+        # Check if line is in a blended group
+        line_ref = line.profile_label if line.blended_check else line.label
+        user_conf = line._fit_conf
+
+        # Confirm the number of gaussian components
+        compList = np.array(line_ref.split('-'), ndmin=1)
+        n_comps = compList.size
+
+        # TODO maybe we need this operation just once and create self.ion, self.trans_array, self.latex_label
+        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(compList, user_conf, units_wave=units_wave)
+
+        # Compute the line redshift and reference wavelength
+        if line.blended_check:
+            ref_wave = theoWave_arr * (1 + z_obj)
+        else:
+            ref_wave = np.array([line.peak_wave], ndmin=1)
+
+        # Line redshift # TODO calculate z_line using the label reference
+        line.z_line = line.peak_wave/(ref_wave[0] * (1 + z_obj)) - 1
+
+        # Continuum model
+        fit_model = Model(linear_model)
+        fit_model.prefix = f'line0_'
+
+        if line._cont_from_adjacent:
+            SLOPE_PAR = self._SLOPE_PAR
+            INTER_PAR = self._INTER_PAR
+        else:
+            SLOPE_PAR = self._SLOPE_FIX_PAR
+            INTER_PAR = self._INTER_FIX_PAR
+
+        self.define_param(0, compList, fit_model, 'slope', line.m_cont, SLOPE_PAR, user_conf)
+        self.define_param(0, compList, fit_model, 'intercept', line.n_cont, INTER_PAR, user_conf)
+
+        # Add one gaussian model per component
+        for idx, comp in enumerate(compList):
+
+            # Gaussian
+            fit_model += Model(gaussian_model, prefix=f'line{idx}_')
+
+            # Amplitude default configuration changes according and emission or absorption feature
+            AMP_PAR = self._AMP_PAR if line._emission_check else self._AMP_ABS_PAR
+
+            if line._narrow_check:
+                AMP_PAR = {**AMP_PAR, **{'min': (line.peak_flux - line.cont)*0.80,
+                                         'max': (line.peak_flux - line.cont)*1.20}}
+
+            self.define_param(idx, compList, fit_model, 'amp', line.peak_flux - line.cont, AMP_PAR, user_conf)
+            self.define_param(idx, compList, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
+            self.define_param(idx, compList, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
+            self.define_param(idx, compList, fit_model, 'area', None, self._AREA_PAR, user_conf)
+
+        # Unpack the mask for LmFit analysis
+        if np.ma.is_masked(x):
+            idcs_good = ~x.mask
+            x_in = x.data[idcs_good]
+            y_in = y.data[idcs_good]
+            weights_in = weights[idcs_good]
+        else:
+            x_in, y_in, weights_in = x, y, weights
+
+        # Fit the line
+        self.fit_params = fit_model.make_params()
+        self.fit_output = fit_model.fit(y_in, self.fit_params, x=x_in, weights=weights_in, method=fit_method)
+
+        # Check output quality
+        review_fitting(line, self.fit_output)
+
+        # Generate containers for the results
+        eqw_g, eqwErr_g = np.empty(n_comps), np.empty(n_comps)
+
+        line.amp, line.amp_err = np.empty(n_comps), np.empty(n_comps)
+        line.center, line.center_err = np.empty(n_comps), np.empty(n_comps)
+        line.sigma, line.sigma_err = np.empty(n_comps), np.empty(n_comps)
+
+        line.v_r, line.v_r_err = np.empty(n_comps), np.empty(n_comps)
+        line.sigma_vel, line.sigma_vel_err = np.empty(n_comps), np.empty(n_comps)
+        line.gauss_flux, line.gauss_err = np.empty(n_comps), np.empty(n_comps)
+
+        line.FWHM_g = np.empty(n_comps)
+        line.sigma_thermal = np.empty(n_comps)
+
+        # Fitting diagnostics
+        line.chisqr, line.redchi = self.fit_output.chisqr, self.fit_output.redchi
+        line.aic, line.bic = self.fit_output.aic, self.fit_output.bic
+
+        # Instrumental sigma #TODO check this
+        line.sigma_instr = k_FWHM/line.inst_FWHM if not np.isnan(inst_FWHM) else None
+
+        # Store lmfit measurements
+        for i, user_ref in enumerate(compList):
+
+            # Recover using the lmfit name
+            comp = f'line{i}'
+
+            # Gaussian parameters
+            for j, param in enumerate(['amp', 'center', 'sigma']):
+                param_fit = self.fit_output.params[f'{comp}_{param}']
+                term_mag = getattr(line, param)
+                term_mag[i] = param_fit.value
+                term_err = getattr(line, f'{param}_err')
+                term_err[i] = param_fit.stderr
+
+                # Case with error propagation from _kinem command
+                if (term_err[i] == 0) and (f'{user_ref}_{param}_err' in user_conf):
+                    term_err[i] = user_conf[f'{user_ref}_{param}_err'] # TODO do I need this one here, can I use the one below
+
+            # Gaussian area
+            line.gauss_flux[i] = self.fit_output.params[f'{comp}_area'].value
+            line.gauss_err[i] = self.fit_output.params[f'{comp}_area'].stderr
+
+            # Equivalent with gaussian flux for blended components TODO compute self.cont from linear fit
+            if line.blended_check:
+                eqw_g[i], eqwErr_g[i] = line.gauss_flux[i] / line.cont, line.gauss_err[i] / line.cont
+
+            # Kinematics
+            line.v_r[i] = c_KMpS * (line.center[i] - ref_wave[i])/ref_wave[i]
+            line.v_r_err[i] = c_KMpS * (line.center_err[i])/ref_wave[i]
+            line.sigma_vel[i] = c_KMpS * line.sigma[i]/ref_wave[i]
+            line.sigma_vel_err[i] = c_KMpS * line.sigma_err[i]/ref_wave[i]
+            line.FWHM_g[i] = k_FWHM * line.sigma_vel[i]
+
+            try:
+                line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            except:
+                line.sigma_thermal[i] = np.nan
+
+            # Check parameters error progragation from the lmfit parameter
+            review_err_propagation(line, i, comp)
+
+        # Recalculate the equivalent width with the gaussian fluxes if blended
+        if line.blended_check:
+            line.eqw = eqw_g
+            line.eqw_err = eqwErr_g
+
+        return
+
+    def define_param(self, idx, comps, model_obj, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
+
+        # Line name i.e. H1_6563A_w1, H1_6563A_w1_amp
+        line_label = comps[idx]
+
+        # LmFit reference line0, line0_amp
+        user_ref = f'{line_label}_{param_label}'
+        param_ref = f'line{idx}_{param_label}'
+
+        # TODO if min max provided the value should be in the middle
+
+        # Overwrite default by the one provided by the user
+        if user_ref in user_conf:
+            param_conf = {**default_conf, **user_conf[user_ref]}
+        else:
+            param_conf = default_conf.copy()
+
+        # Convert from LiMe -> LmFit label configuration in the expr entries if necessary
+        if param_conf['expr'] is not None:
+
+            # TODO this one could be faster
+            expr = param_conf['expr']
+            for i, comp in enumerate(comps):
+                for g_param in g_params:
+                    expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
+            param_conf['expr'] = expr
+
+        # Set initial value estimation from spectrum if not provided by the user
+        if user_ref not in user_conf:
+            param_conf['value'] = param_value
+
+        else:
+            # Special case inequalities: H1_6563A_w1_sigma = '>1.5*H1_6563A_sigma'
+            if param_conf['expr'] is not None:
+                if ('<' in param_conf['expr']) or ('>' in param_conf['expr']):
+
+                    # Create additional parameter
+                    ineq_name = f'{param_ref}_ineq'
+                    ineq_operation = '*' # TODO add remaining operations
+
+                    # Split number and ref
+                    ineq_expr = param_conf['expr'].replace('<', '').replace('>', '')
+                    ineq_items = ineq_expr.split(ineq_operation)
+                    ineq_linkedParam = ineq_items[0] if not is_digit(ineq_items[0]) else ineq_items[1]
+                    ineq_lim = float(ineq_items[0]) if is_digit(ineq_items[0]) else float(ineq_items[1])
+
+                    # Stablish the inequality configuration:
+                    ineq_conf = {} # TODO need to check these limits
+                    if '>' in param_conf['expr']:
+                        ineq_conf['value'] = ineq_lim * 1.2
+                        ineq_conf['min'] = ineq_lim
+                    else:
+                        ineq_conf['value'] = ineq_lim * 0.8
+                        ineq_conf['max'] = ineq_lim
+
+                    # Define new param
+                    model_obj.set_param_hint(name=ineq_name, **ineq_conf)
+
+                    # Prepare definition of param:
+                    new_expresion = f'{ineq_name}{ineq_operation}{ineq_linkedParam}'
+                    param_conf = dict(expr=new_expresion)
+
+            # Case default value is not provided
+            else:
+                if param_conf['value'] is None:
+                    param_conf['value'] = param_value
+
+        # Additional preparation for area parameter
+        if '_area' in param_ref:
+            if (param_conf['expr'] is None) and (param_conf['value'] == param_value):
+                param_conf['value'] = None
+                param_conf['expr'] = f'line{idx}_amp*2.5066282746*line{idx}_sigma'
+
+        # Additional preparation for center parameter: Multiply value, min, max by redshift
+        if '_center' in param_ref:
+            if user_ref in user_conf:
+                param_user_conf = user_conf[user_ref]
+                for param_conf_entry in ('value', 'min', 'max'):
+                    if param_conf_entry in param_user_conf:
+                        param_conf[param_conf_entry] = param_conf[param_conf_entry] * (1 + z_obj)
+
+        # Check the limits on the fitting # TODO some params (blended lines) do not have initial value amp wide
+        param_value = param_conf.get('value')
+        # if param_value is not None:
+        #     if (param_value < param_conf['min']) or (param_value > param_conf['max']):
+        #         _logger.warning(f'Initial value for {param_ref} is outside min-max boundaries: '
+        #                         f'{param_conf["min"]} < {param_value} < {param_conf["max"]}')
+
+        # Assign the parameter configuration to the model
+        model_obj.set_param_hint(param_ref, **param_conf)
+
+        return
+
+    def velocity_profile_calc(self, line, vel_array, line_flux, cont_flux, min_array_dim=15):
+
+        # Full width zero intensity
+        line.FWZI = vel_array[-1] - vel_array[0]
+
+        # Only compute the velocity percentiles for line bands with more than 15 pixels
+        valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
+
+        if valid_pixels > min_array_dim:
+
+            peakIdx = np.argmax(line_flux)
+            percentFluxArray = np.cumsum(line_flux-cont_flux) * line.pixelWidth / line.intg_flux * 100
+
+            if line._emission_check:
+                blue_range = line_flux[:peakIdx] > line.peak_flux/2
+                red_range = line_flux[peakIdx:] < line.peak_flux/2
+            else:
+                blue_range = line_flux[:peakIdx] < line.peak_flux/2
+                red_range = line_flux[peakIdx:] > line.peak_flux/2
+
+            # In case the peak is at the edge
+            if (blue_range.size > 2) and (red_range.size > 2):
+
+                # Integrated FWHM
+                vel_FWHM_blue = vel_array[:peakIdx][np.argmax(blue_range)]
+                vel_FWHM_red = vel_array[peakIdx:][np.argmax(red_range)]
+
+                line.FWHM_intg = vel_FWHM_red - vel_FWHM_blue
+
+                # Interpolation for integrated kinematics
+                percentInterp = interp1d(percentFluxArray, vel_array, kind='slinear', fill_value='extrapolate')
+                velocPercent = percentInterp(TARGET_PERCENTILES)
+
+                line.v_med, line.v_50 = np.median(vel_array), velocPercent[3] # TODO np.median ignores the mask
+                line.v_5, line.v_10 = velocPercent[1], velocPercent[2]
+                line.v_90, line.v_95 = velocPercent[4], velocPercent[5]
+
+                W_80 = line.v_90 - line.v_10
+                W_90 = line.v_95 - line.v_5
+
+                # This are not saved... should they
+                A_factor = ((line.v_90 - line.v_med) - (line.v_med-line.v_10)) / W_80
+                K_factor = W_90 / (1.397 * line.FWHM_intg)
+
+        return

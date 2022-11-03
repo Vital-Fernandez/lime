@@ -78,6 +78,196 @@ KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}
 KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
 
 
+def load_lines_log(log_address, ext='LINESLOG'):
+
+    """
+    This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
+    text file, a ``.fits`` file, a ``.asdf`` file and an excel file (``.xlsx``). In the case of ``.fits``, ``.asdf`` or
+    ``.xlsx`` files the user should specify the target extension/sheet name (the default one is ``LINESLOG``).
+
+    :param log_address: Address of the configuration file. The function stops if the file is not found
+    :type log_address: str
+
+    :param ext: Name of the ``.fits`` file or ``.xlsx`` file extension with the extension name to read
+    :type ext: str, optional
+
+    :return: lines log table
+    :rtype: pandas.DataFrame
+    """
+
+    # Check file is at path
+    log_path = Path(log_address)
+
+    if not log_path.is_file():
+        _logger.critical(f'No lines log found at {log_address}\n')
+
+    file_name, file_type = log_path.name, log_path.suffix
+
+    try:
+
+        # Fits file:
+        if file_type == '.fits':
+            log = Table.read(log_path, ext, character_as_bytes=False).to_pandas()
+            log.set_index('index', inplace=True)
+
+        # Excel table
+        elif file_type in ['.xlsx' or '.xls']:
+            log = pd.read_excel(log_path, sheet_name=ext, header=0, index_col=0)
+
+        # ASDF file
+        elif file_type == '.asdf':
+            with asdf.open(log_path) as af:
+                log_RA = af[ext]
+                log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
+                log.set_index('index', inplace=True)
+
+        # Text file
+        else:
+            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
+
+    except ValueError as e:
+        exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
+
+    return log
+
+
+def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_header=None):
+
+    """
+
+    This function saves the input lines log at the location provided by the user.
+
+    The function takes into consideration the extension of the output address for the log file format.
+
+    The valid output formats are .txt, .pdf, .fits, .asdf and .xlsx
+
+    For .fits and excel files the user can provide an ``ext`` name for the HDU/sheet.
+
+    The user can specify the parameters to be saved in the output file
+
+    For .fits files the user can provide a dictionary so that its keys-values are stored in the header.
+
+    :param log: Lines log with the measurements
+    :type log: pandas.DataFrame
+
+    :param log_address: Address for the output lines log file.
+    :type log_address: str
+
+    :param parameters: List of parameters to include in the output log. By default the log includes all the parameters,
+                       default value "all"
+    :type parameters: list
+
+    :param ext: Name for the HDU/sheet in output .fits and excel files. If the target file already has this extension it
+                will be overwritten. The default value is LINESLOG.
+    :type ext: str, optional
+
+    :param fits_header: Dictionary with key-values to be included in the output .fits or .asdf file header.
+    :type fits_header: dict, optional
+
+    """
+
+    # Confirm file path exits
+    log_path = Path(log_address)
+    assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
+    file_name, file_type = log_path.name, log_path.suffix
+
+    # Slice the log if the user provides a list of columns
+    if parameters != 'all':
+        parameters_list = np.array(parameters, ndmin=1)
+        lines_log = log[parameters_list]
+        param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
+
+    else:
+        lines_log = log
+        param_dtypes = list(_LOG_TYPES_DICT.values())
+
+    # Default txt log with the complete information
+    if file_type == '.txt':
+        with open(log_path, 'wb') as output_file:
+            string_DF = lines_log.to_string()
+            output_file.write(string_DF.encode('UTF-8'))
+
+    # Pdf fluxes table
+    elif file_type == '.pdf':
+
+        # Recover the fit components for merged lines from the log
+        if 'profile_label' in log.columns:
+            idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
+            fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
+        else:
+            fit_conf = {}
+        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+                     lines_notation=log.latex_label.values)
+
+    # Lines log in a fits file
+    elif file_type == '.fits':
+        if isinstance(lines_log, pd.DataFrame):
+            lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
+
+            if log_path.is_file():
+                try:
+                    fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
+                except KeyError:
+                    fits.append(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+            else:
+                hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
+                hdul.writeto(log_path, overwrite=True, output_verify='fix')
+
+    # Default log in excel format
+    elif file_type == '.xlsx' or file_type == '.xls':
+
+        # Check openpyxl is installed else leave
+        if openpyxl:
+            pass
+        else:
+            print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
+            return
+
+        if not log_path.is_file():
+            with pd.ExcelWriter(log_path) as writer:
+                lines_log.to_excel(writer, sheet_name=ext)
+        else:
+            # THIS WORKS IN WINDOWS BUT NOT IN LINUX
+            # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+            #     log.to_excel(writer, sheet_name=ext)
+
+            if file_type == '.xlsx':
+                book = openpyxl.load_workbook(log_path)
+                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                    writer.book = book
+                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    lines_log.to_excel(writer, sheet_name=ext)
+            else:
+                # TODO this does not write to a xlsx file
+                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                    lines_log.to_excel(writer, sheet_name=ext)
+
+    # Advance Scientific Storage Format
+    elif file_type == '.asdf':
+
+        tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
+
+        # Create new file
+        if not log_path.is_file():
+            af = asdf.AsdfFile(tree)
+            af.write_to(log_path)
+
+        # Update file
+        else:
+            with asdf.open(log_path, mode='rw') as af:
+                af.tree.update(tree)
+                af.update()
+
+    else:
+        print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
+        exit()
+
+    return
+
+
+_parent_bands_file = Path(__file__).parent/'resources/parent_mask.txt'
+_PARENT_BANDS = load_lines_log(_parent_bands_file)
+
 # Function to check if variable can be converte to float else leave as string
 def check_numeric_Value(s):
     try:
@@ -342,191 +532,6 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
         # Save to a text file
         with open(output_file, 'w') as f:
             output_cfg.write(f)
-
-    return
-
-
-def load_lines_log(log_address, ext='LINESLOG'):
-
-    """
-    This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
-    text file, a ``.fits`` file, a ``.asdf`` file and an excel file (``.xlsx``). In the case of ``.fits``, ``.asdf`` or
-    ``.xlsx`` files the user should specify the target extension/sheet name (the default one is ``LINESLOG``).
-
-    :param log_address: Address of the configuration file. The function stops if the file is not found
-    :type log_address: str
-
-    :param ext: Name of the ``.fits`` file or ``.xlsx`` file extension with the extension name to read
-    :type ext: str, optional
-
-    :return: lines log table
-    :rtype: pandas.DataFrame
-    """
-
-    # Check file is at path
-    log_path = Path(log_address)
-    # assert log_path.is_file(), f'- Error: lines log not found at {log_address}'
-    assert log_path.is_file(), _logger.critical(f'No lines log found at {log_address}\n')
-    file_name, file_type = log_path.name, log_path.suffix
-
-    try:
-
-        # Fits file:
-        if file_type == '.fits':
-            log = Table.read(log_path, ext, character_as_bytes=False).to_pandas()
-            log.set_index('index', inplace=True)
-
-        # Excel table
-        elif file_type in ['.xlsx' or '.xls']:
-            log = pd.read_excel(log_path, sheet_name=ext, header=0, index_col=0)
-
-        # ASDF file
-        elif file_type == '.asdf':
-            with asdf.open(log_path) as af:
-                log_RA = af[ext]
-                log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
-                log.set_index('index', inplace=True)
-
-        # Text file
-        else:
-            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
-
-    except ValueError as e:
-        exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
-
-    return log
-
-
-def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_header=None):
-
-    """
-
-    This function saves the input lines log at the location provided by the user.
-
-    The function takes into consideration the extension of the output address for the log file format.
-
-    The valid output formats are .txt, .pdf, .fits, .asdf and .xlsx
-
-    For .fits and excel files the user can provide an ``ext`` name for the HDU/sheet.
-
-    The user can specify the parameters to be saved in the output file
-
-    For .fits files the user can provide a dictionary so that its keys-values are stored in the header.
-
-    :param log: Lines log with the measurements
-    :type log: pandas.DataFrame
-
-    :param log_address: Address for the output lines log file.
-    :type log_address: str
-
-    :param parameters: List of parameters to include in the output log. By default the log includes all the parameters,
-                       default value "all"
-    :type parameters: list
-
-    :param ext: Name for the HDU/sheet in output .fits and excel files. If the target file already has this extension it
-                will be overwritten. The default value is LINESLOG.
-    :type ext: str, optional
-
-    :param fits_header: Dictionary with key-values to be included in the output .fits or .asdf file header.
-    :type fits_header: dict, optional
-
-    """
-
-    # Confirm file path exits
-    log_path = Path(log_address)
-    assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
-    file_name, file_type = log_path.name, log_path.suffix
-
-    # Slice the log if the user provides a list of columns
-    if parameters != 'all':
-        parameters_list = np.array(parameters, ndmin=1)
-        lines_log = log[parameters_list]
-        param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
-
-    else:
-        lines_log = log
-        param_dtypes = list(_LOG_TYPES_DICT.values())
-
-    # Default txt log with the complete information
-    if file_type == '.txt':
-        with open(log_path, 'wb') as output_file:
-            string_DF = lines_log.to_string()
-            output_file.write(string_DF.encode('UTF-8'))
-
-    # Pdf fluxes table
-    elif file_type == '.pdf':
-
-        # Recover the fit components for merged lines from the log
-        if 'profile_label' in log.columns:
-            idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
-            fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
-        else:
-            fit_conf = {}
-        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
-                     lines_notation=log.latex_label.values)
-
-    # Lines log in a fits file
-    elif file_type == '.fits':
-        if isinstance(lines_log, pd.DataFrame):
-            lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
-
-            if log_path.is_file():
-                try:
-                    fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
-                except KeyError:
-                    fits.append(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
-            else:
-                hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
-                hdul.writeto(log_path, overwrite=True, output_verify='fix')
-
-    # Default log in excel format
-    elif file_type == '.xlsx' or file_type == '.xls':
-
-        # Check openpyxl is installed else leave
-        if openpyxl:
-            pass
-        else:
-            print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
-            return
-
-        if not log_path.is_file():
-            with pd.ExcelWriter(log_path) as writer:
-                lines_log.to_excel(writer, sheet_name=ext)
-        else:
-            # THIS WORKS IN WINDOWS BUT NOT IN LINUX
-            # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-            #     log.to_excel(writer, sheet_name=ext)
-
-            if file_type == '.xlsx':
-                book = openpyxl.load_workbook(log_path)
-                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    lines_log.to_excel(writer, sheet_name=ext)
-            else:
-                # TODO this does not write to a xlsx file
-                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                    lines_log.to_excel(writer, sheet_name=ext)
-
-    # Advance Scientific Storage Format
-    elif file_type == '.asdf':
-
-        tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
-
-        # Create new file
-        if not log_path.is_file():
-            af = asdf.AsdfFile(tree)
-            af.write_to(log_path)
-
-        # Update file
-        else:
-            with asdf.open(log_path, mode='rw') as af:
-                af.tree.update(tree)
-                af.update()
-
-    else:
-        print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
-        exit()
 
     return
 
