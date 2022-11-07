@@ -17,9 +17,7 @@ Core
 ----
 
 .. autoclass:: lime.Spectrum
-   :members: fit_from_wavelengths, match_line_mask, display_results, plot_spectrum
-
-.. autofunction:: lime.MaskInspector
+   :members: match_line_mask
 
 
 Convenience functions
