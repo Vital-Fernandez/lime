@@ -1,6 +1,6 @@
 import logging
 
-from numpy import array, abs, nan, all, diff, char, searchsorted
+from numpy import array, abs, nan, all, diff, char, searchsorted, zeros, unique, empty
 from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
 from .io import _PARENT_BANDS
 
@@ -42,7 +42,7 @@ def check_units_from_wave(str_wave):
     return wave, units
 
 
-def check_line_in_log(input_label, log=None, z_obj=0, tol=1):
+def check_line_in_log(input_label, log=None, tol=1):
 
     # Guess the transition if only a wavelength provided
     if not isinstance(input_label, str):
@@ -66,7 +66,7 @@ def check_line_in_log(input_label, log=None, z_obj=0, tol=1):
                                 f'issues to identify the lines using the transition wavelength')
 
             # Locate the best candidate
-            idx_closest = searchsorted(ref_waves, input_label * (1 + z_obj))
+            idx_closest = searchsorted(ref_waves, input_label)
 
             line_ion, line_wave = ion_array[idx_closest], ref_waves[idx_closest]
 
@@ -91,7 +91,7 @@ def latex_from_label(label, ion=None, wave=None, units_wave=None, kinetic_comp=N
 
     # Use input values if provided else compute from label
     if (ion is None) or (wave is None) or (wave is None):
-        ion, wave, units_wave, kinetic_comp = label_components(label)
+        ion, wave, units_wave, kinetic_comp = label_components(label, scalar_output=True)
 
     atom, ionization = ion[:-1], int(ion[-1])
 
@@ -101,7 +101,7 @@ def latex_from_label(label, ion=None, wave=None, units_wave=None, kinetic_comp=N
 
     wave_round = int(wave)
 
-    kinetic_comp = '' if kinetic_comp is None else f'-k{kinetic_comp}'
+    kinetic_comp = '' if kinetic_comp == 0 else f'-k{kinetic_comp}'
 
     if ion in recomb_atom:
         latex = f'${atom}{ionization_roman}{wave_round}{units_latex}{kinetic_comp}$'
@@ -111,25 +111,40 @@ def latex_from_label(label, ion=None, wave=None, units_wave=None, kinetic_comp=N
     return latex
 
 
-def label_components(label):
+def label_components(input_label, scalar_output=False):
 
-    # Transition label items assuming '_' separation
-    trans_items = label.split('_')
+    # Confirm input array has one dimension
+    input_label = array(input_label, ndmin=1)
 
-    # Element producing the transition
-    ion = trans_items[0]
+    # Check there are unique elements
+    uniq, count = unique(input_label, return_counts=True)
+    if any(count > 1):
+        _logger.critical(f'There are repeated entries in the input label: {input_label}')
 
-    # Wavelength and units
-    wave, units_wave = check_units_from_wave(trans_items[1])
+    ion, wave = empty(input_label.size).astype(str), empty(input_label.size)
+    units_wave, kinem = empty(input_label.size).astype(str), empty(input_label.size).astype(int)
 
-    # Kinematic element
-    kinematic = None
-    if len(trans_items) > 2:
-        if trans_items[2][0] == 'w':
-            kinematic = trans_items[2][1]
-            # _logger.info(f'Kinematic component "{trans_items[2][0]}" in label {label} is not recognized')
+    for i, label in enumerate(input_label):
 
-    return ion, wave, units_wave, kinematic
+        # Transition label items assuming '_' separation
+        trans_items = label.split('_')
+
+        # Element producing the transition
+        ion[i] = trans_items[0]
+
+        # Wavelength and units
+        wave[i], units_wave[i] = check_units_from_wave(trans_items[1])
+
+        # Kinematic element
+        kinem[i] = 0
+        if len(trans_items) > 2:
+            if trans_items[2][0] == 'w':
+                kinem[i] = trans_items[2][1]
+    
+    if scalar_output and input_label.size == 1:
+        ion, wave, units_wave, kinem = ion[0], wave[0], units_wave[0], kinem[0]
+    
+    return ion, wave, units_wave, kinem
 
 
 class Line:
@@ -138,8 +153,8 @@ class Line:
                  z_line=0):
 
         self.line, self.mask = None, array([nan] * 6)
-        self.blended_check, self.profile_label = False, 'no'
-        self.list_comps = None
+        self.blended_check, self.merged_check = False, False
+        self.profile_label, self.list_comps = 'no', None
         self.ion, self.wave, self.units_wave, self.kinem, self.latex = None, None, None, None, None
 
         self.intg_flux, self.intg_err = None, None
@@ -182,24 +197,31 @@ class Line:
 
         # Discriminate between string and float transitions
         ref_log = ref_log if ref_log is not None else _PARENT_BANDS
-        self.label = check_line_in_log(label, ref_log, z_obj=self.z_line)
+        self.label = check_line_in_log(label, ref_log)
 
         # Copy the input configuration dictionary
         self._fit_conf = {} if fit_conf is None else fit_conf.copy()
 
-        # Get transition data from label
-        self.ion, self.wave, self.units_wave, self.kinem = label_components(self.label)
-
-        # List of components in a blended or merged transition
-        suffix = self.label[-2:]
+        # List of components and label for the multi-profile
         self.profile_label = self._fit_conf.get(self.label, 'no')  # TODO change this one to None
+
+        # Distinguish between merged and blended
+        suffix = self.label[-2:]
         if (suffix == '_b') or (suffix == '_m'):
             if self.profile_label != 'no':
-                self.list_comps = self.profile_label.split('-')
-                self.blended_check = True if suffix == '_b' else False
+                if suffix == '_b':
+                    self.blended_check = True
+                else:
+                    self.merged_check = True
             else:
                 _logger.warning(f'The line {self.line} has the "{suffix}" suffix but no components have been specified '
                                 f'for the fitting')
+
+        # Blended lines have various elements in the list, single and merged only one
+        self.list_comps = self.profile_label.split('-') if self.blended_check else [self.label]
+
+        # Get transition data from label
+        self.ion, self.wave, self.units_wave, self.kinem = label_components(self.list_comps)
 
         # Provide a band from the log if available the band
         if band is None:
@@ -216,15 +238,9 @@ class Line:
         if self.mask is not None:
             if not all(diff(self.mask) >= 0):
                 _logger.warning(f'The line {label} band wavelengths are not sorted: {band}')
-            if not (self.mask[2] < self.wave < self.mask[3]):
+            if not all(self.mask[2] < self.wave) and all(self.wave < self.mask[3]):
                 _logger.warning(f'The line {label} transition at {self.wave} is outside the line band wavelengths: '
                                 f'w3 = {self.mask[2]};  w4 = {self.mask[3]}')
-
-        # # Check if blended line
-        # if self.label in self._fit_conf:
-        #     self.profile_label = self._fit_conf[self.label]
-        #     if '_b' in self.label:
-        #         self.blended_check = True
 
         # Check if there are masked pixels in the line
         self.pixel_mask = self._fit_conf.get(f'{self.label}_mask', 'no')
@@ -232,12 +248,26 @@ class Line:
         # Check if the wavelength has decimal transition
         self._decimal_wave = True if '.' in self.label else False
 
-        # Compute the latex label
-        if self.profile_label == 'no':
-            self.latex = latex_from_label(None, self.ion, self.wave, self.units_wave, self.kinem)
+        # Latex label
+        self.latex = empty(len(self.list_comps)).astype(str)
+
+        # Merged
+        if self.merged_check:
+            list_comps = self.profile_label.split('-')
+            for i, comp in enumerate(list_comps):
+                if i == 0:
+                    self.latex[0] = latex_from_label(comp)
+                else:
+                    self.latex[0] = f'{self.latex[0][:-1]}+{latex_from_label(comp)[1:]}'
+
+        # Blended
+        elif self.blended_check:
+            list_comps = self.list_comps
+            for i, comp in enumerate(list_comps):
+                self.latex[i] = latex_from_label(comp)
+
+        # Single
         else:
-            self.latex = latex_from_label(self.list_comps[0])
-            for comp in self.list_comps[1:]:
-                self.latex = f'{self.latex[:-1]}+{latex_from_label(comp)[1:]}'
+            self.latex[0] = latex_from_label(None, self.ion[0], self.wave[0], self.units_wave[0], self.kinem[0])
 
         return

@@ -48,10 +48,11 @@ lime.save_line_log(match_bands, obj_bands_file)
 fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
-gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='bar')
+gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='bar', plot_fits=False)
 
 # Display fits in grid
 gp_spec.plot.grid(gp_spec.log, rest_frame=True)
 
+# Save the data
 lime.save_line_log(gp_spec.log, './sample_data/example3_linelog.txt', ext='GP121903')
 

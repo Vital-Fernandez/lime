@@ -109,19 +109,19 @@ def import_line_kinematics(line, z_cor, log, units_wave):
 
 def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
 
-    # Recover line data
-    if line.blended_check:
-        line_components = line.profile_label.split('-')
-    else:
-        line_components = np.array([line.label], ndmin=1)
-
-    ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=line._fit_conf, units_wave=units_wave)
+    # # Recover line data
+    # if line.blended_check:
+    #     line_components = line.profile_label.split('-')
+    # else:
+    #     line_components = np.array([line.label], ndmin=1)
+    #
+    # ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=line._fit_conf, units_wave=units_wave)
 
     # Loop through the line components
-    for i, comp in enumerate(line_components):
+    for i, comp in enumerate(line.list_comps):
 
         # Convert current measurement to a pandas series container
-        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = ion[i], waveRef[i], latexLabel[i]
+        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wave[i], line.latex[i]
         log.loc[comp, 'w1':'w6'] = line.mask
 
         # Treat every line
@@ -151,27 +151,76 @@ class LineTreatment(LineFitting):
 
         # Lime spectrum object with the scientific data
         self._spec = spectrum
+        self.line = None
 
-    def band(self, label, mask, fit_conf=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
+    def band(self, label, mask=None, fit_conf=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
              temp=10000.0):
 
+        """
+
+         This function fits a line given its line and spectral mask. The line notation consists in the transition
+         ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
+
+         The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
+         adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
+
+         The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
+         the documentation for the complete description.
+
+         The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+
+         By default, the algorithm assumes an emission line. The user can set the parameter ``emission=False`` for an
+         absorption.
+
+         If the sigma spectrum was not provided, the fitting estimates the pixel uncertainty from the adjacent continua flux
+         standard deviation assuming a linear profile. If the parameter ``adjacent_cont=True`` the adjacent continua is also
+         use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
+         first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
+
+         For the calculation of the thermal broadening on the emission lines the user can include the line electron
+         temperature in Kelvin. The default value is 10000 K
+
+         :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
+         :type line: string
+
+         :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
+         :type mask: numpy.ndarray
+
+         :param user_cfg: Dictionary with the fitting configuration.
+         :type user_cfg: dict, optional
+
+         :param fit_method: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
+         :type fit_method: str, optional
+
+         :param emission: Boolean check for the line type. The default is ``True`` for an emission line
+         :type emission: bool, optional
+
+         :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
+                               adjacent continua array
+         :type adjacent_cont: bool, optional
+
+         :param temp_line: Line electron temperature for the thermal broadening calculation.
+         :type temp_line: bool, optional
+
+         """
+
         # Interpret the input line
-        line = Line(label, mask, fit_conf, emission_check, cont_from_bands)
+        self.line = Line(label, mask, fit_conf, emission_check, cont_from_bands)
 
         # Get the bands regions
-        idcsEmis, idcsCont = define_masks(self._spec.wave, line.mask * (1 + self._spec.redshift), line.pixel_mask)
+        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift), self.line.pixel_mask)
         emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
         contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
         err_array = self._spec.err_flux[idcsEmis] if self._spec.err_flux is not None else None
 
         # Check the bands size
-        review_bands(line, emisWave, contWave)
+        review_bands(self.line, emisWave, contWave)
 
         # Non-parametric measurements
-        self.integrated_properties(line, emisWave, emisFlux, contWave, contFlux, err_array)
+        self.integrated_properties(self.line, emisWave, emisFlux, contWave, contFlux, err_array)
 
         # Import kinematics if requested
-        import_line_kinematics(line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave)
+        import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave)
 
         # Combine bands
         idcsLine = idcsEmis + idcsCont
@@ -179,21 +228,21 @@ class LineTreatment(LineFitting):
 
         # Fit weights according to input err
         if self._spec.err_flux is None:
-            w_array = np.full(x_array.size, 1.0 / line.std_cont)
+            w_array = np.full(x_array.size, 1.0 / self.line.std_cont)
         else:
             w_array = 1.0 / self._spec.err_flux[idcsLine]
 
         # Gaussian fitting
-        self.profile_fitting(line, x_array, y_array, w_array, self._spec.redshift, fit_method, temp, self._spec.units_wave,
+        self.profile_fitting(self.line, x_array, y_array, w_array, self._spec.redshift, fit_method, temp, self._spec.units_wave,
                              self._spec.inst_FWHM)
 
         # Save the line parameters to the dataframe
-        results_to_log(line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
+        results_to_log(self.line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
 
         return
 
     def frame(self, bands_df, fit_conf=None,  label=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
-              temp=10000.0, progress_output=None):
+              temp=10000.0, progress_output=None, plot_fits=False):
 
         # Check if the lines table is a dataframe or a file
         bands_df = check_file(bands_df, pd.DataFrame)
@@ -224,6 +273,9 @@ class LineTreatment(LineFitting):
             # Fit the lines
             self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check, cont_from_bands,
                       temp)
+
+            if plot_fits:
+                self._spec.plot.line()
 
         # self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
         #                   cont_from_bands, temp)

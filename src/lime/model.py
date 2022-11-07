@@ -6,6 +6,7 @@ from lmfit.models import Model
 from scipy import stats, optimize
 from scipy.interpolate import interp1d
 from .tools import label_decomposition, compute_FWHM0
+from .transitions import label_components
 
 _logger = logging.getLogger('LiMe')
 
@@ -36,6 +37,7 @@ ATOMIC_MASS = {'H': (1.00784+1.00811)/2 * amu,
                'Fe': 55.845 * amu}
 
 g_params = np.array(['amp', 'center', 'sigma', 'cont_slope', 'cont_intercept'])
+
 
 
 def wavelength_to_vel(delta_lambda, lambda_wave, light_speed=c_KMpS):
@@ -748,19 +750,19 @@ class LineFitting:
                         inst_FWHM=np.nan):
 
         # Check if line is in a blended group
-        line_ref = line.profile_label if line.blended_check else line.label
+        # line_ref = line.profile_label if line.blended_check else line.label
         user_conf = line._fit_conf
 
         # Confirm the number of gaussian components
-        compList = np.array(line_ref.split('-'), ndmin=1)
-        n_comps = compList.size
+        # compList = line.list_comps
+        n_comps = len(self.line.list_comps)
 
-        # TODO maybe we need this operation just once and create self.ion, self.trans_array, self.latex_label
-        ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(compList, user_conf, units_wave=units_wave)
+        # # TODO maybe we need this operation just once and create self.ion, self.trans_array, self.latex_label
+        # ion_arr, theoWave_arr, latexLabel_arr = label_decomposition(compList, user_conf, units_wave=units_wave)
 
         # Compute the line redshift and reference wavelength
         if line.blended_check:
-            ref_wave = theoWave_arr * (1 + z_obj)
+            ref_wave = line.wave * (1 + z_obj)
         else:
             ref_wave = np.array([line.peak_wave], ndmin=1)
 
@@ -778,11 +780,11 @@ class LineFitting:
             SLOPE_PAR = self._SLOPE_FIX_PAR
             INTER_PAR = self._INTER_FIX_PAR
 
-        self.define_param(0, compList, fit_model, 'slope', line.m_cont, SLOPE_PAR, user_conf)
-        self.define_param(0, compList, fit_model, 'intercept', line.n_cont, INTER_PAR, user_conf)
+        self.define_param(0, line.list_comps, fit_model, 'slope', line.m_cont, SLOPE_PAR, user_conf)
+        self.define_param(0, line.list_comps, fit_model, 'intercept', line.n_cont, INTER_PAR, user_conf)
 
         # Add one gaussian model per component
-        for idx, comp in enumerate(compList):
+        for idx, comp in enumerate(line.list_comps):
 
             # Gaussian
             fit_model += Model(gaussian_model, prefix=f'line{idx}_')
@@ -794,10 +796,10 @@ class LineFitting:
                 AMP_PAR = {**AMP_PAR, **{'min': (line.peak_flux - line.cont)*0.80,
                                          'max': (line.peak_flux - line.cont)*1.20}}
 
-            self.define_param(idx, compList, fit_model, 'amp', line.peak_flux - line.cont, AMP_PAR, user_conf)
-            self.define_param(idx, compList, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
-            self.define_param(idx, compList, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
-            self.define_param(idx, compList, fit_model, 'area', None, self._AREA_PAR, user_conf)
+            self.define_param(idx, line.list_comps, fit_model, 'amp', line.peak_flux - line.cont, AMP_PAR, user_conf)
+            self.define_param(idx, line.list_comps, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
+            self.define_param(idx, line.list_comps, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
+            self.define_param(idx, line.list_comps, fit_model, 'area', None, self._AREA_PAR, user_conf)
 
         # Unpack the mask for LmFit analysis
         if np.ma.is_masked(x):
@@ -837,7 +839,7 @@ class LineFitting:
         line.sigma_instr = k_FWHM/line.inst_FWHM if not np.isnan(inst_FWHM) else None
 
         # Store lmfit measurements
-        for i, user_ref in enumerate(compList):
+        for i, user_ref in enumerate(line.list_comps):
 
             # Recover using the lmfit name
             comp = f'line{i}'
@@ -869,10 +871,14 @@ class LineFitting:
             line.sigma_vel_err[i] = c_KMpS * line.sigma_err[i]/ref_wave[i]
             line.FWHM_g[i] = k_FWHM * line.sigma_vel[i]
 
-            try:
-                line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
-            except:
-                line.sigma_thermal[i] = np.nan
+            # Compute the thermal correction
+            atom_mass = self._atomic_mass_dict.get(line.ion[i][:-1], np.nan)
+            line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / atom_mass) / 1000
+
+            # try:
+            #     line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / self._atomic_mass_dict[ion_arr[i][:-1]]) / 1000
+            # except:
+            #     line.sigma_thermal[i] = np.nan
 
             # Check parameters error progragation from the lmfit parameter
             review_err_propagation(line, i, comp)

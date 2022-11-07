@@ -33,13 +33,13 @@ mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, norm_flux=normFlux_gp)
-gp_spec.plot.spectrum(label='GP121903')
+# gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
 gp_spec.fit.band(line, mask)
 
 # Show the results
-gp_spec.display_results(line)
+gp_spec.plot.line()
 
 # Fit configuration
 line = 'H1_6563A_b'
@@ -49,8 +49,8 @@ fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
 
 # Second attempt including the fit configuration
 gp_spec.fit.band(line, mask, fit_conf)
-gp_spec.plot.line(line)
-gp_spec.plot.line(line, output_address=f'./sample_data/{line}.png')
+gp_spec.plot.line()
+gp_spec.plot.line(output_address=f'./sample_data/{line}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
 print(gp_spec.log)

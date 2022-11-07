@@ -12,7 +12,7 @@ from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks
 
-from .plots import LiMePlots, IntMaskInspector, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures, SampleFigures
+from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures, SampleFigures
 from .plots_interactive import SpectrumCheck
 from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
 from .model import gaussian_profiles_computation, linear_continuum_computation
@@ -36,7 +36,70 @@ if mplcursors_check:
     popupProps['bbox']['alpha'] = 0.9
 
 
-class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
+def check_units_norm_redshift(units_wave, units_flux, norm_flux, redshift):
+
+    # Checks spectra units
+    for arg in ['units_wave', 'units_flux']:
+        arg_value = locals()[arg]
+        if arg_value not in UNITS_LATEX_DICT:
+            _logger.warning(f'Input {arg} = {arg_value} is not recognized.\nPlease try to convert it to the accepted'
+                            f'units: {list(UNITS_LATEX_DICT.keys())}')
+
+    # Check if spectrum redshift and flux normalization flux are provided
+    for arg in ['norm_flux', 'redshift']:
+        arg_value = locals()[arg]
+        if arg_value is None:
+            _logger.debug(f'No value provided for the {arg}')
+
+    return
+
+
+def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask):
+
+    if crop_waves is not None:
+        idcs_crop = np.searchsorted(input_wave, crop_waves)
+        input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
+        input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
+        if input_err is not None:
+            input_err = input_err[idcs_crop[0]:idcs_crop[1]]
+        if pixel_mask is not None:
+            pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
+
+    return input_wave, input_flux, input_err, pixel_mask
+
+
+def spec_definition(input_wave, input_flux, input_err, pixel_mask, redshift, norm_flux):
+
+    # Apply the redshift correction
+    if input_wave is not None:
+        wave_rest = input_wave / (1 + redshift)
+        if (input_wave is not None) and (input_flux is not None):
+            wave = input_wave
+            flux = input_flux  # * (1 + self.redshift)
+            if input_err is not None:
+                err_flux = input_err  # * (1 + self.redshift)
+            else:
+                err_flux = None
+
+    # Normalize the spectrum
+    if input_flux is not None:
+        flux = flux / norm_flux
+        if input_err is not None:
+            err_flux = err_flux / norm_flux
+
+    # Masked the arrays if requested
+    if pixel_mask is not None:
+        wave = np.ma.masked_array(wave, pixel_mask)
+        wave_rest = np.ma.masked_array(wave_rest, pixel_mask)
+        flux = np.ma.masked_array(flux, pixel_mask)
+
+        if err_flux is not None:
+            err_flux = np.ma.masked_array(err_flux, pixel_mask)
+
+    return wave, wave_rest, flux, err_flux
+
+
+class Spectrum(LineFinder):
 
     """
     This class defines a spectrum object from which the lines can be measured. The required inputs for the spectrum definition
@@ -88,11 +151,11 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
                  inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, label=None):
 
-        # Load parent classes
+        # # Load parent classes
         LineFinder.__init__(self)
-        EmissionFitting.__init__(self)
-        LiMePlots.__init__(self)
-        IntMaskInspector.__init__(self)
+        # EmissionFitting.__init__(self)
+        # LiMePlots.__init__(self)
+        # IntMaskInspector.__init__(self)
 
         # Class attributes
         self.label = label
@@ -116,50 +179,15 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
         self.check = SpectrumCheck(self)
 
         # Checks spectra units
-        for arg in ['units_wave', 'units_flux']:
-            arg_value = self.__getattribute__(arg)
-            if arg_value not in UNITS_LATEX_DICT:
-                _logger.warning(f'Input {arg} = {arg_value} is not recognized.\nPlease try to convert it to the accepted'
-                                f'units: {list(UNITS_LATEX_DICT.keys())}')
-
-        # Check if spectrum redshift and flux normalization flux are provided
-        for arg in ['norm_flux', 'redshift']:
-            if self.__getattribute__(arg) is None:
-                _logger.debug(f'No value provided for the {arg}')
+        check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
 
         # Start cropping the input spectrum if necessary
-        if crop_waves is not None:
-            idcs_crop = np.searchsorted(input_wave, crop_waves)
-            input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
-            input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
-            if input_err is not None:
-                input_err = input_err[idcs_crop[0]:idcs_crop[1]]
-            if pixel_mask is not None:
-                pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
+        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
+                                                                          pixel_mask)
 
-        # Apply the redshift correction
-        if input_wave is not None:
-            self.wave_rest = input_wave / (1 + self.redshift)
-            if (input_wave is not None) and (input_flux is not None):
-                self.wave = input_wave
-                self.flux = input_flux  # * (1 + self.redshift)
-                if input_err is not None:
-                    self.err_flux = input_err  # * (1 + self.redshift)
-
-        # Normalize the spectrum
-        if input_flux is not None:
-            self.flux = self.flux / self.norm_flux
-            if input_err is not None:
-                self.err_flux = self.err_flux / self.norm_flux
-
-        # Masked the arrays if requested
-        if pixel_mask is not None:
-            self.wave = np.ma.masked_array(self.wave, pixel_mask)
-            self.wave_rest = np.ma.masked_array(self.wave_rest, pixel_mask)
-            self.flux = np.ma.masked_array(self.flux, pixel_mask)
-
-            if self.err_flux is not None:
-                self.err_flux = np.ma.masked_array(self.err_flux, pixel_mask)
+        # Spectra normalization, redshift and mask calculation
+        self.wave, self.wave_rest, self.flux, self.err_flux = spec_definition(input_wave, input_flux, input_err,
+                                                                              pixel_mask, self.redshift, self.norm_flux)
 
         # Check for dimensions and nan entries
         for arg in ['wave', 'flux', 'err_flux']:
@@ -190,317 +218,6 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
 
         # Generate empty dataframe to store measurement use cwd as default storing folder
         self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
-
-        return
-
-    def fit_from_wavelengths(self, line, mask, user_cfg={}, fit_method='leastsq', emission=True, adjacent_cont=True,
-                             temp_line=10000.0):
-
-        """
-
-        This function fits a line given its line and spectral mask. The line notation consists in the transition
-        ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
-
-        The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
-        adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
-
-        The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
-        the documentation for the complete description.
-
-        The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
-
-        By default, the algorithm assumes an emission line. The user can set the parameter ``emission=False`` for an
-        absorption.
-
-        If the sigma spectrum was not provided, the fitting estimates the pixel uncertainty from the adjacent continua flux
-        standard deviation assuming a linear profile. If the parameter ``adjacent_cont=True`` the adjacent continua is also
-        use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
-        first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
-
-        For the calculation of the thermal broadening on the emission lines the user can include the line electron
-        temperature in Kelvin. The default value is 10000 K
-
-        :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
-        :type line: string
-
-        :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
-        :type mask: numpy.ndarray
-
-        :param user_cfg: Dictionary with the fitting configuration.
-        :type user_cfg: dict, optional
-
-        :param fit_method: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
-        :type fit_method: str, optional
-
-        :param emission: Boolean check for the line type. The default is ``True`` for an emission line
-        :type emission: bool, optional
-
-        :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
-                              adjacent continua array
-        :type adjacent_cont: bool, optional
-
-        :param temp_line: Line electron temperature for the thermal broadening calculation.
-        :type temp_line: bool, optional
-
-        """
-
-        # Security checks for the mask wavelengths
-        assert np.all(np.diff(mask) >= 0), f'\n- Error: the {line} mask is not sorted'
-        # assert self.wave_rest[0] < mask[0], f'\n- Error: the {line} mask low mask limit (w1 = {mask[0]:.2f}) is below the spectrum rest _frame limit (w_min = {self.wave_rest[0]:.2f})'
-        # assert self.wave_rest[-1] > mask[-1], f'\n- Error: the {line} mask up mask limit (w6 = {mask[-1]:.2f}) is above the spectrum rest _frame limit (w_min = {self.wave_rest[-1]:.2f})'
-
-        # For security previous measurement is cleared and a copy of the user configuration is used
-        self.clear_fit()
-        fit_conf = user_cfg.copy()
-
-        # Estate the minimizing method for the fitting (this parameter is not restored to default by the self.clear_fit function)
-        self._minimize_method = fit_method
-
-        # Label the current measurement
-        self.line = line
-        self.mask = mask
-        self.temp_line = temp_line
-
-        # Global fit parameters
-        self._emission_check = emission
-        self._cont_from_adjacent = adjacent_cont
-        self._decimal_wave = True if '.' in self.line else False
-
-        # Get spectrum line and continua band indeces
-        self.pixel_mask = fit_conf.get(f'{self.line}_mask', 'no')
-        idcsEmis, idcsCont = define_masks(self.wave, self.mask*(1 + self.redshift), line_mask_entry=self.pixel_mask)
-
-        # Integrated line properties
-        emisWave, emisFlux = self.wave[idcsEmis], self.flux[idcsEmis]
-        contWave, contFlux = self.wave[idcsCont], self.flux[idcsCont]
-        err_array = self.err_flux[idcsEmis] if self.err_flux is not None else None
-
-        self._narrow_line = True if emisWave.size <= 6 else False
-
-        # Review the transition bands before
-        emis_band_lengh = emisWave.size if not np.ma.is_masked(emisWave) else np.sum(~emisWave.mask)
-        cont_band_length = contWave.size if not np.ma.is_masked(contWave) else np.sum(~contWave.mask)
-        if emis_band_lengh/emisWave.size < 0.5:
-            _logger.warning(f'The line band for {self.line} has very few valid pixels')
-
-        if cont_band_length/contWave.size < 0.5:
-            _logger.warning(f'The continuum band for {self.line} has very few valid pixels')
-
-        # Store error very small mask
-        if emis_band_lengh <= 1:
-            if self.observations == 'no':
-                self.observations = 'Small_line_band'
-            else:
-                self.observations += 'Small_line_band'
-            _logger.warning(f'- Line {line} mask band is too small ({emisWave.size} value array): {emisWave}')
-
-        # Non-parametric measurements
-        self.line_properties(emisWave, emisFlux, contWave, contFlux, err_array, bootstrap_size=1000)
-
-        # Check if blended line
-        if self.line in fit_conf:
-            self.profile_label = fit_conf[self.line]
-            if '_b' in self.line:
-                self.blended_check = True
-
-        # Import kinematics if requested
-        self.import_line_kinematics(fit_conf, z_cor=1 + self.redshift)
-
-        # Gaussian fitting # TODO Add logic for very small lines
-        idcsLine = idcsEmis + idcsCont
-        x_array = self.wave[idcsLine]
-        y_array = self.flux[idcsLine]
-        w_array = 1.0 / self.err_flux[idcsLine] if self.err_flux is not None else np.full(x_array.size, 1.0 / self.std_cont)
-        self.gauss_lmfit(self.line, x_array, y_array, w_array, fit_conf, z_obj=self.redshift)
-
-        # Safe the results to log DF
-        self.results_to_database(self.line, self.log, fit_conf)
-
-        return
-
-    def display_results(self, line=None, fit_report=False, plot=True, y_scale='auto', rest_frame=False,
-                        output_address=None):
-
-        """
-
-        This function plots or prints the results of a line measurement. If no line is specified, the last fitting is showed.
-
-        The ``fit_report=True`` includes the `the LmFit log <https://lmfit.github.io/lmfit-py/fitting.html#getting-and-printing-fit-reports>`_.
-
-        If an ``output_address`` is provided, the outputs will be saved to a file instead of displayed on the terminal/window.
-        The text file will have the address output file extension changed to .txt, while the plot will use the one provided
-        by the user.
-
-        :param line: line fitting to query. If none is provided, the one from the last fitting is considered
-        :type line: str, optional
-
-        :param fit_report: Summary of the fitting inputs and outputs. The default value is ``False``
-        :type fit_report: bool, optional
-
-        :param plot: Plot of the fitting inputs and outputs. The default value is ``True``
-        :type plot: bool, optional
-
-        :param y_scale: Scale for the flux (vertical) axis in the plot. The default value is ``auto`` assigns linear,
-                        log or symlog depending on the displayed units.
-        :type y_scale: bool, optional
-
-        :param rest_frame: Frame of reference for the plot. The default value is "False" for observed reference frame``
-        :type rest_frame: bool, optional
-
-        :param output_address: Output address for the measurement report and/or plot. If provided the results will be stored
-                               instead of displayed on screen.
-        :type output_address: str, optional
-
-        """
-
-        # Check if the user provided an output file address
-        if output_address is not None:
-            output_path = Path(output_address)
-
-        # Fitting report
-        if fit_report:
-
-            if line is None:
-                if self.line is not None:
-                    line = self.line
-                    output_ref = (f'\nLine line: {line}\n'
-                                  f'- Line mask: {self.mask}\n'
-                                  f'- Normalization flux: {self.norm_flux}\n'
-                                  f'- Redshift: {self.redshift}\n'
-                                  f'- Peak wavelength: {self.peak_wave:.2f}; peak intensity: {self.peak_flux:.2f}\n'
-                                  f'- Cont. slope: {self.m_cont:.2e}; Cont. intercept: {self.n_cont:.2e}\n')
-
-                    if self.blended_check:
-                        mixtureComponents = np.array(self.profile_label.split('-'))
-                    else:
-                        mixtureComponents = np.array([line], ndmin=1)
-
-                    output_ref += f'\n- {line} Intg flux: {self.intg_flux:.3f} +/- {self.intg_err:.3f}\n'
-
-                    if mixtureComponents.size == 1:
-                        output_ref += f'- {line} Eqw (intg): {self.eqw[0]:.2f} +/- {self.eqw_err[0]:.2f}\n'
-
-                    for i, lineRef in enumerate(mixtureComponents):
-                        output_ref += (f'\n- {lineRef} gaussian fitting:\n'
-                                       f'-- Gauss flux: {self.gauss_flux[i]:.3f} +/- {self.gauss_err[i]:.3f}\n'
-                                       # f'-- Amplitude: {self.amp[i]:.3f} +/- {self.amp_err[i]:.3f}\n'
-                                       f'-- Center: {self.center[i]:.2f} +/- {self.center_err[i]:.2f}\n'
-                                       f'-- Sigma (km/s): {self.sigma_vel[i]:.2f} +/- {self.sigma_vel_err[i]:.2f}\n')
-                else:
-                    output_ref = f'- No measurement performed\n'
-
-            # Case with line input: search and show that measurement
-            elif self.log is not None:
-                if line in self.log.index:
-                    output_ref = self.log.loc[line].to_string
-                else:
-                    output_ref = f'- WARNING: {line} not found in  lines table\n'
-            else:
-                output_ref = '- WARNING: Measurement lines log not defined\n'
-
-            # Display the print lmfit report if available
-            if fit_report:
-                if self.fit_output is not None:
-                    output_ref += f'\n- LmFit output:\n{lmfit_fit_report(self.fit_output)}\n'
-                else:
-                    output_ref += f'\n- LmFit output not available\n'
-
-            # Display the report
-            if output_address is None:
-                print(output_ref)
-            else:
-                output_txt = f'{output_path.parent/output_path.stem}.txt'
-                with open(output_txt, 'w+') as fh:
-                    fh.write(output_ref)
-
-        # Fitting plot
-        if plot:
-            self.plot.line(line, rest_frame=rest_frame, y_scale=y_scale, output_address=output_address)
-
-        return
-
-    def import_line_kinematics(self, user_conf, z_cor):
-
-        # Check if imported kinematics come from blended component
-        if self.profile_label != 'no':
-            childs_list = self.profile_label.split('-')
-        else:
-            childs_list = np.array(self.line, ndmin=1)
-
-        for child_label in childs_list:
-            parent_label = user_conf.get(f'{child_label}_kinem')
-
-            if parent_label is not None:
-
-                # Case we want to copy from previous line and the data is not available
-                if (parent_label not in self.log.index) and (not self.blended_check):
-                    _logger.warning(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
-
-                else:
-                    ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True, units_wave=self.units_wave)
-                    ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True, units_wave=self.units_wave)
-
-                    # Copy v_r and sigma_vel in wavelength units
-                    for param_ext in ('center', 'sigma'):
-                        param_label_child = f'{child_label}_{param_ext}'
-
-                        # Warning overwritten existing configuration
-                        if param_label_child in user_conf:
-                            _logger.warning(f'{param_label_child} overwritten by {parent_label} kinematics in configuration input')
-
-                        # Case where parent and child are in blended group
-                        if parent_label in childs_list:
-                            param_label_parent = f'{parent_label}_{param_ext}'
-                            param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
-
-                            user_conf[param_label_child] = {'expr': param_expr_parent}
-
-                        # Case we want to copy from previously measured line
-                        else:
-                            mu_parent = self.log.loc[parent_label, ['center', 'center_err']].values
-                            sigma_parent = self.log.loc[parent_label, ['sigma', 'sigma_err']].values
-
-                            if param_ext == 'center':
-                                param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
-                            else:
-                                param_value = wtheo_child / wtheo_parent * sigma_parent
-
-                            user_conf[param_label_child] = {'value': param_value[0], 'vary': False}
-                            user_conf[f'{param_label_child}_err'] = param_value[1]
-
-        return
-
-    def results_to_database(self, lineLabel, linesDF, fit_conf, export_params=_LOG_EXPORT):
-
-        # Recover line data
-        if self.blended_check:
-            line_components = self.profile_label.split('-')
-        else:
-            line_components = np.array([lineLabel], ndmin=1)
-
-        ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=fit_conf, units_wave=self.units_wave)
-
-        # Loop through the line components
-        for i, line in enumerate(line_components):
-
-            # Convert current measurement to a pandas series container
-            linesDF.loc[line, ['ion', 'wavelength', 'latex_label']] = ion[i], waveRef[i], latexLabel[i]
-            linesDF.loc[line, 'w1':'w6'] = self.mask
-
-            # Treat every line
-            for param in export_params:
-
-                # Get component parameter
-                if _LOG_COLUMNS[param][2]:
-                    param_value = self.__getattribute__(param)[i]
-                else:
-                    param_value = self.__getattribute__(param)
-
-                # De normalize
-                if _LOG_COLUMNS[param][0]:
-                    param_value = param_value * self.norm_flux
-
-                linesDF.loc[line, param] = param_value
 
         return
 
@@ -576,8 +293,26 @@ class Spectrum(EmissionFitting, LiMePlots, IntMaskInspector, LineFinder):
 
         return
 
-    def clear_fit(self):
-        super().__init__()
+
+class Cube(EmissionFitting, LineFinder, LiMePlots):
+
+    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, label=None):
+
+        # Class attributes
+        self.label = label
+        self.wave = None
+        self.wave_rest = None
+        self.flux = None
+        self.err_flux = None
+        self.norm_flux = norm_flux
+        self.redshift = redshift
+        self.log = None
+        self.inst_FWHM = inst_FWHM
+        self.units_wave = units_wave
+        self.units_flux = units_flux
+        self._masked_inputs = False
+
         return
 
 
