@@ -12,12 +12,13 @@ from .model import EmissionFitting
 from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks
 
-from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, LimeFigures, SampleFigures
-from .plots_interactive import SpectrumCheck
-from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log
+from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, SpectrumFigures, SampleFigures, CubeFigures
+from .plots_interactive import SpectrumCheck, CubeCheck
+from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log, LiMe_Error
 from .model import gaussian_profiles_computation, linear_continuum_computation
 from .transitions import Line
-from .workflow import LineTreatment
+from .workflow import SpecTreatment, CubeTreatment
+from . import Error
 
 from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
 from matplotlib.widgets import SpanSelector
@@ -36,6 +37,37 @@ if mplcursors_check:
     popupProps['bbox']['alpha'] = 0.9
 
 
+
+def check_inputs(wave, flux, err_flux, lime_object):
+
+    for i, items in enumerate(locals().items()):
+
+        if i < 3:
+
+            key, value = items
+            if value is not None:
+
+                # Confirm numpy array inputs
+                if isinstance(value, np.ndarray):
+
+                    # Confirm dimensions
+                    dimensions = len(value.shape)
+                    spec_check = dimensions == 1 and (isinstance(lime_object, Spectrum) or key == 'wave')
+                    cube_type = dimensions == 3 and isinstance(lime_object, Cube)
+                    if not spec_check and not cube_type:
+                        raise LiMe_Error(f'The dimensions of the input {key} are {dimensions}.\n'
+                                         f'LiMe only recognizes 1D arrays for the wavelength array, \n'
+                                         f'1D flux arrays for the Spectrum objects \n'
+                                         f'and 3D flux arrays Cube objects.')
+                else:
+                    raise LiMe_Error(f'The input {key} array must be numpy array. The input variable type is a {type(value)}')
+            else:
+                if key in ['wave', 'flux']:
+                    _logger.info(f'No value has been provided for {key}.')
+
+    return
+
+
 def check_units_norm_redshift(units_wave, units_flux, norm_flux, redshift):
 
     # Checks spectra units
@@ -51,24 +83,64 @@ def check_units_norm_redshift(units_wave, units_flux, norm_flux, redshift):
         if arg_value is None:
             _logger.debug(f'No value provided for the {arg}')
 
+
+    return
+
+
+def check_spectrum_axes(lime_object):
+
+    # Check for masked arrays
+    check_mask = np.zeros(3).astype(bool)
+    for i, arg in enumerate(['wave', 'wave_rest', 'flux']):
+        if np.ma.is_masked(lime_object.__getattribute__(arg)):
+            check_mask[i] = True
+
+    if np.any(check_mask):
+        lime_object._masked_inputs = True
+        if ~np.all(check_mask):
+            _logger.warning(f'Make sure *all* your input wavelength, flux and uncertainty are masked arrays')
+
+    # Check that the flux and wavelength normalization
+    if not isinstance(lime_object, Cube):
+        if np.nanmedian(lime_object.flux) < 0.0001:
+            _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
+                            f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
+                            f'Try changing the flux normalization')
+
     return
 
 
 def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask):
 
     if crop_waves is not None:
+
         idcs_crop = np.searchsorted(input_wave, crop_waves)
         input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
-        input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
-        if input_err is not None:
-            input_err = input_err[idcs_crop[0]:idcs_crop[1]]
+
+        # Spectrum
+        if input_flux.shape == 1:
+            input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
+            if input_err is not None:
+                input_err = input_err[idcs_crop[0]:idcs_crop[1]]
+
+        # Cube
+        elif input_flux.shape == 3:
+            input_flux = input_flux[idcs_crop[0]:idcs_crop[1], :, :]
+            if input_err is not None:
+                input_err = input_err[idcs_crop[0]:idcs_crop[1], :, :]
+
+        # Not recognized
+        else:
+            raise LiMe_Error(f'The dimensions of the input flux are {input_flux.shape}. LiMe only recognized flux 1D '
+                             f'arrays for Spectrum objects and 3D arrays for Cube objects')
+
         if pixel_mask is not None:
             pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
 
     return input_wave, input_flux, input_err, pixel_mask
 
 
-def spec_definition(input_wave, input_flux, input_err, pixel_mask, redshift, norm_flux):
+def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, redshift, norm_flux):
 
     # Apply the redshift correction
     if input_wave is not None:
@@ -91,10 +163,17 @@ def spec_definition(input_wave, input_flux, input_err, pixel_mask, redshift, nor
     if pixel_mask is not None:
         wave = np.ma.masked_array(wave, pixel_mask)
         wave_rest = np.ma.masked_array(wave_rest, pixel_mask)
-        flux = np.ma.masked_array(flux, pixel_mask)
+
+        # Spectrum or Cube spectral masking
+        if len(input_flux.shape) == 1:
+            mask_array = pixel_mask
+        else:
+            mask_array = np.ones(flux.shape).astype(bool)
+            mask_array[pixel_mask, :, :] = pixel_mask
+        flux = np.ma.masked_array(flux, mask_array)
 
         if err_flux is not None:
-            err_flux = np.ma.masked_array(err_flux, pixel_mask)
+            err_flux = np.ma.masked_array(err_flux, mask_array)
 
     return wave, wave_rest, flux, err_flux
 
@@ -149,34 +228,95 @@ class Spectrum(LineFinder):
     """
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, label=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, label=None, review_inputs=True):
 
-        # # Load parent classes
+        # Load parent classes
         LineFinder.__init__(self)
-        # EmissionFitting.__init__(self)
-        # LiMePlots.__init__(self)
-        # IntMaskInspector.__init__(self)
+
+        # Review the inputs
+        # check_inputs(input_wave, input_flux, input_err, self)
 
         # Class attributes
-        self.label = label
+        self.label = None
         self.wave = None
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.norm_flux = norm_flux
-        self.redshift = redshift
+        self.norm_flux = None
+        self.redshift = None
         self.log = None
-        self.inst_FWHM = inst_FWHM
-        self.units_wave = units_wave
-        self.units_flux = units_flux
+        self.inst_FWHM = None
+        self.units_wave = None
+        self.units_flux = None
         self._masked_inputs = False
 
         # Treatments objects
-        self.fit = LineTreatment(self)
+        self.fit = SpecTreatment(self)
 
         # Plotting objects
-        self.plot = LimeFigures(self)
+        self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
+
+        # # Checks spectra units
+        # check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
+        #
+        # # Start cropping the input spectrum if necessary
+        # input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
+        #                                                                   pixel_mask)
+        #
+        # # Spectra normalization and masking
+        # self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
+        #                                                                                  input_err, pixel_mask,
+        #                                                                                  self.redshift, self.norm_flux)
+        #
+        # # Check nan entries and mask quality
+        # check_spectrum_axes(self)
+        #
+        # # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
+        # self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
+
+        # Review and assign the attibutes data
+        if review_inputs:
+            self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM,
+                                 units_wave, units_flux, pixel_mask, label)
+
+        return
+
+    @classmethod
+    def from_cube(cls, cube, idx_j, idx_i, label=None):
+
+        # Load parent classes
+        spec = cls(review_inputs=False)
+
+        # Class attributes
+        spec.label = label
+        spec.wave = cube.wave
+        spec.wave_rest = cube.wave_rest
+        spec.flux = cube.flux[:, idx_j, idx_i]
+        spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
+        spec.norm_flux = cube.norm_flux
+        spec.redshift = cube.redshift
+        spec.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
+        spec.inst_FWHM = cube.inst_FWHM
+        spec.units_wave = cube.units_wave
+        spec.units_flux = cube.units_flux
+        spec._masked_inputs = False
+
+        return spec
+
+    def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM, units_wave,
+                        units_flux, pixel_mask, label):
+
+        # Class attributes
+        self.label = label
+        self.norm_flux = norm_flux
+        self.redshift = redshift
+        self.inst_FWHM = inst_FWHM
+        self.units_wave = units_wave
+        self.units_flux = units_flux
+
+        # Review the inputs
+        check_inputs(input_wave, input_flux, input_err, self)
 
         # Checks spectra units
         check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
@@ -185,38 +325,15 @@ class Spectrum(LineFinder):
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
                                                                           pixel_mask)
 
-        # Spectra normalization, redshift and mask calculation
-        self.wave, self.wave_rest, self.flux, self.err_flux = spec_definition(input_wave, input_flux, input_err,
-                                                                              pixel_mask, self.redshift, self.norm_flux)
+        # Spectra normalization and masking
+        self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
+                                                                                         input_err, pixel_mask,
+                                                                                         self.redshift, self.norm_flux)
 
-        # Check for dimensions and nan entries
-        for arg in ['wave', 'flux', 'err_flux']:
-            arg_array = self.__getattribute__(arg)
-            if arg_array is not None:
-                dimensions = len(arg_array.shape)
-                nan_entries = np.isnan(arg_array)
-                if np.any(nan_entries):
-                    _logger.warning(f'Input spectrum {arg} array has {np.sum(nan_entries)} nan entries. Try to mask '
-                                    f'these pixels to avoid issues with the measurements')
-                if dimensions != 1:
-                    _logger.warning(f'The input spectrum {arg} array has a number of dimensions {dimensions} > 1. This '
-                                    f'will cause issues in the measurements')
-            else:
-                if arg in ['wave', 'flux']:
-                    _logger.warning(f'No {arg} array introduced. This may bring issues in the measurement.')
+        # Check nan entries and mask quality
+        check_spectrum_axes(self)
 
-        # Check for masked arrays
-        check_mask = np.zeros(3).astype(bool)
-        for i, arg in enumerate(['wave', 'wave_rest', 'flux']):
-            if np.ma.is_masked(self.__getattribute__(arg)):
-                check_mask[i] = True
-
-        if np.any(check_mask):
-            self._masked_inputs = True
-            if ~np.all(check_mask):
-                _logger.warning(f'Make sure *all* your input wavelength, flux and uncertainty are masked arrays')
-
-        # Generate empty dataframe to store measurement use cwd as default storing folder
+        # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
         self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
 
         return
@@ -294,13 +411,16 @@ class Spectrum(LineFinder):
         return
 
 
-class Cube(EmissionFitting, LineFinder, LiMePlots):
+class Cube:
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, label=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, pixel_mask=None, obj_name=None):
+
+        # Review the inputs
+        check_inputs(input_wave, input_flux, input_err, self)
 
         # Class attributes
-        self.label = label
+        self.obj_name = obj_name
         self.wave = None
         self.wave_rest = None
         self.flux = None
@@ -313,7 +433,186 @@ class Cube(EmissionFitting, LineFinder, LiMePlots):
         self.units_flux = units_flux
         self._masked_inputs = False
 
+        # Treatments objects
+        self.fit = CubeTreatment(self)
+
+        # Plotting objects
+        self.plot = CubeFigures(self)
+        self.check = CubeCheck(self)
+
+        # Checks spectra units
+        check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
+
+        # Start cropping the input spectrum if necessary
+        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
+                                                                          pixel_mask)
+
+        # Spectra normalization, redshift and mask calculation
+        self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
+                                                                                         input_err, pixel_mask,
+                                                                                         self.redshift, self.norm_flux)
+
+        # Check nan entries and mask quality
+        check_spectrum_axes(self)
+
         return
+
+    def spatial_masker(self, line, band=None, param=None, percentiles=[85, 90, 95], mask_ref=None, min_percentil=None,
+                       output_address=None, header_dict={}, bands_frame=None):
+
+        """
+        This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
+        Currently, the only one implemented is the percentile intensity. If an output address is provided, the mask is saved as a fits file
+        where each intensity level mask is stored in its corresponding page. The parameter calculation method, its intensity and mask
+        index are saved in the corresponding HDU header as PARAM, PARAMIDX and PARAMVAL.
+
+        :param image_flux: Matrix with the image flux to be spatially masked.
+        :type image_flux: np.array()
+
+        :param mask_param: Flux intensity model from which the masks are calculated. The options available are 'flux',
+               'SN_line' and 'SN_cont'.
+        :type mask_param: str, optional
+
+        :param contour_levels: Vector in decreasing order with the parameter values for the mask_param chosen.
+        :type contour_levels: np.array()
+
+        :param mask_ref: String label for the mask. If none provided the masks will be named in cardinal order.
+        :type mask_ref: str, optional
+
+        :param output_address: Output address for the mask fits file.
+        :type output_address: str, optional
+
+        :param min_level: Minimum level for the masks calculation. If none is provided the minimum value from the contour_levels
+                          vector will be used.
+        :type min_level: float, optional
+
+        :param show_plot: If true a plot will be displayed with the mask calculation. Additionally, if an output_address is
+                          provided the plot will be saved in the parent folder as image taking into consideration the
+                          mask_ref value.
+        :type show_plot: bool, optional
+
+        :param fits_header: Dictionary with key-values to be included in the output .fits file header.
+        :type fits_header: dict, optional
+
+        :return:
+        """
+
+        # Check the function inputs
+        if not np.all(np.diff(percentiles) > 0):
+            raise Error(f'The mask percentiles ({percentiles}) must be in increasing order')
+        inver_percentiles = np.flip(percentiles)
+
+        if not param in [None, 'SN_line', 'SN_cont']:
+            raise Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
+
+
+        # TODO overwrite spatial mask file not update
+        # Line for the background image
+        line_bg = Line(line, band, ref_log=bands_frame)
+
+        # Get the band indexes
+        idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_bg.pixel_mask)
+        signal_slice = self.flux[idcsEmis, :, :]
+
+        # If not mask parameter provided we use the flux percentiles
+        if param is None:
+            default_title = 'Flux percentiles masks'
+            param = self.units_flux
+            param_image = signal_slice.sum(axis=0)
+
+        # S/N cont
+        elif param == 'SN_cont':
+            default_title = 'Continuum S/N percentile masks'
+
+            param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
+
+        # S/N line
+        else:
+            default_title = 'Emission line S/N percentile masks'
+
+            n_pixels = np.sum(idcsCont)
+            cont_slice = self.flux[idcsCont, :, :]
+            Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
+            std_image = np.nanstd(cont_slice, axis=0)
+            param_image = (np.sqrt(2 * n_pixels * np.pi) / 6) * (Amp_image / std_image)
+
+        # Percentiles vector for the target parameter
+        param_array = np.nanpercentile(param_image, inver_percentiles)
+
+        # If minimum level not provided by user use lowest contour_level
+        min_level = param_array[-1] if min_percentil is None else min_percentil
+
+        # Containers for the mask parameters
+        mask_dict = {}
+        param_level = {}
+        boundary_dict = {}
+
+        # Loop throught the counter levels and compute the
+        for i, n_levels in enumerate(param_array):
+
+            # # Operation every element
+            if i == 0:
+                maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                                  (param_image >= min_level),
+                                                  param_image)
+
+            else:
+                maParamImage = np.ma.masked_where((param_image >= param_array[i]) &
+                                                  (param_image < param_array[i - 1]) &
+                                                  (param_image >= min_level),
+                                                  param_image)
+
+            if np.sum(maParamImage.mask) > 0:
+                mask_dict[f'mask_{i}'] = maParamImage.mask
+                boundary_dict[f'mask_{i}'] = inver_percentiles[i]
+                param_level[f'mask_{i}'] = param_array[i]
+
+        # Use as HDU as container for the mask
+        hdul = fits.HDUList([fits.PrimaryHDU()])
+
+        for idx_region, region_items in enumerate(mask_dict.items()):
+            region_label, region_mask = region_items
+
+            # Metadata for the fits page
+            header_lime = {'PARAM': param,
+                           'PARAMIDX': boundary_dict[region_label],
+                           'PARAMVAL': param_level[region_label],
+                           'NUMSPAXE': np.sum(region_mask)}
+            fits_hdr = fits.Header(header_lime)
+
+            if header_dict is not None:
+                fits_hdr.update(header_dict)
+
+            # Extension for the mask
+            mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'
+
+            # Mask HDU
+            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=fits_hdr)
+
+            hdul.append(mask_hdu)
+
+        # Output folder computed from the output address
+        output_address = Path(output_address) if output_address is not None else None
+
+        # Return an array with the masks
+        if output_address is not None:
+            if output_address.parent.is_dir():
+                hdul.writeto(output_address, overwrite=True, output_verify='fix')
+                output_func = None
+            else:
+                raise LiMe_Error(f'Mask could not be saved. Folder not found: {output_address.parent.as_posix()}')
+
+        # Return the hdul
+        else:
+            output_func = hdul
+
+        return output_func
+
+    def get_spaxel(self, idx_j, idx_i, label=None):
+
+        spaxel = Spectrum.from_cube(self, idx_j, idx_i, label)
+
+        return spaxel
 
 
 class Sample(dict):
@@ -358,388 +657,388 @@ class Sample(dict):
                                     f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
 
 
-class MaskInspector(Spectrum):
-
-    """
-    This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
-    dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
-    file provided.
-
-    Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
-    wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
-    the interactive selection has the following rules:
-
-    * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
-      mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
-      original mask limits.
-
-    * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
-      `w3` and `w4` values.
-
-    * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
-      between `w1` and `w3` or `w4` and `w6` respectively.
-
-    The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
-    parameter can be an array of strings with the labels of the target lines or a two value integer array with the
-    interval of lines to plot.
-
-    Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
-    and greater than the blue and red wavelegnth values respectively.
-
-    :param log_address: Address for the lines log mask file.
-    :type log_address: str
-
-    :param input_wave: Wavelength array of the input spectrum.
-    :type input_wave: numpy.array
-
-    :param input_flux: Flux array for the input spectrum.
-    :type input_flux: numpy.array
-
-    :param input_err: Sigma array of the `input_flux`
-    :type input_err: numpy.array, optional
-
-    :param redshift: Spectrum redshift
-    :type redshift: float, optional
-
-    :param norm_flux: Spectrum flux normalization
-    :type norm_flux: float, optional
-
-    :param crop_waves: Wavelength limits in a two value array
-    :type crop_waves: np.array, optional
-
-    :param n_cols: Number of columns of the grid plot
-    :type n_cols: integer
-
-    :param n_rows: Number of columns of the grid plot
-    :type n_rows: integer
-
-    :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
-                           this interval must be a two value array.
-    :type lines_interval: list
-
-    :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
-                    strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
-    :type y_scale: str, optional
-
-    """
-
-    def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
-                 norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None, y_scale='auto'):
-
-        # Output file address
-        self.linesLogAddress = Path(log_address)
-        self.y_scale = y_scale
-
-        # Assign attributes to the parent class
-        super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
-
-        # Lines log address is provided and we read the DF from it
-        if Path(self.linesLogAddress).is_file():
-            self.log = load_lines_log(self.linesLogAddress)
-
-        # Lines log not provide code ends
-        else:
-            _logger.warning(f'No lines log file found at {log_address}. Leaving the script')
-            exit()
-
-        # Only plotting the lines in the lines interval
-        self.line_inter = lines_interval
-        if lines_interval is None:
-            n_lines = len(self.log.index)
-            self.target_lines = self.log.index.values
-
-        else:
-            # Array of strings
-            if isinstance(lines_interval[0], str):
-                n_lines = len(lines_interval)
-                self.target_lines = np.array(lines_interval, ndmin=1)
-            # Array of integers
-            else:
-                n_lines = lines_interval[1] - lines_interval[0]
-                self.target_lines = self.log[lines_interval[0]:lines_interval[1]].index.values
-
-        # Establish the grid shape
-        if n_lines > n_cols:
-            if n_rows is None:
-                n_rows = int(np.ceil(n_lines / n_cols))
-        else:
-            n_cols = n_lines
-            n_rows = 1
-
-        # Adjust the plot theme
-        PLOT_CONF = STANDARD_PLOT.copy()
-        AXES_CONF = STANDARD_AXES.copy()
-        PLOT_CONF['figure.figsize'] = (n_rows * 2, 8)
-        AXES_CONF.pop('xlabel')
-
-        with rc_context(PLOT_CONF):
-
-            self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-            self.ax = ax.flatten() if n_lines > 1 else [ax]
-            self.in_ax = None
-            self.dict_spanSelec = {}
-            self.axConf = {}
-
-            # Plot function
-            self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols, n_lines=n_lines)
-            plt.gca().axes.yaxis.set_ticklabels([])
-
-            try:
-                manager = plt.get_current_fig_manager()
-                manager.window.showMaximized()
-            except:
-                print()
-
-            # Show the image
-            save_close_fig_swicth(None, 'tight', self.fig)
-
-
-        return
-
-    def plot_line_mask_selection(self, logscale='auto', grid_size=None, n_lines=None):
-
-        # Generate plot
-        for i in range(grid_size):
-            if i < n_lines:
-                line = self.target_lines[i]
-                if line in self.log.index:
-                    self.mask = self.log.loc[line, 'w1':'w6'].values
-                    self.plot_line_region_i(self.ax[i], line, logscale=logscale)
-                    self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
-                                                                       self.on_select,
-                                                                       'horizontal',
-                                                                       useblit=True,
-                                                                       rectprops=dict(alpha=0.5, facecolor='tab:blue'))
-                else:
-                    print(f'- WARNING: line {line} not found in the input mask')
-
-            # Clear not filled axes
-            else:
-                self.fig.delaxes(self.ax[i])
-
-        bpe = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-        aee = self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
-
-        return
-
-    def plot_line_region_i(self, ax, lineLabel, limitPeak=5, logscale='auto'):
-
-        # Plot line region:
-        ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True, units_wave=self.units_wave)
-
-        # Decide type of plot
-        non_nan = (~pd.isnull(self.mask)).sum()
-
-        # Incomplete selections
-        if non_nan < 6:  # selections
-
-            # Peak region
-            idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
-            wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
-
-            # Plot region
-            idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (
-                        lineWave - limitPeak * 2 <= self.mask[3])
-            waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
-
-            # Plot the line region
-            ax.step(waveLine, fluxLine, where='mid')
-
-            # Fill the user selections
-            if non_nan == 2:
-                idx1, idx2 = np.searchsorted(self.wave_rest, self.mask[0:2])
-                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
-                                step='mid', alpha=0.5)
-
-            if non_nan == 4:
-                idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.mask[0:4])
-                ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
-                                step='mid', alpha=0.5)
-                ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor=self._color_dict['cont_band'],
-                                step='mid', alpha=0.5)
-
-        # Complete selections
-        else:
-
-            # Get line regions
-            idcsContLeft = (self.mask[0] <= self.wave_rest) & (self.wave_rest <= self.mask[1])
-            idcsContRight = (self.mask[4] <= self.wave_rest) & (self.wave_rest <= self.mask[5])
-
-            idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
-            idcsLineArea = (self.mask[2] <= self.wave_rest) & (self.wave_rest <= self.mask[3])
-
-            waveCentral, fluxCentral = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
-            wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
-
-            idcsLinePlot = (self.mask[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.mask[5] + 5)
-            waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
-
-            # Plot the line
-            ax.step(waveLine, fluxLine, color=self._color_dict['fg'], where='mid')
-
-            # Fill the user selections
-            ax.fill_between(waveCentral, 0, fluxCentral, step="mid", alpha=0.4, facecolor=self._color_dict['line_band'])
-            ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor=self._color_dict['cont_band'],
-                            step="mid", alpha=0.2)
-            ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor=self._color_dict['cont_band'],
-                            step="mid", alpha=0.2)
-
-        # Plot format
-        ax.yaxis.set_major_locator(plt.NullLocator())
-        ax.xaxis.set_major_locator(plt.NullLocator())
-
-        ax.update({'title': lineLabel})
-        ax.yaxis.set_ticklabels([])
-        ax.axes.yaxis.set_visible(False)
-        try:
-            idxPeakFlux = np.argmax(fluxPeak)
-            ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
-
-            if logscale == 'auto':
-                if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
-                    ax.set_yscale('log')
-            else:
-                if logscale == 'log':
-                    ax.set_yscale('log')
-        except:
-            print(f'fail at {self.line}')
-
-
-        return
-
-    def on_select(self, w_low, w_high):
-
-        # Check we are not just clicking on the plot
-        if w_low != w_high:
-
-            # Count number of empty entries to determine next step
-            non_nans = (~pd.isnull(self.mask)).sum()
-
-            # Case selecting 1/3 region
-            if non_nans == 0:
-                self.mask[0] = w_low
-                self.mask[1] = w_high
-
-            # Case selecting 2/3 region
-            elif non_nans == 2:
-                self.mask[2] = w_low
-                self.mask[3] = w_high
-                self.mask = np.sort(self.mask)
-
-            # Case selecting 3/3 region
-            elif non_nans == 4:
-                self.mask[4] = w_low
-                self.mask[5] = w_high
-                self.mask = np.sort(self.mask)
-
-            elif non_nans == 6:
-                self.mask = np.sort(self.mask)
-
-                # Caso que se corrija la region de la linea
-                if w_low > self.mask[1] and w_high < self.mask[4]:
-                    self.mask[2] = w_low
-                    self.mask[3] = w_high
-
-                # Caso que se corrija el continuum izquierdo
-                elif w_low < self.mask[2] and w_high < self.mask[2]:
-                    self.mask[0] = w_low
-                    self.mask[1] = w_high
-
-                # Caso que se corrija el continuum derecho
-                elif w_low > self.mask[3] and w_high > self.mask[3]:
-                    self.mask[4] = w_low
-                    self.mask[5] = w_high
-
-                # Case we want to select the complete region
-                elif w_low < self.mask[0] and w_high > self.mask[5]:
-
-                    # # Remove line from dataframe and save it
-                    # self.remove_lines_df(self.current_df, self.Current_Label)
-                    #
-                    # # Save lines log df
-                    # self.save_lineslog_dataframe(self.current_df, self.lineslog_df_address)
-
-                    # Clear the selections
-                    # self.mask = np.array([np.nan] * 6)
-
-                    print(f'\n-- The line {self.line} mask has been removed')
-
-                else:
-                    print('- WARNING: Unsucessful line selection:')
-                    print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
-
-            # Check number of measurements after selection
-            non_nans = (~pd.isnull(self.mask)).sum()
-
-            # Proceed to re-measurement if possible:
-            if non_nans == 6:
-
-                # TODO add option to perform the measurement a new
-                # self.clear_fit()
-                # self.fit_from_wavelengths(self.line, self.mask, user_cfg={})
-
-                # Parse the line regions to the dataframe
-                self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
-
-                # Save the corrected mask to a file
-                self.store_measurement()
-
-            # Redraw the line measurement
-            self.in_ax.clear()
-            self.plot_line_region_i(self.in_ax, self.line, logscale=self.y_scale)
-            self.in_fig.canvas.draw()
-
-        return
-
-    def on_enter_axes(self, event):
-
-        # Assign new axis
-        self.in_fig = event.canvas.figure
-        self.in_ax = event.inaxes
-
-        # TODO we need a better way to index than the latex label
-        # Recognise line line
-        idx_line = self.log.index == self.in_ax.get_title()
-        self.line = self.log.loc[idx_line].index.values[0]
-        self.mask = self.log.loc[idx_line, 'w1':'w6'].values[0]
-
-        # Restore measurements from log
-        # self.database_to_attr()
-
-        # event.inaxes.patch.set_edgecolor('red')
-        # event.canvas.draw()
-
-    def on_click(self, event):
-
-        if event.dblclick:
-            print(self.line)
-            print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')
-
-    def store_measurement(self):
-
-        # Read file in the stored address
-        if self.linesLogAddress.is_file():
-            file_DF = load_lines_log(self.linesLogAddress)
-
-            # Add new line to the DF and sort it if it was new
-            if self.line in file_DF.index:
-                file_DF.loc[self.line, 'w1':'w6'] = self.mask
-            else:
-                file_DF.loc[self.line, 'w1':'w6'] = self.mask
-
-                # Sort the lines by theoretical wavelength
-                lineLabels = file_DF.index.values
-                ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels, units_wave=self.units_wave)
-                file_DF = file_DF.iloc[wavelength_array.argsort()]
-
-        # If the file does not exist (or it is the first time)
-        else:
-            file_DF = self.log
-
-        # Save to a file
-        save_line_log(file_DF, self.linesLogAddress)
-
-        return
+# class MaskInspector(Spectrum):
+#
+#     """
+#     This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
+#     dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
+#     file provided.
+#
+#     Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
+#     wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
+#     the interactive selection has the following rules:
+#
+#     * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
+#       mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
+#       original mask limits.
+#
+#     * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
+#       `w3` and `w4` values.
+#
+#     * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
+#       between `w1` and `w3` or `w4` and `w6` respectively.
+#
+#     The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
+#     parameter can be an array of strings with the labels of the target lines or a two value integer array with the
+#     interval of lines to plot.
+#
+#     Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
+#     and greater than the blue and red wavelegnth values respectively.
+#
+#     :param log_address: Address for the lines log mask file.
+#     :type log_address: str
+#
+#     :param input_wave: Wavelength array of the input spectrum.
+#     :type input_wave: numpy.array
+#
+#     :param input_flux: Flux array for the input spectrum.
+#     :type input_flux: numpy.array
+#
+#     :param input_err: Sigma array of the `input_flux`
+#     :type input_err: numpy.array, optional
+#
+#     :param redshift: Spectrum redshift
+#     :type redshift: float, optional
+#
+#     :param norm_flux: Spectrum flux normalization
+#     :type norm_flux: float, optional
+#
+#     :param crop_waves: Wavelength limits in a two value array
+#     :type crop_waves: np.array, optional
+#
+#     :param n_cols: Number of columns of the grid plot
+#     :type n_cols: integer
+#
+#     :param n_rows: Number of columns of the grid plot
+#     :type n_rows: integer
+#
+#     :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
+#                            this interval must be a two value array.
+#     :type lines_interval: list
+#
+#     :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
+#                     strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
+#     :type y_scale: str, optional
+#
+#     """
+#
+#     def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
+#                  norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None, y_scale='auto'):
+#
+#         # Output file address
+#         self.linesLogAddress = Path(log_address)
+#         self.y_scale = y_scale
+#
+#         # Assign attributes to the parent class
+#         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
+#
+#         # Lines log address is provided and we read the DF from it
+#         if Path(self.linesLogAddress).is_file():
+#             self.log = load_lines_log(self.linesLogAddress)
+#
+#         # Lines log not provide code ends
+#         else:
+#             _logger.warning(f'No lines log file found at {log_address}. Leaving the script')
+#             exit()
+#
+#         # Only plotting the lines in the lines interval
+#         self.line_inter = lines_interval
+#         if lines_interval is None:
+#             n_lines = len(self.log.index)
+#             self.target_lines = self.log.index.values
+#
+#         else:
+#             # Array of strings
+#             if isinstance(lines_interval[0], str):
+#                 n_lines = len(lines_interval)
+#                 self.target_lines = np.array(lines_interval, ndmin=1)
+#             # Array of integers
+#             else:
+#                 n_lines = lines_interval[1] - lines_interval[0]
+#                 self.target_lines = self.log[lines_interval[0]:lines_interval[1]].index.values
+#
+#         # Establish the grid shape
+#         if n_lines > n_cols:
+#             if n_rows is None:
+#                 n_rows = int(np.ceil(n_lines / n_cols))
+#         else:
+#             n_cols = n_lines
+#             n_rows = 1
+#
+#         # Adjust the plot theme
+#         PLOT_CONF = STANDARD_PLOT.copy()
+#         AXES_CONF = STANDARD_AXES.copy()
+#         PLOT_CONF['figure.figsize'] = (n_rows * 2, 8)
+#         AXES_CONF.pop('xlabel')
+#
+#         with rc_context(PLOT_CONF):
+#
+#             self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
+#             self.ax = ax.flatten() if n_lines > 1 else [ax]
+#             self.in_ax = None
+#             self.dict_spanSelec = {}
+#             self.axConf = {}
+#
+#             # Plot function
+#             self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols, n_lines=n_lines)
+#             plt.gca().axes.yaxis.set_ticklabels([])
+#
+#             try:
+#                 manager = plt.get_current_fig_manager()
+#                 manager.window.showMaximized()
+#             except:
+#                 print()
+#
+#             # Show the image
+#             save_close_fig_swicth(None, 'tight', self.fig)
+#
+#
+#         return
+#
+#     def plot_line_mask_selection(self, logscale='auto', grid_size=None, n_lines=None):
+#
+#         # Generate plot
+#         for i in range(grid_size):
+#             if i < n_lines:
+#                 line = self.target_lines[i]
+#                 if line in self.log.index:
+#                     self.mask = self.log.loc[line, 'w1':'w6'].values
+#                     self.plot_line_region_i(self.ax[i], line, logscale=logscale)
+#                     self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
+#                                                                        self.on_select,
+#                                                                        'horizontal',
+#                                                                        useblit=True,
+#                                                                        rectprops=dict(alpha=0.5, facecolor='tab:blue'))
+#                 else:
+#                     print(f'- WARNING: line {line} not found in the input mask')
+#
+#             # Clear not filled axes
+#             else:
+#                 self.fig.delaxes(self.ax[i])
+#
+#         bpe = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+#         aee = self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+#
+#         return
+#
+#     def plot_line_region_i(self, ax, lineLabel, limitPeak=5, logscale='auto'):
+#
+#         # Plot line region:
+#         ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True, units_wave=self.units_wave)
+#
+#         # Decide type of plot
+#         non_nan = (~pd.isnull(self.mask)).sum()
+#
+#         # Incomplete selections
+#         if non_nan < 6:  # selections
+#
+#             # Peak region
+#             idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
+#             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
+#
+#             # Plot region
+#             idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (
+#                         lineWave - limitPeak * 2 <= self.mask[3])
+#             waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
+#
+#             # Plot the line region
+#             ax.step(waveLine, fluxLine, where='mid')
+#
+#             # Fill the user selections
+#             if non_nan == 2:
+#                 idx1, idx2 = np.searchsorted(self.wave_rest, self.mask[0:2])
+#                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
+#                                 step='mid', alpha=0.5)
+#
+#             if non_nan == 4:
+#                 idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.mask[0:4])
+#                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
+#                                 step='mid', alpha=0.5)
+#                 ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor=self._color_dict['cont_band'],
+#                                 step='mid', alpha=0.5)
+#
+#         # Complete selections
+#         else:
+#
+#             # Get line regions
+#             idcsContLeft = (self.mask[0] <= self.wave_rest) & (self.wave_rest <= self.mask[1])
+#             idcsContRight = (self.mask[4] <= self.wave_rest) & (self.wave_rest <= self.mask[5])
+#
+#             idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
+#             idcsLineArea = (self.mask[2] <= self.wave_rest) & (self.wave_rest <= self.mask[3])
+#
+#             waveCentral, fluxCentral = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
+#             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
+#
+#             idcsLinePlot = (self.mask[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.mask[5] + 5)
+#             waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
+#
+#             # Plot the line
+#             ax.step(waveLine, fluxLine, color=self._color_dict['fg'], where='mid')
+#
+#             # Fill the user selections
+#             ax.fill_between(waveCentral, 0, fluxCentral, step="mid", alpha=0.4, facecolor=self._color_dict['line_band'])
+#             ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor=self._color_dict['cont_band'],
+#                             step="mid", alpha=0.2)
+#             ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor=self._color_dict['cont_band'],
+#                             step="mid", alpha=0.2)
+#
+#         # Plot format
+#         ax.yaxis.set_major_locator(plt.NullLocator())
+#         ax.xaxis.set_major_locator(plt.NullLocator())
+#
+#         ax.update({'title': lineLabel})
+#         ax.yaxis.set_ticklabels([])
+#         ax.axes.yaxis.set_visible(False)
+#         try:
+#             idxPeakFlux = np.argmax(fluxPeak)
+#             ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
+#
+#             if logscale == 'auto':
+#                 if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
+#                     ax.set_yscale('log')
+#             else:
+#                 if logscale == 'log':
+#                     ax.set_yscale('log')
+#         except:
+#             print(f'fail at {self.line}')
+#
+#
+#         return
+#
+#     def on_select(self, w_low, w_high):
+#
+#         # Check we are not just clicking on the plot
+#         if w_low != w_high:
+#
+#             # Count number of empty entries to determine next step
+#             non_nans = (~pd.isnull(self.mask)).sum()
+#
+#             # Case selecting 1/3 region
+#             if non_nans == 0:
+#                 self.mask[0] = w_low
+#                 self.mask[1] = w_high
+#
+#             # Case selecting 2/3 region
+#             elif non_nans == 2:
+#                 self.mask[2] = w_low
+#                 self.mask[3] = w_high
+#                 self.mask = np.sort(self.mask)
+#
+#             # Case selecting 3/3 region
+#             elif non_nans == 4:
+#                 self.mask[4] = w_low
+#                 self.mask[5] = w_high
+#                 self.mask = np.sort(self.mask)
+#
+#             elif non_nans == 6:
+#                 self.mask = np.sort(self.mask)
+#
+#                 # Caso que se corrija la region de la linea
+#                 if w_low > self.mask[1] and w_high < self.mask[4]:
+#                     self.mask[2] = w_low
+#                     self.mask[3] = w_high
+#
+#                 # Caso que se corrija el continuum izquierdo
+#                 elif w_low < self.mask[2] and w_high < self.mask[2]:
+#                     self.mask[0] = w_low
+#                     self.mask[1] = w_high
+#
+#                 # Caso que se corrija el continuum derecho
+#                 elif w_low > self.mask[3] and w_high > self.mask[3]:
+#                     self.mask[4] = w_low
+#                     self.mask[5] = w_high
+#
+#                 # Case we want to select the complete region
+#                 elif w_low < self.mask[0] and w_high > self.mask[5]:
+#
+#                     # # Remove line from dataframe and save it
+#                     # self.remove_lines_df(self.current_df, self.Current_Label)
+#                     #
+#                     # # Save lines log df
+#                     # self.save_lineslog_dataframe(self.current_df, self.lineslog_df_address)
+#
+#                     # Clear the selections
+#                     # self.mask = np.array([np.nan] * 6)
+#
+#                     print(f'\n-- The line {self.line} mask has been removed')
+#
+#                 else:
+#                     print('- WARNING: Unsucessful line selection:')
+#                     print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
+#
+#             # Check number of measurements after selection
+#             non_nans = (~pd.isnull(self.mask)).sum()
+#
+#             # Proceed to re-measurement if possible:
+#             if non_nans == 6:
+#
+#                 # TODO add option to perform the measurement a new
+#                 # self.clear_fit()
+#                 # self.fit_from_wavelengths(self.line, self.mask, user_cfg={})
+#
+#                 # Parse the line regions to the dataframe
+#                 self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
+#
+#                 # Save the corrected mask to a file
+#                 self.store_measurement()
+#
+#             # Redraw the line measurement
+#             self.in_ax.clear()
+#             self.plot_line_region_i(self.in_ax, self.line, logscale=self.y_scale)
+#             self.in_fig.canvas.draw()
+#
+#         return
+#
+#     def on_enter_axes(self, event):
+#
+#         # Assign new axis
+#         self.in_fig = event.canvas.figure
+#         self.in_ax = event.inaxes
+#
+#         # TODO we need a better way to index than the latex label
+#         # Recognise line line
+#         idx_line = self.log.index == self.in_ax.get_title()
+#         self.line = self.log.loc[idx_line].index.values[0]
+#         self.mask = self.log.loc[idx_line, 'w1':'w6'].values[0]
+#
+#         # Restore measurements from log
+#         # self.database_to_attr()
+#
+#         # event.inaxes.patch.set_edgecolor('red')
+#         # event.canvas.draw()
+#
+#     def on_click(self, event):
+#
+#         if event.dblclick:
+#             print(self.line)
+#             print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')
+#
+#     def store_measurement(self):
+#
+#         # Read file in the stored address
+#         if self.linesLogAddress.is_file():
+#             file_DF = load_lines_log(self.linesLogAddress)
+#
+#             # Add new line to the DF and sort it if it was new
+#             if self.line in file_DF.index:
+#                 file_DF.loc[self.line, 'w1':'w6'] = self.mask
+#             else:
+#                 file_DF.loc[self.line, 'w1':'w6'] = self.mask
+#
+#                 # Sort the lines by theoretical wavelength
+#                 lineLabels = file_DF.index.values
+#                 ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels, units_wave=self.units_wave)
+#                 file_DF = file_DF.iloc[wavelength_array.argsort()]
+#
+#         # If the file does not exist (or it is the first time)
+#         else:
+#             file_DF = self.log
+#
+#         # Save to a file
+#         save_line_log(file_DF, self.linesLogAddress)
+#
+#         return
 
 
 class CubeInspector(Spectrum):
@@ -812,7 +1111,8 @@ class CubeInspector(Spectrum):
         #TODO add _frame argument
 
         # Assign attributes to the parent class
-        super().__init__(input_wave=np.zeros(1), input_flux=np.zeros(1), redshift=redshift, norm_flux=1, units_wave=units_wave, units_flux=units_flux)
+        super().__init__(input_wave=np.zeros(1), input_flux=np.zeros(1), redshift=redshift, norm_flux=1,
+                         units_wave=units_wave, units_flux=units_flux)
 
         # Data attributes
         self.grid_mesh = None
@@ -842,7 +1142,7 @@ class CubeInspector(Spectrum):
         self.mask_color_i = None
         self.key_coords = None
         self.marker = None
-
+        self._color_dict = colorDict
         # Scenario we use the background image also for the contours
         if (image_fg is None) and (contour_levels is not None):
             self.image_fg = image_bg

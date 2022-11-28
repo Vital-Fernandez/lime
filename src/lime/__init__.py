@@ -31,8 +31,12 @@ _lines_database_path = (os.path.join(_dir_path, '/resources/parent_mask.txt'))
 # Logging configuration
 _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 
-from .treatment import Spectrum, Sample, CubeInspector
+
+class Error(Exception):
+    """LiMe exception function"""
+
+from .treatment import Spectrum, Sample, CubeInspector, Cube
 from .io import *
-from .tools import label_decomposition, LineFinder, spectral_mask_generator
+from .tools import label_decomposition, LineFinder, spectral_mask_generator, get_coord_entries
 from .plots import spatial_mask_generator
 

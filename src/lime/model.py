@@ -3,6 +3,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from lmfit.models import Model
+from lmfit import fit_report
 from scipy import stats, optimize
 from scipy.interpolate import interp1d
 from .tools import label_decomposition, compute_FWHM0
@@ -339,8 +340,10 @@ class EmissionFitting:
 
         # Velocity calculations
         velocArray = c_KMpS * (emisWave[idx_0:idx_f] - self.peak_wave) / self.peak_wave
-        self.FWZI = velocArray[-1] - velocArray[0]
-        self.velocity_percentiles_calculations(velocArray, emisFlux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
+
+        if velocArray.size > 2:
+            self.FWZI = velocArray[-1] - velocArray[0]
+            self.velocity_percentiles_calculations(velocArray, emisFlux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
 
         # Pixel velocity # TODO we are not using this one
         self.pixel_vel = c_KMpS * self.pixelWidth/self.peak_wave
@@ -702,6 +705,13 @@ class LineFitting:
         line.cont = line.peak_wave * line.m_cont + line.n_cont
         line.std_cont = np.std(cont_flux - continuaFit)
 
+        # Warning if continuum above or below line peak/through
+        if line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+            _logger.warning(f'Line {line.line} introduced as an emission but the line peak is below the continuum level')
+
+        if not line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+            _logger.warning(f'Line {line.line} introduced as an absorption but the line peak is below the continuum level')
+
         # Establish the pixel sigma error
         err_array = line.std_cont if emis_err is None else emis_err
 
@@ -720,15 +730,7 @@ class LineFitting:
         idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, line._emission_check)
         idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, line._emission_check)
 
-        line.w_i = emis_wave[idx_0]
-        line.w_f = emis_wave[idx_f]
-
-        # Warning if continuum above or below line peak/through
-        if line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
-            _logger.warning(f'Line {line.line} introduced as an emission but the line peak is below the continuum level')
-
-        if not line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
-            _logger.warning(f'Line {line.line} introduced as an absorption but the line peak is below the continuum level')
+        line.w_i, line.w_f = emis_wave[idx_0], emis_wave[idx_f]
 
         # Velocity calculations
         velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
@@ -762,12 +764,9 @@ class LineFitting:
 
         # Compute the line redshift and reference wavelength
         if line.blended_check:
-            ref_wave = line.wave * (1 + z_obj)
+            ref_wave = line.wavelength * (1 + z_obj)
         else:
             ref_wave = np.array([line.peak_wave], ndmin=1)
-
-        # Line redshift # TODO calculate z_line using the label reference
-        line.z_line = line.peak_wave/(ref_wave[0] * (1 + z_obj)) - 1
 
         # Continuum model
         fit_model = Model(linear_model)
@@ -883,6 +882,12 @@ class LineFitting:
             # Check parameters error progragation from the lmfit parameter
             review_err_propagation(line, i, comp)
 
+        # Calculate the line redshift
+        if line.blended_check:
+            line.z_line = line.center/line.wavelength - 1
+        else:
+            line.z_line = line.peak_wave/line.wavelength - 1
+
         # Recalculate the equivalent width with the gaussian fluxes if blended
         if line.blended_check:
             line.eqw = eqw_g
@@ -985,46 +990,52 @@ class LineFitting:
 
     def velocity_profile_calc(self, line, vel_array, line_flux, cont_flux, min_array_dim=15):
 
-        # Full width zero intensity
-        line.FWZI = vel_array[-1] - vel_array[0]
+        # In case the vel_array has length zero:
+        if vel_array.size > 2:
 
-        # Only compute the velocity percentiles for line bands with more than 15 pixels
-        valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
+            # Full width zero intensity
+            line.FWZI = vel_array[-1] - vel_array[0]
 
-        if valid_pixels > min_array_dim:
+            # Only compute the velocity percentiles for line bands with more than 15 pixels
+            valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
 
-            peakIdx = np.argmax(line_flux)
-            percentFluxArray = np.cumsum(line_flux-cont_flux) * line.pixelWidth / line.intg_flux * 100
+            if valid_pixels > min_array_dim:
 
-            if line._emission_check:
-                blue_range = line_flux[:peakIdx] > line.peak_flux/2
-                red_range = line_flux[peakIdx:] < line.peak_flux/2
-            else:
-                blue_range = line_flux[:peakIdx] < line.peak_flux/2
-                red_range = line_flux[peakIdx:] > line.peak_flux/2
+                peakIdx = np.argmax(line_flux)
+                percentFluxArray = np.cumsum(line_flux-cont_flux) * line.pixelWidth / line.intg_flux * 100
 
-            # In case the peak is at the edge
-            if (blue_range.size > 2) and (red_range.size > 2):
+                if line._emission_check:
+                    blue_range = line_flux[:peakIdx] > line.peak_flux/2
+                    red_range = line_flux[peakIdx:] < line.peak_flux/2
+                else:
+                    blue_range = line_flux[:peakIdx] < line.peak_flux/2
+                    red_range = line_flux[peakIdx:] > line.peak_flux/2
 
-                # Integrated FWHM
-                vel_FWHM_blue = vel_array[:peakIdx][np.argmax(blue_range)]
-                vel_FWHM_red = vel_array[peakIdx:][np.argmax(red_range)]
+                # In case the peak is at the edge
+                if (blue_range.size > 2) and (red_range.size > 2):
 
-                line.FWHM_intg = vel_FWHM_red - vel_FWHM_blue
+                    # Integrated FWHM
+                    vel_FWHM_blue = vel_array[:peakIdx][np.argmax(blue_range)]
+                    vel_FWHM_red = vel_array[peakIdx:][np.argmax(red_range)]
 
-                # Interpolation for integrated kinematics
-                percentInterp = interp1d(percentFluxArray, vel_array, kind='slinear', fill_value='extrapolate')
-                velocPercent = percentInterp(TARGET_PERCENTILES)
+                    line.FWHM_intg = vel_FWHM_red - vel_FWHM_blue
 
-                line.v_med, line.v_50 = np.median(vel_array), velocPercent[3] # TODO np.median ignores the mask
-                line.v_5, line.v_10 = velocPercent[1], velocPercent[2]
-                line.v_90, line.v_95 = velocPercent[4], velocPercent[5]
+                    # Interpolation for integrated kinematics
+                    percentInterp = interp1d(percentFluxArray, vel_array, kind='slinear', fill_value='extrapolate')
+                    velocPercent = percentInterp(TARGET_PERCENTILES)
 
-                W_80 = line.v_90 - line.v_10
-                W_90 = line.v_95 - line.v_5
+                    line.v_med, line.v_50 = np.median(vel_array), velocPercent[3] # TODO np.median ignores the mask
+                    line.v_5, line.v_10 = velocPercent[1], velocPercent[2]
+                    line.v_90, line.v_95 = velocPercent[4], velocPercent[5]
 
-                # This are not saved... should they
-                A_factor = ((line.v_90 - line.v_med) - (line.v_med-line.v_10)) / W_80
-                K_factor = W_90 / (1.397 * line.FWHM_intg)
+                    W_80 = line.v_90 - line.v_10
+                    W_90 = line.v_95 - line.v_5
+
+                    # This are not saved... should they
+                    A_factor = ((line.v_90 - line.v_med) - (line.v_med-line.v_10)) / W_80
+                    K_factor = W_90 / (1.397 * line.FWHM_intg)
+
+        else:
+            _logger.warning(f'{line.label} failure to measure the non-parametric FWHM')
 
         return

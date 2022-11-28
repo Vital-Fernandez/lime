@@ -24,6 +24,9 @@ cfgFile = './sample_data/config_file.cfg'
 # Load spectrum
 wave, flux, header = import_osiris_fits(obsFitsFile)
 
+
+mask_df = lime.spectral_mask_generator(wave_interval=(wave[0], wave[-1]))
+
 # Load line bands
 bands = lime.load_lines_log(lineMaskFile)
 
@@ -48,10 +51,13 @@ lime.save_line_log(match_bands, obj_bands_file)
 fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
-gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='bar', plot_fits=False)
+gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output=True, plot_fits=False)
 
-# Display fits in grid
+# Display a grid with the fits
 gp_spec.plot.grid(gp_spec.log, rest_frame=True)
+
+# Display the fits on the spectrum
+gp_spec.plot.spectrum(include_fits=True)
 
 # Save the data
 lime.save_line_log(gp_spec.log, './sample_data/example3_linelog.txt', ext='GP121903')

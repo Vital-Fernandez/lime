@@ -7,7 +7,6 @@ __all__ = [
     'log_parameters_calculation',
     'log_to_HDU',
     'save_param_maps',
-    'COORD_ENTRIES',
     '_LOG_DTYPES_REC',
     '_LOG_EXPORT',
     '_LOG_COLUMNS']
@@ -26,6 +25,7 @@ from collections import Sequence
 
 from astropy.io import fits
 from astropy.table import Table
+from parso.python.tree import Class
 
 from .tables import table_fluxes
 
@@ -65,10 +65,6 @@ _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.values,
 # Numpy recarray dtype for the pandas dataframe creation
 _LOG_DTYPES_REC = np.dtype(list(_LOG_TYPES_DICT.items()))
 
-# Variables with the astronomical coordinate information for the creation of new .fits files
-COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
-                 'CTYPE1', 'CTYPE2']
-
 GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
 
 FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
@@ -77,6 +73,9 @@ FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lam
 KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}{s}\right)$', r'$\sigma_{int}\left(\nicefrac{km}{s}\right)$', r'Flux $(\nicefrac{erg}{cm^{-2} s^{-1} \AA^{-1})}$']
 KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
 
+
+class LiMe_Error(Exception):
+    """LiMe exception function"""
 
 def load_lines_log(log_address, ext='LINESLOG'):
 
@@ -171,96 +170,101 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
     assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
     file_name, file_type = log_path.name, log_path.suffix
 
-    # Slice the log if the user provides a list of columns
-    if parameters != 'all':
-        parameters_list = np.array(parameters, ndmin=1)
-        lines_log = log[parameters_list]
-        param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
+    if len(log.index) > 0:
 
-    else:
-        lines_log = log
-        param_dtypes = list(_LOG_TYPES_DICT.values())
+        # Slice the log if the user provides a list of columns
+        if parameters != 'all':
+            parameters_list = np.array(parameters, ndmin=1)
+            lines_log = log[parameters_list]
+            param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
 
-    # Default txt log with the complete information
-    if file_type == '.txt':
-        with open(log_path, 'wb') as output_file:
-            string_DF = lines_log.to_string()
-            output_file.write(string_DF.encode('UTF-8'))
-
-    # Pdf fluxes table
-    elif file_type == '.pdf':
-
-        # Recover the fit components for merged lines from the log
-        if 'profile_label' in log.columns:
-            idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
-            fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
         else:
-            fit_conf = {}
-        table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
-                     lines_notation=log.latex_label.values)
+            lines_log = log
+            param_dtypes = list(_LOG_TYPES_DICT.values())
 
-    # Lines log in a fits file
-    elif file_type == '.fits':
-        if isinstance(lines_log, pd.DataFrame):
-            lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
+        # Default txt log with the complete information
+        if file_type == '.txt':
+            with open(log_path, 'wb') as output_file:
+                string_DF = lines_log.to_string()
+                output_file.write(string_DF.encode('UTF-8'))
 
-            if log_path.is_file():
-                try:
-                    fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
-                except KeyError:
-                    fits.append(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+        # Pdf fluxes table
+        elif file_type == '.pdf':
+
+            # Recover the fit components for merged lines from the log
+            if 'profile_label' in log.columns:
+                idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
+                fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
             else:
-                hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
-                hdul.writeto(log_path, overwrite=True, output_verify='fix')
+                fit_conf = {}
+            table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+                         lines_notation=log.latex_label.values)
 
-    # Default log in excel format
-    elif file_type == '.xlsx' or file_type == '.xls':
+        # Lines log in a fits file
+        elif file_type == '.fits':
+            if isinstance(lines_log, pd.DataFrame):
+                lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
 
-        # Check openpyxl is installed else leave
-        if openpyxl:
-            pass
-        else:
-            print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
-            return
+                if log_path.is_file():
+                    try:
+                        fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
+                    except KeyError:
+                        fits.append(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name)
+                else:
+                    hdul = fits.HDUList([fits.PrimaryHDU(), lineLogHDU])
+                    hdul.writeto(log_path, overwrite=True, output_verify='fix')
 
-        if not log_path.is_file():
-            with pd.ExcelWriter(log_path) as writer:
-                lines_log.to_excel(writer, sheet_name=ext)
-        else:
-            # THIS WORKS IN WINDOWS BUT NOT IN LINUX
-            # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-            #     log.to_excel(writer, sheet_name=ext)
+        # Default log in excel format
+        elif file_type == '.xlsx' or file_type == '.xls':
 
-            if file_type == '.xlsx':
-                book = openpyxl.load_workbook(log_path)
-                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+            # Check openpyxl is installed else leave
+            if openpyxl:
+                pass
+            else:
+                print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
+                return
+
+            if not log_path.is_file():
+                with pd.ExcelWriter(log_path) as writer:
                     lines_log.to_excel(writer, sheet_name=ext)
             else:
-                # TODO this does not write to a xlsx file
-                with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                    lines_log.to_excel(writer, sheet_name=ext)
+                # THIS WORKS IN WINDOWS BUT NOT IN LINUX
+                # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                #     log.to_excel(writer, sheet_name=ext)
 
-    # Advance Scientific Storage Format
-    elif file_type == '.asdf':
+                if file_type == '.xlsx':
+                    book = openpyxl.load_workbook(log_path)
+                    with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                        writer.book = book
+                        writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                        lines_log.to_excel(writer, sheet_name=ext)
+                else:
+                    # TODO this does not write to a xlsx file
+                    with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                        lines_log.to_excel(writer, sheet_name=ext)
 
-        tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
+        # Advance Scientific Storage Format
+        elif file_type == '.asdf':
 
-        # Create new file
-        if not log_path.is_file():
-            af = asdf.AsdfFile(tree)
-            af.write_to(log_path)
+            tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
 
-        # Update file
+            # Create new file
+            if not log_path.is_file():
+                af = asdf.AsdfFile(tree)
+                af.write_to(log_path)
+
+            # Update file
+            else:
+                with asdf.open(log_path, mode='rw') as af:
+                    af.tree.update(tree)
+                    af.update()
+
         else:
-            with asdf.open(log_path, mode='rw') as af:
-                af.tree.update(tree)
-                af.update()
+            print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
+            exit()
 
     else:
-        print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
-        exit()
+        _logger.info('The output log has no measurements. An output file will not be saved')
 
     return
 
@@ -618,6 +622,9 @@ def load_fits(file_address, instrument, frame_idx=None):
 
     if instrument == 'ISIS':
 
+        if frame_idx is None:
+            frame_idx = 0
+
         # Open fits file
         with fits.open(file_address) as hdul:
             data, header = hdul[frame_idx].data, hdul[frame_idx].header
@@ -961,3 +968,37 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     return
 
 
+def load_spatial_masks(mask_file, mask_list=[]):
+
+    # Masks array container
+    spatial_mask_dict = {}
+
+    # Limit the analysis to some masks
+    mask_list_check = False if len(mask_list) == 0 else True
+
+    # Check that mask is there:
+    if mask_file is not None:
+
+        mask_file = Path(mask_file)
+
+        if mask_file.is_file():
+
+            with fits.open(mask_file) as maskHDULs:
+
+                # Save the fits data to restore later
+                counter = 0
+                for HDU in maskHDULs:
+                    ext_name = HDU.name
+                    if HDU.name != 'PRIMARY':
+                        if (ext_name in mask_list) or not mask_list_check:
+                            spatial_mask_dict[ext_name] = (HDU.data.astype('bool'), HDU.header)
+                            counter += 1
+
+                # Warn if the mask file does not contain any of the expected masks
+                if counter == 0:
+                    _logger.warning(f'No masks extensions were found in file {mask_file}')
+
+        else:
+            _logger.warning(f'No mask file was found at {mask_file.as_posix()}.')
+
+    return spatial_mask_dict

@@ -1,13 +1,19 @@
 import logging
 import numpy as np
 import pandas as pd
+
+from pathlib import Path
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 from matplotlib.widgets import RadioButtons, SpanSelector
-from pathlib import Path
+from astropy.io import fits
+
 from .io import load_lines_log, save_line_log
-from .plots import Plotter, maximize_center_fig, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale
-from .tools import label_decomposition, blended_label_from_log
-from lime import _lines_database_path
+from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, STANDARD_PLOT, STANDARD_AXES, \
+    determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
+from .tools import label_decomposition, blended_label_from_log, define_masks
+from .transitions import Line
+from astropy.table import Table
+
 
 _logger = logging.getLogger('LiMe')
 
@@ -148,6 +154,69 @@ class BandsInspection:
     def bands(self, input_mask, output_log_address=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
               rest_frame=True, maximize=False, plt_cfg={}, ax_cfg={}):
 
+        """
+        This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
+        dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
+        file provided.
+
+        Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
+        wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
+        the interactive selection has the following rules:
+
+        * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
+          mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
+          original mask limits.
+
+        * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
+          `w3` and `w4` values.
+
+        * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
+          between `w1` and `w3` or `w4` and `w6` respectively.
+
+        The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
+        parameter can be an array of strings with the labels of the target lines or a two value integer array with the
+        interval of lines to plot.
+
+        Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
+        and greater than the blue and red wavelegnth values respectively.
+
+        :param log_address: Address for the lines log mask file.
+        :type log_address: str
+
+        :param input_wave: Wavelength array of the input spectrum.
+        :type input_wave: numpy.array
+
+        :param input_flux: Flux array for the input spectrum.
+        :type input_flux: numpy.array
+
+        :param input_err: Sigma array of the `input_flux`
+        :type input_err: numpy.array, optional
+
+        :param redshift: Spectrum redshift
+        :type redshift: float, optional
+
+        :param norm_flux: Spectrum flux normalization
+        :type norm_flux: float, optional
+
+        :param crop_waves: Wavelength limits in a two value array
+        :type crop_waves: np.array, optional
+
+        :param n_cols: Number of columns of the grid plot
+        :type n_cols: integer
+
+        :param n_rows: Number of columns of the grid plot
+        :type n_rows: integer
+
+        :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
+                               this interval must be a two value array.
+        :type lines_interval: list
+
+        :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
+                        strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
+        :type y_scale: str, optional
+
+        """
+
         # Assign the attribute values
         self._y_scale = y_scale
         self._log_address = None if output_log_address is None else Path(output_log_address)
@@ -253,7 +322,7 @@ class BandsInspection:
             self._bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line)
 
             # Plot the masked pixels
-            self._masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH])
+            _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH])
 
             # Formatting the figure
             ax.yaxis.set_major_locator(plt.NullLocator())
@@ -304,7 +373,6 @@ class BandsInspection:
                     _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Save the new selection to the lines log
-            print('bicho', type(self.mask))
             self.log.loc[self.line, 'w1':'w6'] = self.mask
 
             # Save the log to the file
@@ -518,6 +586,299 @@ class RedshiftInspection:
         return
 
 
+class CubeInspector:
+
+    def __init__(self):
+
+        # Data attributes
+        self.grid_mesh = None
+        self.bg_image = None
+        self.fg_image = None
+        self.fg_levels = None
+        self.hdul_linelog = None
+        self.ext_log = None
+
+        # Mask correction attributes
+        self.mask_file = None
+        self.mask_ext = None
+        self.masks_dict = {}
+        self.mask_color = None
+        self.mask_array = None
+
+        # Plot attributes
+        self._ax0, self._ax1, self._ax2, self.in_ax = None, None, None, None
+        self.fig_conf = None
+        self.axes_conf = {}
+        self.axlim_dict = {}
+        self.color_norm = None
+        self.mask_color_i = None
+        self.key_coords = None
+        self.marker = None
+        self.rest_frame = None
+        self.log_scale = None
+
+        return
+
+    def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99], bands_frame=None,
+             bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
+             wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, title=None, masks_file=None, lines_log_address=None,
+             maximise=False, rest_frame=False, log_scale=False):
+
+        # Prepare the background image data
+        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
+                                                                       percentil_bg, bg_scale, contours_check=False)
+
+        # Prepare the foreground image data
+        line_fg, self.fg_image, self.fg_levels, self.fg_scale = determine_cube_images(self._cube, line_fg, band_fg, bands_frame,
+                                                                       percentils_fg, fg_scale, contours_check=True)
+
+        # Mesh for the countours
+        if line_fg is not None:
+            y, x = np.arange(0, self.fg_image.shape[0]), np.arange(0, self.fg_image.shape[1])
+            self.fg_mesh = np.meshgrid(x, y)
+        else:
+            self.fg_mesh = None
+
+        # Colors
+        self.bg_color, self.fg_color, self.mask_color, self.mask_alpha = bg_color, fg_color, mask_color, mask_alpha
+
+        # Frame
+        self.rest_frame, self.log_scale = rest_frame, log_scale
+
+        # Load the masks
+        self.masks_dict = load_spatial_masks(masks_file)
+
+        # Check that the images have the same size
+        check_image_size(self.bg_image, self.fg_image, self.masks_dict)
+
+        # Image mesh grid
+        frame_size = self._cube.flux.shape
+        y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
+        self.grid_mesh = np.meshgrid(x, y)
+
+        # Use central voxel as initial coordinate
+        self.key_coords = int(self._cube.flux.shape[1]/2), int(self._cube.flux.shape[2]/2)
+
+        if len(self.masks_dict) > 0:
+            self.mask_ext = list(self.masks_dict.keys())[0]
+        else:
+            self.mask_ext = '_LINESLOG'
+
+        # Load the complete fits lines log if input
+        if lines_log_address is not None:
+            self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+
+        # State the plot labelling
+        title, x_label, y_label = image_map_labels(title, wcs, line_bg, line_fg, self.masks_dict)
+
+        # User configuration overwrite default figure format
+        plt_cfg.setdefault('figure.figsize', (10, 5))
+        plt_cfg.setdefault('axes.titlesize', 12)
+        plt_cfg.setdefault('legend.fontsize', 10)
+        self.fig_conf, ax_cfg_spec = self._figure_format(plt_cfg, ax_cfg_spec, norm_flux=self._cube.norm_flux,
+                                                         units_wave=self._cube.units_wave, units_flux=self._cube.units_flux)
+
+        # Image axes format
+        ax_cfg_image.setdefault('xlabel', x_label)
+        ax_cfg_image.setdefault('ylabel', y_label)
+        ax_cfg_image.setdefault('title', title)
+
+        # Container for both axes format
+        self.axes_conf = {'image': ax_cfg_image, 'spectrum': ax_cfg_spec}
+
+        # Create the figure
+        with rc_context(self.fig_conf):
+
+            # Figure structure
+            self._fig = plt.figure()
+            gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[1, 2], height_ratios=[1])
+
+            # Create subgrid for buttons if mask file provided
+            if len(self.masks_dict) > 0:
+                gs_image = gridspec.GridSpecFromSubplotSpec(nrows=2, ncols=1, subplot_spec=gs[0], height_ratios=[0.8, 0.2])
+            else:
+                gs_image = gs
+
+            # Image axes Astronomical coordinates if provided
+            if wcs is None:
+                self._ax0 = self._fig.add_subplot(gs_image[0])
+            else:
+                self._ax0 = self._fig.add_subplot(gs_image[0], projection=wcs, slices=('x', 'y', 1))
+
+            # Spectrum plot
+            self._ax1 = self._fig.add_subplot(gs[1])
+
+            # Buttons axis if provided
+            if len(self.masks_dict) > 0:
+                self._ax2 = self._fig.add_subplot(gs_image[1])
+                radio = RadioButtons(self._ax2, list(self.masks_dict.keys()))
+
+            # Load the complete fits lines log if input
+            if lines_log_address is not None:
+                self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+
+            # Plot the data
+            self.data_plots()
+
+            # Connect the widgets
+            self._fig.canvas.mpl_connect('button_press_event', self.on_click)
+            self._fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+            if len(self.masks_dict) > 0:
+                radio.on_clicked(self.mask_selection)
+
+            # Display the figure
+            save_close_fig_swicth()
+
+            # Close the lines log if it has been opened
+            if isinstance(self.hdul_linelog, fits.hdu.HDUList):
+                self.hdul_linelog.close()
+
+        return
+
+    def data_plots(self):
+
+        # Delete previous marker
+        if self.marker is not None:
+            self.marker.remove()
+            self.marker = None
+
+        # Background image
+        self.im, _, self.marker = image_plot(self._ax0, self.bg_image, self.fg_image, self.fg_levels, self.fg_mesh,
+                                        self.bg_scale, self.fg_scale, self.bg_color, self.fg_color, self.key_coords)
+
+        # Spatial masks
+        spatial_mask_plot(self._ax0, self.masks_dict, self.mask_color, self.mask_alpha, self._cube.units_flux,
+                          mask_list=[self.mask_ext])
+
+        # Voxel spectrum
+        if self.key_coords is not None:
+            idx_j, idx_i = self.key_coords
+            flux_voxel = self._cube.flux[:, idx_j, idx_i]
+            log = None
+
+            # Check if lines have been measured
+            if self.hdul_linelog is not None:
+                ext_name = f'{idx_j}-{idx_i}_LINESLOG'#{self.ext_log}'
+
+                # Better sorry than permission. Faster?
+                try:
+                    lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
+                    lineslogDF.set_index('index', inplace=True)
+                    log = lineslogDF
+                except KeyError:
+                    _logger.info(f'Extension {ext_name} not found in the input file')
+
+            # Plot spectrum
+            spec_plot(self._ax1, self._cube.wave, flux_voxel, self._cube.redshift, self._cube.norm_flux,
+                      rest_frame=self.rest_frame, log=log, units_wave=self._cube.units_wave,
+                      units_flux=self._cube.units_flux, color_dict=self._color_dict)
+
+            if self.log_scale:
+                self._ax.set_yscale('log')
+
+        # Update the axis
+        self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
+        self._ax0.update(self.axes_conf['image'])
+        self._ax1.update(self.axes_conf['spectrum'])
+
+        return
+
+    def on_click(self, event, new_voxel_button=3, mask_button='m'):
+
+        if self.in_ax == self._ax0:
+
+            # Save axes zoom
+            self.save_zoom()
+
+            if event.button == new_voxel_button:
+
+                # Save clicked coordinates for next plot
+                self.key_coords = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
+
+                # Remake the drawing
+                self.im.remove()# self.ax0.clear()
+                self._ax1.clear()
+                self.data_plots()
+
+                # Reset the image
+                self.reset_zoom()
+                self._fig.canvas.draw()
+
+            if event.dblclick:
+                if len(self.masks_dict) > 0:
+
+                    # Save clicked coordinates for next plot
+                    self.key_coords = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
+
+                    # Add or remove voxel from mask:
+                    self.spaxel_selection()
+
+                    # Save the new mask: # TODO just update the one we need
+                    hdul = fits.HDUList([fits.PrimaryHDU()])
+                    for mask_name, mask_attr in self.masks_dict.items():
+                        hdul.append(fits.ImageHDU(name=mask_name, data=mask_attr[0].astype(int), ver=1, header=mask_attr[1]))
+                    hdul.writeto(self.mask_file, overwrite=True, output_verify='fix')
+
+                    # Remake the drawing
+                    self.im.remove()
+                    self._ax1.clear()
+                    self.data_plots()
+
+                    # Reset the image
+                    self.reset_zoom()
+                    self._fig.canvas.draw()
+
+            return
+
+    def mask_selection(self, mask_label):
+
+        # Assign the mask
+        self.mask_ext = mask_label
+
+        # Replot the figure
+        self.save_zoom()
+        self.im.remove()
+        self._ax1.clear()
+        self.data_plots()
+
+        # Reset the image
+        self.reset_zoom()
+        self._fig.canvas.draw()
+
+        return
+
+    def spaxel_selection(self):
+
+        for mask, mask_data in self.masks_dict.items():
+            mask_matrix = mask_data[0]
+            if mask == self.mask_ext:
+                mask_matrix[self.key_coords[0], self.key_coords[1]] = not mask_matrix[self.key_coords[0], self.key_coords[1]]
+            else:
+                mask_matrix[self.key_coords[0], self.key_coords[1]] = False
+
+        return
+
+    def on_enter_axes(self, event):
+        self.in_ax = event.inaxes
+
+    def save_zoom(self):
+        self.axlim_dict['image_xlim'] = self._ax0.get_xlim()
+        self.axlim_dict['image_ylim'] = self._ax0.get_ylim()
+        self.axlim_dict['spec_xlim'] = self._ax1.get_xlim()
+        self.axlim_dict['spec_ylim'] = self._ax1.get_ylim()
+
+        return
+
+    def reset_zoom(self):
+
+        self._ax0.set_xlim(self.axlim_dict['image_xlim'])
+        self._ax0.set_ylim(self.axlim_dict['image_ylim'])
+        self._ax1.set_xlim(self.axlim_dict['spec_xlim'])
+        self._ax1.set_ylim(self.axlim_dict['spec_ylim'])
+
+        return
+
+
 class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
 
     def __init__(self, spectrum):
@@ -530,7 +891,24 @@ class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
         # Lime spectrum object with the scientific data
         self._spec = spectrum
 
-        # Container for the matplotlib figures
+        # Variables for the matplotlib figures
+        self._fig, self._ax = None, None
+
+        return
+
+
+class CubeCheck(Plotter, CubeInspector):
+
+    def __init__(self, cube):
+
+        # Instantiate the dependencies
+        Plotter.__init__(self)
+        CubeInspector.__init__(self)
+
+        # Lime cube object with the scientific data
+        self._cube = cube
+
+        # Variables for the matplotlib figures
         self._fig, self._ax = None, None
 
         return

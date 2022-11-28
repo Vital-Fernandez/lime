@@ -2,17 +2,18 @@ import logging
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from sys import exit
+from astropy.io import fits
 
+from . import Error
 from .model import LineFitting
-from .tools import define_masks, label_decomposition
+from .tools import define_masks, label_decomposition, COORD_ENTRIES
 from .transitions import Line
-from .io import _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, progress_bar
+from .io import _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, progress_bar, load_spatial_masks, log_to_HDU
 
 _logger = logging.getLogger('LiMe')
 
 
-def check_file(input, variable_type):
+def check_file_dataframe(input, variable_type):
 
     if isinstance(input, variable_type):
         output = input
@@ -21,14 +22,62 @@ def check_file(input, variable_type):
         output = load_lines_log(input)
 
     else:
-        _logger.critical(f'Not file found at {input}.\nPlease introduce a {variable_type} as input or check the'
+        _logger.warning(f'Not file found at {input}.\nPlease introduce a {variable_type} as input or check the'
                          f'file address.')
-        exit()
+        output = None
 
     return output
 
 
-def review_bands(line, emis_wave, cont_wave, limit_narrow=6):
+def check_file_array_mask(var, mask_list=[]):
+
+    # Check if file
+    if isinstance(var, (str, Path)):
+
+        input = Path(var)
+        if input.is_file():
+            mask_dict = load_spatial_masks(var, mask_list)
+        else:
+            raise Error(f'No spatial mask file at {var.as_posix()}')
+
+    # Array
+    elif isinstance(var, (np.ndarray, list)):
+
+        # Re-adjust the variable
+        var = np.ndarray(var, ndmin=3)
+        masks_array = np.squeeze(np.array_split(var, var.shape[0], axis=0))
+
+        # Confirm boolean array
+        if masks_array.dtype != bool:
+            _logger.warning(f'The input mask array should have a boolean variables (True/False)')
+
+        # Incase user gives a str
+        mask_list = [mask_list] if isinstance(mask_list, str) else mask_list
+
+        # Check if there is a mask list
+        if len(mask_list) == 0:
+            mask_list = [f'SPMASK{i}' for i in range(masks_array.shape[0])]
+
+        # Case the number of masks names and arrays is different
+        elif masks_array.shape[0] != len(mask_list):
+            _logger.warning(f'The number of input spatial mask arrays is different than the number of mask names')
+
+        # Everything is fine
+        else:
+            mask_list = mask_list
+
+        # Create mask dict with empty headers
+        mask_dict = dict(zip(mask_list, (masks_array, {})))
+
+    else:
+
+        raise Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
+                    f' numpy array or a list/array of numpy arrays')
+
+    return mask_dict
+
+
+def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 
     # Review the transition bands before
     emis_band_lengh = emis_wave.size if not np.ma.is_masked(emis_wave) else np.sum(~emis_wave.mask)
@@ -46,9 +95,14 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=6):
             line.observations = 'Small_line_band'
         else:
             line.observations += '-Small_line_band'
-        _logger.warning(f'- Line {line.label} mask band is too small ({emis_wave.size} value array): {emis_wave}')
 
-    # Check if the line is very narrow for fit initial conditions
+        if np.ma.is_masked(emis_wave):
+            length = np.sum(~emis_wave.mask)
+        else:
+            length = emis_band_lengh
+        _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
+
+    # Check if the line is very narrow for fit initial conditions # TODO change logic to number of pixels above cont level
     line._narrow_check = True if emis_band_lengh <= limit_narrow else False
 
     return
@@ -109,19 +163,11 @@ def import_line_kinematics(line, z_cor, log, units_wave):
 
 def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
 
-    # # Recover line data
-    # if line.blended_check:
-    #     line_components = line.profile_label.split('-')
-    # else:
-    #     line_components = np.array([line.label], ndmin=1)
-    #
-    # ion, waveRef, latexLabel = label_decomposition(line_components, comp_dict=line._fit_conf, units_wave=units_wave)
-
     # Loop through the line components
     for i, comp in enumerate(line.list_comps):
 
         # Convert current measurement to a pandas series container
-        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wave[i], line.latex[i]
+        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wavelength[i], line.latex[i]
         log.loc[comp, 'w1':'w6'] = line.mask
 
         # Treat every line
@@ -142,7 +188,7 @@ def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
     return
 
 
-class LineTreatment(LineFitting):
+class SpecTreatment(LineFitting):
 
     def __init__(self, spectrum):
 
@@ -245,76 +291,170 @@ class LineTreatment(LineFitting):
               temp=10000.0, progress_output=None, plot_fits=False):
 
         # Check if the lines table is a dataframe or a file
-        bands_df = check_file(bands_df, pd.DataFrame)
+        bands_df = check_file_dataframe(bands_df, pd.DataFrame)
 
-        # Crop the analysis to the target lines
-        if label is not None:
-            idcs = bands_df.index.isin(label)
-            line_list = bands_df.loc[idcs].index.values
+        if bands_df is not None:
+
+            # Crop the analysis to the target lines
+            if label is not None:
+                idcs = bands_df.index.isin(label)
+                line_list = bands_df.loc[idcs].index.values
+            else:
+                line_list = bands_df.index.values
+
+            # Loop text decision
+            bar_output = True if progress_output == 'bar' else False
+
+            # Loop through the lines
+            n_lines = len(line_list)
+            for i in np.arange(n_lines):
+
+                line = line_list[i]
+
+                # Progress message
+                if progress_output is not None:
+                    if bar_output:
+                        progress_bar(i+1, n_lines, post_text=f'of lines')
+                    else:
+                        print(f'{i+1}/{n_lines}) {line}')
+
+                # Fit the lines
+                self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
+                          cont_from_bands, temp)
+
+                if plot_fits:
+                    self._spec.plot.line()
+
         else:
-            line_list = bands_df.index.values
+            _logger.info(f'Not input dataframe. Lines were not measured')
+
+
+        return
+
+
+class CubeTreatment(LineFitting):
+
+    def __init__(self, cube):
+
+        # Instantiate the dependencies
+        LineFitting.__init__(self)
+
+        # Lime spectrum object with the scientific data
+        self._cube = cube
+        self._spec = None
+
+    def spatial_mask(self, spatial_mask, mask_name_list=[], bands_frame=None, fit_conf={}, output_log=None, fit_method='leastsq',
+                     line_detection=False, emission_check=True, cont_from_bands=True, temp=10000, n_save=100,
+                     progress_output=None, log_ext_suffix='_LINESLOG', **kwargs):
+
+        # Check if the mask variable is a file or an array
+        mask_dict = check_file_array_mask(spatial_mask, mask_name_list)
+
+        # Check if the lines table is a dataframe or a file
+        if bands_frame is not None:
+            bands_frame = check_file_dataframe(bands_frame, pd.DataFrame)
+        else:
+            raise(Error(f'No input bands frame or file in the spatial mask line fitting'))
+
+        # Check if output log
+        if output_log is None:
+            raise(Error(f'No output log file address to save the line measurements log'))
+        else:
+            output_log = Path(output_log)
+            if not output_log.parent.is_dir():
+                raise(Error(f'The folder of the output log file does not exist at {output_log}'))
+
+        # Unpack mask dictionary
+        mask_list = np.array(list(mask_dict.keys()))
+        mask_data_list = list(mask_dict.values())
+
+        # Determine the spaxels to treat at each mask
+        total_spaxels, spaxels_dict = 0, {}
+        for idx_mask, mask_data in enumerate(mask_data_list):
+            spa_mask, hdr_mask = mask_data
+            idcs_spaxels = np.argwhere(spa_mask)
+
+            total_spaxels += len(idcs_spaxels)
+            spaxels_dict[idx_mask] = idcs_spaxels
 
         # Loop text decision
         bar_output = True if progress_output == 'bar' else False
 
-        # Loop through the lines
-        n_lines = len(line_list)
-        for i in np.arange(n_lines):
+        # Spaxel counter to save the data everytime n_save is reached
+        spax_counter = 0
 
-            line = line_list[i]
+        # HDU_container
+        hdul_log = fits.HDUList([fits.PrimaryHDU()])
+
+        # Loop through the masks
+        n_masks = len(mask_list)
+        for i in np.arange(n_masks):
+
+            mask_name = mask_list[i]
+            mask_hdr = mask_data_list[i][1]
+            idcs_spaxels = spaxels_dict[i]
 
             # Progress message
             if progress_output is not None:
                 if bar_output:
-                    progress_bar(i+1, n_lines, post_text=f'of lines')
+                    progress_bar(i + 1, n_masks, post_text=f'of masks')
                 else:
-                    print(f'{i+1}/{n_lines}) {line}')
+                    print(f'{i + 1}/{n_masks}) {mask_name}')
 
-            # Fit the lines
-            self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check, cont_from_bands,
-                      temp)
+            # Get mask line fitting_conf
+            mask_conf = fit_conf.get(f'{mask_name}_line_fitting', fit_conf)
 
-            if plot_fits:
-                self._spec.plot.line()
+            # WCS header data
+            hdr_coords = {}
+            for key in COORD_ENTRIES:
+                if key in mask_hdr:
+                    hdr_coords[key] = mask_hdr[key]
+            hdr_coords = fits.Header(hdr_coords)
 
-        # self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
-        #                   cont_from_bands, temp)
+            # Loop through the spaxels
+            n_spaxels = idcs_spaxels.shape[0]
+            for j in np.arange(n_spaxels):
 
+                idx_j, idx_i = idcs_spaxels[j]
+                spaxel_label = f'{idx_j}-{idx_i}'
 
-        #
-        # # Loop through the lines
-        # if progress_output is None:
-        #
-        #     # No message:
-        #     for line in line_list:
-        #         self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
-        #                   cont_from_bands, temp)
-        #
-        # # Progress bar
-        # elif progress_output == 'bar':
-        #     n_lines = line_list.size
-        #
-        #     for i, line in enumerate(line_list):
-        #         progress_bar(i, n_lines, post_text=f'of lines')
-        #         self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
-        #                   cont_from_bands, temp)
-        #
-        # # Line labels and numbers
-        # elif progress_output == 'labels':
-        #
-        #     n_lines = line_list.size
-        #     for i, line in enumerate(line_list):
-        #         print(f'{i}/{n_lines}) {line}')
-        #         self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
-        #                   cont_from_bands, temp)
-        #
-        # # Line name and number:
-        # else:
-        #
-        #     for line in line_list:
-        #         self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
-        #                   cont_from_bands, temp)
+                # Get the spaxel fitting configuration
+                spaxel_conf = fit_conf.get(f'{spaxel_label}_line_fitting', mask_conf)
 
+                # Progress message
+                if progress_output is not None:
+                    if bar_output:
+                        progress_bar(j + 1, n_spaxels, post_text=f'of masks')
+                    else:
+                        print(f'{j + 1}/{n_spaxels}) {idx_j}-{idx_i}')
+
+                # Get spaxel data
+                spaxel = self._cube.get_spaxel(idx_j, idx_i, spaxel_label)
+
+                # Detect the lines
+                if line_detection:
+                    bands_frame = spaxel.line_detection(bands_log=bands_frame)
+                else:
+                    bands_frame = bands_frame
+
+                # Fit the lines
+                spaxel.fit.frame(bands_frame, spaxel_conf, None, fit_method, emission_check, cont_from_bands,
+                                 temp, progress_output=None, plot_fits=None)
+
+                # Save to a fits file
+                linesHDU = log_to_HDU(spaxel.log, ext_name=f'{spaxel_label}{log_ext_suffix}', header_dict=hdr_coords)
+                hdul_log.append(linesHDU)
+
+                # Save the data every 100 spaxels
+                if spax_counter < n_save:
+                    spax_counter += 1
+                else:
+                    spax_counter = 0
+                    hdul_log.writeto(output_log, overwrite=True, output_verify='fix')
+
+            # Save the log at each new mask
+            hdul_log.writeto(output_log, overwrite=True, output_verify='fix')
 
         return
+
 

@@ -34,8 +34,8 @@ ASTRO_UNITS_KEYS = {'A': au.AA,
                     'mJy': au.mJy,
                     'nJy': au.nJy}
 
-UNITS_LATEX_DICT = {'A': '\AA',
-                    'um': '\mu\!m',
+UNITS_LATEX_DICT = {'A': r'\AA',
+                    'um': r'\mu\!m',
                     'nm': 'nm',
                     'Hz': 'Hz',
                     'cm': 'cm',
@@ -50,7 +50,16 @@ DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
 
 FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
 
+PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
+                        'Fnu': r'$F_{\nu}$',
+                        'SN_line': r'$\frac{S}{N}_{line}$',
+                        'SN_cont': r'$\frac{S}{N}_{cont}$'}
+
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
+
+# Variables with the astronomical coordinate information for the creation of new .fits files
+COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
+                 'CTYPE1', 'CTYPE2']
 
 MACHINE_PATH = Path(__file__).parent/'resources'/'LogitistRegression_v2_cost1_logNorm.joblib'
 
@@ -548,7 +557,20 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
         return idcsLineRegion, idcsContLeft, idcsContRight
 
 
+def get_coord_entries(hdr, coord_entries=None):
 
+    if coord_entries is None:
+        coord_entries = COORD_ENTRIES
+
+    output_dict = {}
+    for key in coord_entries:
+        if key in hdr:
+            output_dict[key] = hdr[key]
+
+    if len(output_dict) < 2:
+        _logger.info(f'{len(output_dict)} coordinate entries were found in the input header: {output_dict.keys()}')
+
+    return output_dict
 
 
 class LineFinder:
@@ -596,7 +618,7 @@ class LineFinder:
             if plot_results:
                 title = f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'
                 continuum_full = poly3Out.eval(x=self.wave.data)
-                self._plot_continuum_fit(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
+                self.plot._plot_continuum_fit(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         if return_std:

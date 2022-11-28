@@ -2,7 +2,8 @@ import logging
 
 from numpy import array, abs, nan, all, diff, char, searchsorted, zeros, unique, empty
 from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
-from .io import _PARENT_BANDS
+from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS
+# from .io import _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, progress_bar
 
 _logger = logging.getLogger('LiMe')
 
@@ -150,12 +151,12 @@ def label_components(input_label, scalar_output=False):
 class Line:
 
     def __init__(self, label, band=None, fit_conf=None, emission_check=True, cont_from_bands=True, ref_log=None,
-                 z_line=0):
+                 z_line=0, interpret=True):
 
-        self.line, self.mask = None, array([nan] * 6)
+        self.label, self.mask = label, array([nan] * 6)
         self.blended_check, self.merged_check = False, False
         self.profile_label, self.list_comps = 'no', None
-        self.ion, self.wave, self.units_wave, self.kinem, self.latex = None, None, None, None, None
+        self.ion, self.wavelength, self.units_wave, self.kinem, self.latex = None, None, None, None, None
 
         self.intg_flux, self.intg_err = None, None
         self.peak_wave, self.peak_flux = None, None
@@ -189,9 +190,65 @@ class Line:
         self._narrow_check = False
 
         # Interpret the line from the user reference
-        self._line_derivation(label, band, fit_conf, ref_log=ref_log)
+        if interpret:
+            self._line_derivation(label, band, fit_conf, ref_log=ref_log)
 
         return
+
+    @classmethod
+    def from_log(cls, label, log=None, norm_flux=1):
+
+        # Recover the label just in case
+        label = check_line_in_log(label, log)
+
+        # Create the line object
+        inline = cls(label, interpret=False)
+
+        if log is not None:
+
+            if label in log.index:
+
+                # Recover "simple" attributes
+                for param in _LOG_EXPORT:
+
+                    param_value = log.loc[label, param]
+
+                    # Normalize
+                    if _LOG_COLUMNS[param][0]:
+                        param_value = param_value / norm_flux
+
+                    inline.__setattr__(param, param_value)
+
+                # Recover "complex" attributes
+                for param in ['ion', 'wavelength', 'latex_label']:
+                    inline.__setattr__(param, log.loc[label, param])
+
+                # Band
+                inline.mask = log.loc[label, 'w1':'w6'].values
+
+                # Checks:
+                if inline.profile_label != 'no':
+                    inline.blended_check, inline.merged_check = False, False
+
+                    if inline.label.endswith('_m'):
+                        inline.merged_check = True
+                    else:
+                        inline.blended_check = True
+
+                # List comps
+                if inline.blended_check:
+                    inline.list_comps = array(inline.profile_label.split('-'))
+
+                else:
+                    inline.list_comps = array([inline.label])
+
+            else:
+                _logger.warning(f'Input line {inline.label} not found in log')
+
+        else:
+            _logger.warning(f'No lines log introduced for the line {inline.label}')
+
+        return inline
 
     def _line_derivation(self, label, band, fit_conf=None, ref_log=None):
 
@@ -214,14 +271,14 @@ class Line:
                 else:
                     self.merged_check = True
             else:
-                _logger.warning(f'The line {self.line} has the "{suffix}" suffix but no components have been specified '
+                _logger.warning(f'The line {self.label} has the "{suffix}" suffix but no components have been specified '
                                 f'for the fitting')
 
         # Blended lines have various elements in the list, single and merged only one
         self.list_comps = self.profile_label.split('-') if self.blended_check else [self.label]
 
         # Get transition data from label
-        self.ion, self.wave, self.units_wave, self.kinem = label_components(self.list_comps)
+        self.ion, self.wavelength, self.units_wave, self.kinem = label_components(self.list_comps)
 
         # Provide a band from the log if available the band
         if band is None:
@@ -238,8 +295,8 @@ class Line:
         if self.mask is not None:
             if not all(diff(self.mask) >= 0):
                 _logger.warning(f'The line {label} band wavelengths are not sorted: {band}')
-            if not all(self.mask[2] < self.wave) and all(self.wave < self.mask[3]):
-                _logger.warning(f'The line {label} transition at {self.wave} is outside the line band wavelengths: '
+            if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
+                _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths: '
                                 f'w3 = {self.mask[2]};  w4 = {self.mask[3]}')
 
         # Check if there are masked pixels in the line
@@ -268,6 +325,6 @@ class Line:
 
         # Single
         else:
-            self.latex[0] = latex_from_label(None, self.ion[0], self.wave[0], self.units_wave[0], self.kinem[0])
+            self.latex[0] = latex_from_label(None, self.ion[0], self.wavelength[0], self.units_wave[0], self.kinem[0])
 
         return

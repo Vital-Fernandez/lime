@@ -66,18 +66,20 @@ cfg_dict = {'H1_4861A_b': 'H1_4861A-H1_4861A_w1',
 
 # Define line measuring object
 synth_spec = lime.Spectrum(wave_obs, flux_obs, redshift=z_obj, norm_flux=flux_norm)
-synth_spec.plot_spectrum()
+# synth_spec.plot.spectrum()
 
 # Measure the emission lines
 for lineLabel in mask_df.index.values:
 
     # Run the fit
     wave_regions = mask_df.loc[lineLabel, 'w1':'w6'].values
-    synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
+    # synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
+    synth_spec.fit.band(lineLabel, wave_regions, fit_conf=cfg_dict)
+
 
     # Display the results
-    synth_spec.display_results(plot=True)
-    synth_spec.plot_line_velocity()
+    # synth_spec.plot.line()
+    synth_spec.plot.velocity_profile()
 
     # Compare the measurements with the true values
     if '_b' in lineLabel:
@@ -87,7 +89,7 @@ for lineLabel in mask_df.index.values:
 
     for i, comp in enumerate(gaus_comps):
         amp_true, center_true, sigma_true = emission_lines_dict[comp]
-        amp_attr, center_attr, sigma_attr = synth_spec.amp, synth_spec.center/(1 + z_obj), synth_spec.sigma
+        amp_attr, center_attr, sigma_attr = synth_spec.fit.line.amp, synth_spec.fit.line.center/(1 + z_obj), synth_spec.fit.line.sigma
         amp_df, center_df, sigma_df = synth_spec.log.loc[comp, 'amp'] / flux_norm, synth_spec.log.loc[comp, 'center'] / (1 + z_obj), synth_spec.log.loc[comp, 'sigma']
 
         print(f'\n- {comp}')

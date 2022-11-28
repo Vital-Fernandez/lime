@@ -77,7 +77,12 @@ ax_conf = {'image': {'xlabel': r'RA', 'ylabel': r'DEC', 'title': f'MANGA SHOC579
 min_flux = np.nanpercentile(Halpha_image, 60)
 log_norm_bg = colors.SymLogNorm(linthresh=min_flux, vmin=min_flux, base=10)
 
-# Interactive plotter for IFU data cubes
-lime.CubeInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
-                   fits_header=hdr, ax_cfg=ax_conf, color_norm=log_norm_bg,
-                   lines_log_address=log_file, mask_file='./sample_data/SHOC579_mask.fits')
+# # Interactive plotter for IFU data cubes
+# lime.CubeInspector(wave, flux, Halpha_image, SII_image, SII_contourLevels, redshift=z_SHOC579,
+#                    fits_header=hdr, ax_cfg=ax_conf, color_norm=log_norm_bg,
+#                     mask_file='./sample_data/SHOC579_mask.fits')
+
+
+shoc579 = lime.Cube(wave, flux, norm_flux=norm_flux, redshift=z_SHOC579)
+
+shoc579.check.cube(6563, line_fg=6716, wcs=WCS(hdr), lines_log_address=log_file, rest_frame=True)
