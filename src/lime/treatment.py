@@ -426,6 +426,7 @@ class Spectrum(LineFinder):
 
         return
 
+
 class Cube:
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,

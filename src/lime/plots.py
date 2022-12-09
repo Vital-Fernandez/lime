@@ -1699,7 +1699,7 @@ class SpectrumFigures(Plotter):
         return
 
     def spectrum(self, extra_comp=None, line_bands=None, label=None, noise_region=None, log_scale=False,
-                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_ax=None, plt_cfg={}, ax_cfg={},
+                 output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_ax=None, fig_cfg={}, ax_cfg={},
                  maximize=False, return_fig=False):
 
         """
@@ -1759,8 +1759,8 @@ class SpectrumFigures(Plotter):
 
         # Set figure format with the user inputs overwriting the default conf
         legend_check = True if label is not None else False
-        plt_cfg.setdefault('figure.figsize', (10, 6))
-        PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
+        fig_cfg.setdefault('figure.figsize', (10, 6))
+        PLT_CONF, AXES_CONF = self._figure_format(fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
                                                   units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
 
         # Create and fill the figure
@@ -1838,7 +1838,7 @@ class SpectrumFigures(Plotter):
         return in_fig
 
     def grid(self, log=None, rest_frame=True, y_scale='auto', include_fits=True, output_address=None, n_cols=6,
-             n_rows=None, col_row_scale=(2, 1.5), maximize=False, plt_cfg={}, ax_cfg={}, in_fig=None, in_ax=None):
+             n_rows=None, col_row_scale=(2, 1.5), maximize=False, fig_cfg={}, ax_cfg={}, in_fig=None, in_ax=None):
 
         # Display check for the user figures
         display_check = True if in_fig is None else False
@@ -1868,7 +1868,7 @@ class SpectrumFigures(Plotter):
             # Set the plot format where the user's overwrites the default
             default_fig_cfg = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1]),
                                'axes.titlesize': 12}
-            default_fig_cfg.update(plt_cfg)
+            default_fig_cfg.update(fig_cfg)
             PLT_CONF, AXES_CONF = self._figure_format(default_fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
                                                       units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
             AXES_CONF.pop('xlabel')
@@ -1956,7 +1956,7 @@ class SpectrumFigures(Plotter):
         return in_fig
 
     def band(self, line=None, band_edges=None, include_fits=True, rest_frame=False, y_scale='auto', trans_line=False,
-             in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}, output_address=None, maximise=False, return_fig=False):
+             in_fig=None, in_axis=None, fig_cfg={}, ax_cfg={}, output_address=None, maximise=False, return_fig=False):
 
         # Display check for the user figures
         display_check = True if in_fig is None else False
@@ -1968,8 +1968,8 @@ class SpectrumFigures(Plotter):
         include_fits = include_fits and (line in self._spec.log.index)
 
         # Adjust the default theme
-        plt_cfg.setdefault('axes.labelsize', 14)
-        PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, self._spec.norm_flux, self._spec.units_wave,
+        fig_cfg.setdefault('axes.labelsize', 14)
+        PLT_CONF, AXES_CONF = self._figure_format(fig_cfg, ax_cfg, self._spec.norm_flux, self._spec.units_wave,
                                                   self._spec.units_flux)
 
         # Create and fill the figure
