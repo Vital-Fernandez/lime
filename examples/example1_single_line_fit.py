@@ -1,6 +1,7 @@
 import numpy as np
 from astropy.io import fits
 import lime
+import matplotlib.pyplot as plt
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -17,28 +18,28 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # Address of the Green Pea galaxy spectrum
-gp_fits = './sample_data/gp121903_BR.fits'
+fits_file = './sample_data/gp121903_BR.fits'
 
 # Load spectrum
-wave, flux, hdr = import_osiris_fits(gp_fits)
+wave, flux, hdr = import_osiris_fits(fits_file)
 
 # Galaxy redshift and the flux normalization
-z_gp = 0.19531
-normFlux_gp = 1e-18
+z_obj = 0.19531
+normFlux = 1e-18
 
 # Line name and its location mask in the rest _frame
 line = 'H1_6563A'
-mask = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
+band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
-gp_spec = lime.Spectrum(wave, flux, redshift=z_gp, norm_flux=normFlux_gp)
-gp_spec.plot.spectrum(label='GP121903')
+gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
+# gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
-gp_spec.fit.band(line, mask)
+gp_spec.fit.band(line, band_edges)
 
-# Show the results
-gp_spec.plot.line()
+# Plot the results from the last fitting
+gp_spec.plot.band()
 
 # Fit configuration
 line = 'H1_6563A_b'
@@ -47,16 +48,28 @@ fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
             'N2_6548A_kinem': 'N2_6584A'}
 
 # Second attempt including the fit configuration
-gp_spec.fit.band(line, mask, fit_conf)
-gp_spec.plot.line(line)
-gp_spec.plot.line(output_address=f'./sample_data/{line}.png')
+gp_spec.fit.band(line, band_edges, fit_conf)
+gp_spec.plot.band(line)
+
+# You can also save the fitting plot to a file
+gp_spec.plot.band(output_address=f'./sample_data/{line}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
 print(gp_spec.log)
 
-# It can be saved into different types of document using the command
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.txt')
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.fits', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.pdf', parameters=['eqw', 'gauss_flux', 'gauss_err'])
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.xlsx', ext='GP121903')
-lime.save_line_log(gp_spec.log, './sample_data/example1_linelog.asdf', ext='GP121903')
+# It can be saved into different types of document using the function
+gp_spec.save_log('./sample_data/example1_linelog.txt')
+gp_spec.save_log('./sample_data/example1_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_err'])
+gp_spec.save_log('./sample_data/example1_linelog.fits', ext='GP121903')
+gp_spec.save_log('./sample_data/example1_linelog.xlsx', ext='GP121903')
+gp_spec.save_log('./sample_data/example1_linelog.asdf', ext='GP121903')
+
+# # A lines log can also be save/loaded using the lime functions:
+log_address = './sample_data/example1_linelog.fits'
+lime.save_log(gp_spec.log, log_address, ext='GP121903')
+log = lime.load_log(log_address, ext='GP121903')
+print(f'Are the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')
+
+
+gp_spec.load_log(log_address,  ext='GP121903')
+gp_spec.plot.band(6563)

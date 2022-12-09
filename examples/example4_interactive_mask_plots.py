@@ -37,7 +37,7 @@ shutil.copy(instrMaskFile, objMaskFile)
 
 # Review the mask
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
-inputMask = lime.load_lines_log(objMaskFile)
+inputMask = lime.load_log(objMaskFile)
 objMaskFile = './sample_data/GP121903_mask_review.txt'
 gp_spec.check.bands(inputMask, objMaskFile, maximize=True)
 

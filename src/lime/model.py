@@ -707,10 +707,10 @@ class LineFitting:
 
         # Warning if continuum above or below line peak/through
         if line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
-            _logger.warning(f'Line {line.line} introduced as an emission but the line peak is below the continuum level')
+            _logger.warning(f'Line {line.band} introduced as an emission but the line peak is below the continuum level')
 
         if not line._emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
-            _logger.warning(f'Line {line.line} introduced as an absorption but the line peak is below the continuum level')
+            _logger.warning(f'Line {line.band} introduced as an absorption but the line peak is below the continuum level')
 
         # Establish the pixel sigma error
         err_array = line.std_cont if emis_err is None else emis_err

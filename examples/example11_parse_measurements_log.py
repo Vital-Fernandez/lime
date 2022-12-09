@@ -25,7 +25,7 @@ cfgFile = './sample_data/config_file.cfg'
 wave, flux, header = import_osiris_fits(obsFitsFile)
 
 # Load mask
-mask = lime.load_lines_log(lineMaskFile)
+mask = lime.load_log(lineMaskFile)
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)
@@ -45,7 +45,7 @@ for i, lineLabel in enumerate(matched_masks_DF.index.values):
     gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
 
 # Save the results
-lime.save_line_log(gp_spec.log, './sample_data/example_3.txt')
+lime.save_log(gp_spec.log, './sample_data/example_3.txt')
 
 # Add new parameters to the log
 parameters = ['eqw_gaussian',

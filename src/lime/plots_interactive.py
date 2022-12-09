@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 from matplotlib.widgets import RadioButtons, SpanSelector
 from astropy.io import fits
 
-from .io import load_lines_log, save_line_log
+from .io import load_log, save_log
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, STANDARD_PLOT, STANDARD_AXES, \
     determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import label_decomposition, blended_label_from_log, define_masks
@@ -120,7 +120,7 @@ def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2',
             log_address.unlink()
     else:
         if log_address is not None:
-            save_line_log(log.loc[activeLines], log_address, parameters=log_parameters)
+            save_log(log.loc[activeLines], log_address, parameters=log_parameters)
         else:
             _logger.warning(r"Not output redshift lob provided, the selection won't be stored")
 
@@ -226,7 +226,7 @@ class BandsInspection:
         parent_mask = None
         if self._log_address is not None:
             if self._log_address.is_file():
-                parent_mask = load_lines_log(self._log_address)
+                parent_mask = load_log(self._log_address)
 
         # Establish the reference lines log to inspect the mask
         self.log, self._activeLines = check_previous_mask(input_mask, parent_mask, self._spec.wave_rest)

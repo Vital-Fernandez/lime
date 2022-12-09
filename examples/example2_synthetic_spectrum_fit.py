@@ -89,7 +89,7 @@ for lineLabel in mask_df.index.values:
 
     for i, comp in enumerate(gaus_comps):
         amp_true, center_true, sigma_true = emission_lines_dict[comp]
-        amp_attr, center_attr, sigma_attr = synth_spec.fit.line.amp, synth_spec.fit.line.center/(1 + z_obj), synth_spec.fit.line.sigma
+        amp_attr, center_attr, sigma_attr = synth_spec.fit.band.amp, synth_spec.fit.band.center / (1 + z_obj), synth_spec.fit.band.sigma
         amp_df, center_df, sigma_df = synth_spec.log.loc[comp, 'amp'] / flux_norm, synth_spec.log.loc[comp, 'center'] / (1 + z_obj), synth_spec.log.loc[comp, 'sigma']
 
         print(f'\n- {comp}')

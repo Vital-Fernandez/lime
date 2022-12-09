@@ -14,7 +14,7 @@ from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_scie
 
 from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck
-from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, save_line_log, LiMe_Error
+from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_log, save_log, LiMe_Error, check_file_dataframe
 from .model import gaussian_profiles_computation, linear_continuum_computation
 from .transitions import Line
 from .workflow import SpecTreatment, CubeTreatment
@@ -233,9 +233,6 @@ class Spectrum(LineFinder):
         # Load parent classes
         LineFinder.__init__(self)
 
-        # Review the inputs
-        # check_inputs(input_wave, input_flux, input_err, self)
-
         # Class attributes
         self.label = None
         self.wave = None
@@ -256,24 +253,6 @@ class Spectrum(LineFinder):
         # Plotting objects
         self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
-
-        # # Checks spectra units
-        # check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
-        #
-        # # Start cropping the input spectrum if necessary
-        # input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
-        #                                                                   pixel_mask)
-        #
-        # # Spectra normalization and masking
-        # self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
-        #                                                                                  input_err, pixel_mask,
-        #                                                                                  self.redshift, self.norm_flux)
-        #
-        # # Check nan entries and mask quality
-        # check_spectrum_axes(self)
-        #
-        # # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
-        # self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
 
         # Review and assign the attibutes data
         if review_inputs:
@@ -410,6 +389,42 @@ class Spectrum(LineFinder):
 
         return
 
+    def save_log(self, file_address, ext='LINESLOG', param_list='all', fits_header=None):
+
+        # Save the file
+        save_log(self.log, file_address, ext, param_list, fits_header)
+
+        return
+
+    def load_log(self, log_var, ext='LINESLOG'):
+
+        # Load the log file if it is a log file
+        log_df = check_file_dataframe(log_var, pd.DataFrame, ext=ext)
+
+        # Security checks:
+        if log_df.index.size > 0:
+            line_list = log_df.index.values
+
+            # Get the first line in the log
+            line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
+
+            # Confirm the lines in the log match the one of the spectrum
+            if line_0.units_wave != self.units_wave:
+                _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
+                                f' in {line_0.units_wave}')
+
+            # Confirm all the log lines have the same units
+            same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), line_0.units_wave) != -1).size == line_list.size
+            if not same_units_check:
+                _logger.warning(f'The log has lines with different units')
+
+            # Assign the log
+            self.log = log_df
+
+        else:
+            _logger.info(f'Log file with 0 entries ({log_var})')
+
+        return
 
 class Cube:
 

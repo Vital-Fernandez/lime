@@ -2,8 +2,8 @@ __all__ = [
     'load_fits',
     'save_cfg',
     'load_cfg',
-    'load_lines_log',
-    'save_line_log',
+    'load_log',
+    'save_log',
     'log_parameters_calculation',
     'log_to_HDU',
     'save_param_maps',
@@ -77,15 +77,16 @@ KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_
 class LiMe_Error(Exception):
     """LiMe exception function"""
 
-def load_lines_log(log_address, ext='LINESLOG'):
+
+def load_log(file_address, ext='LINESLOG'):
 
     """
     This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
     text file, a ``.fits`` file, a ``.asdf`` file and an excel file (``.xlsx``). In the case of ``.fits``, ``.asdf`` or
     ``.xlsx`` files the user should specify the target extension/sheet name (the default one is ``LINESLOG``).
 
-    :param log_address: Address of the configuration file. The function stops if the file is not found
-    :type log_address: str
+    :param file_address: Address of the configuration file. The function stops if the file is not found
+    :type file_address: str
 
     :param ext: Name of the ``.fits`` file or ``.xlsx`` file extension with the extension name to read
     :type ext: str, optional
@@ -95,10 +96,10 @@ def load_lines_log(log_address, ext='LINESLOG'):
     """
 
     # Check file is at path
-    log_path = Path(log_address)
+    log_path = Path(file_address)
 
     if not log_path.is_file():
-        _logger.critical(f'No lines log found at {log_address}\n')
+        _logger.critical(f'No lines log found at {file_address}\n')
 
     file_name, file_type = log_path.name, log_path.suffix
 
@@ -130,7 +131,7 @@ def load_lines_log(log_address, ext='LINESLOG'):
     return log
 
 
-def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_header=None):
+def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=None):
 
     """
 
@@ -149,8 +150,8 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
     :param log: Lines log with the measurements
     :type log: pandas.DataFrame
 
-    :param log_address: Address for the output lines log file.
-    :type log_address: str
+    :param file_address: Address for the output lines log file.
+    :type file_address: str
 
     :param parameters: List of parameters to include in the output log. By default the log includes all the parameters,
                        default value "all"
@@ -166,7 +167,7 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
     """
 
     # Confirm file path exits
-    log_path = Path(log_address)
+    log_path = Path(file_address)
     assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
     file_name, file_type = log_path.name, log_path.suffix
 
@@ -221,7 +222,7 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
             if openpyxl:
                 pass
             else:
-                print(f'\n- WARNING: openpyxl is not installed. Lines log {log_address} could not be saved')
+                print(f'\n- WARNING: openpyxl is not installed. Lines log {file_address} could not be saved')
                 return
 
             if not log_path.is_file():
@@ -269,8 +270,25 @@ def save_line_log(log, log_address, ext='LINESLOG', parameters='all', fits_heade
     return
 
 
+def check_file_dataframe(input, variable_type, ext='LINESLOG'):
+
+    if isinstance(input, variable_type):
+        output = input
+
+    elif Path(input).is_file():
+        output = load_log(input, ext=ext)
+
+    else:
+        # TODO this is not necessary?
+        _logger.warning(f'Not file found at {input}.\nPlease introduce a {variable_type} as input or check the'
+                         f'file address.')
+        output = None
+
+    return output
+
+
 _parent_bands_file = Path(__file__).parent/'resources/parent_mask.txt'
-_PARENT_BANDS = load_lines_log(_parent_bands_file)
+_PARENT_BANDS = load_log(_parent_bands_file)
 
 # Function to check if variable can be converte to float else leave as string
 def check_numeric_Value(s):
@@ -549,7 +567,7 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     elif isinstance(input_log, (str, Path)):
         file_check = True
-        log_df = load_lines_log(input_log)
+        log_df = load_log(input_log)
 
     else:
         _logger.critical(
@@ -566,7 +584,7 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     # Save to the previous location
     if file_check:
-        save_line_log(log_df, input_log)
+        save_log(log_df, input_log)
 
 
     return

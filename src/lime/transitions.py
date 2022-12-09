@@ -62,13 +62,13 @@ def check_line_in_log(input_label, log=None, tol=1):
                 ref_waves = char.strip(ref_waves, units_wave).astype(float)
 
             # Check if table rows are not sorted
-            if not all(diff(ref_waves) >= 0):
+            if not all(diff(ref_waves) >= 0): # TODO we might need to use something else than searchsorted
                 _logger.warning(f'The lines log rows are not sorted from lower to higher wavelengths. This can cause '
-                                f'issues to identify the lines using the transition wavelength')
+                                f'issues to identify the lines using the transition wavelength. Try to use the string'
+                                f'line label')
 
             # Locate the best candidate
             idx_closest = searchsorted(ref_waves, input_label)
-
             line_ion, line_wave = ion_array[idx_closest], ref_waves[idx_closest]
 
             # Check if input wavelength is close to the guessed line
@@ -230,10 +230,19 @@ class Line:
                 if inline.profile_label != 'no':
                     inline.blended_check, inline.merged_check = False, False
 
+                    # Merged line
                     if inline.label.endswith('_m'):
                         inline.merged_check = True
+                        _, inline.units_wave = check_units_from_wave(label[:-1].split('_')[1])
+
+                    # Blended line
                     else:
                         inline.blended_check = True
+                        _, inline.units_wave = check_units_from_wave(label.split('_')[1])
+
+                # Units transition
+                else:
+                    _, inline.units_wave = check_units_from_wave(label.split('_')[1])
 
                 # List comps
                 if inline.blended_check:

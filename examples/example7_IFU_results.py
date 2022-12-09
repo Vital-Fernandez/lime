@@ -54,7 +54,7 @@ with fits.open(SHOC579_cube_address) as hdul:
 
 # and the masks file:
 mask_file = './sample_data/SHOC579_region0_maskLog.txt'
-mask_log = lime.load_lines_log(mask_file)
+mask_log = lime.load_log(mask_file)
 
 # Establish the band image for the plot bacground using Halpha
 Halpha_band = mask_log.loc['H1_6563A_b', 'w3':'w4'].values * (1 + z_SHOC579)

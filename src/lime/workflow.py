@@ -8,25 +8,9 @@ from . import Error
 from .model import LineFitting
 from .tools import define_masks, label_decomposition, COORD_ENTRIES
 from .transitions import Line
-from .io import _LOG_EXPORT, _LOG_COLUMNS, load_lines_log, progress_bar, load_spatial_masks, log_to_HDU
+from .io import _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU
 
 _logger = logging.getLogger('LiMe')
-
-
-def check_file_dataframe(input, variable_type):
-
-    if isinstance(input, variable_type):
-        output = input
-
-    elif Path(input).is_file():
-        output = load_lines_log(input)
-
-    else:
-        _logger.warning(f'Not file found at {input}.\nPlease introduce a {variable_type} as input or check the'
-                         f'file address.')
-        output = None
-
-    return output
 
 
 def check_file_array_mask(var, mask_list=[]):
@@ -199,7 +183,7 @@ class SpecTreatment(LineFitting):
         self._spec = spectrum
         self.line = None
 
-    def band(self, label, mask=None, fit_conf=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
+    def band(self, label, band_edges=None, fit_conf=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
              temp=10000.0):
 
         """
@@ -229,8 +213,8 @@ class SpecTreatment(LineFitting):
          :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
          :type line: string
 
-         :param mask: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
-         :type mask: numpy.ndarray
+         :param band_edges: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
+         :type band_edges: numpy.ndarray
 
          :param user_cfg: Dictionary with the fitting configuration.
          :type user_cfg: dict, optional
@@ -251,7 +235,7 @@ class SpecTreatment(LineFitting):
          """
 
         # Interpret the input line
-        self.line = Line(label, mask, fit_conf, emission_check, cont_from_bands)
+        self.line = Line(label, band_edges, fit_conf, emission_check, cont_from_bands)
 
         # Get the bands regions
         idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift), self.line.pixel_mask)
@@ -323,7 +307,7 @@ class SpecTreatment(LineFitting):
                           cont_from_bands, temp)
 
                 if plot_fits:
-                    self._spec.plot.line()
+                    self._spec.plot.band()
 
         else:
             _logger.info(f'Not input dataframe. Lines were not measured')

@@ -7,7 +7,7 @@ mask_address = './sample_data/abs_line_mask.txt'
 wave, flux = np.loadtxt(spectrum_address, unpack=True)
 noise_region = np.array([5780, 5850])
 
-mask_log = lime.load_lines_log(mask_address)
+mask_log = lime.load_log(mask_address)
 
 star_spec = lime.Spectrum(wave, flux, norm_flux=1e-4, crop_waves=(4515, 9500))
 # star_spec.plot_spectrum()

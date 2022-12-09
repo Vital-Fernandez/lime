@@ -27,5 +27,5 @@ for i, spec_address in enumerate([spectrumA1, spectrumA2]):
     wave, flux, hdr = lime.load_fits(spec_address, instrument='ISIS')
     spec = lime.Spectrum(wave, flux, redshift=0.00256539, norm_flux=1e-18)
     spec.fit.band(6716)
-    spec.plot.line()
+    spec.plot.band()
     spec.plot.spectrum()
