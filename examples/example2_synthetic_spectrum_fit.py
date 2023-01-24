@@ -89,12 +89,12 @@ for lineLabel in mask_df.index.values:
 
     for i, comp in enumerate(gaus_comps):
         amp_true, center_true, sigma_true = emission_lines_dict[comp]
-        amp_attr, center_attr, sigma_attr = synth_spec.fit.band.amp, synth_spec.fit.band.center / (1 + z_obj), synth_spec.fit.band.sigma
+        amp_attr, center_attr, sigma_attr = synth_spec.fit.line.amp, synth_spec.fit.line.center / (1 + z_obj), synth_spec.fit.line.sigma
         amp_df, center_df, sigma_df = synth_spec.log.loc[comp, 'amp'] / flux_norm, synth_spec.log.loc[comp, 'center'] / (1 + z_obj), synth_spec.log.loc[comp, 'sigma']
 
         print(f'\n- {comp}')
-        print(f'True amplitude: {amp_true}, amplitude attribute {amp_attr[i]}, amplitude dataframe {amp_df}')
-        print(f'True center: {center_true}, center attribute {center_attr[i]}, center log dataframe {center_df}')
-        print(f'True sigma: {sigma_true}, sigma attribute {sigma_attr[i]}, sigma dataframe {sigma_df}')
+        print(f'True amplitude: {amp_true:0.4f}, amplitude attribute {amp_attr[i]:0.4f}, amplitude dataframe {amp_df:0.4f}')
+        print(f'True center: {center_true:0.4f}, center attribute {center_attr[i]:0.4f}, center log dataframe {center_df:0.4f}')
+        print(f'True sigma: {sigma_true:0.4f}, sigma attribute {sigma_attr[i]:0.4f}, sigma dataframe {sigma_df:0.4f}')
 
 

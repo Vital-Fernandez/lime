@@ -1,7 +1,7 @@
 import numpy as np
 from astropy.io import fits
 import lime
-import matplotlib.pyplot as plt
+
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -33,7 +33,7 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
-# gp_spec.plot.spectrum(label='GP121903')
+gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
 gp_spec.fit.band(line, band_edges)
@@ -69,7 +69,12 @@ log_address = './sample_data/example1_linelog.fits'
 lime.save_log(gp_spec.log, log_address, ext='GP121903')
 log = lime.load_log(log_address, ext='GP121903')
 print(f'Are the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')
+#
+#
+# gp_spec.load_log(log_address,  ext='GP121903')
+# gp_spec.plot.band(6563)
 
 
-gp_spec.load_log(log_address,  ext='GP121903')
-gp_spec.plot.band(6563)
+gp_spec2 = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
+gp_spec2.load_log(log_address,  ext='GP121903')
+gp_spec2.plot.band('H1_6563A')

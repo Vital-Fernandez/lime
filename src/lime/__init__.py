@@ -37,6 +37,8 @@ class Error(Exception):
 
 from .treatment import Spectrum, Sample, CubeInspector, Cube
 from .io import *
-from .tools import label_decomposition, LineFinder, spectral_mask_generator, get_coord_entries
+from .tools import label_decomposition, LineFinder, spectral_mask_generator, get_coord_entries, unit_convertor
 from .plots import spatial_mask_generator
 #TODO joblib optional
+
+

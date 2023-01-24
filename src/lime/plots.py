@@ -1759,7 +1759,7 @@ class SpectrumFigures(Plotter):
 
         # Set figure format with the user inputs overwriting the default conf
         legend_check = True if label is not None else False
-        fig_cfg.setdefault('figure.figsize', (10, 6))
+        fig_cfg.setdefault('figure.figsize', (8, 5))
         PLT_CONF, AXES_CONF = self._figure_format(fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
                                                   units_wave=self._spec.units_wave, units_flux=self._spec.units_flux)
 
@@ -1775,7 +1775,8 @@ class SpectrumFigures(Plotter):
 
             # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                          self._spec.redshift, rest_frame, )
+                                                                          self._spec.redshift, rest_frame)
+
 
             # Plot the spectrum
             in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=self._color_dict['fg'])
@@ -1840,7 +1841,7 @@ class SpectrumFigures(Plotter):
     def grid(self, log=None, rest_frame=True, y_scale='auto', include_fits=True, output_address=None, n_cols=6,
              n_rows=None, col_row_scale=(2, 1.5), maximize=False, fig_cfg={}, ax_cfg={}, in_fig=None, in_ax=None):
 
-        # Display check for the user figures
+        # Display chec k for the user figures
         display_check = True if in_fig is None else False
 
         # If not mask provided use the log

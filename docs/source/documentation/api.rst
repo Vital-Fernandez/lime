@@ -8,8 +8,6 @@ Inputs and outputs
 
 .. autofunction:: lime.load_cfg
 
-.. autofunction:: lime.load_lines_log
-
 .. autofunction:: lime.save_param_maps
 
 

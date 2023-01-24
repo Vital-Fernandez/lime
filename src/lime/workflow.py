@@ -86,9 +86,6 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
             length = emis_band_lengh
         _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
 
-    # Check if the line is very narrow for fit initial conditions # TODO change logic to number of pixels above cont level
-    line._narrow_check = True if emis_band_lengh <= limit_narrow else False
-
     return
 
 
@@ -263,7 +260,7 @@ class SpecTreatment(LineFitting):
             w_array = 1.0 / self._spec.err_flux[idcsLine]
 
         # Gaussian fitting
-        self.profile_fitting(self.line, x_array, y_array, w_array, self._spec.redshift, fit_method, temp, self._spec.units_wave,
+        self.profile_fitting(self.line, x_array, y_array, w_array, self._spec.redshift, fit_method, temp,
                              self._spec.inst_FWHM)
 
         # Save the line parameters to the dataframe
@@ -271,8 +268,9 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def frame(self, bands_df, fit_conf=None,  label=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
-              temp=10000.0, progress_output=None, plot_fits=False):
+    def frame(self, bands_df, fit_conf=None,  label=None, fit_method='least_squares', emission_check=True,
+              cont_from_bands=True, temp=10000.0, progress_output=None, plot_fits=False, obj_ref=None,
+              default_conf='default_line_fitting'):
 
         # Check if the lines table is a dataframe or a file
         bands_df = check_file_dataframe(bands_df, pd.DataFrame)
@@ -285,6 +283,24 @@ class SpecTreatment(LineFitting):
                 line_list = bands_df.loc[idcs].index.values
             else:
                 line_list = bands_df.index.values
+
+            # If object and default line fitting is provided get default configuration
+            input_conf = None
+            if fit_conf is not None:
+
+                # We provide object configuration directly
+                if obj_ref is None:
+                    input_conf = fit_conf
+
+                # We update the default configuration with the object one
+                else:
+
+                    # Use the default one
+                    input_conf = {**fit_conf.get(default_conf, {})}
+
+                    # Update the default one
+                    if f'{obj_ref}_line_fitting' in fit_conf:
+                        input_conf.update(fit_conf[f'{obj_ref}_line_fitting'])
 
             # Loop text decision
             bar_output = True if progress_output == 'bar' else False
@@ -303,7 +319,7 @@ class SpecTreatment(LineFitting):
                         print(f'{i+1}/{n_lines}) {line}')
 
                 # Fit the lines
-                self.band(line, bands_df.loc[line, 'w1':'w6'].values, fit_conf, fit_method, emission_check,
+                self.band(line, bands_df.loc[line, 'w1':'w6'].values, input_conf, fit_method, emission_check,
                           cont_from_bands, temp)
 
                 if plot_fits:

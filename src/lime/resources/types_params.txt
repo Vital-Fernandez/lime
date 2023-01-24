@@ -24,7 +24,7 @@ cont                      1                0          0           1    <f8      
 std_cont                  1                0          0           1    <f8      $\sigma_{cont}$
 m_cont                    1                0          0           1    <f8           $m_{cont}$
 n_cont                    1                0          0           1    <f8           $n_{cont}$
-snr_line                  0                0          0           1    <f8 $\frac{S}{N}_{line}$
+snr_line                  0                0          1           1    <f8 $\frac{S}{N}_{line}$
 snr_cont                  0                0          0           1    <f8 $\frac{S}{N}_{cont}$
 z_line                    0                0          1           1    <f8           $z_{line}$
 amp                       1                0          1           1    <f8              $A_{i}$

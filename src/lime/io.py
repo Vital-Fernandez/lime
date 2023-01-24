@@ -206,7 +206,7 @@ def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=No
             if isinstance(lines_log, pd.DataFrame):
                 lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=fits_header)
 
-                if log_path.is_file():
+                if log_path.is_file(): # TODO this strategy is slow for many inputs
                     try:
                         fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
                     except KeyError:
@@ -441,7 +441,7 @@ def load_cfg(file_address, obj_list=None, mask_section=None, def_cfg_sec='line_f
         cfg.optionxform = str
         cfg.read(file_address)
     else:
-        exit(f'-ERROR Configuration file not found at:\n{file_address}')
+        raise LiMe_Error(f'Configuration file not found : {file_address}')
 
     # Convert the configuration entries from the string format if possible
     cfg_lime = {}
@@ -635,6 +635,14 @@ def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
     return linesHDU
 
+
+def hdu_to_log(hdu):
+
+    # TODO check this one is good
+    log = Table(hdu).to_pandas()
+    log.set_index('index', inplace=True)
+
+    return log
 
 def load_fits(file_address, instrument, frame_idx=None):
 

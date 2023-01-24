@@ -16,6 +16,7 @@ def import_osiris_fits(file_address, ext=0):
 
     return wavelength, data, header
 
+
 # State the data files
 obsFitsFile = './sample_data/gp121903_BR.fits'
 instrMaskFile = './sample_data/osiris_bands.txt'
@@ -40,18 +41,3 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
 inputMask = lime.load_log(objMaskFile)
 objMaskFile = './sample_data/GP121903_mask_review.txt'
 gp_spec.check.bands(inputMask, objMaskFile, maximize=True)
-
-
-# # Manually inspect the masks and correct them iteratively
-# lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux)
-#
-# # In case you have many masks you can adjust the number of elements inspect the masks and correct them iteratively
-# lines_interval = (6, 10)
-# lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
-#                    n_cols=2, lines_interval=lines_interval)
-#
-# # You can also specify the lines you are interested in inspecting the mask
-# lines_interval = ['He2_4686A', 'S2_6716A_b', 'O3_4363A']
-# lime.MaskInspector(objMaskFile, input_wave=wave, input_flux=flux, redshift=z_obj, norm_flux=norm_flux,
-#                    lines_interval=lines_interval)
-

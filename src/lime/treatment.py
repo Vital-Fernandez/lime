@@ -2,26 +2,22 @@ import logging
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from lmfit import fit_report as lmfit_fit_report
-from sys import exit
 from astropy.table import Table
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from .model import EmissionFitting
-from .tools import label_decomposition, LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
+from .tools import LineFinder, UNITS_LATEX_DICT, latex_science_float, DISPERSION_UNITS,\
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks
 
-from .plots import LiMePlots, STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, SpectrumFigures, SampleFigures, CubeFigures
-from .plots_interactive import SpectrumCheck, CubeCheck
-from .io import _LOG_DTYPES_REC, _LOG_EXPORT, _LOG_COLUMNS, load_log, save_log, LiMe_Error, check_file_dataframe
+from .plots import STANDARD_PLOT, STANDARD_AXES, colorDict, save_close_fig_swicth, frame_mask_switch, SpectrumFigures, SampleFigures, CubeFigures
+from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
+from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe
 from .model import gaussian_profiles_computation, linear_continuum_computation
 from .transitions import Line
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
 
 from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
-from matplotlib.widgets import SpanSelector
 from matplotlib.widgets import RadioButtons
 
 _logger = logging.getLogger('LiMe')
@@ -100,12 +96,12 @@ def check_spectrum_axes(lime_object):
         if ~np.all(check_mask):
             _logger.warning(f'Make sure *all* your input wavelength, flux and uncertainty are masked arrays')
 
-    # Check that the flux and wavelength normalization
-    if not isinstance(lime_object, Cube):
-        if np.nanmedian(lime_object.flux) < 0.0001:
-            _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
-                            f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
-                            f'Try changing the flux normalization')
+    # Check that the flux and wavelength normalization #TODO ONLY DO THIS IN REVISION
+    # if not isinstance(lime_object, Cube):
+    #     if np.nanmedian(lime_object.flux) < 0.0001:
+    #         _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
+    #                         f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
+    #                         f'Try changing the flux normalization')
 
     return
 
@@ -118,13 +114,13 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
         input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
 
         # Spectrum
-        if input_flux.shape == 1:
+        if len(input_flux.shape) == 1:
             input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
             if input_err is not None:
                 input_err = input_err[idcs_crop[0]:idcs_crop[1]]
 
         # Cube
-        elif input_flux.shape == 3:
+        elif len(input_flux.shape) == 3:
             input_flux = input_flux[idcs_crop[0]:idcs_crop[1], :, :]
             if input_err is not None:
                 input_err = input_err[idcs_crop[0]:idcs_crop[1], :, :]
@@ -304,7 +300,7 @@ class Spectrum(LineFinder):
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
                                                                           pixel_mask)
 
-        # Spectra normalization and masking
+        # spectra normalization and masking
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
                                                                                          input_err, pixel_mask,
                                                                                          self.redshift, self.norm_flux)
@@ -338,7 +334,7 @@ class Spectrum(LineFinder):
                 self.wave_rest = np.ma.masked_array(output_wave/(1+self.redshift), self.wave.mask)
             else:
                 self.wave = output_wave
-                self.wave_rest = output_wave/1+self.redshift
+                self.wave_rest = output_wave/(1+self.redshift)
             self.units_wave = units_wave
 
         # Flux axis conversion
@@ -463,7 +459,7 @@ class Cube:
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
                                                                           pixel_mask)
 
-        # Spectra normalization, redshift and mask calculation
+        # spectra normalization, redshift and mask calculation
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
                                                                                          input_err, pixel_mask,
                                                                                          self.redshift, self.norm_flux)
@@ -640,10 +636,13 @@ class Sample(dict):
 
         # Attributes
         self.obj_list = np.array([])
-        self.plot = SampleFigures(self)
         self.norm_flux = None
         self.units_wave = None
         self.units_flux = None
+
+        # Functionality objects
+        self.plot = SampleFigures(self)
+        self.check = SampleCheck(self)
 
         return
 
@@ -662,7 +661,6 @@ class Sample(dict):
 
         # Check if the units and normalizations match
         if len(self.keys()) == 1:
-            print('ALOMOJOR')
             self.norm_flux = lime_obj.norm_flux
             self.units_wave, self.units_flux = lime_obj.units_wave, lime_obj.units_flux
 
@@ -671,390 +669,6 @@ class Sample(dict):
                 if self.__getattribute__(prop) != lime_obj.__getattribute__(prop):
                     _logger.warning(f'The {prop} of object {label} do not match those in the sample:'
                                     f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
-
-
-# class MaskInspector(Spectrum):
-#
-#     """
-#     This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
-#     dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
-#     file provided.
-#
-#     Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
-#     wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
-#     the interactive selection has the following rules:
-#
-#     * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
-#       mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
-#       original mask limits.
-#
-#     * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
-#       `w3` and `w4` values.
-#
-#     * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
-#       between `w1` and `w3` or `w4` and `w6` respectively.
-#
-#     The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
-#     parameter can be an array of strings with the labels of the target lines or a two value integer array with the
-#     interval of lines to plot.
-#
-#     Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
-#     and greater than the blue and red wavelegnth values respectively.
-#
-#     :param log_address: Address for the lines log mask file.
-#     :type log_address: str
-#
-#     :param input_wave: Wavelength array of the input spectrum.
-#     :type input_wave: numpy.array
-#
-#     :param input_flux: Flux array for the input spectrum.
-#     :type input_flux: numpy.array
-#
-#     :param input_err: Sigma array of the `input_flux`
-#     :type input_err: numpy.array, optional
-#
-#     :param redshift: Spectrum redshift
-#     :type redshift: float, optional
-#
-#     :param norm_flux: Spectrum flux normalization
-#     :type norm_flux: float, optional
-#
-#     :param crop_waves: Wavelength limits in a two value array
-#     :type crop_waves: np.array, optional
-#
-#     :param n_cols: Number of columns of the grid plot
-#     :type n_cols: integer
-#
-#     :param n_rows: Number of columns of the grid plot
-#     :type n_rows: integer
-#
-#     :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
-#                            this interval must be a two value array.
-#     :type lines_interval: list
-#
-#     :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
-#                     strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
-#     :type y_scale: str, optional
-#
-#     """
-#
-#     def __init__(self, log_address, input_wave=None, input_flux=None, input_err=None, redshift=0,
-#                  norm_flux=1.0, crop_waves=None, n_cols=10, n_rows=None, lines_interval=None, y_scale='auto'):
-#
-#         # Output file address
-#         self.linesLogAddress = Path(log_address)
-#         self.y_scale = y_scale
-#
-#         # Assign attributes to the parent class
-#         super().__init__(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves)
-#
-#         # Lines log address is provided and we read the DF from it
-#         if Path(self.linesLogAddress).is_file():
-#             self.log = load_lines_log(self.linesLogAddress)
-#
-#         # Lines log not provide code ends
-#         else:
-#             _logger.warning(f'No lines log file found at {log_address}. Leaving the script')
-#             exit()
-#
-#         # Only plotting the lines in the lines interval
-#         self.line_inter = lines_interval
-#         if lines_interval is None:
-#             n_lines = len(self.log.index)
-#             self.target_lines = self.log.index.values
-#
-#         else:
-#             # Array of strings
-#             if isinstance(lines_interval[0], str):
-#                 n_lines = len(lines_interval)
-#                 self.target_lines = np.array(lines_interval, ndmin=1)
-#             # Array of integers
-#             else:
-#                 n_lines = lines_interval[1] - lines_interval[0]
-#                 self.target_lines = self.log[lines_interval[0]:lines_interval[1]].index.values
-#
-#         # Establish the grid shape
-#         if n_lines > n_cols:
-#             if n_rows is None:
-#                 n_rows = int(np.ceil(n_lines / n_cols))
-#         else:
-#             n_cols = n_lines
-#             n_rows = 1
-#
-#         # Adjust the plot theme
-#         PLOT_CONF = STANDARD_PLOT.copy()
-#         AXES_CONF = STANDARD_AXES.copy()
-#         PLOT_CONF['figure.figsize'] = (n_rows * 2, 8)
-#         AXES_CONF.pop('xlabel')
-#
-#         with rc_context(PLOT_CONF):
-#
-#             self.fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-#             self.ax = ax.flatten() if n_lines > 1 else [ax]
-#             self.in_ax = None
-#             self.dict_spanSelec = {}
-#             self.axConf = {}
-#
-#             # Plot function
-#             self.plot_line_mask_selection(logscale=self.y_scale, grid_size=n_rows * n_cols, n_lines=n_lines)
-#             plt.gca().axes.yaxis.set_ticklabels([])
-#
-#             try:
-#                 manager = plt.get_current_fig_manager()
-#                 manager.window.showMaximized()
-#             except:
-#                 print()
-#
-#             # Show the image
-#             save_close_fig_swicth(None, 'tight', self.fig)
-#
-#
-#         return
-#
-#     def plot_line_mask_selection(self, logscale='auto', grid_size=None, n_lines=None):
-#
-#         # Generate plot
-#         for i in range(grid_size):
-#             if i < n_lines:
-#                 line = self.target_lines[i]
-#                 if line in self.log.index:
-#                     self.mask = self.log.loc[line, 'w1':'w6'].values
-#                     self.plot_line_region_i(self.ax[i], line, logscale=logscale)
-#                     self.dict_spanSelec[f'spanner_{i}'] = SpanSelector(self.ax[i],
-#                                                                        self.on_select,
-#                                                                        'horizontal',
-#                                                                        useblit=True,
-#                                                                        rectprops=dict(alpha=0.5, facecolor='tab:blue'))
-#                 else:
-#                     print(f'- WARNING: line {line} not found in the input mask')
-#
-#             # Clear not filled axes
-#             else:
-#                 self.fig.delaxes(self.ax[i])
-#
-#         bpe = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-#         aee = self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
-#
-#         return
-#
-#     def plot_line_region_i(self, ax, lineLabel, limitPeak=5, logscale='auto'):
-#
-#         # Plot line region:
-#         ion, lineWave, latexLabel = label_decomposition(lineLabel, scalar_output=True, units_wave=self.units_wave)
-#
-#         # Decide type of plot
-#         non_nan = (~pd.isnull(self.mask)).sum()
-#
-#         # Incomplete selections
-#         if non_nan < 6:  # selections
-#
-#             # Peak region
-#             idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
-#             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
-#
-#             # Plot region
-#             idcsLineArea = (lineWave - limitPeak * 2 <= self.wave_rest) & (
-#                         lineWave - limitPeak * 2 <= self.mask[3])
-#             waveLine, fluxLine = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
-#
-#             # Plot the line region
-#             ax.step(waveLine, fluxLine, where='mid')
-#
-#             # Fill the user selections
-#             if non_nan == 2:
-#                 idx1, idx2 = np.searchsorted(self.wave_rest, self.mask[0:2])
-#                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
-#                                 step='mid', alpha=0.5)
-#
-#             if non_nan == 4:
-#                 idx1, idx2, idx3, idx4 = np.searchsorted(self.wave_rest, self.mask[0:4])
-#                 ax.fill_between(self.wave_rest[idx1:idx2], 0.0, self.flux[idx1:idx2], facecolor=self._color_dict['cont_band'],
-#                                 step='mid', alpha=0.5)
-#                 ax.fill_between(self.wave_rest[idx3:idx4], 0.0, self.flux[idx3:idx4], facecolor=self._color_dict['cont_band'],
-#                                 step='mid', alpha=0.5)
-#
-#         # Complete selections
-#         else:
-#
-#             # Get line regions
-#             idcsContLeft = (self.mask[0] <= self.wave_rest) & (self.wave_rest <= self.mask[1])
-#             idcsContRight = (self.mask[4] <= self.wave_rest) & (self.wave_rest <= self.mask[5])
-#
-#             idcsLinePeak = (lineWave - limitPeak <= self.wave_rest) & (self.wave_rest <= lineWave + limitPeak)
-#             idcsLineArea = (self.mask[2] <= self.wave_rest) & (self.wave_rest <= self.mask[3])
-#
-#             waveCentral, fluxCentral = self.wave_rest[idcsLineArea], self.flux[idcsLineArea]
-#             wavePeak, fluxPeak = self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak]
-#
-#             idcsLinePlot = (self.mask[0] - 5 <= self.wave_rest) & (self.wave_rest <= self.mask[5] + 5)
-#             waveLine, fluxLine = self.wave_rest[idcsLinePlot], self.flux[idcsLinePlot]
-#
-#             # Plot the line
-#             ax.step(waveLine, fluxLine, color=self._color_dict['fg'], where='mid')
-#
-#             # Fill the user selections
-#             ax.fill_between(waveCentral, 0, fluxCentral, step="mid", alpha=0.4, facecolor=self._color_dict['line_band'])
-#             ax.fill_between(self.wave_rest[idcsContLeft], 0, self.flux[idcsContLeft], facecolor=self._color_dict['cont_band'],
-#                             step="mid", alpha=0.2)
-#             ax.fill_between(self.wave_rest[idcsContRight], 0, self.flux[idcsContRight], facecolor=self._color_dict['cont_band'],
-#                             step="mid", alpha=0.2)
-#
-#         # Plot format
-#         ax.yaxis.set_major_locator(plt.NullLocator())
-#         ax.xaxis.set_major_locator(plt.NullLocator())
-#
-#         ax.update({'title': lineLabel})
-#         ax.yaxis.set_ticklabels([])
-#         ax.axes.yaxis.set_visible(False)
-#         try:
-#             idxPeakFlux = np.argmax(fluxPeak)
-#             ax.set_ylim(ymin=np.min(fluxLine) / 5, ymax=fluxPeak[idxPeakFlux] * 1.25)
-#
-#             if logscale == 'auto':
-#                 if fluxPeak[idxPeakFlux] > 5 * np.median(fluxLine):
-#                     ax.set_yscale('log')
-#             else:
-#                 if logscale == 'log':
-#                     ax.set_yscale('log')
-#         except:
-#             print(f'fail at {self.line}')
-#
-#
-#         return
-#
-#     def on_select(self, w_low, w_high):
-#
-#         # Check we are not just clicking on the plot
-#         if w_low != w_high:
-#
-#             # Count number of empty entries to determine next step
-#             non_nans = (~pd.isnull(self.mask)).sum()
-#
-#             # Case selecting 1/3 region
-#             if non_nans == 0:
-#                 self.mask[0] = w_low
-#                 self.mask[1] = w_high
-#
-#             # Case selecting 2/3 region
-#             elif non_nans == 2:
-#                 self.mask[2] = w_low
-#                 self.mask[3] = w_high
-#                 self.mask = np.sort(self.mask)
-#
-#             # Case selecting 3/3 region
-#             elif non_nans == 4:
-#                 self.mask[4] = w_low
-#                 self.mask[5] = w_high
-#                 self.mask = np.sort(self.mask)
-#
-#             elif non_nans == 6:
-#                 self.mask = np.sort(self.mask)
-#
-#                 # Caso que se corrija la region de la linea
-#                 if w_low > self.mask[1] and w_high < self.mask[4]:
-#                     self.mask[2] = w_low
-#                     self.mask[3] = w_high
-#
-#                 # Caso que se corrija el continuum izquierdo
-#                 elif w_low < self.mask[2] and w_high < self.mask[2]:
-#                     self.mask[0] = w_low
-#                     self.mask[1] = w_high
-#
-#                 # Caso que se corrija el continuum derecho
-#                 elif w_low > self.mask[3] and w_high > self.mask[3]:
-#                     self.mask[4] = w_low
-#                     self.mask[5] = w_high
-#
-#                 # Case we want to select the complete region
-#                 elif w_low < self.mask[0] and w_high > self.mask[5]:
-#
-#                     # # Remove line from dataframe and save it
-#                     # self.remove_lines_df(self.current_df, self.Current_Label)
-#                     #
-#                     # # Save lines log df
-#                     # self.save_lineslog_dataframe(self.current_df, self.lineslog_df_address)
-#
-#                     # Clear the selections
-#                     # self.mask = np.array([np.nan] * 6)
-#
-#                     print(f'\n-- The line {self.line} mask has been removed')
-#
-#                 else:
-#                     print('- WARNING: Unsucessful line selection:')
-#                     print(f'-- {self.line}: w_low: {w_low}, w_high: {w_high}')
-#
-#             # Check number of measurements after selection
-#             non_nans = (~pd.isnull(self.mask)).sum()
-#
-#             # Proceed to re-measurement if possible:
-#             if non_nans == 6:
-#
-#                 # TODO add option to perform the measurement a new
-#                 # self.clear_fit()
-#                 # self.fit_from_wavelengths(self.line, self.mask, user_cfg={})
-#
-#                 # Parse the line regions to the dataframe
-#                 self.results_to_database(self.line, self.log, fit_conf={}, export_params=[])
-#
-#                 # Save the corrected mask to a file
-#                 self.store_measurement()
-#
-#             # Redraw the line measurement
-#             self.in_ax.clear()
-#             self.plot_line_region_i(self.in_ax, self.line, logscale=self.y_scale)
-#             self.in_fig.canvas.draw()
-#
-#         return
-#
-#     def on_enter_axes(self, event):
-#
-#         # Assign new axis
-#         self.in_fig = event.canvas.figure
-#         self.in_ax = event.inaxes
-#
-#         # TODO we need a better way to index than the latex label
-#         # Recognise line line
-#         idx_line = self.log.index == self.in_ax.get_title()
-#         self.line = self.log.loc[idx_line].index.values[0]
-#         self.mask = self.log.loc[idx_line, 'w1':'w6'].values[0]
-#
-#         # Restore measurements from log
-#         # self.database_to_attr()
-#
-#         # event.inaxes.patch.set_edgecolor('red')
-#         # event.canvas.draw()
-#
-#     def on_click(self, event):
-#
-#         if event.dblclick:
-#             print(self.line)
-#             print(f'{event.button}, {event.x}, {event.y}, {event.xdata}, {event.ydata}')
-#
-#     def store_measurement(self):
-#
-#         # Read file in the stored address
-#         if self.linesLogAddress.is_file():
-#             file_DF = load_lines_log(self.linesLogAddress)
-#
-#             # Add new line to the DF and sort it if it was new
-#             if self.line in file_DF.index:
-#                 file_DF.loc[self.line, 'w1':'w6'] = self.mask
-#             else:
-#                 file_DF.loc[self.line, 'w1':'w6'] = self.mask
-#
-#                 # Sort the lines by theoretical wavelength
-#                 lineLabels = file_DF.index.values
-#                 ion_array, wavelength_array, latexLabel_array = label_decomposition(lineLabels, units_wave=self.units_wave)
-#                 file_DF = file_DF.iloc[wavelength_array.argsort()]
-#
-#         # If the file does not exist (or it is the first time)
-#         else:
-#             file_DF = self.log
-#
-#         # Save to a file
-#         save_line_log(file_DF, self.linesLogAddress)
-#
-#         return
 
 
 class CubeInspector(Spectrum):
@@ -1480,3 +1094,70 @@ class CubeInspector(Spectrum):
         self.ax1.set_ylim(self.axlim_dict['spec_ylim'])
 
         return
+
+
+# class MaskInspector(Spectrum):
+#
+#     """
+#     This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
+#     dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
+#     file provided.
+#
+#     Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
+#     wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
+#     the interactive selection has the following rules:
+#
+#     * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
+#       mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
+#       original mask limits.
+#
+#     * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
+#       `w3` and `w4` values.
+#
+#     * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
+#       between `w1` and `w3` or `w4` and `w6` respectively.
+#
+#     The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
+#     parameter can be an array of strings with the labels of the target lines or a two value integer array with the
+#     interval of lines to plot.
+#
+#     Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
+#     and greater than the blue and red wavelegnth values respectively.
+#
+#     :param log_address: Address for the lines log mask file.
+#     :type log_address: str
+#
+#     :param input_wave: Wavelength array of the input spectrum.
+#     :type input_wave: numpy.array
+#
+#     :param input_flux: Flux array for the input spectrum.
+#     :type input_flux: numpy.array
+#
+#     :param input_err: Sigma array of the `input_flux`
+#     :type input_err: numpy.array, optional
+#
+#     :param redshift: Spectrum redshift
+#     :type redshift: float, optional
+#
+#     :param norm_flux: Spectrum flux normalization
+#     :type norm_flux: float, optional
+#
+#     :param crop_waves: Wavelength limits in a two value array
+#     :type crop_waves: np.array, optional
+#
+#     :param n_cols: Number of columns of the grid plot
+#     :type n_cols: integer
+#
+#     :param n_rows: Number of columns of the grid plot
+#     :type n_rows: integer
+#
+#     :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
+#                            this interval must be a two value array.
+#     :type lines_interval: list
+#
+#     :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
+#                     strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
+#     :type y_scale: str, optional
+#
+#     """
+#
