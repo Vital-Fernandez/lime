@@ -1,57 +1,57 @@
-               Norm_by_flux  Mask_wavelength  Array_var  Export_log  dtype          latex_label
-wavelength                0                0          1           0    <f8        $\lambda_{i}$
-intg_flux                 1                0          0           1    <f8           $F_{intg}$
-intg_err                  1                0          0           1    <f8     $F_{err,\,intg}$
-gauss_flux                1                0          1           1    <f8          $F_{gauss}$
-gauss_err                 1                0          1           1    <f8    $F_{err,\,gauss}$
-eqw                       0                0          1           1    <f8                $Eqw$
-eqw_err                   0                0          1           1    <f8          $Eqw_{err}$
-ion                       0                0          1           0   <U50                  Ion
-latex_label               0                0          1           0  <U100           Transition
-profile_label             0                0          0           1  <U120           Components
-pixel_mask                0                0          0           1  <U100     $Masked\,Pixels$
-w1                        0                1          0           0    <f8              $w_{1}$
-w2                        0                1          0           0    <f8              $w_{2}$
-w3                        0                1          0           0    <f8              $w_{3}$
-w4                        0                1          0           0    <f8              $w_{4}$
-w5                        0                1          0           0    <f8              $w_{5}$
-w6                        0                1          0           0    <f8              $w_{6}$
-w_i                       0                0          0           1    <f8              $w_{i}$
-w_f                       0                0          0           1    <f8              $w_{f}$
-peak_wave                 0                0          0           1    <f8     $\lambda_{peak}$
-peak_flux                 1                0          0           1    <f8           $F_{peak}$
-cont                      1                0          0           1    <f8           $F_{cont}$
-std_cont                  1                0          0           1    <f8      $\sigma_{cont}$
-m_cont                    1                0          0           1    <f8           $m_{cont}$
-n_cont                    1                0          0           1    <f8           $n_{cont}$
-snr_line                  0                0          1           1    <f8 $\frac{S}{N}_{line}$
-snr_cont                  0                0          0           1    <f8 $\frac{S}{N}_{cont}$
-z_line                    0                0          1           1    <f8           $z_{line}$
-amp                       1                0          1           1    <f8              $A_{i}$
-center                    0                0          1           1    <f8            $\mu_{i}$
-sigma                     0                0          1           1    <f8         $\sigma_{i}$
-amp_err                   1                0          1           1    <f8        $A_{i,\,err}$
-center_err                0                0          1           1    <f8      $\mu_{i,\,err}$
-sigma_err                 0                0          1           1    <f8   $\sigma_{i,\,err}$
-v_r                       0                0          1           1    <f8              $v_{r}$
-v_r_err                   0                0          1           1    <f8        $v_{r,\,err}$
-sigma_vel                 0                0          1           1    <f8       $\sigma_{vel}$
-sigma_vel_err             0                0          1           1    <f8 $\sigma_{vel,\,err}$
-sigma_thermal             0                0          1           1    <f8        $\sigma_{th}$
-sigma_instr               0                0          0           1    <f8     $\sigma_{instr}$
-pixel_vel                 0                0          0           1    <f8        $pixel_{vel}$
-FWHM_intg                 0                0          0           1    <f8        $FWHM_{intg}$
-FWHM_g                    0                0          1           1    <f8       $FWHM_{gauss}$
-FWZI                      0                0          0           1    <f8               $FWZI$
-v_med                     0                0          0           1    <f8            $v_{med}$
-v_50                      0                0          0           1    <f8             $v_{50}$
-v_5                       0                0          0           1    <f8              $v_{5}$
-v_10                      0                0          0           1    <f8             $v_{10}$
-v_90                      0                0          0           1    <f8             $v_{90}$
-v_95                      0                0          0           1    <f8             $v_{95}$
-chisqr                    0                0          0           1    <f8           $\chi^{2}$
-redchi                    0                0          0           1    <f8     $\chi_{\nu}^{2}$
-aic                       0                0          0           1    <f8                  AIC
-bic                       0                0          0           1    <f8                  BIC
-observations              0                0          0           1   <U50         Observations
-comments                  0                0          0           1   <U50             Comments
+               Norm_by_flux  Mask_wavelength  Array_var  Export_log  dtype          latex_label         units
+wavelength                0                0          1           0    <f8        $\lambda_{i}$         wave
+intg_flux                 1                0          0           1    <f8           $F_{intg}$         inten
+intg_err                  1                0          0           1    <f8     $F_{err,\,intg}$         inten
+gauss_flux                1                0          1           1    <f8          $F_{gauss}$         inten
+gauss_err                 1                0          1           1    <f8    $F_{err,\,gauss}$         inten
+eqw                       0                0          1           1    <f8                $Eqw$         wave
+eqw_err                   0                0          1           1    <f8          $Eqw_{err}$         wave
+ion                       0                0          1           0   <U50                  Ion         str
+latex_label               0                0          1           0  <U100           Transition         str
+profile_label             0                0          0           1  <U120           Components         str
+pixel_mask                0                0          0           1  <U100     $Masked\,Pixels$         str
+w1                        0                1          0           0    <f8              $w_{1}$         wave
+w2                        0                1          0           0    <f8              $w_{2}$         wave
+w3                        0                1          0           0    <f8              $w_{3}$         wave
+w4                        0                1          0           0    <f8              $w_{4}$         wave
+w5                        0                1          0           0    <f8              $w_{5}$         wave
+w6                        0                1          0           0    <f8              $w_{6}$         wave
+w_i                       0                0          0           1    <f8              $w_{i}$         wave
+w_f                       0                0          0           1    <f8              $w_{f}$         wave
+peak_wave                 0                0          0           1    <f8     $\lambda_{peak}$         wave
+peak_flux                 1                0          0           1    <f8           $F_{peak}$         flux
+cont                      1                0          0           1    <f8           $F_{cont}$         flux
+std_cont                  1                0          0           1    <f8      $\sigma_{cont}$         flux
+m_cont                    1                0          0           1    <f8           $m_{cont}$         flux/wave
+n_cont                    1                0          0           1    <f8           $n_{cont}$         flux
+snr_line                  0                0          1           1    <f8 $\frac{S}{N}_{line}$         none
+snr_cont                  0                0          0           1    <f8 $\frac{S}{N}_{cont}$         none
+z_line                    0                0          1           1    <f8           $z_{line}$         none
+amp                       1                0          1           1    <f8              $A_{i}$         flux
+center                    0                0          1           1    <f8            $\mu_{i}$         wave
+sigma                     0                0          1           1    <f8         $\sigma_{i}$         wave
+amp_err                   1                0          1           1    <f8        $A_{i,\,err}$         flux
+center_err                0                0          1           1    <f8      $\mu_{i,\,err}$         wave
+sigma_err                 0                0          1           1    <f8   $\sigma_{i,\,err}$         wave
+v_r                       0                0          1           1    <f8              $v_{r}$         vel
+v_r_err                   0                0          1           1    <f8        $v_{r,\,err}$         vel
+sigma_vel                 0                0          1           1    <f8       $\sigma_{vel}$         vel
+sigma_vel_err             0                0          1           1    <f8 $\sigma_{vel,\,err}$         vel
+sigma_thermal             0                0          1           1    <f8        $\sigma_{th}$         vel
+sigma_instr               0                0          0           1    <f8     $\sigma_{instr}$         vel
+pixel_vel                 0                0          0           1    <f8        $pixel_{vel}$         vel
+FWHM_intg                 0                0          0           1    <f8        $FWHM_{intg}$         wave
+FWHM_g                    0                0          1           1    <f8       $FWHM_{gauss}$         wave
+FWZI                      0                0          0           1    <f8               $FWZI$         wave
+v_med                     0                0          0           1    <f8            $v_{med}$         vel
+v_50                      0                0          0           1    <f8             $v_{50}$         vel
+v_5                       0                0          0           1    <f8              $v_{5}$         vel
+v_10                      0                0          0           1    <f8             $v_{10}$         vel
+v_90                      0                0          0           1    <f8             $v_{90}$         vel
+v_95                      0                0          0           1    <f8             $v_{95}$         vel
+chisqr                    0                0          0           1    <f8           $\chi^{2}$         none
+redchi                    0                0          0           1    <f8     $\chi_{\nu}^{2}$         none
+aic                       0                0          0           1    <f8                  AIC         none
+bic                       0                0          0           1    <f8                  BIC         none
+observations              0                0          0           1   <U50         Observations         str
+comments                  0                0          0           1   <U50             Comments         str

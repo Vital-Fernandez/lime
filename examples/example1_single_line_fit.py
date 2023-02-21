@@ -69,12 +69,3 @@ log_address = './sample_data/example1_linelog.fits'
 lime.save_log(gp_spec.log, log_address, ext='GP121903')
 log = lime.load_log(log_address, ext='GP121903')
 print(f'Are the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')
-#
-#
-# gp_spec.load_log(log_address,  ext='GP121903')
-# gp_spec.plot.band(6563)
-
-
-gp_spec2 = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
-gp_spec2.load_log(log_address,  ext='GP121903')
-gp_spec2.plot.band('H1_6563A')

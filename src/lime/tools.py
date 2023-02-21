@@ -1,3 +1,11 @@
+__all__ = ['label_decomposition',
+           'LineFinder',
+           'spectral_mask_generator',
+           'unit_convertor',
+           'extract_fluxes',
+           'relative_fluxes',
+           'compute_line_ratios']
+
 import logging
 import numpy as np
 import pandas as pd
@@ -7,6 +15,7 @@ from lmfit.models import PolynomialModel
 from sys import exit
 from pathlib import Path
 from scipy import signal
+from .io import LiMe_Error
 
 _logger = logging.getLogger('LiMe')
 
@@ -70,13 +79,7 @@ _REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'He2_1640A', 'O3]_1666A', '
                               'Si6_24830A', 'H1_26259A',  'H1_32970A', 'PAH1_33000A', 'H1_37406A', 'H1_40522A', 'H1_46539A'])
 
 
-#[Y erg/cm^2/s/A] = 2.99792458E+21 * [X1 W/m^2/Hz] / [X2 A]^2
-# 2.99792458E+17 units
-# 1 Jy = 10−26 W⋅m−2⋅Hz−1
-# 1 Jy = 10−23 erg⋅s−1⋅cm−2⋅Hz−1
-# 1 nm = 2.99792458E+17
-
-
+# Number conversion to Roman style
 def int_to_roman(num):
     i, roman_num = 0, ''
     while num > 0:
@@ -87,6 +90,7 @@ def int_to_roman(num):
     return roman_num
 
 
+# Extract transition elements from a line label
 def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
                         user_format={}, units_wave='A'):
 
@@ -255,6 +259,199 @@ def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, s
         output = (ion_array, wavelength_array, latexLabel_array)
 
     return output
+
+
+# Favoured method to get line fluxes according to resolution
+def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=None, column_positions=None):
+
+    # Get indeces of blended lines
+    if not isinstance(log.index, pd.MultiIndex):
+        idcs_blended = (log['profile_label'] != 'no') & (~log.index.str.endswith('_m'))
+
+    else:
+        if sample_level not in log.index.names:
+            raise LiMe_Error(f'Input log does not have a index level with column "{sample_level}"')
+
+        idcs_blended = (log['profile_label'] != 'no') & (~log.index.get_level_values('line').str.endswith('_m'))
+        (log.loc['p10_G395M_672_s00672_x1d'].profile_label != 'no') & (~log.loc['p10_G395M_672_s00672_x1d'].index.str.endswith('_m'))
+
+    # Mixture model: Integrated fluxes for all lines except blended
+    if flux_type == 'mixture' and np.any(idcs_blended):
+        obsFlux = log['intg_flux'].to_numpy(copy=True)
+        obsErr = log['intg_err'].to_numpy(copy=True)
+        obsFlux[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_flux'].to_numpy(copy=True)
+        obsErr[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_err'].to_numpy(copy=True)
+
+    # Use the one requested by the user
+    else:
+        obsFlux = log[f'{flux_type}_flux'].to_numpy(copy=True)
+        obsErr = log[f'{flux_type}_flux_err'].to_numpy(copy=True)
+
+    output_fluxes = [obsFlux, obsErr]
+
+    # Add columns to input dataframe
+    if column_names is not None:
+        if column_positions is not None:
+            for i, pos_i in enumerate(column_positions):
+                if column_names[i] not in log.columns:
+                    log.insert(loc=pos_i, column=column_names[i], value=output_fluxes[i])
+                else:
+                    log[column_names[i]] = output_fluxes[i]
+                    # log.insert(loc=column_positions[0], column=column_names[0], value=obsFlux)
+
+        else:
+            log[column_names[0]] = obsFlux
+            log[column_names[1]] = obsErr
+
+        function_return = None
+
+    else:
+        function_return = obsFlux, obsErr
+
+    return function_return
+
+
+# Compute the fluxes
+def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_err'], column_names=None,
+                    column_positions=None):
+
+    '''
+    If the normalization line is not available, no operation is added.
+    '''
+
+    # If normalization_line is not none
+    if len(flux_entries) != np.sum(log.columns.isin(flux_entries)):
+        raise LiMe_Error(f'Input log is missing {len(flux_entries)} "flux_entries" in the column headers')
+
+    # Container for params
+    nflux_array, nErr_array = None, None
+
+    # Single index dataframes
+    if not isinstance(log.index, pd.MultiIndex):
+        idcs_slice = log.index
+
+        if normalization_line in idcs_slice:
+            nflux_array = log.loc[idcs_slice, flux_entries[0]]/log.loc[normalization_line, flux_entries[0]]
+            errLog_n = np.power(log.loc[idcs_slice, flux_entries[1]]/log.loc[idcs_slice, flux_entries[0]], 2)
+            errNorm_n = np.power(log.loc[normalization_line, flux_entries[1]]/log.loc[normalization_line, flux_entries[0]], 2)
+            nErr_array = nflux_array * np.sqrt(errLog_n + errNorm_n)
+
+    # Multi-index dataframes
+    else:
+        log_slice = log.xs(normalization_line, level="line")
+        idcs_slice = log_slice.index
+
+        if len(log_slice) > 0:
+            nflux_array = log.loc[idcs_slice, flux_entries[0]]/log_slice[flux_entries[0]]
+            errLog_n = np.power(log.loc[idcs_slice, flux_entries[1]]/log.loc[idcs_slice, flux_entries[0]], 2)
+            errNorm_n = np.power(log_slice[flux_entries[1]]/log_slice[flux_entries[0]], 2)
+            nErr_array = nflux_array * np.sqrt(errLog_n + errNorm_n)
+
+    # Confirm lines were normalized
+    if nflux_array is None:
+        _logger.info(f'The normalization line {normalization_line} is not found on the input log')
+
+    # Check for column names
+    if column_names is None:
+        column_names = [f'n{flux_entries[0]}', f'n{flux_entries[1]}']
+
+    # Add columns to input dataframe
+    if nflux_array is not None:
+        if (column_positions is not None) and (column_names[0] not in log.columns):
+            log.insert(loc=column_positions[0], column=column_names[0], value=np.nan)
+            log.insert(loc=column_positions[1], column=column_names[1], value=np.nan)
+
+        log.loc[idcs_slice, column_names[0]] = nflux_array
+        log.loc[idcs_slice, column_names[1]] = nErr_array
+
+    return
+
+
+# Get flux weighted redshift from lines
+def weighted_redshift_calculation(df, line_list=None):
+
+    z_array = (df.center/df.wavelength - 1).values
+    z_mean = z_array.mean()
+    z_std = z_array.std()
+    w_array = (1/np.square(df.gauss_flux.values))
+    z_centroid = (df.center/df.wavelength - 1)
+    param = (w_array.size-1)/w_array.size
+    weight_mean = np.sum(z_array*w_array)/np.sum(w_array)
+    weighted_err = np.std(z_array*w_array/np.sum(w_array))
+
+    return z_mean, z_std
+
+
+def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_err'], sample_levels=['id', 'line'],
+                        object_id='obj_0', keep_empty_columns=True):
+
+    # If normalization_line is not none
+    if len(flux_columns) != np.sum(log.columns.isin(flux_columns)):
+        raise LiMe_Error(f'Input log is missing {len(flux_columns)} "flux_entries" in the column headers')
+
+    # Create dataframe to contain the results
+    if not isinstance(log.index, pd.MultiIndex):
+        idcs = [object_id]
+    else:
+        idcs = log.index.get_level_values(sample_levels[0]).unique()
+
+    ratio_df = pd.DataFrame(index=idcs)
+
+    # Loop through
+    if line_ratios is not None:
+
+        # Loop through the ratios
+        for ratio_str in line_ratios:
+            numer, denom = ratio_str.split('/')
+
+            # Slice the dataframe to objects having both lines
+            numer_flux, denom_flux = None, None
+            if not isinstance(log.index, pd.MultiIndex):
+                if (numer in log.index) and (denom in log.index):
+                    numer_flux = log.loc[numer, flux_columns[0]]
+                    numer_err = log.loc[numer, flux_columns[1]]
+
+                    denom_flux = log.loc[denom, flux_columns[0]]
+                    denom_err = log.loc[denom, flux_columns[1]]
+                    idcs_slice = object_id
+                else:
+                    idcs_slice = ratio_df.index
+
+            else:
+
+                # Slice the dataframe to objects which have both lines
+                idcs_slice = log.index.get_level_values(sample_levels[1]).isin([numer, denom])
+                grouper = log.index.get_level_values(sample_levels[0])
+                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+                df_slice = log.loc[idcs_slice]
+
+                # Get fluxes
+                if df_slice.size > 0:
+                    numer_flux = df_slice.xs(numer, level=sample_levels[1])[flux_columns[0]]
+                    numer_err = df_slice.xs(numer, level=sample_levels[1])[flux_columns[1]]
+
+                    denom_flux = df_slice.xs(denom, level=sample_levels[1])[flux_columns[0]]
+                    denom_err = df_slice.xs(denom, level=sample_levels[1])[flux_columns[1]]
+                    idcs_slice = numer_flux.index
+                else:
+                    idcs_slice = ratio_df.index
+
+            # Check there have been measure
+            if (numer_flux is not None) and (denom_flux is not None):
+
+                # Compute the ratios with the error propagation
+                ratio_array = numer_flux/denom_flux
+                errRatio_array = ratio_array * np.sqrt(np.power(numer_err/numer_flux, 2) +
+                                                       np.power(denom_err/denom_flux, 2))
+            else:
+                ratio_array, errRatio_array = np.nan, np.nan
+
+            # Store in dataframe (with empty columns)
+            if not ((numer_flux is None) and (denom_flux is None) and (keep_empty_columns is False)):
+                ratio_df.loc[idcs_slice, ratio_str] = ratio_array
+                ratio_df.loc[idcs_slice, f'{ratio_str}_err'] = errRatio_array
+
+    return ratio_df
 
 
 def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):

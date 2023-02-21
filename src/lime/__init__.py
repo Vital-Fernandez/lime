@@ -1,5 +1,5 @@
 """
-LiMe - A python package for measuring lines in astronomical spectra
+LiMe - A python package for measuring lines in astronomical SMACS_v2.0
 """
 
 import os
@@ -35,9 +35,9 @@ _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 class Error(Exception):
     """LiMe exception function"""
 
-from .treatment import Spectrum, Sample, CubeInspector, Cube
+from .treatment import Spectrum, Sample, Cube
 from .io import *
-from .tools import label_decomposition, LineFinder, spectral_mask_generator, get_coord_entries, unit_convertor
+from .tools import *
 from .plots import spatial_mask_generator
 #TODO joblib optional
 

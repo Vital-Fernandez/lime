@@ -62,28 +62,4 @@ shoc579.plot.cube(6563, masks_file=spatial_mask, wcs=WCS(hdr), maximise=True)
 
 # Generate a spatial mask as a function of the signal to noise
 spatial_mask = './sample_data/SHOC579_mask.fits'
-shoc579.check.cube(6563, wcs=WCS(hdr), masks_file=spatial_mask, maximise=True)
-
-
-
-
-
-
-# # Parameters for the new masks
-# coord_lower_limit = 22
-# mask_list = ['S2_6716A_B_MASK_1', 'S2_6716A_B_MASK_2', 'S2_6716A_B_MASK_3']
-#
-# # New HDUs for the modified mask
-# hdul_new = fits.HDUList([fits.PrimaryHDU()])
-#
-# # Open the original mask file, loop through the target masks and set voxels below row 22 outside the mask (False)
-# with fits.open(output_mask_file) as hdul:
-#     for i, mask_ext in enumerate(mask_list):
-#         mask_frame = hdul[mask_ext].data.astype('bool')
-#         mask_frame[:coord_lower_limit, :] = False
-#         hdul_new.append(fits.ImageHDU(name=f'S2_6716A_B_MASK_{i}', data=mask_frame.astype(int),
-#                                   ver=1, header=fits.Header(hdr_coords)))
-#
-# # Save the modified mask
-# hdul_new.writeto(output_mask_file, overwrite=True)
-#
+shoc579.check.cube(6563, wcs=WCS(hdr), maximise=False, masks_file=spatial_mask)

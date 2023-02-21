@@ -4,10 +4,11 @@ import pandas as pd
 
 from pathlib import Path
 from matplotlib import pyplot as plt, gridspec, rc_context
-from matplotlib.widgets import RadioButtons, SpanSelector
+from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
+from pygments.lexer import default
 
-from .io import load_log, save_log, LiMe_Error
+from .io import load_log, save_log, LiMe_Error, check_file_dataframe
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, \
     determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import label_decomposition, blended_label_from_log
@@ -35,7 +36,7 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
 
         # Join the lists and sort by wavelength
         user_mask = pd.concat([user_mask, input_mask_crop.loc[idcsNoMatch]])
-        ion_array, wave_array, latex_array = label_decomposition(user_mask.index.values)
+        ion_array, wave_array, latex_array = label_decomposition(user_mask.index.values) # TODO need alternative function
         idx_array = np.argsort(wave_array)
         user_mask = user_mask.iloc[idx_array]
         active_lines = active_lines[idx_array]
@@ -51,7 +52,7 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
     else:
         w_min, w_max = wave_rest[0], wave_rest[-1]
 
-    idx_rows_cont = (user_mask.w1 > w_min) & (user_mask.w6 < w_max)
+    idx_rows_cont = (user_mask.w2 > w_min) & (user_mask.w5 < w_max)
     idx_row_line = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
 
     # Inform if one or more lines have been excluded from the interface
@@ -69,6 +70,10 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
     # Trim to the output lines
     user_mask = user_mask.loc[idx_rows_cont]
     active_lines = active_lines[idx_rows_cont]
+
+    # Add wavelength to mask
+    ion_array, wave_array, latex_array = label_decomposition(user_mask.index.to_numpy())  # TODO need alternative function
+    user_mask['wavelength'] = wave_array
 
     return user_mask, active_lines
 
@@ -142,7 +147,7 @@ def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2',
         if log_address is not None:
             save_log(log.loc[activeLines], log_address, parameters=log_parameters)
         else:
-            _logger.warning(r"Not output redshift lob provided, the selection won't be stored")
+            _logger.warning(r"Not output redshift log provided, the selection won't be stored")
 
     # Update the user input log to the new selection
     if input_log is not None:
@@ -155,11 +160,18 @@ class BandsInspection:
 
     def __init__(self):
 
+        self._fig = None
+        self.ax_list = None
+        self._ax = None
         self._y_scale = None
         self._log_address = None
         self._rest_frame = None
         self._activeLines = None
         self._lineList = None
+        self._z_slider = None
+        self._z_orig = None
+        self._sweep_mask = 0
+        self._inter_mask = None
 
         self.line = None
         self.mask = None
@@ -172,7 +184,7 @@ class BandsInspection:
         return
 
     def bands(self, input_mask, output_log_address=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              rest_frame=True, maximize=False, plt_cfg={}, ax_cfg={}):
+              maximize=False, plt_cfg={}, ax_cfg={}, redshift_log=None, object_ref=None, redshift_column='redshift'):
 
         """
         This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
@@ -242,7 +254,16 @@ class BandsInspection:
         # Assign the attribute values
         self._y_scale = y_scale
         self._log_address = None if output_log_address is None else Path(output_log_address)
-        self._rest_frame = rest_frame
+        self._rest_frame = True
+        self._redshift_log_path = None if redshift_log is None else Path(redshift_log)
+        self._obj_ref = object_ref
+        self._redshift_column = redshift_column
+
+        # # Try to open the input mask
+        # if isinstance(input_mask, (str, Path)):
+        #     input_mask = Path(input_mask)
+        #     if input_mask.is_file():
+        #         input_mask = load_log(input_mask)
 
         # If provided, open the previous mask
         parent_mask = None
@@ -270,7 +291,7 @@ class BandsInspection:
 
             # Set the plot format where the user's overwrites the default
             default_fig_cfg = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1]),
-                               'axes.titlesize': 12}
+                               'axes.titlesize': 11}
             default_fig_cfg.update(plt_cfg)
             PLT_CONF, self._AXES_CONF = self._figure_format(default_fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
                                                             units_wave=self._spec.units_wave,
@@ -280,18 +301,22 @@ class BandsInspection:
             # Launch the interative figure
             with rc_context(PLT_CONF):
 
-                # Figure attributes
-                self._fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols)
-                ax_list = ax.flatten() if n_lines > 1 else [ax]
+                # Main structure
+                self._fig = plt.figure()
+
+                gs0 = self._fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
+                gs_lines = gs0[0].subgridspec(n_rows, n_cols, hspace=0.5)
+                self.ax_list = gs_lines.subplots().flatten()
 
                 # Generate plot
                 spanSelectDict = {}
                 for i in range(n_grid):
                     if i < n_lines:
                         self.line = self._lineList[i]
+
                         self.mask = self.log.loc[self.line, 'w1':'w6'].values
-                        self._plot_line_BI(ax_list[i], self.line, self._rest_frame, self._y_scale)
-                        spanSelectDict[f'spanner_{i}'] = SpanSelector(ax_list[i],
+                        self._plot_line_BI(self.ax_list[i], self.line, self._rest_frame, self._y_scale)
+                        spanSelectDict[f'spanner_{i}'] = SpanSelector(self.ax_list[i],
                                                                       self._on_select_MI,
                                                                       'horizontal',
                                                                       useblit=True,
@@ -299,14 +324,45 @@ class BandsInspection:
                                                                       button=1)
                     else:
                         # Clear not filled axes
-                        self._fig.delaxes(ax_list[i])
+                        self._fig.delaxes(self.ax_list[i])
+
+                # Create sliders grid
+                n_sliders = 1 if self._redshift_log_path is None else 2
+                gs_slicers = gs0[1].subgridspec(1, n_sliders)
+                ax_sliders = gs_slicers.subplots().flatten() if n_sliders > 1 else [gs_slicers.subplots()]
+
+                # Mask sweep slider configuration
+                self._inter_mask = np.median(np.diff(self._spec.wave_rest))
+                mask_slider = Slider(ax_sliders[0], 'Mask\n(pixels)', -10, 10, 0, valstep=1)
+                mask_slider.on_changed(self._on_mask_slider_MI)
+
+                # Redshift sweep slider configuration
+                if self._redshift_log_path is not None:
+                    if self._obj_ref is None:
+                        raise LiMe_Error(f'No object reference was provided for the redshift log.')
+
+                    self.z_df = check_file_dataframe(self._redshift_log_path, pd.DataFrame)
+                    if self.z_df is None:
+                        self.z_df = pd.DataFrame(index=[self._obj_ref], columns=[self._redshift_column])
+
+                    if self._redshift_column not in self.z_df.columns:
+                        raise LiMe_Error(f'Input redshift log file does not have a {redshift_column} column.')
+
+                    # Add the current value
+                    self.z_df.loc[self._obj_ref, self._redshift_column] = self._spec.redshift
+                    save_log(self.z_df, self._redshift_log_path)
+
+                    self._z_orig = self._spec.redshift
+                    self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
+                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -10, 10, 0, valstep=1)
+                    z_slider.on_changed(self._on_z_slider_MI)
 
                 # Connecting the figure to the interactive widgets
                 self._fig.canvas.mpl_connect('button_press_event', self._on_click_MI)
                 self._fig.canvas.mpl_connect('axes_enter_event', self._on_enter_axes_MI)
 
                 # Show the image
-                save_close_fig_swicth(None, 'tight', self._fig, maximize=maximize)
+                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize)
 
         else:
             _logger.warning(f'No lines found in the lines mask for the object wavelentgh range')
@@ -347,11 +403,13 @@ class BandsInspection:
             _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH],
                         color_dict=self._color_dict)
 
+            ax.axvline(self.log.loc[line, 'wavelength'], linestyle='--', color='grey', linewidth=0.5)
+
             # Formatting the figure
             ax.yaxis.set_major_locator(plt.NullLocator())
             ax.xaxis.set_major_locator(plt.NullLocator())
 
-            ax.update({'title': line})
+            ax.set_title(line, pad=3)
             ax.yaxis.set_ticklabels([])
             ax.axes.yaxis.set_visible(False)
 
@@ -412,9 +470,11 @@ class BandsInspection:
 
         # Assign current line and axis
         self._ax = event.inaxes
-        self.line = self._ax.get_title()
-        self._idx_ax = np.where(self._lineList == self.line)
-        self.mask = self.log.loc[self.line, 'w1':'w6'].values
+        title = self._ax.get_title()
+        if title != '':
+            self.line = title
+            self._idx_ax = np.where(self._lineList == self.line)
+            self.mask = self.log.loc[self.line, 'w1':'w6'].values
 
     def _on_click_MI(self, event):
 
@@ -442,6 +502,46 @@ class BandsInspection:
             self._ax.clear()
             self._plot_line_BI(self._ax, self.line, self._rest_frame, self._y_scale)
             self._fig.canvas.draw()
+
+        return
+
+    def _on_z_slider_MI(self, val):
+
+        # Update the redshift value
+        z_new = self._z_orig + (self._inter_z * val)
+        self._spec.udpate_redshift(z_new)
+
+        # Re-plot the lines
+        for i, line in enumerate(self._lineList):
+            self.ax_list[i].clear()
+            self._plot_line_BI(self.ax_list[i], line, self._rest_frame, self._y_scale)
+        self._fig.canvas.draw()
+
+        # Save to the data frame
+        self.z_df.loc[self._obj_ref, self._redshift_column] = z_new
+        save_log(self.z_df, self._redshift_log_path)
+
+        return
+
+    def _on_mask_slider_MI(self, val):
+
+        # Remove the previous value
+        mask_matrix = self.log.loc[:, 'w1':'w6'].to_numpy() - self._sweep_mask
+        self._sweep_mask = val * self._inter_mask
+
+        # Add new sweep
+        mask_matrix = mask_matrix + self._sweep_mask
+        self.log.loc[:, 'w1':'w6'] = mask_matrix
+
+        # Replot the lines
+        for i, line in enumerate(self._lineList):
+            self.ax_list[i].clear()
+            self._plot_line_BI(self.ax_list[i], line, self._rest_frame, self._y_scale)
+
+        self._fig.canvas.draw()
+
+        # Save the log to the file
+        save_or_clear_log(self.log, self._log_address, self._activeLines)
 
         return
 
@@ -480,6 +580,7 @@ class RedshiftInspection:
         self._column_log = column_log
         self._none_value = none_value
         self._unknown_value = unknow_value
+        #TODO Auto update redshift
 
         if not hasattr(self, '_sample'):
             self._obj_dict = {self._spec_name: self._spec}
@@ -544,7 +645,7 @@ class RedshiftInspection:
                 self._fig.canvas.mpl_connect('button_press_event', self._on_click_ZI)
 
                 # Plot on screen unless an output address is provided
-                save_close_fig_swicth(None, 'tight', self._fig, maximize=maximize)
+                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize)
 
         else:
             _logger.warning(f'The sample does not have objects. The redshift check could not be done')
@@ -587,10 +688,10 @@ class RedshiftInspection:
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
 
             # Plot the spectrum
-            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=obj, where='mid') #, color=self._color_dict['fg'])
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=obj, where='mid', color=self._color_dict['fg'])
 
             # Plot the masked pixels
-            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask)
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
 
         return
 
@@ -702,31 +803,6 @@ class RedshiftInspection:
 
         if event.button == 2:
 
-            # # Loop through the objects an find the best index
-            # objSel, idxWave, closest_dist = None, None, None
-            # for i, items in enumerate(self._obj_dict.items()):
-            #     obj, spec = items
-            #     idx = np.searchsorted(spec.wave, event.xdata)
-            #
-            #     wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
-            #     wavelength = wavelength[~np.isnan(wavelength)]
-            #
-            #     print(i, f'{idx}/{spec.wave.size}', obj, event.xdata)
-            #     if objSel is None:
-            #         objSel = obj
-            #         idx_selec = idx if idx < spec.wave.size else spec.wave.size - 1
-            #         closest_dist = np.abs(spec.wave[idx_selec] - event.xdata)
-            #     else:
-            #         idx_selec = idx if idx < spec.wave.size else spec.wave.size - 1
-            #         if np.abs(spec.wave[idx_selec] - event.xdata) < closest_dist:
-            #             objSel = obj
-            #             closest_dist = np.abs(spec.wave[idx_selec] - event.xdata)
-            #
-            # # Compute the index closet to the flux
-            # print(f'\n Selected: {objSel}, idx_select: {idx_selec}, cl')
-            # spec = self._obj_dict[objSel]
-            # idx_max = idx_selec + np.argmax(spec.flux[idx_selec-tolerance:idx_selec+tolerance]) - tolerance
-
             self._user_point = (event.xdata, 0.5)
 
             # Compute the redshift
@@ -736,41 +812,6 @@ class RedshiftInspection:
             self._launch_plots_ZI()
 
         return
-
-    def _on_click_ZI_backUp(self, event, tolerance=3):
-
-        if event.button == 3:
-
-            # Loop through the objects an find the best index
-            objSel, idxWave, closest_dist = None, None, None
-            for i, items in enumerate(self._obj_dict.items()):
-                obj, spec = items
-                idx = np.searchsorted(spec.wave, event.xdata)
-                print(i, f'{idx}/{spec.wave.size}', obj, event.xdata)
-                if objSel is None:
-                    objSel = obj
-                    idx_selec = idx if idx < spec.wave.size else spec.wave.size - 1
-                    closest_dist = np.abs(spec.wave[idx_selec] - event.xdata)
-                else:
-                    idx_selec = idx if idx < spec.wave.size else spec.wave.size - 1
-                    if np.abs(spec.wave[idx_selec] - event.xdata) < closest_dist:
-                        objSel = obj
-                        closest_dist = np.abs(spec.wave[idx_selec] - event.xdata)
-
-            # Compute the index closet to the flux
-            print(f'\n Selected: {objSel}, idx_select: {idx_selec}, cl')
-            spec = self._obj_dict[objSel]
-            idx_max = idx_selec + np.argmax(spec.flux[idx_selec-tolerance:idx_selec+tolerance]) - tolerance
-            self._user_point = (spec.wave[idx_max], spec.flux[idx_max])
-
-            # Compute the redshift
-            self._compute_redshift()
-
-            # Replot the figure
-            self._launch_plots_ZI()
-
-        return
-
 
 class CubeInspector:
 
@@ -809,6 +850,68 @@ class CubeInspector:
              bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
              wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, title=None, masks_file=None, lines_log_address=None,
              maximise=False, rest_frame=False, log_scale=False):
+
+        """
+        This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
+        On the left-hand side, a 2D image of the cube read from the ``image_bg`` parameter. This plot can include
+        intensity contours from the ``contour_levels`` parameter. By default, the intensity contours are calculated from
+        the ``image_bg`` matrix array unless an optional foreground ``image_fg`` array is provided. The spaxel selection
+        is accomplished with a mouse right click.
+
+        On the right-hand side, the selected spaxel spectrum is plotted. The user can select either window region using
+        the matplotlib window *zoom* or *span* tools. As a new spaxel is selected the plotting limits in either figure
+        should not change. To restore the plot axes limits you can click the *reset* (house icon).
+
+        The user can provide a ``lines_log_address`` with the line measurements of the plotted object. In this case,
+        the plot will include the fitted line profiles. The *.fits* file HDUs will be queried by the spaxel coordinates.
+        The default format is ``{idx_j}-{idx_i}_LINESLOG)`` where idx_j and idx_i are the spaxel Y and X coordinates
+        respectively
+
+        :param wave: One dimensional array with the SMACS_v2.0 wavelength range.
+        :type wave: numpy.array
+
+        :param cube_flux: Three dimensional array with the IFU cube flux
+        :type cube_flux: numpy.array
+
+        :param image_bg Two dimensional array with the flux band image for the plot background
+        :type image_bg: numpy.array
+
+        :param image_fg: Two dimensional array with the flux band image to plot foreground contours
+        :type image_fg: numpy.array, optional
+
+        :param contour_levels: One dimensional array with the flux contour levels in increasing order.
+        :type contour_levels: numpy.array, optional
+
+        :param color_norm: `Color normalization <https://matplotlib.org/stable/tutorials/colors/colormapnorms.html#sphx-glr-tutorials-colors-colormapnorms-py>`_
+                            form the galaxy image plot
+        :type color_norm: matplotlib.colors.Normalize, optional
+
+        :param redshift: Object astronomical redshift
+        :type redshift: float, optional
+
+        :param lines_log_address: Address of the *.fits* file with the object line measurements.
+        :type lines_log_address: str, optional
+
+        :param fits_header: *.fits* header with the entries for the astronomical coordinates plot conversion.
+        :type fits_header: dict, optional
+
+        :param plt_cfg: Dictionary with the configuration for the matplotlib rcParams style.
+        :type plt_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
+        :type ax_cfg: dict, optional
+
+        :param ext_suffix: Suffix of the line SMACS_v2.0 extensions. The default value is “_LINESLOG”.
+        :type ext_suffix: str, optional
+
+        :param units_wave: Wavelength array physical units. The default value is introduced as "A"
+        :type units_wave: str, optional
+
+        :param units_flux: Flux array physical units. The default value is erg/cm^2/s/A
+        :type units_flux: str, optional
+
+        """
+
 
         # Prepare the background image data
         line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
@@ -858,19 +961,21 @@ class CubeInspector:
         title, x_label, y_label = image_map_labels(title, wcs, line_bg, line_fg, self.masks_dict)
 
         # User configuration overwrite default figure format
-        plt_cfg.setdefault('figure.figsize', (10, 5))
-        plt_cfg.setdefault('axes.titlesize', 12)
-        plt_cfg.setdefault('legend.fontsize', 10)
-        self.fig_conf, ax_cfg_spec = self._figure_format(plt_cfg, ax_cfg_spec, norm_flux=self._cube.norm_flux,
-                                                         units_wave=self._cube.units_wave, units_flux=self._cube.units_flux)
+        default_plt_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
+                           'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        default_ax_cfg_im = {'xlabel': x_label, 'ylabel': y_label, 'title': title}
+        default_ax_cfg_spec = {}
 
-        # Image axes format
-        ax_cfg_image.setdefault('xlabel', x_label)
-        ax_cfg_image.setdefault('ylabel', y_label)
-        ax_cfg_image.setdefault('title', title)
+        default_plt_cfg.update(plt_cfg)
+        default_ax_cfg_im.update(ax_cfg_image)
+        default_ax_cfg_spec.update(ax_cfg_spec)
+
+        # Adjusting the labels to the units
+        self.fig_conf, ax_cfg_spec = self._figure_format(default_plt_cfg, default_ax_cfg_spec, norm_flux=self._cube.norm_flux,
+                                                     units_wave=self._cube.units_wave, units_flux=self._cube.units_flux)
 
         # Container for both axes format
-        self.axes_conf = {'image': ax_cfg_image, 'spectrum': ax_cfg_spec}
+        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
 
         # Create the figure
         with rc_context(self.fig_conf):
@@ -899,6 +1004,13 @@ class CubeInspector:
                 self._ax2 = self._fig.add_subplot(gs_image[1])
                 radio = RadioButtons(self._ax2, list(self.masks_dict.keys()))
 
+                for r in radio.labels:
+                    r.set_fontsize(10)
+
+                for circle in radio.circles:  # Make the buttons a bit rounder
+                    # circle.set_height(0.025)
+                    circle.set_width(0.04)
+
             # Load the complete fits lines log if input
             if lines_log_address is not None:
                 self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
@@ -913,7 +1025,7 @@ class CubeInspector:
                 radio.on_clicked(self.mask_selection)
 
             # Display the figure
-            save_close_fig_swicth()
+            save_close_fig_swicth(maximise=maximise, bbox_inches='tight')
 
             # Close the lines log if it has been opened
             if isinstance(self.hdul_linelog, fits.hdu.HDUList):

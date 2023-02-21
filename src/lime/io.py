@@ -78,7 +78,7 @@ class LiMe_Error(Exception):
     """LiMe exception function"""
 
 
-def load_log(file_address, ext='LINESLOG'):
+def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
 
     """
     This function reads a lines log table as a pandas dataframe. The accepted input file types are a whitespace separated
@@ -122,16 +122,24 @@ def load_log(file_address, ext='LINESLOG'):
                 log.set_index('index', inplace=True)
 
         # Text file
+        elif file_type == '.txt':
+            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
+
         else:
+            _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
             log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
 
     except ValueError as e:
         exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
 
+    # Restore levels if multi-index
+    if log.columns.isin(sample_levels).sum() == len(sample_levels):
+        log.set_index(sample_levels, inplace=True)
+
     return log
 
 
-def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=None):
+def save_log(log_dataframe, file_address, ext='LINESLOG', parameters='all', fits_header=None):
 
     """
 
@@ -171,7 +179,13 @@ def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=No
     assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found ({log_path.parent})'
     file_name, file_type = log_path.name, log_path.suffix
 
-    if len(log.index) > 0:
+    if len(log_dataframe.index) > 0:
+
+        # In case of multi-index dataframe
+        if isinstance(log_dataframe.index, pd.MultiIndex):
+            log = log_dataframe.reset_index()
+        else:
+            log = log_dataframe
 
         # Slice the log if the user provides a list of columns
         if parameters != 'all':
@@ -186,6 +200,7 @@ def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=No
         # Default txt log with the complete information
         if file_type == '.txt':
             with open(log_path, 'wb') as output_file:
+                pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_string()
                 output_file.write(string_DF.encode('UTF-8'))
 
@@ -261,8 +276,7 @@ def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=No
                     af.update()
 
         else:
-            print(f"--WARNING: output extension {file_type} was not recognised in file {log_path}")
-            exit()
+            raise LiMe_Error(f'output extension "{file_type}" was not recognised for file {log_path}')
 
     else:
         _logger.info('The output log has no measurements. An output file will not be saved')
@@ -270,18 +284,42 @@ def save_log(log, file_address, ext='LINESLOG', parameters='all', fits_header=No
     return
 
 
-def check_file_dataframe(input, variable_type, ext='LINESLOG'):
+def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
+
+    # Loop through the line components
+    for i, comp in enumerate(line.list_comps):
+
+        # Convert current measurement to a pandas series container
+        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wavelength[i], line.latex_label[i]
+        log.loc[comp, 'w1':'w6'] = line.mask
+
+        # Treat every line
+        for param in export_params:
+
+            # Get component parameter
+            param_value = line.__getattribute__(param)
+            if _LOG_COLUMNS[param][2] and (param_value is not None):
+                param_value = param_value[i]
+
+            # De normalize
+            if _LOG_COLUMNS[param][0]:
+                if param_value is not None:
+                    param_value = param_value * norm_flux
+
+            log.loc[comp, param] = param_value
+
+    return
+
+
+def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line']):
 
     if isinstance(input, variable_type):
         output = input
 
     elif Path(input).is_file():
-        output = load_log(input, ext=ext)
+        output = load_log(input, ext=ext, sample_levels=sample_levels)
 
     else:
-        # TODO this is not necessary?
-        _logger.warning(f'Not file found at {input}.\nPlease introduce a {variable_type} as input or check the'
-                         f'file address.')
         output = None
 
     return output
@@ -609,7 +647,7 @@ def log_to_RA(log, column_types=None):
 
 def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
-    # For non empty logs
+    # For non empty SMACS_v2.0
     if not log.empty:
 
         if len(column_types) == 0:
@@ -850,7 +888,7 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     The output ``.fits`` image maps include a header with the ``PARAM`` and ``LINE`` with the line and parameter labels
     respectively (see `measurements <documentation/measurements.html>`_).
 
-    :param log_file_address: fits file address location with the line logs
+    :param log_file_address: fits file address location with the line SMACS_v2.0
     :type log_file_address: str
 
     :param params_list: Array with the parameters to map from log measurements, e.g. np.array([intg_flux, v_r])
@@ -872,12 +910,12 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     :param image_shape: Array with the image spatial size. The unis are the 2D array indices, e.g. (idx_j_max, idx_i_max)
     :type image_shape: list or array, optional
 
-    :param ext_log: Suffix of the line logs extensions. The default value is "_LINESLOG". In this case the .fits file HDUs
+    :param ext_log: Suffix of the line SMACS_v2.0 extensions. The default value is "_LINESLOG". In this case the .fits file HDUs
                     will be queried as ``{idx_j}-{idx_i}_LINESLOG``, where ``idx_j`` and ``idx_i`` are the spaxel Y and X coordinates
                     respectively
     :type ext_log: str, optional
 
-    :param default_spaxel_value: Default value for the output image spaxels, where no measurement was obtained from the logs.
+    :param default_spaxel_value: Default value for the output image spaxels, where no measurement was obtained from the SMACS_v2.0.
                                  By default this value is numpy.nan
     :type default_spaxel_value: float, optional
 

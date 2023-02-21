@@ -99,6 +99,7 @@ def gaussian_profiles_computation(line_list, log, z_corr, res_factor=100, interv
 
         idcs_lines = (log.index.isin(line_list))
 
+        # TODO .values does not create a copy, we should switch to .to_numpy(copy=True)
         amp_array = log.loc[idcs_lines, 'amp'].values
         center_array = log.loc[idcs_lines, 'center'].values
         sigma_array = log.loc[idcs_lines, 'sigma'].values

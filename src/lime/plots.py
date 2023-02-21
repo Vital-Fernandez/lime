@@ -11,7 +11,7 @@ from pathlib import Path
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
 from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
 from .tools import define_masks, format_line_mask_option
-from .io import load_log, save_log, _PARENT_BANDS, load_spatial_masks
+from .io import load_log, save_log, _PARENT_BANDS, load_spatial_masks, LiMe_Error, _LOG_COLUMNS_LATEX
 from .transitions import check_line_in_log, Line
 
 _logger = logging.getLogger('LiMe')
@@ -302,7 +302,7 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
     return
 
 
-def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximize=False, plot_check=True):
+def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximise=False, plot_check=True):
 
     # By default, plot on screen unless an output address is provided
     if plot_check:
@@ -314,7 +314,7 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
                 plt.tight_layout()
 
             # Window positioning and size
-            maximize_center_fig(maximize)
+            maximize_center_fig(maximise)
 
             # Display
             plt.show()
@@ -574,10 +574,10 @@ def image_map_labels(title, wcs, line_bg, line_fg, masks_dict):
 
     # Define the title
     if title is None:
-        title = r'{} band'.format(line_bg.latex[0])
+        title = r'{} band'.format(line_bg.latex_label[0])
         if line_fg is not None:
             # title = f'{} with {} contours'.format(title, line_fg.latex[0])
-            title = f'{title} with {line_fg.latex[0]} contours'
+            title = f'{title} with {line_fg.latex_label[0]} contours'
         if len(masks_dict) > 0:
             title += f'\n and spatial masks'
 
@@ -770,7 +770,7 @@ def _masks_plot(axis, line_list, x, y, z_corr, log, spectrum_mask, color_dict={}
         x_mask = x[spectrum_mask]/z_corr
         y_mask = y[spectrum_mask]*z_corr
         if not np.all(np.isnan(y_mask)):
-            axis.scatter(x_mask, y_mask, marker='x', label='Masked pixels', color=color_dict['mask_marker'])
+            axis.scatter(x_mask, y_mask, marker='x', label='Masked pixels', color='red') # TODO add color dict
 
     # Line masks
     if log is not None:
@@ -1043,7 +1043,7 @@ class LiMePlots:
             # List the profile components
             list_comps = profile_label.split('-') if blended_check else [line]
 
-            # In case the input list of lines is different from the order stored in the logs, the latter takes precedence
+            # In case the input list of lines is different from the order stored in the SMACS_v2.0, the latter takes precedence
             if blended_check:
                 log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
                 list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
@@ -1781,7 +1781,7 @@ class SpectrumFigures(Plotter):
             # Plot the spectrum
             in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=self._color_dict['fg'])
 
-            # Ass extra spectra if requested # TODO a more complex mechanic would be usefull
+            # Ass extra SMACS_v2.0 if requested # TODO a more complex mechanic would be usefull
             if extra_comp is not None:
                 if len(extra_comp) == len(wave_plot):
                     in_ax.step(wave_plot / z_corr, extra_comp, label='Sigma Continuum', linestyle=':', where='mid')
@@ -2339,7 +2339,7 @@ class SampleFigures(Plotter):
             # Generate the figure object and figures
             self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
 
-            # Loop through the spectra in the sample
+            # Loop through the SMACS_v2.0 in the sample
             for obj_label, spec in self._sample.items():
 
                 # Reference _frame for the plot
@@ -2389,4 +2389,83 @@ class SampleFigures(Plotter):
 
         return
 
+    def properties(self, x_param, y_param, observation_list=None, x_param_err=None, y_param_err=None, labels_list=None,
+                   groups_variable=None, output_address=None, in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={},
+                   log_scale=False):
 
+        # Check selected variables are located in the panel columns
+        for param in [x_param, y_param, x_param_err, y_param_err, groups_variable]:
+            if param is not None:
+                if param not in self._sample.log:
+                    raise LiMe_Error(f'Variable {param} is not found in the sample panel columns')
+
+        # Panel slice
+        slice_df = self._sample.log.loc[observation_list]
+
+        # Confirm selection has data
+        if len(slice_df) > 0:
+
+            # Get variables arrays
+            data = {'x_param': slice_df[x_param].values, 'y_values': slice_df[y_param].values,
+                    'x_err': slice_df[x_param_err].values if x_param_err in slice_df else None,
+                    'y_err': slice_df[y_param_err].values if y_param_err in slice_df else None}
+
+            # Split the data set if a group variable is provided
+            idcs_dict = {}
+            if groups_variable is None:
+                idcs_dict['_'] = slice_df.index
+            else:
+                group_levels = np.sort(slice_df[groups_variable].unique())
+                for i, level in enumerate(group_levels):
+                    idcs_dict[level] = slice_df[groups_variable] == level
+
+            # Ready the arrays:
+            data_dict = {}
+            for level, idcs in idcs_dict.items():
+                data_dict[level] = {'x_param': slice_df.loc[idcs, x_param].values,
+                                    'y_values': slice_df.loc[idcs, y_param].values,
+                                    'x_err': slice_df.loc[idcs, x_param_err].values if x_param_err in slice_df else None,
+                                    'y_err': slice_df.loc[idcs, y_param_err].values if y_param_err in slice_df else None}
+
+            # Default figure format
+            fig_format = {**STANDARD_PLOT, **{'figure.figsize': (10, 6)}}
+            ax_format = {'xlabel': _LOG_COLUMNS_LATEX.get(x_param, x_param), 'ylabel': _LOG_COLUMNS_LATEX.get(y_param, y_param)}
+
+            # User format overwrites default params
+            plt_cfg.update(fig_format)
+            ax_cfg.update(ax_format)
+
+            with rc_context(plt_cfg):
+
+                # Generate the figure object and figures
+                self._fig, self._ax = self._plot_container(in_fig, in_axis, ax_cfg)
+
+                # Plot data
+                for group_label, group_dict in data_dict.items():
+                    self._ax.errorbar(group_dict['x_param'], group_dict['y_values'], label=group_label,
+                                      xerr=group_dict['x_err'], yerr=group_dict['y_err'], fmt='o')
+
+                # Interactive display
+                if mplcursors_check:
+
+                    # If none provided use the object names
+                    if labels_list is None:
+                        labels_list = slice_df.index.values
+
+                    mplcursors.cursor(self._ax).connect("add", lambda sel: sel.annotation.set_text(labels_list[sel.index]))
+
+                if log_scale:
+                    self._ax.set_yscale('log')
+
+                # Display legend
+                h, l = self._ax.get_legend_handles_labels()
+                if len(h) > 0:
+                    self._ax.legend()
+
+                # By default, plot on screen unless an output address is provided
+                save_close_fig_swicth(output_address, 'tight', self._fig)
+
+        else:
+            _logger.info(f'There is no data on the sample panel for the input observation selection')
+
+        return

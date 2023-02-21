@@ -38,6 +38,15 @@ shutil.copy(instrMaskFile, objMaskFile)
 
 # Review the mask
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
+delta_obs = np.diff(gp_spec.wave).mean()
+delta_rest = np.diff(gp_spec.wave_rest).mean()
+
+# print(delta_obs, delta_rest, )
+# gp_spec.wave/(gp_spec.wave_rest + delta_rest) - 1
+# interval = (gp_spec.wave/(gp_spec.wave_rest + np.diff(gp_spec.wave_rest).median()) - 1).mean()
+
 inputMask = lime.load_log(objMaskFile)
 objMaskFile = './sample_data/GP121903_mask_review.txt'
-gp_spec.check.bands(inputMask, objMaskFile, maximize=True)
+redshift_log = './sample_data/redshift_log.txt'
+gp_spec.check.bands(inputMask, objMaskFile, maximize=True, redshift_log=redshift_log, object_ref='GP121903')
+

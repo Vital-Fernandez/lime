@@ -1,8 +1,10 @@
 import logging
 
+import numpy as np
 from numpy import array, abs, nan, all, diff, char, searchsorted, unique, empty, arange, zeros
 from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
-from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS
+from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, _LOG_DTYPES_REC, results_to_log
+from pandas import DataFrame
 
 _logger = logging.getLogger('LiMe')
 
@@ -88,14 +90,52 @@ def check_line_in_log(input_label, log=None, tol=1):
     return input_label
 
 
+def label_components(input_label, scalar_output=False):
+
+    # Confirm input array has one dimension
+    input_label = array(input_label, ndmin=1)
+
+    # Check there are unique elements
+    uniq, count = unique(input_label, return_counts=True)
+    if any(count > 1):
+        _logger.critical(f'There are repeated entries in the input label: {input_label}')
+
+    ion, wave = empty(input_label.size).astype(str), empty(input_label.size)
+    units_wave, kinem = empty(input_label.size).astype(str), zeros(input_label.size, dtype=int)
+
+    for i, label in enumerate(input_label):
+
+        # Transition label items assuming '_' separation
+        trans_items = label.split('_')
+
+        # Element producing the transition
+        ion[i] = trans_items[0]
+
+        # Wavelength and units
+        wave[i], units_wave[i] = check_units_from_wave(trans_items[1])
+
+        # Kinematic element
+        kinem[i] = 0
+        if len(trans_items) > 2:
+            if (trans_items[2][0] == 'w') or (
+                    trans_items[2][0] == 'k'):  # TODO make this one always k, maybe a dictionary
+                kinem[i] = trans_items[2][1]
+
+    if scalar_output and input_label.size == 1:
+        ion, wave, units_wave, kinem = ion[0], wave[0], units_wave[0], kinem[0]
+
+    return ion, wave, units_wave, kinem
+
+
 def latex_from_label(label, ion=None, wave=None, units_wave=None, kinem=None, recomb_atom=('H1', 'He1', 'He2'),
-                     scalar_output=False):
+                     scalar_output=False, comps_dict={}):
 
     # Use input values if provided else compute from label
     if (ion is None) or (wave is None) or (wave is None):
         ion, wave, units_wave, kinem = label_components(label)
+
+    # Brand to 1d array
     else:
-        # Brand to 1d array
         ion = array(ion, ndmin=1)
         wave = array(wave, ndmin=1)
         units_wave = array(units_wave, ndmin=1)
@@ -129,51 +169,32 @@ def latex_from_label(label, ion=None, wave=None, units_wave=None, kinem=None, re
     return latex_array
 
 
-def label_components(input_label, scalar_output=False):
+def log_from_line_list(lines, comps_dict, headers=None):
 
-    # Confirm input array has one dimension
-    input_label = array(input_label, ndmin=1)
+    # TODO this is the new label decomposition
+    if headers is None:
+        headers = _LOG_DTYPES_REC
 
-    # Check there are unique elements
-    uniq, count = unique(input_label, return_counts=True)
-    if any(count > 1):
-        _logger.critical(f'There are repeated entries in the input label: {input_label}')
+    # Generate container
+    log = DataFrame(np.empty(0, dtype=headers))
 
-    ion, wave = empty(input_label.size).astype(str), empty(input_label.size)
-    units_wave, kinem = empty(input_label.size).astype(str), zeros(input_label.size, dtype=int)
+    # Loop through the lines
+    for i, line in enumerate(lines):
+        line_obj = Line(line, fit_conf=comps_dict)
+        results_to_log(line_obj, log, norm_flux=1, units_wave=line_obj.units_wave)
 
-    for i, label in enumerate(input_label):
-
-        # Transition label items assuming '_' separation
-        trans_items = label.split('_')
-
-        # Element producing the transition
-        ion[i] = trans_items[0]
-
-        # Wavelength and units
-        wave[i], units_wave[i] = check_units_from_wave(trans_items[1])
-
-        # Kinematic element
-        kinem[i] = 0
-        if len(trans_items) > 2:
-            if (trans_items[2][0] == 'w') or (trans_items[2][0] == 'k'): # TODO make this one always k, maybe a dictionary
-                kinem[i] = trans_items[2][1]
-    
-    if scalar_output and input_label.size == 1:
-        ion, wave, units_wave, kinem = ion[0], wave[0], units_wave[0], kinem[0]
-    
-    return ion, wave, units_wave, kinem
+    return log
 
 
 class Line:
 
     def __init__(self, label, band=None, fit_conf=None, emission_check=True, cont_from_bands=True, ref_log=None,
-                 z_line=0, interpret=True):
+                 z_line=None, interpret=True):
 
         self.label, self.mask = label, array([nan] * 6)
         self.blended_check, self.merged_check = False, False
         self.profile_label, self.list_comps = 'no', None
-        self.ion, self.wavelength, self.units_wave, self.kinem, self.latex = None, None, None, None, None
+        self.ion, self.wavelength, self.units_wave, self.kinem, self.latex_label = None, None, None, None, None
 
         self.intg_flux, self.intg_err = None, None
         self.peak_wave, self.peak_flux = None, None
@@ -318,12 +339,14 @@ class Line:
             self.mask = band
 
         # Warn if the band wavelengths are not sorted and the theoretical value is not within the line region
-        if self.mask is not None:
+        if not np.any(np.isnan(self.mask)):
             if not all(diff(self.mask) >= 0):
                 _logger.warning(f'The line {label} band wavelengths are not sorted: {band}')
             if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
                 _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths: '
                                 f'w3 = {self.mask[2]};  w4 = {self.mask[3]}')
+        else:
+            _logger.info(f'Transition {self.label} contains NaN entries')
 
         # Check if there are masked pixels in the line
         self.pixel_mask = self._fit_conf.get(f'{self.label}_mask', 'no')
@@ -334,13 +357,13 @@ class Line:
         # Generate the latex label
         if self.merged_check:       # Merged
             latex_list = list(latex_from_label(self.profile_label.split('-')))
-            self.latex = array('+'.join(latex_list), ndmin=1)
+            self.latex_label = array('+'.join(latex_list), ndmin=1)
 
         elif self.blended_check:    # Blended
-            self.latex = latex_from_label(self.profile_label.split('-'))
+            self.latex_label = latex_from_label(self.profile_label.split('-'))
 
         else:                       # Single
-            self.latex = latex_from_label(None, self.ion, self.wavelength, self.units_wave, self.kinem)
+            self.latex_label = latex_from_label(None, self.ion, self.wavelength, self.units_wave, self.kinem)
 
         return
 

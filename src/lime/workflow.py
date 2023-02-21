@@ -8,7 +8,7 @@ from . import Error
 from .model import LineFitting
 from .tools import define_masks, label_decomposition, COORD_ENTRIES
 from .transitions import Line
-from .io import _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU
+from .io import check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU, results_to_log
 
 _logger = logging.getLogger('LiMe')
 
@@ -105,7 +105,7 @@ def import_line_kinematics(line, z_cor, log, units_wave):
 
             # Case we want to copy from previous line and the data is not available
             if (parent_label not in log.index) and (not line.blended_check):
-                _logger.warning(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
+                _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
             else:
                 ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True, units_wave=units_wave)
@@ -138,33 +138,6 @@ def import_line_kinematics(line, z_cor, log, units_wave):
 
                         line._fit_conf[param_label_child] = {'value': param_value[0], 'vary': False}
                         line._fit_conf[f'{param_label_child}_err'] = param_value[1]
-
-    return
-
-
-def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
-
-    # Loop through the line components
-    for i, comp in enumerate(line.list_comps):
-
-        # Convert current measurement to a pandas series container
-        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wavelength[i], line.latex[i]
-        log.loc[comp, 'w1':'w6'] = line.mask
-
-        # Treat every line
-        for param in export_params:
-
-            # Get component parameter
-            if _LOG_COLUMNS[param][2]:
-                param_value = line.__getattribute__(param)[i]
-            else:
-                param_value = line.__getattribute__(param)
-
-            # De normalize
-            if _LOG_COLUMNS[param][0]:
-                param_value = param_value * norm_flux
-
-            log.loc[comp, param] = param_value
 
     return
 
