@@ -285,7 +285,7 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=N
     # Use the one requested by the user
     else:
         obsFlux = log[f'{flux_type}_flux'].to_numpy(copy=True)
-        obsErr = log[f'{flux_type}_flux_err'].to_numpy(copy=True)
+        obsErr = log[f'{flux_type}_err'].to_numpy(copy=True)
 
     output_fluxes = [obsFlux, obsErr]
 
@@ -368,18 +368,35 @@ def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_er
 
 
 # Get flux weighted redshift from lines
-def weighted_redshift_calculation(df, line_list=None):
+def weighted_redshift_calculation(input_log, line_list=None):
 
-    z_array = (df.center/df.wavelength - 1).values
-    z_mean = z_array.mean()
-    z_std = z_array.std()
-    w_array = (1/np.square(df.gauss_flux.values))
-    z_centroid = (df.center/df.wavelength - 1)
-    param = (w_array.size-1)/w_array.size
-    weight_mean = np.sum(z_array*w_array)/np.sum(w_array)
-    weighted_err = np.std(z_array*w_array/np.sum(w_array))
+    if line_list is not None:
+        idcs_slice = input_log.index.isin(line_list)
+        df_slice = input_log.loc[idcs_slice]
+    else:
+        df_slice = input_log
 
-    return z_mean, z_std
+    n_lines = len(df_slice.index)
+    if n_lines > 0:
+        z_array = (df_slice.center/df_slice.wavelength - 1).values
+        line_list = df_slice.index.values
+
+        if n_lines == 1:
+            z_mean = z_array[0]
+            z_std = df_slice.center_err.values[0]/df_slice.wavelength.values[0]
+        else:
+            z_mean = z_array.mean()
+            z_std = z_array.std()
+            w_array = (1/np.square(df_slice.gauss_flux.values))
+            z_centroid = (df_slice.center/df_slice.wavelength - 1)
+            param = (w_array.size-1)/w_array.size
+            weight_mean = np.sum(z_array*w_array)/np.sum(w_array)
+            weighted_err = np.std(z_array*w_array/np.sum(w_array))
+
+    else:
+        z_mean, z_std, line_list = np.nan, np.nan, None
+
+    return z_mean, z_std, line_list
 
 
 def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_err'], sample_levels=['id', 'line'],

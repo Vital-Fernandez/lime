@@ -175,6 +175,9 @@ def log_from_line_list(lines, comps_dict, headers=None):
     if headers is None:
         headers = _LOG_DTYPES_REC
 
+    # Minimum one size:
+    lines = np.array(lines, ndmin=1)
+
     # Generate container
     log = DataFrame(np.empty(0, dtype=headers))
 

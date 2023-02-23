@@ -285,7 +285,6 @@ class LineFitting:
         line.peak_wave = emis_wave[peakIdx]
         line.peak_flux = emis_flux[peakIdx]
         line.pixelWidth = np.diff(emis_wave).mean()
-
         line.cont = line.peak_wave * line.m_cont + line.n_cont
         line.std_cont = np.std(cont_flux - continuaFit)
 
