@@ -17,6 +17,7 @@
 # Adding library path to the compilation for the autodoc documentation
 import sys
 from pathlib import Path
+
 _lib_path = Path(__file__).parents[2]/'src'
 sys.path.append(str(_lib_path))
 
