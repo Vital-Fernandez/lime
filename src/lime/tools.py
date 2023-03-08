@@ -4,7 +4,8 @@ __all__ = ['label_decomposition',
            'unit_convertor',
            'extract_fluxes',
            'relative_fluxes',
-           'compute_line_ratios']
+           'compute_line_ratios',
+           'redshift_calculation']
 
 import logging
 import numpy as np
@@ -367,36 +368,77 @@ def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_er
     return
 
 
-# Get flux weighted redshift from lines
-def weighted_redshift_calculation(input_log, line_list=None):
+# Get Weighted redshift from lines
+def redshift_calculation(input_log, line_list=None, weight_parameter=None, sample_levels=['id', 'line'], obj_label='spec_0'):
 
-    if line_list is not None:
-        idcs_slice = input_log.index.isin(line_list)
-        df_slice = input_log.loc[idcs_slice]
+    # Check the weighted parameter presence
+    if weight_parameter is not None:
+        if weight_parameter not in input_log.columns:
+            raise LiMe_Error(f'The parameter {weight_parameter} is not found on the input lines log headers')
+
+    # Check input line is not a string
+    line_list = np.array(line_list, ndmin=1) if isinstance(line_list, str) else line_list
+
+    # Check if single or multi-index
+    sample_check = isinstance(input_log.index, pd.MultiIndex)
+    if sample_check:
+        id_list = input_log.index.unique(level=sample_levels[0])
     else:
-        df_slice = input_log
+        id_list = np.array([obj_label])
 
-    n_lines = len(df_slice.index)
-    if n_lines > 0:
-        z_array = (df_slice.center/df_slice.wavelength - 1).values
-        line_list = df_slice.index.values
+    # Container for redshifts
+    z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'lines', 'weight'])
 
-        if n_lines == 1:
-            z_mean = z_array[0]
-            z_std = df_slice.center_err.values[0]/df_slice.wavelength.values[0]
+    # Loop through the ids
+    for id in id_list:
+
+        # Slice to the object log
+        if not sample_check:
+            df_slice = input_log
         else:
-            z_mean = z_array.mean()
-            z_std = z_array.std()
-            w_array = (1/np.square(df_slice.gauss_flux.values))
-            z_centroid = (df_slice.center/df_slice.wavelength - 1)
-            param = (w_array.size-1)/w_array.size
-            weight_mean = np.sum(z_array*w_array)/np.sum(w_array)
-            weighted_err = np.std(z_array*w_array/np.sum(w_array))
+            df_slice = input_log.xs(id)
 
-    else:
-        z_mean, z_std, line_list = np.nan, np.nan, None
+        # Get the lines requested
+        if line_list is not None:
+            idcs_slice = df_slice.index.isin(line_list)
+            df_slice = df_slice.loc[idcs_slice]
+        else:
+            df_slice = df_slice
 
-    return z_mean, z_std, line_list
+        # Check the line has lines
+        n_lines = len(df_slice.index)
+        if n_lines > 0:
+            z_array = (df_slice['center']/df_slice['wavelength'] - 1).to_numpy()
+            obsLineList = ','.join(df_slice.index.values)
+
+            # Just one line
+            if n_lines == 1:
+                z_mean = z_array[0]
+                z_std = df_slice.center_err.to_numpy()[0]/df_slice.wavelength.to_numpy()[0]
+
+            # Multiple lines
+            else:
+
+                # Not weighted parameter
+                if weight_parameter is None:
+                    z_mean = z_array.mean()
+                    z_std = z_array.std()
+
+                # With a weighted parameter
+                else:
+                    w_array = df_slice[weight_parameter]
+                    z_err_array = df_slice.center_err.to_numpy()/df_slice.wavelength.to_numpy()
+
+                    z_mean = np.sum(w_array * z_array)/np.sum(w_array)
+                    z_std = np.sqrt(np.sum(np.power(w_array, 2) * np.power(z_err_array, 2)) / np.sum(np.power(w_array, 2)))
+
+        else:
+            z_mean, z_std, obsLineList = np.nan, np.nan, None
+
+        # Add to dataframe
+        z_df.loc[id, 'z_mean':'weight'] = z_mean, z_std, obsLineList, weight_parameter
+
+    return z_df
 
 
 def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_err'], sample_levels=['id', 'line'],

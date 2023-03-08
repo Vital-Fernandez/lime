@@ -688,7 +688,7 @@ class RedshiftInspection:
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
 
             # Plot the spectrum
-            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=obj, where='mid', color=self._color_dict['fg'])
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=obj, where='mid')
 
             # Plot the masked pixels
             _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
@@ -812,6 +812,7 @@ class RedshiftInspection:
             self._launch_plots_ZI()
 
         return
+
 
 class CubeInspector:
 
