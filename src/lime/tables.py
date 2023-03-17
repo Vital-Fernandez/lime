@@ -1,6 +1,6 @@
 import numpy as np
 from functools import partial
-from collections import Sequence
+from collections.abc import Sequence
 
 try:
     import pylatex

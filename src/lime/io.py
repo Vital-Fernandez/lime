@@ -21,7 +21,7 @@ import pandas as pd
 from sys import exit, stdout
 from pathlib import Path
 from distutils.util import strtobool
-from collections import Sequence
+from collections.abc import Sequence
 
 from astropy.io import fits
 from astropy.table import Table
