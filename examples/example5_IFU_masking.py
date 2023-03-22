@@ -58,8 +58,9 @@ shoc579.plot.cube(6563, line_fg=4363, wcs=WCS(hdr), maximise=True)
 # Generate a spatial mask as a function of the signal to noise
 spatial_mask = './sample_data/SHOC579_mask.fits'
 shoc579.spatial_masker(4363, param='SN_line', percentiles=[93, 95, 98], header_dict=hdr, output_address=spatial_mask)
-# shoc579.plot.cube(6563, masks_file=spatial_mask, wcs=WCS(hdr), maximise=True)
+shoc579.plot.cube(6563, masks_file=spatial_mask, wcs=WCS(hdr), maximise=True)
 
 # Generate a spatial mask as a function of the signal to noise
 spatial_mask = './sample_data/SHOC579_mask.fits'
 shoc579.check.cube(6563, wcs=WCS(hdr), maximise=False, masks_file=spatial_mask)
+

@@ -18,16 +18,21 @@ import logging
 import numpy as np
 import pandas as pd
 
-from sys import exit, stdout
+from sys import exit, stdout, version_info
 from pathlib import Path
 from distutils.util import strtobool
-from collections import Sequence
+from collections.abc import Sequence
 
 from astropy.io import fits
 from astropy.table import Table
-from parso.python.tree import Class
 
 from .tables import table_fluxes
+
+# if version_info[:3] < (3, 10):
+#     print('Hi')
+#     from collections import Sequence
+# else:
+#     from collections.abc import Sequence
 
 try:
     import openpyxl
@@ -40,6 +45,8 @@ try:
     asdf_check = True
 except ImportError:
     asdf_check = False
+
+
 
 _logger = logging.getLogger('LiMe')
 

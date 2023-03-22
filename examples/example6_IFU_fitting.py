@@ -2,7 +2,6 @@ import lime
 import wget
 import gzip
 import shutil
-import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 from pathlib import Path
@@ -71,93 +70,8 @@ shoc579 = lime.Cube(wave, flux, redshift=z_SHOC579, norm_flux=norm_flux)
 # Check the input cube and spatial masks previously calculated
 shoc579.check.cube(6563, wcs=WCS(hdr), masks_file=spatial_mask)
 
-# # Fit the lines on the stored masked
+# Fit the lines on the stored masked
 log_address = './sample_data/SHOC579_log.fits'
 shoc579.fit.spatial_mask(spatial_mask, bands_frame=bands_frame_file, fit_conf=obs_cfg, line_detection=True,
                          output_log=log_address, progress_output=True)
-
 shoc579.check.cube(6563, wcs=WCS(hdr), masks_file=spatial_mask, lines_log_address=log_address)
-
-
-# # Boolean check to plot the steps
-# verbose = False
-#
-# # Counting the number of voxels and lines
-# n_spaxels, n_lines = 0, 0
-#
-# # Loop through the masks:
-# for idx_region in [0, 1, 2]:
-#
-#     # Load the region spatial mask:
-#     region_label = f'S2_6716A_B_MASK_{idx_region}'
-#     region_mask = fits.getdata(spatial_mask, region_label, ver=1)
-#     region_mask = region_mask.astype(bool)
-#     n_spaxels += np.sum(region_mask)
-#
-#     # Convert the mask into an array of spaxel coordinates (idxY, idxX)
-#     idcs_spaxels = np.argwhere(region_mask)
-#
-#     # Load the region spectral mask:
-#     mask_log_file = f'./sample_data/SHOC579_region{idx_region}_maskLog.txt'
-#     mask_log = lime.load_lines_log(mask_log_file)
-#
-#     # Load the region fitting configuration
-#     region_fit_cfg = obs_cfg[f'SHOC579_region{idx_region}_line_fitting']
-#
-#     # Loop through the spaxels
-#     print(f'- Treating region {idx_region}')
-#     for idx_spaxel, coords_spaxel in enumerate(idcs_spaxels):
-#
-#         # Define a spectrum object for the current spaxel
-#         idxY, idxX = coords_spaxel
-#         spaxel_spec = lime.Spectrum(wave, flux[:, idxY, idxX], redshift=z_SHOC579, norm_flux=norm_flux)
-#
-#         if verbose:
-#             spaxel_spec.plot_spectrum(spec_label=f'SHOC579 spaxel {idxY}-{idxX}')
-#
-#         # Limit the line fittings to those detected
-#         peaks_table, matched_mask_log = spaxel_spec.match_line_mask(mask_log, noise_region)
-#         n_lines += len(matched_mask_log.index)
-#
-#         if verbose:
-#             spaxel_spec.plot_spectrum(peaks_table=peaks_table, match_log=matched_mask_log,
-#                                       spec_label=f'SHOC579 spaxel {idxY}-{idxX}')
-#
-#         # Loop through the detected lines
-#         print(f'-- Treating spaxel {idx_spaxel}')
-#         for idx_line, line in enumerate(matched_mask_log.index):
-#
-#             wave_regions = matched_mask_log.loc[line, 'w1':'w6'].values
-#             try:
-#                 # spaxel_spec.fit_from_wavelengths(line, wave_regions, fit_method='least_squares', user_cfg=region_fit_cfg)
-#                 spaxel_spec.fit.band(line, wave_regions, fit_method='least_squares', fit_conf=region_fit_cfg)
-#                 if verbose:
-#                         spaxel_spec.display_results(fit_report=True)
-#
-#             except ValueError as e:
-#                 print(f'--- Line measuring failure at {line} in spaxel {idxY}-{idxX}:\n{e}')
-#
-#         if verbose:
-#             spaxel_spec.plot_line_grid(spaxel_spec.log)
-#
-#         # Convert the measurements log into a HDU and append it to the HDU list unless it is empty
-#         linesHDU = lime.log_to_HDU(spaxel_spec.log, ext_name=f'{idxY}-{idxX}_LINESLOG', header_dict=hdr_coords)
-#
-#         # Check the HDU is not empty (no lines measured)
-#         if linesHDU is not None:
-#             hdul_log.append(linesHDU)
-#
-#     # After the regions spaxels have been analysed save all the measurements to a .fits file
-#     hdul_log.writeto(log_address, overwrite=True, output_verify='fix')
-#
-# print(f'SHOC579 analysis finished treating {n_lines} lines in {n_spaxels} spaxels')
-
-
-
-
-
-
-
-
-
-
