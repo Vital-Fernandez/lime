@@ -306,6 +306,7 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
 
     # By default, plot on screen unless an output address is provided
     if plot_check:
+        output_fig = None
 
         if file_path is None:
 
@@ -326,7 +327,11 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
             if fig_obj is not None:
                 plt.close(fig_obj)
 
-    return
+    # Return the figure for output plotting
+    else:
+        output_fig = fig_obj
+
+    return output_fig
 
 
 def save_redshift_table(object, redshift, file_address):
@@ -1700,7 +1705,7 @@ class SpectrumFigures(Plotter):
 
     def spectrum(self, extra_comp=None, line_bands=None, label=None, noise_region=None, log_scale=False,
                  output_address=None, rest_frame=False, include_fits=False, in_fig=None, in_ax=None, fig_cfg={}, ax_cfg={},
-                 maximize=False, return_fig=False):
+                 maximize=False):
 
         """
 
@@ -1834,12 +1839,12 @@ class SpectrumFigures(Plotter):
                 in_ax.legend()
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
+            in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
 
         return in_fig
 
     def grid(self, log=None, rest_frame=True, y_scale='auto', include_fits=True, output_address=None, n_cols=6,
-             n_rows=None, col_row_scale=(2, 1.5), maximize=False, fig_cfg={}, ax_cfg={}, in_fig=None, in_ax=None):
+             n_rows=None, col_row_scale=(2, 1.5), maximize=False, fig_cfg={}, ax_cfg={}, in_fig=None):
 
         # Display chec k for the user figures
         display_check = True if in_fig is None else False
@@ -1945,11 +1950,8 @@ class SpectrumFigures(Plotter):
                         # Scale each
                         _auto_flux_scale(in_ax, flux_plot[idxL:idxH] * z_corr, y_scale)
 
-                    # else:
-                    #     in_fig.delaxes(in_ax)
-
                 # Show the image
-                save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
+                in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
 
         else:
             _logger.info('The bands log does not contain lines')
@@ -2054,9 +2056,9 @@ class SpectrumFigures(Plotter):
             _auto_flux_scale(in_ax[0], y=flux_plot[idcsM[0]:idcsM[5]] * z_corr, y_scale=y_scale)
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', in_fig, maximise, display_check)
+            in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximise, display_check)
 
-            return
+            return in_fig
 
     def velocity_profile(self,  line=None, band=None, y_scale='auto', plt_cfg={}, ax_cfg={}, in_fig=None,
                          output_address=None):

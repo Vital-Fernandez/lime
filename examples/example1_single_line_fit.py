@@ -64,7 +64,7 @@ gp_spec.save_log('./sample_data/example1_linelog.fits', ext='GP121903')
 gp_spec.save_log('./sample_data/example1_linelog.xlsx', ext='GP121903')
 gp_spec.save_log('./sample_data/example1_linelog.asdf', ext='GP121903')
 
-# # A lines log can also be save/loaded using the lime functions:
+# A lines log can also be save/loaded using the lime functions:
 log_address = './sample_data/example1_linelog.fits'
 lime.save_log(gp_spec.log, log_address, ext='GP121903')
 log = lime.load_log(log_address, ext='GP121903')

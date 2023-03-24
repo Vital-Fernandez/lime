@@ -53,9 +53,9 @@ These are some of the features currently available:
    :caption: Tutorials
    :name: tutorial-tree
 
-   tutorials/1_BasicFit
+   tutorials/1_SingleLineFitting
    tutorials/2_Synthetic
-   tutorials/3_CompleteSpec
+   tutorials/3_CompleteSpectrumFitting
    tutorials/4_Mask_selection
    tutorials/5_IFU_masks
    tutorials/6_IFU_fittings

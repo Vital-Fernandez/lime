@@ -7,7 +7,7 @@ In this tutorial, we continue our analysis on the galaxy `SHOC579 <https://dr17.
 the spatial mask from the :ref:`previous tutorial <example5>`.
 
 This tutorial can be found as a script at the `github 6th example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example6_IFU_fitting.py>`_.
-Moreover, you may notice that many of the steps are the same as in the single observation of the :ref:`3rd example <example3>`.
+Moreover, you may notice that many of the steps are the same as in the single spectrum analysis in the 3rd tutorial.
 Indeed, the main difference is that in this case we are going to treat 329 spectra. Most of the extra steps involve
 reading the data from the spatial mask and some good practices to better handle the larger workflow.
 
