@@ -46,6 +46,12 @@ try:
 except ImportError:
     asdf_check = False
 
+# tomli >= 1.1.0 ; python_version < "3.11"
+#
+# try:
+#     import tomllib
+# except ModuleNotFoundError:
+#     import tomli as tomllib
 
 
 _logger = logging.getLogger('LiMe')
@@ -53,6 +59,8 @@ _logger = logging.getLogger('LiMe')
 # Reading file with the format and export status for the measurements
 _params_table_file = Path(__file__).parent/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
+
+_LINES_DATABASE_FILE = Path(__file__).parent/'resources/parent_mask.txt'
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -132,6 +140,9 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
         elif file_type == '.txt':
             log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
 
+        elif file_type == '.csv':
+            log = pd.read_csv(log_path, sep=';', delim_whitespace=False, header=0, index_col=0)
+
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
             log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
@@ -209,6 +220,12 @@ def save_log(log_dataframe, file_address, ext='LINESLOG', parameters='all', fits
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_string()
+                output_file.write(string_DF.encode('UTF-8'))
+
+        elif file_type == '.csv':
+            with open(log_path, 'wb') as output_file:
+                pd.set_option('multi_sparse', False)
+                string_DF = lines_log.to_csv(sep=';', na_rep='NaN')
                 output_file.write(string_DF.encode('UTF-8'))
 
         # Pdf fluxes table

@@ -54,10 +54,10 @@ These are some of the features currently available:
    :name: tutorial-tree
 
    tutorials/1_SingleLineFitting
-   tutorials/2_Synthetic
+   tutorials/2_Line_bands_inspection
    tutorials/3_CompleteSpectrumFitting
-   tutorials/4_Mask_selection
-   tutorials/5_IFU_masks
-   tutorials/6_IFU_fittings
-   tutorials/7_IFU_results
+   tutorials/4_IFU_spatial_masking
+   tutorials/5_IFU_line_fitting
+   tutorials/6_IFU_review_results
+   tutorials/7_SyntheticObservation
 

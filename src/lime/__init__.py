@@ -35,7 +35,8 @@ _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 class Error(Exception):
     """LiMe exception function"""
 
-from .treatment import Spectrum, Sample, Cube
+
+from .treatment import Spectrum, Sample, Cube, spectral_bands
 from .io import *
 from .tools import *
 from .plots import spatial_mask_generator

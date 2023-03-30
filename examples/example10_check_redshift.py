@@ -33,7 +33,7 @@ norm_flux = obs_cfg['sample_data']['norm_flux']
 gp_spec = lime.Spectrum(wave, flux, norm_flux=norm_flux)
 
 # Reference lines for the redshift calculation
-band_df = lime.spectral_mask_generator(lines_list=['H1_6563A', 'H1_4861A', 'O3_5007A', 'O3_4363A'])
+band_df = lime.spectral_bands(lines_list=['H1_6563A', 'H1_4861A', 'O3_5007A', 'O3_4363A'])
 
 # Providing a table where the redshift prediction is saved
 redshift_table = './sample_data/reshift_table.txt'

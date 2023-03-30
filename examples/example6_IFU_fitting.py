@@ -24,7 +24,7 @@ def extract_gz_file(input_file_address, output_file_address):
                 shutil.copyfileobj(f_in, f_out)
 
 
-lime.spectral_mask_generator()
+lime.spectral_bands()
 
 # Web link and saving location
 data_folder = Path('./sample_data/')

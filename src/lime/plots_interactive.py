@@ -8,7 +8,7 @@ from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 from pygments.lexer import default
 
-from .io import load_log, save_log, LiMe_Error, check_file_dataframe
+from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, \
     determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import label_decomposition, blended_label_from_log
@@ -19,7 +19,11 @@ from astropy.table import Table
 _logger = logging.getLogger('LiMe')
 
 
-def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
+def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
+
+    # Review the dataframe
+    parent_mask = check_file_dataframe(parent_mask, pd.DataFrame)
+    user_mask = check_file_dataframe(user_mask, pd.DataFrame)
 
     # Add the lines from the input mask to the user mask and treat them as inactive
     if user_mask is not None:
@@ -27,7 +31,7 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
         # Crop the input mask to exclude blended/merged lines in the previous mask
         idcs_comb = user_mask.index.str.endswith('_b') | user_mask.index.str.endswith('_m')
         comb_lines = user_mask.loc[idcs_comb].index.str[:-2]
-        input_mask_crop = input_mask.loc[~input_mask.index.isin(comb_lines)]
+        input_mask_crop = parent_mask.loc[~parent_mask.index.isin(comb_lines)]
 
         # Define for line status
         idcsNoMatch = ~input_mask_crop.index.isin(user_mask.index)
@@ -43,7 +47,7 @@ def check_previous_mask(input_mask, user_mask=None, wave_rest=None):
 
     # Use all mask and treat them as active
     else:
-        user_mask = input_mask.copy()
+        user_mask = parent_mask.copy()
         active_lines = np.zeros(len(user_mask.index)).astype(bool)
 
     # Establish the lower and upper wavelength limits
@@ -183,7 +187,7 @@ class BandsInspection:
 
         return
 
-    def bands(self, input_mask, output_log_address=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
+    def bands(self, bands_file, parent_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
               maximize=False, plt_cfg={}, ax_cfg={}, redshift_log=None, object_ref=None, redshift_column='redshift'):
 
         """
@@ -249,30 +253,29 @@ class BandsInspection:
 
         """
 
-        # TODO add mask for just some lines fitting
+        # TODO add a function just to switch the spectrum redshift
 
         # Assign the attribute values
         self._y_scale = y_scale
-        self._log_address = None if output_log_address is None else Path(output_log_address)
+        self._log_address = None
         self._rest_frame = True
         self._redshift_log_path = None if redshift_log is None else Path(redshift_log)
         self._obj_ref = object_ref
         self._redshift_column = redshift_column
 
-        # # Try to open the input mask
-        # if isinstance(input_mask, (str, Path)):
-        #     input_mask = Path(input_mask)
-        #     if input_mask.is_file():
-        #         input_mask = load_log(input_mask)
+        # Input is a mask is address and it will be also used to save the file
+        if self._log_address is None:
+            if isinstance(bands_file, (str, Path)):
+                self._log_address = Path(bands_file)
+                if not self._log_address.parent.is_dir():
+                    _logger.warning(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
-        # If provided, open the previous mask
-        parent_mask = None
-        if self._log_address is not None:
-            if self._log_address.is_file():
-                parent_mask = load_log(self._log_address)
+        # If not parent mask use the default database
+        if parent_bands is None:
+            parent_mask = _LINES_DATABASE_FILE
 
         # Establish the reference lines log to inspect the mask
-        self.log, self._activeLines = check_previous_mask(input_mask, parent_mask, self._spec.wave_rest)
+        self.log, self._activeLines = check_previous_mask(parent_mask, bands_file, self._spec.wave_rest)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
@@ -313,7 +316,6 @@ class BandsInspection:
                 for i in range(n_grid):
                     if i < n_lines:
                         self.line = self._lineList[i]
-
                         self.mask = self.log.loc[self.line, 'w1':'w6'].values
                         self._plot_line_BI(self.ax_list[i], self.line, self._rest_frame, self._y_scale)
                         spanSelectDict[f'spanner_{i}'] = SpanSelector(self.ax_list[i],
@@ -333,7 +335,7 @@ class BandsInspection:
 
                 # Mask sweep slider configuration
                 self._inter_mask = np.median(np.diff(self._spec.wave_rest))
-                mask_slider = Slider(ax_sliders[0], 'Mask\n(pixels)', -10, 10, 0, valstep=1)
+                mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -10, 10, 0, valstep=1)
                 mask_slider.on_changed(self._on_mask_slider_MI)
 
                 # Redshift sweep slider configuration
@@ -369,7 +371,7 @@ class BandsInspection:
 
             return
 
-        return self.log.loc[self._activeLines]
+        return
 
     def _plot_line_BI(self, ax, line, frame, y_scale='auto'):
 
@@ -571,7 +573,8 @@ class RedshiftInspection:
         self._obj_dict = None
 
     def redshift(self, obj_reference, reference_lines, log_address=None, plt_cfg={}, ax_cfg={}, in_fig=None,
-                 maximize=False, column_log='redshift', none_value=np.nan, unknow_value=0.0, initial_redshift=None):
+                 maximize=False, column_log='redshift', none_value=np.nan, unknow_value=0.0, initial_redshift=None,
+                 output_address=None):
 
         # Assign the attributes
         self._spec_name = obj_reference
@@ -645,7 +648,7 @@ class RedshiftInspection:
                 self._fig.canvas.mpl_connect('button_press_event', self._on_click_ZI)
 
                 # Plot on screen unless an output address is provided
-                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize)
+                save_close_fig_swicth(output_address, 'tight', self._fig, maximise=maximize)
 
         else:
             _logger.warning(f'The sample does not have objects. The redshift check could not be done')

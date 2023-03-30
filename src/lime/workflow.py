@@ -9,6 +9,7 @@ from .model import LineFitting
 from .tools import define_masks, label_decomposition, COORD_ENTRIES
 from .transitions import Line
 from .io import check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU, results_to_log
+from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
 
@@ -301,6 +302,48 @@ class SpecTreatment(LineFitting):
         else:
             _logger.info(f'Not input dataframe. Lines were not measured')
 
+
+        return
+
+    def continuum(self, degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 2], plot_steps=True):
+
+        # Check for a masked array
+        if np.ma.is_masked(self._spec.flux):
+            mask_cont = ~self._spec.flux.mask
+            input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
+        else:
+            mask_cont = np.ones(self._spec.flux.size).astype(bool)
+            input_wave, input_flux = self._spec.wave, self._spec.flux
+
+        # Loop through the fitting degree
+        for i, degree in enumerate(degree_list):
+
+            # Establishing the flux limits
+            low_lim, high_lim = np.percentile(input_flux[mask_cont], (16, 84))
+            low_lim, high_lim = low_lim / threshold_list[i], high_lim * threshold_list[i]
+
+            # Add new entries to the mask
+            mask_cont = mask_cont & (input_flux >= low_lim) & (input_flux <= high_lim)
+
+            poly3Mod = PolynomialModel(prefix=f'poly_{degree}', degree=degree)
+            poly3Params = poly3Mod.guess(input_flux[mask_cont], x=input_wave[mask_cont])
+
+            try:
+                poly3Out = poly3Mod.fit(input_flux[mask_cont], poly3Params, x=input_wave[mask_cont])
+                self._spec.cont = poly3Out.eval(x=input_wave)
+
+            except TypeError:
+                _logger.warning(f'- The continuum fitting polynomial has more degrees ({degree}) than data points')
+                self._spec.cont = np.full(input_wave.size, np.nan)
+
+            # Compute the continuum and assign replace the value outside the bands the new continuum
+            if plot_steps:
+                title = f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'
+                continuum_full = poly3Out.eval(x=self._spec.wave.data)
+                self._spec.plot._continuum_iteration(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
+
+        # Include the standard deviation of the spectrum for the unmasked pixels
+        self._spec.cont_std = np.std((self._spec.flux - self._spec.cont)[mask_cont])
 
         return
 

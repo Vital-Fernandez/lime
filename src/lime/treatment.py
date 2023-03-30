@@ -5,7 +5,7 @@ from pathlib import Path
 from astropy.io import fits
 
 import lime
-from .tools import LineFinder, UNITS_LATEX_DICT, DISPERSION_UNITS,\
+from .tools import LineFinder, UNITS_LATEX_DICT, DISPERSION_UNITS, label_decomposition, air_to_vacuum_function, \
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks, extract_fluxes, relative_fluxes, compute_line_ratios
 
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -107,7 +107,10 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
 
     if crop_waves is not None:
 
-        idcs_crop = np.searchsorted(input_wave, crop_waves)
+        min_limit = crop_waves[0] if crop_waves[0] != 0 else input_wave[0]
+        max_limit = crop_waves[1] if crop_waves[1] != -1 else input_wave[-1]
+
+        idcs_crop = np.searchsorted(input_wave, (min_limit, max_limit))
         input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
 
         # Spectrum
@@ -171,6 +174,98 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     return wave, wave_rest, flux, err_flux
 
 
+def spectral_bands(wave_inter=None, lines_list=None, ion_list=None, z_range=None,
+                   parent_mask_address=None, units_wave='A', sig_fig=4, vacuum_conversion=False):
+
+    # Use the default lime mask if none provided
+    if parent_mask_address is None:
+        parent_mask_address = Path(__file__).parent/'resources'/'parent_mask.txt'
+
+
+    # Check that the file exists: #TODO remove blended, merged extensions from parent mask (or recover them here)
+    if not Path(parent_mask_address).is_file():
+        _logger.warning(f'Parent mask file not found. The input user address was {parent_mask_address}')
+
+    # Load the parent mask
+    mask_df = pd.read_csv(parent_mask_address, delim_whitespace=True, header=0, index_col=0)
+
+    # Recover line label components
+    ion_array, wave_array, latex_array = label_decomposition(mask_df.index.values)
+    idcs_rows = np.ones(mask_df.index.size).astype(bool)
+
+    # Convert to vacuum wavelengths if requested
+    if vacuum_conversion:
+
+        # First the table data
+        mask_df = mask_df.apply(air_to_vacuum_function)
+
+        # The line headers
+        wave_array = air_to_vacuum_function(wave_array)
+        if sig_fig is not None:
+            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
+
+        # Reconstruct the line labels for the new units
+        labels_array = np.core.defchararray.add(ion_array, '_')
+        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
+        labels_array = np.core.defchararray.add(labels_array, units_wave)
+
+        # Rename the indeces
+        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
+
+    # Momentarily add columns with the transition wavelength, ion and latex notation
+    mask_df['wave'], mask_df['ion'], mask_df['latex'] = wave_array, ion_array, latex_array
+
+    # Convert the output mask to the units requested by the user
+    if units_wave != 'A':
+
+        conversion_factor = unit_convertor('A', units_wave,  wave_array=1, dispersion_units='dispersion axis', sig_fig=sig_fig)
+        mask_df.loc[:, 'w1':'w6'] = mask_df.loc[:, 'w1':'w6'] * conversion_factor
+        wave_array = wave_array * conversion_factor
+
+        if sig_fig is not None:
+            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
+
+        # Reconstruct the line labels for the new units
+        labels_array = np.core.defchararray.add(ion_array, '_')
+        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
+        labels_array = np.core.defchararray.add(labels_array, units_wave)
+
+        # Rename the indeces
+        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
+
+    # First slice by wavelength and redshift
+    if wave_inter is not None:
+
+        # In case the input is an spectrum
+        if isinstance(wave_inter, Spectrum):
+            wave_inter = wave_inter.wave_rest
+
+        # Establish the lower and upper wavelenght limits
+        if np.ma.isMaskedArray(wave_inter):
+            w_min, w_max = wave_inter.data[0], wave_inter.data[-1]
+        else:
+            w_min, w_max = wave_inter[0], wave_inter[-1]
+
+        if z_range is not None:
+            z_range = np.array(z_range, ndmin=1)
+            w_min, w_max = w_min * (1 + z_range[0]), w_max * (1 + z_range[-1])
+
+        idcs_rows = idcs_rows & (wave_array >= w_min) & (wave_array <= w_max)
+
+    # Second slice by ion
+    if ion_list is not None:
+        idcs_rows = idcs_rows & mask_df.ion.isin(ion_list)
+
+    # Finally slice by the name of the lines
+    if lines_list is not None:
+        idcs_rows = idcs_rows & mask_df.index.isin(lines_list)
+
+    # Return the sliced the parent mask
+    output_mask = mask_df.loc[idcs_rows, 'w1':'w6']
+
+    return output_mask
+
+
 class Spectrum(LineFinder):
 
     """
@@ -232,9 +327,13 @@ class Spectrum(LineFinder):
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.norm_flux = None
-        self.redshift = None
+        self.cont = None
+        self.cont_std = None
+
         self.log = None
+
+        self.redshift = None
+        self.norm_flux = None
         self.inst_FWHM = None
         self.units_wave = None
         self.units_flux = None
