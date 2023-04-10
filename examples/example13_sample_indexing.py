@@ -3,14 +3,83 @@ import pandas as pd
 import lime
 from pathlib import Path
 
-spectrum_log_path = Path(f'sample_data/gp121903_linelog.txt')
+spectrum_log_path = r'D:\Pycharm Projects\lime_online\data\tables\fluxes_log.txt' #Path(f'sample_data/gp121903_linelog.txt')
 sample_log_path = Path(f'sample_data/sample_log.txt')
 
 # Load the logs
-log_spec = lime.load_log(spectrum_log_path)
+log_spec = lime.load_log(spectrum_log_path, sample_levels=['sample', 'id', 'line'])
 
 sample = lime.Sample()
-sample.load_log(sample_log_path)
+sample.load_log(spectrum_log_path, sample_levels=['sample', 'id', 'line'])
+
+print(sample.log)
+sample.extract_fluxes()
+ratio_list = ['H1_6565A/H1_4862A', 'H1_4341A/H1_4862A']
+ratio_df = sample.compute_line_ratios(line_ratios=ratio_list, sample_levels=['sample', 'id', 'line'])
+print(ratio_df)
+print(np.all(np.isnan(ratio_df['H1_6565A/H1_4862A'].to_numpy())))
+
+# logA, logB = lime.load_log(spectrum_log_path), lime.load_log(spectrum_log_path)
+# sample_log = lime.join_logs(['objA', 'objB'], log_list=[logA, logB])
+# print('A', sample_log)
+#
+# sample_log = lime.join_logs(['objA', 'objB'], log_list=[logA, logB], level_list=['MPT', 'lineID'])
+# print('B', sample_log)
+#
+# sample_log = lime.join_logs(['objA', 'objB'],
+#                             log_list=[spectrum_log_path, spectrum_log_path],
+#                             level_list=['MPT', 'sample', 'line'],
+#                             sample=['reductionA', 'reductionB'])
+#
+# print(sample_log)
+#
+# a = sample_log.index
+# b = a.droplevel('line')
+# print(b.isin([('objB', 'reductionA'), ('objA', 'reductionB')]))
+#
+#
+# sample_log.xs('objA', level='MPT')
+# sample_log.xs('reductionB', level='sample')
+
+# level_list = ['sample', 'id']
+# log_list = [logA, logB]
+# sample_list = ['reduction_v0.3', 'reduction_v0.1']
+# id_list = ['objA', 'objB']
+#
+#
+# log_list = [logA, logB]
+# id_list = ['objA', 'objB']
+# levels = ['sample', 'id']
+#
+#
+#
+# for i, log_i in enumerate([logA, logB]):
+#     log_i.rename_axis(index='line', inplace=True)
+#     for j, level in enumerate(level_list):
+#         log_i.insert(loc=j, column=level, value=sample_list[j])
+#         log_i.set_index(level, append=True, inplace=True)
+#     log_i.reorder_levels(list(level_list) + ['line'])
+#
+#
+# logA.insert(loc=0, column='sample', value='reduction_v0.3')
+# logA.insert(loc=1, column='id', value='objA')
+# logA.set_index('sample', append=True, inplace=True)
+# logA.set_index('id', append=True, inplace=True)
+# logA.reorder_levels(['id', 'sample', 'line'])
+#
+# logB.set_index(['sample', 'id'], append=True)
+# # df['Firstlevel'] = 'Foo'
+# # df.set_index('Firstlevel', append=True, inplace=True)
+#
+# logB.insert(loc=0, column='sample', value='reduction_v0.1')
+# logB.rename_axis(index='line', inplace=True)
+# # logB.insert(loc=1, column='id', value='objB')
+# # self.log = pd.concat(list(log_dict.values()), axis=0, keys=list(log_dict.keys()))
+#
+# comb = pd.concat([logA, logB], axis=0, keys=['objA', 'objB'], levels=['id', 'line', 'sample'])
+
+
+
 
 # # Select fluxes and compute the line ratios
 # flux_entry_headers = ['line_flux', 'line_flux_err']

@@ -824,6 +824,7 @@ class Sample(dict):
                         self.label_list[i].load_log(log_df)
 
                 # Concact the panel
+                obj_list, log_list = list(log_dict.keys()), list(log_dict.values())
                 self.log = pd.concat(list(log_dict.values()), axis=0, keys=list(log_dict.keys()))
                 self.log.rename_axis(index=level_names, inplace=True)
 

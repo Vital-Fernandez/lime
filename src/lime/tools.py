@@ -273,7 +273,6 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=N
             raise LiMe_Error(f'Input log does not have a index level with column "{sample_level}"')
 
         idcs_blended = (log['profile_label'] != 'no') & (~log.index.get_level_values('line').str.endswith('_m'))
-        (log.loc['p10_G395M_672_s00672_x1d'].profile_label != 'no') & (~log.loc['p10_G395M_672_s00672_x1d'].index.str.endswith('_m'))
 
     # Mixture model: Integrated fluxes for all lines except blended
     if flux_type == 'mixture' and np.any(idcs_blended):
@@ -370,6 +369,8 @@ def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_er
 # Get Weighted redshift from lines
 def redshift_calculation(input_log, line_list=None, weight_parameter=None, sample_levels=['id', 'line'], obj_label='spec_0'):
 
+    #TODO accept LiME objects as imput log
+
     # Check the weighted parameter presence
     if weight_parameter is not None:
         if weight_parameter not in input_log.columns:
@@ -380,22 +381,25 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
 
     # Check if single or multi-index
     sample_check = isinstance(input_log.index, pd.MultiIndex)
+
     if sample_check:
-        id_list = input_log.index.unique(level=sample_levels[0])
+        id_list = input_log.index.droplevel(sample_levels[-1]).unique()
     else:
         id_list = np.array([obj_label])
 
     # Container for redshifts
     z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'lines', 'weight'])
+    if sample_check:
+        z_df.rename_axis(index=sample_levels[:-1], inplace=True)
 
     # Loop through the ids
-    for id in id_list:
+    for idx in id_list:
 
         # Slice to the object log
         if not sample_check:
             df_slice = input_log
         else:
-            df_slice = input_log.xs(id)
+            df_slice = input_log.xs(idx, level=sample_levels[:-1])
 
         # Get the lines requested
         if line_list is not None:
@@ -435,7 +439,7 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
             z_mean, z_std, obsLineList = np.nan, np.nan, None
 
         # Add to dataframe
-        z_df.loc[id, 'z_mean':'weight'] = z_mean, z_std, obsLineList, weight_parameter
+        z_df.loc[idx, 'z_mean':'weight'] = z_mean, z_std, obsLineList, weight_parameter
 
     return z_df
 
@@ -447,11 +451,13 @@ def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_
     if len(flux_columns) != np.sum(log.columns.isin(flux_columns)):
         raise LiMe_Error(f'Input log is missing {len(flux_columns)} "flux_entries" in the column headers')
 
-    # Create dataframe to contain the results
-    if not isinstance(log.index, pd.MultiIndex):
-        idcs = [object_id]
+    # Check if single or multi-index
+    sample_check = isinstance(log.index, pd.MultiIndex)
+
+    if sample_check:
+        idcs = log.index.droplevel(sample_levels[-1]).unique()
     else:
-        idcs = log.index.get_level_values(sample_levels[0]).unique()
+        idcs = np.array([object_id])
 
     ratio_df = pd.DataFrame(index=idcs)
 
@@ -478,18 +484,18 @@ def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_
             else:
 
                 # Slice the dataframe to objects which have both lines
-                idcs_slice = log.index.get_level_values(sample_levels[1]).isin([numer, denom])
-                grouper = log.index.get_level_values(sample_levels[0])
+                idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
+                grouper = log.index.droplevel('line')
                 idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
                 df_slice = log.loc[idcs_slice]
 
                 # Get fluxes
                 if df_slice.size > 0:
-                    numer_flux = df_slice.xs(numer, level=sample_levels[1])[flux_columns[0]]
-                    numer_err = df_slice.xs(numer, level=sample_levels[1])[flux_columns[1]]
+                    numer_flux = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[0]]
+                    numer_err = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[1]]
 
-                    denom_flux = df_slice.xs(denom, level=sample_levels[1])[flux_columns[0]]
-                    denom_err = df_slice.xs(denom, level=sample_levels[1])[flux_columns[1]]
+                    denom_flux = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[0]]
+                    denom_err = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[1]]
                     idcs_slice = numer_flux.index
                 else:
                     idcs_slice = ratio_df.index

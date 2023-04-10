@@ -4,6 +4,7 @@ __all__ = [
     'load_cfg',
     'load_log',
     'save_log',
+    'join_logs',
     'log_parameters_calculation',
     'log_to_HDU',
     'save_param_maps',
@@ -308,6 +309,60 @@ def save_log(log_dataframe, file_address, ext='LINESLOG', parameters='all', fits
     return
 
 
+def join_logs(id_list, log_list, level_list=None, ext='LINESLOG', **kwargs):
+
+    # Check if multi-index is not using the default names
+    if level_list is not None:
+        if not np.unique(level_list).size == len(level_list):
+            _logger.warning(f'The level names have a repeated entry: {level_list}')
+
+    # Check if default level names
+    else:
+        level_list = ['id', 'line']
+
+    # Loop through the lines
+    output_list = [None] * len(id_list)
+    for i, log in enumerate(log_list):
+
+        log = check_file_dataframe(log, pd.DataFrame, ext, sample_levels=level_list)
+
+        # Rename lines index to line if necessary
+        if log.index.name is None:
+            log.rename_axis(index=level_list[-1], inplace=True)
+
+        # Add id index
+        if not level_list[0] in log.index.names:
+            log.insert(loc=0, column=level_list[0], value=id_list[i])
+            log.set_index(level_list[0], append=True, inplace=True)
+
+        # Add extra levels
+        for j, level_j in enumerate(level_list):
+            if (j > 0) and (level_j != level_list[-1]):
+                values_level = kwargs.get(level_j)
+
+                # User provides values for the new index
+                if values_level is not None:
+                    if not level_j in log.index.names:
+                        log.insert(loc=0, column=level_j, value=values_level[i])
+                        log.set_index(level_j, append=True, inplace=True)
+
+                # It already exists as a column in the log
+                elif level_j in log.columns:
+                    log.set_index(level_j, append=True, inplace=True)
+
+                # Error, requested but not provided
+                else:
+                    raise LiMe_Error(f'Please provide a list of values for the "{level_j}" frame index')
+
+        # Sort the indeces
+        output_list[i] = log.reorder_levels(level_list)
+
+    # Combine the dataframes
+    output_log = pd.concat(output_list, axis=0)
+
+    return output_log
+
+
 def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
 
     # Loop through the line components
@@ -335,10 +390,13 @@ def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
     return
 
 
-def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line']):
+def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line'], copy_output=True):
 
     if isinstance(input, variable_type):
-        output = input
+        if copy_output:
+            output = input.copy()
+        else:
+            output = input
 
     elif Path(input).is_file():
         output = load_log(input, ext=ext, sample_levels=sample_levels)
