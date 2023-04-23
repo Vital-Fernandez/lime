@@ -3,12 +3,13 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from astropy.io import fits
+from inspect import signature
 
 from . import Error
 from .model import LineFitting
-from .tools import define_masks, label_decomposition, COORD_ENTRIES
+from .tools import define_masks, label_decomposition, COORD_ENTRIES, LineFinder
 from .transitions import Line
-from .io import check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU, results_to_log
+from .io import check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU, results_to_log, load_log
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -242,9 +243,9 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def frame(self, bands_df, fit_conf=None,  label=None, fit_method='least_squares', emission_check=True,
+    def frame(self, bands_df, fit_conf=None, label=None, fit_method='least_squares', emission_check=True,
               cont_from_bands=True, temp=10000.0, progress_output=None, plot_fits=False, obj_ref=None,
-              default_conf='default_line_fitting'):
+              key_line_conf='default_line_fitting'):
 
         # Check if the lines table is a dataframe or a file
         bands_df = check_file_dataframe(bands_df, pd.DataFrame)
@@ -270,7 +271,7 @@ class SpecTreatment(LineFitting):
                 else:
 
                     # Use the default one
-                    input_conf = {**fit_conf.get(default_conf, {})}
+                    input_conf = {**fit_conf.get(key_line_conf, {})}
 
                     # Update the default one
                     if f'{obj_ref}_line_fitting' in fit_conf:
@@ -361,16 +362,14 @@ class CubeTreatment(LineFitting):
 
     def spatial_mask(self, spatial_mask, mask_name_list=[], bands_frame=None, fit_conf={}, output_log=None, fit_method='leastsq',
                      line_detection=False, emission_check=True, cont_from_bands=True, temp=10000, n_save=100,
-                     progress_output=None, log_ext_suffix='_LINESLOG', **kwargs):
+                     progress_output=None, log_ext_suffix='_LINESLOG', bands_key='bands_log'):
 
         # Check if the mask variable is a file or an array
         mask_dict = check_file_array_mask(spatial_mask, mask_name_list)
 
         # Check if the lines table is a dataframe or a file
         if bands_frame is not None:
-            bands_frame = check_file_dataframe(bands_frame, pd.DataFrame)
-        else:
-            raise(Error(f'No input bands frame or file in the spatial mask line fitting'))
+            bands_df = check_file_dataframe(bands_frame, pd.DataFrame)
 
         # Check if output log
         if output_log is None:
@@ -383,6 +382,14 @@ class CubeTreatment(LineFitting):
         # Unpack mask dictionary
         mask_list = np.array(list(mask_dict.keys()))
         mask_data_list = list(mask_dict.values())
+
+        # Check all the masks line fitting for a lines dataframe
+        if bands_frame is None:
+            for mask_name in mask_list:
+                mask_conf = fit_conf.get(f'{mask_name}_line_fitting', fit_conf.copy())
+                if bands_key not in mask_conf:
+                    raise Error(f'Youn need to specify a bands log path with the "bands_key"="{bands_key}" for the section'
+                                f'"[{mask_name}_line_fitting]" since you did not provide it as a "bands_frame"')
 
         # Determine the spaxels to treat at each mask
         total_spaxels, spaxels_dict = 0, {}
@@ -420,6 +427,26 @@ class CubeTreatment(LineFitting):
             # Get mask line fitting_conf
             mask_conf = fit_conf.get(f'{mask_name}_line_fitting', fit_conf)
 
+            # Load the mask log if provided
+            if bands_frame is None:
+                if bands_key in mask_conf:
+                    bands_mask_path = mask_conf[bands_key]
+                    bands_mask_path = Path().absolute()/bands_mask_path[1:] if bands_mask_path[0] == '.' else Path(bands_mask_path)
+                    bands_df = load_log(bands_mask_path)
+                else:
+                    Error(f'The bands key "{bands_key}" is not find on the configuration file')
+
+            # Parameters and default values for the line detection
+            line_detect_default = {}
+            if line_detection:
+                for i_item, items in enumerate(signature(LineFinder.line_detection).parameters.items()):
+                    if i_item > 0:  # not the self entry
+                        if i_item == 1:  # Bands log
+                            value = bands_df
+                        else:  # Rest parameters
+                            value = mask_conf.get(items[0], items[1].default)
+                        line_detect_default[items[0]] = value
+
             # WCS header data
             hdr_coords = {}
             for key in COORD_ENTRIES:
@@ -449,12 +476,10 @@ class CubeTreatment(LineFitting):
 
                 # Detect the lines
                 if line_detection:
-                    bands_frame = spaxel.line_detection(bands_log=bands_frame)
-                else:
-                    bands_frame = bands_frame
+                    bands_df = spaxel.line_detection(**line_detect_default)
 
                 # Fit the lines
-                spaxel.fit.frame(bands_frame, spaxel_conf, None, fit_method, emission_check, cont_from_bands,
+                spaxel.fit.frame(bands_df, spaxel_conf, None, fit_method, emission_check, cont_from_bands,
                                  temp, progress_output=None, plot_fits=None)
 
                 # Save to a fits file

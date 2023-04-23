@@ -578,24 +578,31 @@ def determine_cube_images(cube, line, band, bands_frame, percentiles, color_scal
     return line, image, levels, color_scale
 
 
-def image_map_labels(title, wcs, line_bg, line_fg, masks_dict):
+def image_map_labels(input_labels, wcs, line_bg, line_fg, masks_dict):
+
+    if input_labels is None:
+        output_labels = {}
+    else:
+        output_labels = input_labels.copy()
 
     # Define the title
-    if title is None:
+    if output_labels.get('title') is None:
         title = r'{} band'.format(line_bg.latex_label[0])
         if line_fg is not None:
-            # title = f'{} with {} contours'.format(title, line_fg.latex[0])
             title = f'{title} with {line_fg.latex_label[0]} contours'
         if len(masks_dict) > 0:
             title += f'\n and spatial masks'
+        output_labels['title'] = title
 
-    # Generate the figure
-    if wcs is not None:
-        x_label, y_label = 'RA', 'DEC'
-    else:
-        x_label, y_label = 'x', 'y'
+    # Define x axis
+    if output_labels.get('xlabel') is None:
+        output_labels['xlabel'] = 'x' if wcs is None else 'RA'
 
-    return title, x_label, y_label
+    # Define y axis
+    if output_labels.get('ylabel') is None:
+        output_labels['ylabel'] = 'y' if wcs is None else 'DEC'
+
+    return output_labels
 
 
 def image_plot(ax, image_bg, image_fg, fg_levels, fg_mesh, bg_scale, fg_scale, bg_color, fg_color, cursor_cords=None):
@@ -796,6 +803,44 @@ def _masks_plot(axis, line_list, x, y, z_corr, log, spectrum_mask, color_dict={}
                                              color=color_dict['mask_marker'])
 
     return
+
+
+def parse_figure_format(input_conf, local_conf=None, default_conf=STANDARD_PLOT, theme=None):
+
+    # Check whether there is an input configuration
+    if input_conf is None:
+        output_conf = {}
+    else:
+        output_conf = input_conf.copy()
+
+    # Default configuration
+    if local_conf is not None:
+        output_conf = {**local_conf, **output_conf}
+
+    # Final configuration
+    output_conf = {**default_conf, **output_conf}
+
+    return output_conf
+
+
+def parse_labels_format(input_labels, units_wave, units_flux, norm_flux):
+
+    # Check whether there are input labels
+    if input_labels is None:
+        output_labels = {}
+    else:
+        output_labels = input_labels.copy()
+
+    # X axis label
+    if output_labels.get('xlabel') is None:
+        output_labels['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
+
+    # Y axis label
+    if output_labels.get('ylabel') is None:
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
+        output_labels['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
+
+    return output_labels
 
 
 class LiMePlots:
@@ -2274,7 +2319,6 @@ class SpectrumFigures(Plotter):
         return
 
 
-
 class CubeFigures(Plotter):
 
     def __init__(self, cube):
@@ -2296,7 +2340,7 @@ class CubeFigures(Plotter):
 
     def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99], bands_frame=None,
              bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
-             wcs=None, plt_cfg={}, ax_cfg={}, in_fig=None, in_ax=None, title=None, masks_file=None, output_address=None,
+             wcs=None, plt_cfg=None, ax_cfg=None, in_fig=None, in_ax=None, masks_file=None, output_address=None,
              maximise=False):
 
 
@@ -2322,18 +2366,11 @@ class CubeFigures(Plotter):
         check_image_size(bg_image, fg_image, masks_dict)
 
         # State the plot labelling
-        title, x_label, y_label = image_map_labels(title, wcs, line_bg, line_fg, masks_dict)
+        AXES_CONF = image_map_labels(ax_cfg, wcs, line_bg, line_fg, masks_dict)
 
-        # User configuration overrites user
-        ax_cfg.setdefault('xlabel', x_label)
-        ax_cfg.setdefault('ylabel', y_label)
-        ax_cfg.setdefault('title', title)
-        plt_cfg.setdefault('figure.figsize', (5 if masks_file is None else 10, 5))
-        plt_cfg.setdefault('axes.titlesize', 12)
-        plt_cfg.setdefault('legend.fontsize', 10)
-
-        PLT_CONF = {**STANDARD_PLOT, **plt_cfg}
-        AXES_CONF = {**STANDARD_AXES, **ax_cfg}
+        # User figure format overwrite default format
+        local_cfg = {'figure.figsize': (5 if masks_file is None else 10, 5), 'axes.titlesize': 12, 'legend.fontsize': 10}
+        PLT_CONF = parse_figure_format(plt_cfg, local_cfg)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):

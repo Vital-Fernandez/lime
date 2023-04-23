@@ -113,9 +113,8 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
 
     # Check file is at path
     log_path = Path(file_address)
-
     if not log_path.is_file():
-        _logger.critical(f'No lines log found at {file_address}\n')
+        raise LiMe_Error(f'No lines log found at {file_address}\n')
 
     file_name, file_type = log_path.name, log_path.suffix
 

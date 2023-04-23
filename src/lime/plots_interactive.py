@@ -9,7 +9,7 @@ from astropy.io import fits
 from pygments.lexer import default
 
 from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
-from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, \
+from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
     determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import label_decomposition, blended_label_from_log
 from .transitions import label_components, latex_from_label
@@ -852,8 +852,8 @@ class CubeInspector:
 
     def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99], bands_frame=None,
              bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
-             wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, title=None, masks_file=None, lines_log_address=None,
-             maximise=False, rest_frame=False, log_scale=False):
+             wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, masks_file=None, lines_log_address=None,
+             maximise=False, rest_frame=False, log_scale=False, ext_log='_LINESLOG'):
 
         """
         This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
@@ -916,6 +916,7 @@ class CubeInspector:
 
         """
 
+        self.ext_log = ext_log
 
         # Prepare the background image data
         line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
@@ -955,28 +956,24 @@ class CubeInspector:
         if len(self.masks_dict) > 0:
             self.mask_ext = list(self.masks_dict.keys())[0]
         else:
-            self.mask_ext = '_LINESLOG'
+            self.mask_ext = self.ext_log
 
         # Load the complete fits lines log if input
         if lines_log_address is not None:
-            self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+            if Path(lines_log_address).is_file():
+                self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+            else:
+                _logger.info(f'The lines log at {lines_log_address} was not found.')
 
         # State the plot labelling
-        title, x_label, y_label = image_map_labels(title, wcs, line_bg, line_fg, self.masks_dict)
+        default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, line_fg, self.masks_dict)
+        ax_cfg_spec = parse_labels_format(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux,
+                                          self._cube.norm_flux)
 
         # User configuration overwrite default figure format
-        default_plt_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
-                           'xtick.labelsize': 10, 'ytick.labelsize': 10}
-        default_ax_cfg_im = {'xlabel': x_label, 'ylabel': y_label, 'title': title}
-        default_ax_cfg_spec = {}
-
-        default_plt_cfg.update(plt_cfg)
-        default_ax_cfg_im.update(ax_cfg_image)
-        default_ax_cfg_spec.update(ax_cfg_spec)
-
-        # Adjusting the labels to the units
-        self.fig_conf, ax_cfg_spec = self._figure_format(default_plt_cfg, default_ax_cfg_spec, norm_flux=self._cube.norm_flux,
-                                                     units_wave=self._cube.units_wave, units_flux=self._cube.units_flux)
+        local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
+                     'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        self.fig_conf = parse_figure_format(plt_cfg, local_cfg)
 
         # Container for both axes format
         self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
@@ -1060,7 +1057,7 @@ class CubeInspector:
 
             # Check if lines have been measured
             if self.hdul_linelog is not None:
-                ext_name = f'{idx_j}-{idx_i}_LINESLOG'#{self.ext_log}'
+                ext_name = f'{idx_j}-{idx_i}{self.ext_log}'
 
                 # Better sorry than permission. Faster?
                 try:
@@ -1085,7 +1082,7 @@ class CubeInspector:
 
         return
 
-    def on_click(self, event, new_voxel_button=3, mask_button='m'):
+    def on_click(self, event, new_voxel_button=3):
 
         if self.in_ax == self._ax0:
 
