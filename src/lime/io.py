@@ -102,7 +102,7 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
     ``.xlsx`` files the user should specify the target extension/sheet name (the default one is ``LINESLOG``).
 
     :param file_address: Address of the configuration file. The function stops if the file is not found
-    :type file_address: str
+    :type file_address: str, Path
 
     :param ext: Name of the ``.fits`` file or ``.xlsx`` file extension with the extension name to read
     :type ext: str, optional
@@ -177,7 +177,7 @@ def save_log(log_dataframe, file_address, ext='LINESLOG', parameters='all', fits
     :type log: pandas.DataFrame
 
     :param file_address: Address for the output lines log file.
-    :type file_address: str
+    :type file_address: str, Path
 
     :param parameters: List of parameters to include in the output log. By default the log includes all the parameters,
                        default value "all"
