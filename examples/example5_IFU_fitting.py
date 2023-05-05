@@ -2,7 +2,6 @@ import lime
 from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
-import inspect
 
 # State the data location
 cfg_file = './sample_data/manga.cfg'
