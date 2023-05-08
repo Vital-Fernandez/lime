@@ -1,4 +1,4 @@
+setuptools
 ipykernel
 nbsphinx
-setuptools
 lmfit
