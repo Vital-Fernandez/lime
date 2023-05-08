@@ -917,6 +917,7 @@ class CubeInspector:
         """
 
         self.ext_log = ext_log
+        self.mask_file = masks_file
 
         # Prepare the background image data
         line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
@@ -940,7 +941,7 @@ class CubeInspector:
         self.rest_frame, self.log_scale = rest_frame, log_scale
 
         # Load the masks
-        self.masks_dict = load_spatial_masks(masks_file)
+        self.masks_dict = load_spatial_masks(self.mask_file)
 
         # Check that the images have the same size
         check_image_size(self.bg_image, self.fg_image, self.masks_dict)
@@ -1147,13 +1148,14 @@ class CubeInspector:
         return
 
     def spaxel_selection(self):
-
         for mask, mask_data in self.masks_dict.items():
             mask_matrix = mask_data[0]
             if mask == self.mask_ext:
                 mask_matrix[self.key_coords[0], self.key_coords[1]] = not mask_matrix[self.key_coords[0], self.key_coords[1]]
             else:
                 mask_matrix[self.key_coords[0], self.key_coords[1]] = False
+
+            self.masks_dict[mask] = mask_data
 
         return
 

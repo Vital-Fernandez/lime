@@ -57,4 +57,3 @@ shoc579.plot.cube('H1_6563A', masks_file=spatial_mask, wcs=wcs)
 
 # Manually add/remove spaxels to the spatial mask
 shoc579.check.cube('H1_6563A', masks_file=spatial_mask, wcs=wcs)
-
