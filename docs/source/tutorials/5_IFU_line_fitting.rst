@@ -11,7 +11,7 @@ Moreover, you may notice that many of the steps are the same as in the single sp
 Indeed, the main difference is that in this case we are going to treat 329 spectra. Most of the extra steps involve
 reading the data from the spatial mask and some good practices to better handle the larger workflow.
 
-We start again by downloading the `MANGA cube <https://dr17.sdss.org/marvin/galaxy/8626-12704/>`_:
+We start again by downloading the `MANGA cube <https://dr17.sdss.org/marvin/galaxy/8626-12704/>`_ if it wasn't already:
 
 .. code-block:: python
 
