@@ -64,7 +64,7 @@ if  you have not already:
         flux = hdul['FLUX'].data * norm_flux
         hdr = hdul['FLUX'].header
 
-As we did in the :ref:`5th tutorial <example5>`. we are going to use the ``lime.CubeFitsInspector`` class to plot the
+As we did in the previous tutorial, we are going to use the ``lime.CubeFitsInspector`` class to plot the
 galaxy IFU cube:
 
 .. code-block:: python

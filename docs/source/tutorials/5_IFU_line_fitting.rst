@@ -4,7 +4,7 @@
 ==================================
 
 In this tutorial, we continue our analysis on the galaxy `SHOC579 <https://dr17.sdss.org/marvin/galaxy/8626-12704/>`_ using
-the spatial mask from the :ref:`previous tutorial <example5>`.
+the spatial mask from the previous tutorial.
 
 This tutorial can be found as a script at the `github 6th example <https://github.com/Vital-Fernandez/lime/blob/master/examples/example6_IFU_fitting.py>`_.
 Moreover, you may notice that many of the steps are the same as in the single spectrum analysis in the 3rd tutorial.

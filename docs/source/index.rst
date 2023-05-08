@@ -56,8 +56,6 @@ These are some of the features currently available:
    tutorials/1_SingleLineFitting
    tutorials/2_Line_bands_inspection
    tutorials/3_CompleteSpectrumFitting
-   tutorials/4_IFU_spatial_masking
+   tutorials/4_IFU_Spatial_Masking
    tutorials/5_IFU_line_fitting
    tutorials/6_IFU_review_results
-   tutorials/7_SyntheticObservation
-

@@ -587,7 +587,7 @@ class Cube:
 
         return
 
-    def spatial_masker(self, line, band=None, param=None, percentiles=[85, 90, 95], mask_ref=None, min_percentil=None,
+    def spatial_masker(self, line, band=None, param=None, percentiles=(90, 95, 99), mask_ref=None, min_percentil=None,
                        output_address=None, header_dict={}, bands_frame=None):
 
         """

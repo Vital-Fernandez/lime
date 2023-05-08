@@ -242,7 +242,7 @@ def spatial_mask_generator(mask_param, wavelength_array, flux_cube, contour_leve
                 param_percentile = f'${latex_science_float(param_array[idx_region], dec=3)}$'
                 mask_voxels = np.sum(region_mask)
 
-                legend_text = f'{ext_name}: {percentile_ref} = {param_percentile} ({mask_voxels} voxels)'
+                legend_text = f'{ext_name}: {percentile_ref} = {param_percentile} ({mask_voxels} spaxels)'
                 legend_list[idx_region] = patches.Patch(color=cmap(idx_region), label=legend_text)
 
                 cm_i = colors.ListedColormap(['black', cmap(idx_region)])
@@ -659,7 +659,7 @@ def spatial_mask_plot(ax, masks_dict, mask_color, mask_alpha, units_flux, mask_l
             legend_i += r', $P_{{{}th}}$ = '.format(param_idx)
 
             # Add percentile value and number voxels
-            legend_i += f'${latex_science_float(param_val, dec=3)}$ ({n_spaxels} voxels)'
+            legend_i += f'${latex_science_float(param_val, dec=3)}$ ({n_spaxels} spaxels)'
 
             cm_i = colors.ListedColormap([cmap_contours(idx_mask)])
 
@@ -2338,19 +2338,19 @@ class CubeFigures(Plotter):
 
         return
 
-    def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99], bands_frame=None,
-             bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
-             wcs=None, plt_cfg=None, ax_cfg=None, in_fig=None, in_ax=None, masks_file=None, output_address=None,
-             maximise=False):
+    def cube(self, line, band=None, percentile_bg=60, line_fg=None, band_fg=None, percentiles_fg=(90, 95, 99),
+             bands_frame=None, bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r',
+             mask_alpha=0.2, wcs=None, plt_cfg=None, ax_cfg=None, in_fig=None, in_ax=None, masks_file=None,
+             output_address=None, maximise=False):
 
 
         # Prepare the background image data
         line_bg, bg_image, bg_levels, bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
-                                                                       percentil_bg, bg_scale, contours_check=False)
+                                                                       percentile_bg, bg_scale, contours_check=False)
 
         # Prepare the foreground image data
         line_fg, fg_image, fg_levels, fg_scale = determine_cube_images(self._cube, line_fg, band_fg, bands_frame,
-                                                                       percentils_fg, fg_scale, contours_check=True)
+                                                                       percentiles_fg, fg_scale, contours_check=True)
 
         # Mesh for the countours
         if line_fg is not None:

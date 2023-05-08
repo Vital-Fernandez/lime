@@ -1076,7 +1076,7 @@ class CubeInspector:
                 self._ax.set_yscale('log')
 
         # Update the axis
-        self.axes_conf['spectrum']['title'] = f'Voxel {idx_j} - {idx_i}'
+        self.axes_conf['spectrum']['title'] = f'Spaxel {idx_j} - {idx_i}'
         self._ax0.update(self.axes_conf['image'])
         self._ax1.update(self.axes_conf['spectrum'])
 
