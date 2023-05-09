@@ -119,7 +119,7 @@ You can learn more about the :math:`\textsc{LiMe}` workflow, using real astronom
 
 :math:`\textsc{LiMe}` configuration files follow the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. **The
 sections with the profile configuration must have the ``_line_fitting`` suffix.** For example, this is the fitting
-configuration from the :ref:`6th tutorial <example6>`:
+configuration from the 6th tutorial:
 
 .. code-block::
 
