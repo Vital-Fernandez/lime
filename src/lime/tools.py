@@ -16,6 +16,7 @@ from sys import exit
 from pathlib import Path
 from scipy import signal
 from .io import LiMe_Error
+from inspect import signature
 
 _logger = logging.getLogger('LiMe')
 
@@ -77,6 +78,8 @@ _REFERENCE_LINES = np.array(['H1_1216A', 'C4_1549A', 'He2_1640A', 'O3]_1666A', '
                              'H1_4861A', '[O3]_5007A', 'H1_6563A', 'S3_9069A', 'S3_9531A', 'H1_10050A', 'He1_10830A', 'H1_10940A',  'H1_12820A',
                               'Fe2_16440A', 'H1_18756A', 'H1_19450A', 'Si6_19620A', 'He1_20590A', 'H2_21210A', 'H1_21661A', 'H2_24070A',
                               'Si6_24830A', 'H1_26259A',  'H1_32970A', 'PAH1_33000A', 'H1_37406A', 'H1_40522A', 'H1_46539A'])
+
+
 
 
 # Number conversion to Roman style
@@ -663,9 +666,6 @@ def air_to_vacuum_function(input_array, sig_fig=0):
     return output_array
 
 
-
-
-
 def format_line_mask_option(entry_value, wave_array):
 
     # Check if several entries
@@ -849,9 +849,11 @@ class LineFinder:
 
         return detection_mask
 
-    def line_detection(self, bands_log=None, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3,
+    def line_detection(self, input_log=None, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3,
                        line_type='emission', width_tol=5, width_mode='fixed', ml_detection=False, plot_cont_calc=False,
                        plot_peak_calc=False):
+
+        # TODO input log should not be None... Maybe read database
 
         # Fit the continuum
         cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
@@ -869,10 +871,10 @@ class LineFinder:
         idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
-        if bands_log is not None:
+        if input_log is not None:
 
             # Match peaks with theoretical lines
-            matched_DF = self.label_peaks(idcs_peaks, bands_log, width_tol=width_tol, width_mode=width_mode,
+            matched_DF = self.label_peaks(idcs_peaks, input_log, width_tol=width_tol, width_mode=width_mode,
                                           line_type=line_type)
 
             return matched_DF
@@ -1101,3 +1103,9 @@ class LineFinder:
         matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
 
         return matched_DF
+
+
+# Line finder default parameters
+LINE_DETECT_PARAMS = signature(LineFinder.line_detection).parameters
+LINE_DETECT_PARAMS = {key: value.default for key, value in LINE_DETECT_PARAMS.items()}
+LINE_DETECT_PARAMS.pop('self')

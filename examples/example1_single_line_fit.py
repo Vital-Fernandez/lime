@@ -68,4 +68,4 @@ gp_spec.save_log('./sample_data/example1_linelog.asdf', ext='GP121903')
 log_address = './sample_data/example1_linelog.fits'
 lime.save_log(gp_spec.log, log_address, ext='GP121903')
 log = lime.load_log(log_address, ext='GP121903')
-print(f'Are the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')
+print(f'Is the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')

@@ -942,7 +942,7 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     # Size of progress bar
     j = i/i_max
     stdout.write('\r')
-    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}%  {post_text}"
+    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
     stdout.write(message)
     stdout.flush()
 
