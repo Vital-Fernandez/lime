@@ -6,9 +6,10 @@ from astropy.io import fits
 
 from . import Error
 from .model import LineFitting
-from .tools import define_masks, label_decomposition, COORD_ENTRIES, LineFinder, LINE_DETECT_PARAMS
+from .tools import define_masks, label_decomposition, COORD_ENTRIES, ProgressBar
+from .recognition import LINE_DETECT_PARAMS
 from .transitions import Line
-from .io import check_file_dataframe, progress_bar, load_spatial_masks, log_to_HDU, results_to_log, load_log
+from .io import check_file_dataframe, load_spatial_masks, log_to_HDU, results_to_log, load_log
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -154,8 +155,8 @@ class SpecTreatment(LineFitting):
         self._spec = spectrum
         self.line = None
 
-    def band(self, label, band_edges=None, fit_conf=None, fit_method='leastsq', emission_check=True, cont_from_bands=True,
-             temp=10000.0):
+    def band(self, label, band_edges=None, fit_conf=None, fit_method='least_squares', emission_check=True,
+             cont_from_bands=True, temp=10000.0):
 
         """
 
@@ -242,23 +243,19 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def frame(self, bands_df, fit_conf=None, label_list=None, fit_method='least_squares', emission_check=True,
-              cont_from_bands=True, temp=10000.0, progress_output=None, plot_fits=False, obj_ref=None,
-              key_line_conf='default_line_fitting'):
+    def frame(self, bands_df, fit_conf=None, line_list=None, fit_method='least_squares', line_detection=False,
+              emission_check=True, cont_from_bands=True, temp=10000.0, progress_output='bar', plot_fit=False,
+              obj_ref=None, key_line_conf='default_line_fitting', user_detect_conf=None):
 
-        # TODO We should add the line detection here
-
-        # Check if the lines table is a dataframe or a file
+        # Check if the lines log is a dataframe or a file address
         bands_df = check_file_dataframe(bands_df, pd.DataFrame)
 
         if bands_df is not None:
 
             # Crop the analysis to the target lines
-            if label_list is not None:
-                idcs = bands_df.index.isin(label_list)
-                line_list = bands_df.loc[idcs].index.values
-            else:
-                line_list = bands_df.index.values
+            if line_list is not None:
+                idcs = bands_df.index.isin(line_list)
+                bands_df = bands_df.loc[idcs].index.values
 
             # If object and default line fitting is provided get default configuration
             input_conf = None
@@ -278,27 +275,39 @@ class SpecTreatment(LineFitting):
                     if f'{obj_ref}_line_fitting' in fit_conf:
                         input_conf.update(fit_conf[f'{obj_ref}_line_fitting'])
 
-            # Loop text decision # TODO change formats by a dictionary
-            bar_output = True if progress_output == 'bar' else False
+
+
+            # Line detection if requested
+            if line_detection:
+
+                # User configuration overwrites default
+                if user_detect_conf is not None:
+                    detect_conf = {**LINE_DETECT_PARAMS, **user_detect_conf}
+                else:
+                    detect_conf = LINE_DETECT_PARAMS.copy()
+                detect_conf['input_log'] = bands_df
+
+                # Perform de line detection
+                bands_df = self._spec.line_detection(**detect_conf)
 
             # Loop through the lines
-            n_lines = len(line_list)
+            label_list = bands_df.index.to_numpy()
+            n_lines = label_list.size
+            pbar = ProgressBar(progress_output, f'{n_lines} lines')
+
             for i in np.arange(n_lines):
 
-                line = line_list[i]
+                # Current line
+                line = label_list[i]
 
                 # Progress message
-                if progress_output is not None:
-                    if bar_output:
-                        progress_bar(i+1, n_lines, post_text=f'of lines')
-                    else:
-                        print(f'{i+1}/{n_lines}) {line}')
+                pbar.output_message(i, n_lines, pre_text="", post_text=line)
 
                 # Fit the lines
-                self.band(line, bands_df.loc[line, 'w1':'w6'].values, input_conf, fit_method, emission_check,
+                self.band(line, bands_df.loc[line, 'w1':'w6'].to_numpy(), input_conf, fit_method, emission_check,
                           cont_from_bands, temp)
 
-                if plot_fits:
+                if plot_fit:
                     self._spec.plot.band()
 
         else:
@@ -361,36 +370,27 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, spatial_mask, mask_name_list=[], bands_frame=None, fit_conf={}, output_log=None, fit_method='leastsq',
-                     line_detection=False, emission_check=True, cont_from_bands=True, temp=10000, n_save=100,
-                     progress_output=None, log_ext_suffix='_LINESLOG'):
+    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf={}, mask_name_list=[], fit_method='least_squares',
+                     line_detection=False, emission_check=True, cont_from_bands=True, temp=10000.0,
+                     output_log=None, log_ext_suffix='_LINESLOG', progress_output='bar', n_save=100):
 
         # Check if the mask variable is a file or an array
         mask_dict = check_file_array_mask(spatial_mask, mask_name_list)
-
-        # Check if the lines table is a dataframe or a file
-        if bands_frame is not None:
-            bands_df = check_file_dataframe(bands_frame, pd.DataFrame)
-
-        # Check if output log
-        if output_log is None:
-            raise(Error(f'No output log file address to save the line measurements log'))
-        else:
-            output_log = Path(output_log)
-            if not output_log.parent.is_dir():
-                raise(Error(f'The folder of the output log file does not exist at {output_log}'))
 
         # Unpack mask dictionary
         mask_list = np.array(list(mask_dict.keys()))
         mask_data_list = list(mask_dict.values())
 
-        # Check all the masks line fitting for a lines dataframe
-        if bands_frame is None:
+        # Check if the lines table is a dataframe or a file
+        if bands_frame is not None:
+            bands_df = check_file_dataframe(bands_frame, pd.DataFrame)
 
+        # Check all the masks line fitting for a lines dataframe
+        else:
             for mask_name in mask_list:
 
                 error_message = 'You did not provide an input bands log for the analysis.\n' \
-                                f'In this case you need to specify an "input_log=file_address" in the ' \
+                                f'In this case you need to specify an "input_log=log_file_address" in the ' \
                                 f'"[{mask_name}_line_detection]" of your configuration file'
 
                 mask_conf = fit_conf.get(f'{mask_name}_line_detection', None)
@@ -401,6 +401,14 @@ class CubeTreatment(LineFitting):
                 else:
                     raise Error(error_message)
 
+        # Check if output log
+        if output_log is None:
+            raise(Error(f'No output log file address to save the line measurements log'))
+        else:
+            output_log = Path(output_log)
+            if not output_log.parent.is_dir():
+                raise(Error(f'The folder of the output log file does not exist at {output_log}'))
+
         # Determine the spaxels to treat at each mask
         total_spaxels, spaxels_dict = 0, {}
         for idx_mask, mask_data in enumerate(mask_data_list):
@@ -410,8 +418,6 @@ class CubeTreatment(LineFitting):
             total_spaxels += len(idcs_spaxels)
             spaxels_dict[idx_mask] = idcs_spaxels
 
-        # Loop text decision
-        bar_output = True if progress_output == 'bar' else False
 
         # Spaxel counter to save the data everytime n_save is reached
         spax_counter = 0
@@ -427,10 +433,12 @@ class CubeTreatment(LineFitting):
             mask_name = mask_list[i]
             mask_hdr = mask_data_list[i][1]
             idcs_spaxels = spaxels_dict[i]
-            print(f'\n\nSpatial mask {i + 1}/{n_masks}) {mask_name}')
 
             # Get mask line detection configuration
-            detect_conf = {**LINE_DETECT_PARAMS, **fit_conf.get(f'{mask_name}_line_detection', {})}
+            if line_detection:
+                detect_conf = {**LINE_DETECT_PARAMS, **fit_conf.get(f'{mask_name}_line_detection', {})}
+            else:
+                detect_conf = None
 
             # Get mask line fitting configuration
             mask_conf = fit_conf.get(f'{mask_name}_line_fitting', fit_conf)
@@ -450,6 +458,8 @@ class CubeTreatment(LineFitting):
 
             # Loop through the spaxels
             n_spaxels = idcs_spaxels.shape[0]
+            pbar = ProgressBar(progress_output, f'{n_spaxels} spaxels')
+            print(f'\n\nSpatial mask {i + 1}/{n_masks}) {mask_name} ({n_spaxels} spaxels)')
             for j in np.arange(n_spaxels):
 
                 idx_j, idx_i = idcs_spaxels[j]
@@ -459,23 +469,24 @@ class CubeTreatment(LineFitting):
                 spaxel_conf = fit_conf.get(f'{spaxel_label}_line_fitting', mask_conf)
 
                 # Spaxel progress message
-                if progress_output is not None:
-                    if bar_output:
-                        progress_bar(j + 1, n_spaxels, post_text=f'of {n_spaxels} spaxels ')
-                    else:
-                        print(f'Spaxel {j + 1}/{n_spaxels}) Coord. {idx_j}-{idx_i}')
+                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'Coord. {idx_j}-{idx_i}')
 
                 # Get spaxel data
                 spaxel = self._cube.get_spaxel(idx_j, idx_i, spaxel_label)
 
-                # Detect the lines
-                if line_detection:
-                    detect_conf['input_log'] = bands_df
-                    bands_df = spaxel.line_detection(**detect_conf)
-
                 # Fit the lines
-                spaxel.fit.frame(bands_df, spaxel_conf, None, fit_method, emission_check, cont_from_bands,
-                                 temp, progress_output=None, plot_fits=None)
+                spaxel.fit.frame(bands_df, spaxel_conf, line_list=None, fit_method=fit_method,
+                                 line_detection=line_detection, emission_check=emission_check,
+                                 cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
+                                 key_line_conf='default_line_fitting', user_detect_conf=detect_conf)
+
+                # self, bands_df, fit_conf = None, line_list = None, fit_method = 'least_squares', line_detection = False,
+                # emission_check = True, cont_from_bands = True, temp = 10000.0, progress_output = 'bar', plot_fit = False,
+                # obj_ref = None, key_line_conf = 'default_line_fitting', user_detect_conf = None
+                #
+
+                # label, band_edges = None, fit_conf = None, fit_method = 'least_squares', emission_check = True,
+                # cont_from_bands = True, temp = 10000.0
 
                 # Save to a fits file
                 linesHDU = log_to_HDU(spaxel.log, ext_name=f'{spaxel_label}{log_ext_suffix}', header_dict=hdr_coords)

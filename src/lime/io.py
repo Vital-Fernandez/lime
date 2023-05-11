@@ -389,7 +389,8 @@ def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
     return
 
 
-def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line'], copy_output=True):
+def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line'], copy_output=True,
+                         key_address=None):
 
     if isinstance(input, variable_type):
         if copy_output:
@@ -405,6 +406,27 @@ def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['i
 
     return output
 
+def check_file_config(fit_conf=None, detect_conf=None, conf_key=None, detect_key=None):
+
+    if fit_conf is not None:
+
+        # Recover configuration file if requested
+        if isinstance(fit_conf, (Path, str)):
+            fit_conf = load_cfg(fit_conf)
+
+            if conf_key is not None:
+                output_conf = fit_conf.get(conf_key, {})
+            else:
+                output_conf = fit_conf
+
+        # Recover requested detection configuration
+        if detect_conf is None:
+
+            if detect_key is not None:
+                detect_conf = fit_conf.get()
+
+
+    return fit_conf, detect_conf
 
 _parent_bands_file = Path(__file__).parent/'resources/parent_mask.txt'
 _PARENT_BANDS = load_log(_parent_bands_file)
@@ -560,7 +582,7 @@ def load_cfg(file_address, obj_list=None, mask_section=None, def_cfg_sec='line_f
         cfg.optionxform = str
         cfg.read(file_address)
     else:
-        raise LiMe_Error(f'Configuration file not found : {file_address}')
+        raise LiMe_Error(f'Configuration file not found at: {file_address}')
 
     # Convert the configuration entries from the string format if possible
     cfg_lime = {}

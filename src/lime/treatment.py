@@ -5,9 +5,10 @@ from pathlib import Path
 from astropy.io import fits
 
 import lime
-from .tools import LineFinder, UNITS_LATEX_DICT, DISPERSION_UNITS, label_decomposition, air_to_vacuum_function, \
+from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, label_decomposition, air_to_vacuum_function, \
                    FLUX_DENSITY_UNITS, unit_convertor, define_masks, extract_fluxes, relative_fluxes, compute_line_ratios
 
+from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe
