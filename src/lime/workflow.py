@@ -24,7 +24,7 @@ def check_file_array_mask(var, mask_list=[]):
         if input.is_file():
             mask_dict = load_spatial_masks(var, mask_list)
         else:
-            raise Error(f'No spatial mask file at {var.as_posix()}')
+            raise Error(f'No spatial mask file at {Path(var).as_posix()}')
 
     # Array
     elif isinstance(var, (np.ndarray, list)):

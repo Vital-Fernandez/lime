@@ -6,9 +6,9 @@ from astropy.wcs import WCS
 # State the data location
 cfg_file = './sample_data/manga.cfg'
 cube_file = Path('./sample_data/manga-8626-12704-LOGCUBE.fits.gz')
-bands_file_1 = Path('./sample_data/SHOC579_region1_maskLog.txt')
-spatial_mask_file = './sample_data/SHOC579_mask.fits'
-output_lines_log_file = './sample_data/SHOC579_log.fits'
+bands_file_1 = Path('./sample_data/SHOC579_MASK0_bands.txt')
+spatial_mask_file = Path('./sample_data/SHOC579_mask.fits')
+output_lines_log_file = Path('./sample_data/SHOC579_log.fits')
 
 # Load the configuration file:
 obs_cfg = lime.load_cfg(cfg_file)
@@ -39,5 +39,5 @@ shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=Tru
 #                          line_detection=True,  output_log=output_lines_log_file, progress_output='counter')
 
 # Review the fittings
-shoc579.check.cube('H1_6563A', wcs=WCS(hdr), masks_file=spatial_mask_file, lines_log_address=output_lines_log_file)
+shoc579.check.cube('H1_6563A', wcs=WCS(hdr), lines_log_address=output_lines_log_file)
 

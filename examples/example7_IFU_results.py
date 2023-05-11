@@ -53,7 +53,7 @@ with fits.open(SHOC579_cube_address) as hdul:
     hdr = hdul['FLUX'].header
 
 # and the masks file:
-mask_file = './sample_data/SHOC579_region0_maskLog.txt'
+mask_file = 'sample_data/SHOC579_MASK0_bands.txt'
 mask_log = lime.load_log(mask_file)
 
 # Establish the band image for the plot bacground using Halpha
