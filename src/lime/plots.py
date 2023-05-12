@@ -11,7 +11,7 @@ from pathlib import Path
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
 from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
 from .tools import define_masks, format_line_mask_option
-from .io import load_log, save_log, _PARENT_BANDS, load_spatial_masks, LiMe_Error, _LOG_COLUMNS_LATEX
+from .io import load_log, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from .transitions import check_line_in_log, Line
 
 _logger = logging.getLogger('LiMe')
@@ -1851,11 +1851,11 @@ class SpectrumFigures(Plotter):
             if noise_region is not None:
                 in_ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
 
-            # List of lines in the log
-            line_list = self._spec.log.index.values
-
             # Plot the fittings
-            if include_fits:
+            if include_fits and self._spec.log is not None:
+
+                # List of lines in the log
+                line_list = self._spec.log.index.values
 
                 # Do not include the legend as the labels are necessary for mplcursors
                 legend_check = False
@@ -2360,7 +2360,7 @@ class CubeFigures(Plotter):
             fg_mesh = None
 
         # Load the masks
-        masks_dict = load_spatial_masks(masks_file)
+        masks_dict = load_spatial_mask(masks_file)
 
         # Check that the images have the same size
         check_image_size(bg_image, fg_image, masks_dict)

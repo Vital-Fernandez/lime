@@ -10,7 +10,7 @@ from pygments.lexer import default
 
 from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
-    determine_cube_images, load_spatial_masks, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
+    determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import label_decomposition, blended_label_from_log
 from .transitions import label_components, latex_from_label
 from astropy.table import Table
@@ -941,7 +941,7 @@ class CubeInspector:
         self.rest_frame, self.log_scale = rest_frame, log_scale
 
         # Load the masks
-        self.masks_dict = load_spatial_masks(self.mask_file)
+        self.masks_dict = load_spatial_mask(self.mask_file)
 
         # Check that the images have the same size
         check_image_size(self.bg_image, self.fg_image, self.masks_dict)

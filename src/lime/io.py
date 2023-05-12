@@ -3,6 +3,7 @@ __all__ = [
     'save_cfg',
     'load_cfg',
     'load_log',
+    'load_spatial_mask',
     'save_log',
     'join_logs',
     'log_parameters_calculation',
@@ -1135,13 +1136,13 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     return
 
 
-def load_spatial_masks(mask_file, mask_list=[]):
+def load_spatial_mask(mask_file, mask_list=None, return_coords=False):
 
     # Masks array container
     spatial_mask_dict = {}
 
     # Limit the analysis to some masks
-    mask_list_check = False if len(mask_list) == 0 else True
+    mask_list_check = False if mask_list is None else True
 
     # Check that mask is there:
     if mask_file is not None:
@@ -1157,7 +1158,11 @@ def load_spatial_masks(mask_file, mask_list=[]):
                 for HDU in maskHDULs:
                     ext_name = HDU.name
                     if HDU.name != 'PRIMARY':
-                        if (ext_name in mask_list) or not mask_list_check:
+                        if mask_list_check:
+                            if ext_name in mask_list:
+                                spatial_mask_dict[ext_name] = (HDU.data.astype('bool'), HDU.header)
+                                counter += 1
+                        else:
                             spatial_mask_dict[ext_name] = (HDU.data.astype('bool'), HDU.header)
                             counter += 1
 
@@ -1168,4 +1173,11 @@ def load_spatial_masks(mask_file, mask_list=[]):
         else:
             _logger.warning(f'No mask file was found at {mask_file.as_posix()}.')
 
+    # Return the mask as a set of coordinates (no headers)
+    if return_coords:
+        for mask_name, mask_data in spatial_mask_dict.items():
+            idcs_spaxels = np.argwhere(mask_data[0])
+            spatial_mask_dict[mask_name] = idcs_spaxels
+
     return spatial_mask_dict
+

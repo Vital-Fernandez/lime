@@ -2,11 +2,11 @@ import lime
 from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
-
+lime.load
 # State the data location
 cfg_file = './sample_data/manga.cfg'
 cube_file = Path('./sample_data/manga-8626-12704-LOGCUBE.fits.gz')
-bands_file_1 = Path('./sample_data/SHOC579_MASK0_bands.txt')
+bands_file_0 = Path('./sample_data/SHOC579_MASK0_bands.txt')
 spatial_mask_file = Path('./sample_data/SHOC579_mask.fits')
 output_lines_log_file = Path('./sample_data/SHOC579_log.fits')
 
@@ -27,17 +27,26 @@ with fits.open(cube_file) as hdul:
 shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux)
 
 # Fit the lines in one spaxel
-spaxel = shoc579.get_spaxel(39, 40)
-spaxel.fit.frame(bands_file_1, obs_cfg['MASK_1_line_fitting'], progress_output='counter', line_detection=False)
-spaxel.plot.spectrum(include_fits=True, rest_frame=True)
+spaxel = shoc579.get_spaxel(38, 35)
+spaxel.fit.frame(bands_file_0, obs_cfg, line_detection=True, obj_ref='MASK_0')
+spaxel.plot.spectrum(rest_frame=True, include_fits=True)
 
-# Fit the lines from all the masks in the input .fits file
+# Fit the lines in all the masks spaxels
 shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=True, output_log=output_lines_log_file)
 
+# Load the spaxels mask coordinates
+masks_dict = lime.load_spatial_mask(spatial_mask_file, return_coords=True)
+for i, coords in enumerate(masks_dict['MASK_0']):
+    print(f'Spaxel {i}) Coordinates {coords}')
+    idx_Y, idx_X = coords
+    spaxel = shoc579.get_spaxel(idx_Y, idx_Y)
+    spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], obj_ref='MASK_0', plot_fit=False, progress_output=None)
+
 # Fit the lines in one mask
-# shoc579.fit.spatial_mask(spatial_mask_file, bands_file_1, obs_cfg, mask_name_list=['MASK_1'],
-#                          line_detection=True,  output_log=output_lines_log_file, progress_output='counter')
+# shoc579.fit.spatial_mask(spatial_mask_file, bands_file_0, obs_cfg, mask_name_list=['MASK_0'],
+#                          line_detection=True,  output_log=output_lines_log_file, progress_output='bar',
+#                          plot_fit=False)
 
-# Review the fittings
-shoc579.check.cube('H1_6563A', wcs=WCS(hdr), lines_log_address=output_lines_log_file)
-
+# # # Review the fittings
+# shoc579.check.cube('H1_6563A', wcs=WCS(hdr), lines_log_address=output_lines_log_file, masks_file=spatial_mask_file)
+#
