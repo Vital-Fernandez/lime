@@ -6,10 +6,10 @@ from astropy.io import fits
 
 from . import Error
 from .model import LineFitting
-from .tools import define_masks, label_decomposition, COORD_ENTRIES, ProgressBar
+from .tools import define_masks, label_decomposition, COORD_KEYS, ProgressBar
 from .recognition import LINE_DETECT_PARAMS
 from .transitions import Line
-from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log
+from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -210,7 +210,7 @@ class SpecTreatment(LineFitting):
         self.line = Line(label, band_edges, fit_conf, emission_check, cont_from_bands)
 
         # Get the bands regions
-        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift), self.line.pixel_mask)
+        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift), line_mask_entry=self.line.pixel_mask)
         emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
         contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
         err_array = self._spec.err_flux[idcsEmis] if self._spec.err_flux is not None else None
@@ -272,7 +272,7 @@ class SpecTreatment(LineFitting):
                     if obj_ref is not None:  # User configuration overwrite default
                         input_conf = {**input_conf, **fit_conf.get(f'{obj_ref}_line_fitting', {})}
             else:
-                input_conf = {**fit_conf}
+                input_conf = {}
 
             # Line detection if requested
             if line_detection:
@@ -293,23 +293,27 @@ class SpecTreatment(LineFitting):
             n_lines = label_list.size
 
             pbar = ProgressBar(progress_output, f'{n_lines} lines')
-            for i in np.arange(n_lines):
+            if n_lines > 0:
+                for i in np.arange(n_lines):
 
-                # Current line
-                line = label_list[i]
+                    # Current line
+                    line = label_list[i]
 
-                # Progress message
-                pbar.output_message(i, n_lines, pre_text="", post_text=line)
+                    # Progress message
+                    pbar.output_message(i, n_lines, pre_text="", post_text=line)
 
-                # Fit the lines
-                self.band(line, bands_matrix[i], input_conf, fit_method, emission_check, cont_from_bands, temp)
+                    # Fit the lines
+                    self.band(line, bands_matrix[i], input_conf, fit_method, emission_check, cont_from_bands, temp)
 
-                if plot_fit:
-                    self._spec.plot.band()
+                    if plot_fit:
+                        self._spec.plot.band()
+
+            else:
+                msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
+                _logger.info(msg)
 
         else:
             _logger.info(f'Not input dataframe. Lines were not measured')
-
 
         return
 
@@ -367,10 +371,10 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf={}, mask_name_list=None, fit_method='least_squares',
+    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf=None, mask_name_list=None, fit_method='least_squares',
                      line_detection=False, emission_check=True, cont_from_bands=True, temp=10000.0,
                      output_log=None, default_conf_key='default_line_fitting', log_ext_suffix='_LINESLOG',
-                     progress_output='bar', plot_fit=False, n_save=100):
+                     progress_output='bar', plot_fit=False, n_save=100, user_hdr=None):
 
         # Check if the mask variable is a file or an array
         mask_dict = check_file_array_mask(spatial_mask, mask_name_list)
@@ -380,6 +384,7 @@ class CubeTreatment(LineFitting):
         mask_data_list = list(mask_dict.values())
 
         # Default fitting configuration
+        fit_conf = {} if fit_conf is None else fit_conf
         default_conf = fit_conf.get(default_conf_key, {})
 
         # Check if the lines table is a dataframe or a file
@@ -425,6 +430,12 @@ class CubeTreatment(LineFitting):
         # HDU_container
         hdul_log = fits.HDUList([fits.PrimaryHDU()])
 
+        # Header data
+        if self._cube.wcs is not None:
+            hdr_coords = extract_wcs_header(self._cube.wcs, drop_dispersion_axis=True)
+        else:
+            hdr_coords = None
+
         # Loop through the masks
         n_masks = len(mask_list)
         for i in np.arange(n_masks):
@@ -448,13 +459,6 @@ class CubeTreatment(LineFitting):
                 bands_mask_path = detect_conf['input_log']
                 bands_mask_path = Path().absolute()/bands_mask_path[1:] if bands_mask_path[0] == '.' else Path(bands_mask_path)
                 bands_df = load_log(bands_mask_path)
-
-            # WCS header data
-            hdr_coords = {}
-            for key in COORD_ENTRIES:
-                if key in mask_hdr:
-                    hdr_coords[key] = mask_hdr[key]
-            hdr_coords = fits.Header(hdr_coords)
 
             # Loop through the spaxels
             n_spaxels = idcs_spaxels.shape[0]
@@ -481,16 +485,21 @@ class CubeTreatment(LineFitting):
                                  cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
                                  obj_ref=None, default_conf_key=None, user_detect_conf=detect_conf)
 
-                # self, bands_df, fit_conf = None, line_list = None, fit_method = 'least_squares', line_detection = False,
-                # emission_check = True, cont_from_bands = True, temp = 10000.0, progress_output = 'bar', plot_fit = False,
-                # obj_ref = None, key_line_conf = 'default_line_fitting', user_detect_conf = None
-                #
+                # Create page header with the default data
+                hdr_i = fits.Header()
 
-                # label, band_edges = None, fit_conf = None, fit_method = 'least_squares', emission_check = True,
-                # cont_from_bands = True, temp = 10000.0
+                # Add WCS information
+                if hdr_coords is not None:
+                    hdr_i.update(hdr_coords)
+
+                # Add user information
+                if user_hdr is not None:
+                    page_hdr = user_hdr.get(f'{spaxel_label}{log_ext_suffix}', None)
+                    page_hdr = user_hdr if page_hdr is None else page_hdr
+                    hdr_i.update(page_hdr)
 
                 # Save to a fits file
-                linesHDU = log_to_HDU(spaxel.log, ext_name=f'{spaxel_label}{log_ext_suffix}', header_dict=hdr_coords)
+                linesHDU = log_to_HDU(spaxel.log, ext_name=f'{spaxel_label}{log_ext_suffix}', header_dict=hdr_i)
                 hdul_log.append(linesHDU)
 
                 # Save the data every 100 spaxels

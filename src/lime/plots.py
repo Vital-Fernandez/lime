@@ -489,7 +489,8 @@ def check_line_for_bandplot(in_label, user_band, spec, log_ref=_PARENT_BANDS):
             label = spec.log.iloc[-1].name
             band = spec.log.loc[label, 'w1':'w6'].values
         else:
-            _logger.info(f'The log is empty')
+            band = None
+            _logger.info(f'The lines log is empty')
 
     # The user provides a line and a band
     elif (in_label is not None) and (user_band is not None):
@@ -1851,11 +1852,11 @@ class SpectrumFigures(Plotter):
             if noise_region is not None:
                 in_ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
 
+            # List of lines in the log
+            line_list = self._spec.log.index.values
+
             # Plot the fittings
             if include_fits and self._spec.log is not None:
-
-                # List of lines in the log
-                line_list = self._spec.log.index.values
 
                 # Do not include the legend as the labels are necessary for mplcursors
                 legend_check = False
@@ -2115,7 +2116,7 @@ class SpectrumFigures(Plotter):
 
         else:
             in_fig = None
-            _logger.info(f'Line {line} not found in spectrum log for plotting.')
+            _logger.info(f'The line "{line}" was not found in the spectrum log for plotting.')
 
         return in_fig
 
@@ -2365,6 +2366,9 @@ class CubeFigures(Plotter):
         # Check that the images have the same size
         check_image_size(bg_image, fg_image, masks_dict)
 
+        # Use the input wcs or use the parent one
+        wcs = self._cube.wcs if wcs is None else wcs
+
         # State the plot labelling
         AXES_CONF = image_map_labels(ax_cfg, wcs, line_bg, line_fg, masks_dict)
 
@@ -2375,13 +2379,12 @@ class CubeFigures(Plotter):
         # Create and fill the figure
         with rc_context(PLT_CONF):
 
-            # Generate the figure object
-            if (in_fig is None) and (in_ax is None):
-                if wcs is None:
-                    in_fig, in_ax = plt.subplots()
-                else:
-                    in_fig = plt.figure()
-                    in_ax = in_fig.add_subplot(projection=wcs, slices=('x', 'y', 1)) # TODO this extra dimension...
+            if wcs is None:
+                in_fig, in_ax = plt.subplots()
+            else:
+                in_fig = plt.figure()
+                slices = ('x', 'y', 1) if wcs.naxis == 3 else ('x', 'y')
+                in_ax = in_fig.add_subplot(projection=wcs, slices=slices)
 
             # Assing the axis
             self._fig, self._ax = in_fig, in_ax

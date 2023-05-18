@@ -35,6 +35,7 @@ These are some of the features currently available:
 
    📈 The outputs physical description is available in the :ref:`measurements <measurements_page>` documentation.
 
+
 .. :ref:`doc-tree`
 
 .. toctree::
@@ -53,9 +54,9 @@ These are some of the features currently available:
    :caption: Tutorials
    :name: tutorial-tree
 
-   tutorials/1_SingleLineFitting
-   tutorials/2_Line_bands_inspection
-   tutorials/3_CompleteSpectrumFitting
-   tutorials/4_IFU_Spatial_Masking
-   tutorials/5_IFU_Line_Fitting
-   tutorials/6_IFU_review_results
+   tutorials/notebook1_SingleLineFitting.ipynb
+   tutorials/notebook2_Line_bands_inspection.ipynb
+   tutorials/notebook3_CompleteSpectrumFitting.ipynb
+   tutorials/notebook4_IFU_Spatial_Masking.ipynb
+   tutorials/notebook5_IFU_Line_Fitting.ipynb
+   tutorials/notebook6_IFU_results.ipynb

@@ -18,7 +18,7 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # Address of the Green Pea galaxy spectrum
-fits_file = './sample_data/gp121903_BR.fits'
+fits_file = './sample_data/gp121903_ISIS_spectrum.fits'
 
 # Load spectrum
 wave, flux, hdr = import_osiris_fits(fits_file)

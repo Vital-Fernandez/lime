@@ -23,8 +23,11 @@ with fits.open(cube_file) as hdul:
     flux_cube = hdul['FLUX'].data * norm_flux
     hdr = hdul['FLUX'].header
 
+# World coordinate system from the observation
+wcs = WCS(hdr)
+
 # Define a LiMe cube object
-shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux)
+shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs)
 
 # Fit the lines in one spaxel
 spaxel = shoc579.get_spaxel(38, 35)
@@ -47,11 +50,10 @@ spaxel = shoc579.get_spaxel(38, 35)
 spaxel.load_log(output_lines_log_file, ext='38-35_LINESLOG')
 spaxel.plot.band('He1_5016A')
 
-# Fit the lines in one mask
+# # Fit the lines in one mask
 # shoc579.fit.spatial_mask(spatial_mask_file, bands_file_0, obs_cfg, mask_name_list=['MASK_0'],
 #                          line_detection=True,  output_log=output_lines_log_file, progress_output='bar',
 #                          plot_fit=False)
 
 # Review the fittings
-shoc579.check.cube('H1_6563A', wcs=WCS(hdr), lines_log_address=output_lines_log_file, masks_file=spatial_mask_file)
-
+shoc579.check.cube('H1_6563A', lines_log_address=output_lines_log_file, masks_file=spatial_mask_file)

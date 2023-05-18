@@ -38,23 +38,22 @@ with fits.open(cube_address) as hdul:
     flux_cube = hdul['FLUX'].data * norm_flux
     hdr = hdul['FLUX'].header
 
-# Declaring the world coordinate system from the header to display on the plots
+# Declaring the world coordinate system from the header to use on plots and export to measurements
 wcs = WCS(hdr)
 
 # Define a LiMe cube object
-shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux)
-shoc579.plot.cube(6563, line_fg=4363, wcs=wcs)
+shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs)
+shoc579.plot.cube(6563, line_fg=4363)
 
 # Check the spaxels interactively
-shoc579.check.cube(6563, line_fg=6563, wcs=WCS(hdr), percentil_bg=80, percentils_fg=[80, 90, 95, 99])
+shoc579.check.cube(6563, line_fg=6563, percentil_bg=80, percentils_fg=[80, 90, 95, 99])
 
 # Generate a spatial mask as a function of the signal-to-noise
 spatial_mask = './sample_data/SHOC579_mask.fits'
-shoc579.spatial_masker('O3_4363A', param='SN_line', percentiles=[93, 96, 99], output_address=spatial_mask,
-                       header_dict=hdr)
+shoc579.spatial_masker('O3_4363A', param='SN_line', percentiles=[93, 96, 99], output_address=spatial_mask)
 
 # We can visualize this mask using the .plot.cube function
-shoc579.plot.cube('H1_6563A', masks_file=spatial_mask, wcs=wcs)
+shoc579.plot.cube('H1_6563A', masks_file=spatial_mask)
 
 # Manually add/remove spaxels to the spatial mask
-shoc579.check.cube('H1_6563A', masks_file=spatial_mask, wcs=wcs)
+shoc579.check.cube('H1_6563A', masks_file=spatial_mask)

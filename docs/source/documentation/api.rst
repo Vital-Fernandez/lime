@@ -8,9 +8,6 @@ Inputs and outputs
 
 .. autofunction:: lime.load_cfg
 
-.. autofunction:: lime.save_param_maps
-
-
 Core
 ----
 

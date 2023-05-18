@@ -630,6 +630,12 @@ class LineFitting:
 
         return
 
+    def report(self):
+
+        print(fit_report(self.fit_output))
+
+        return
+
 
 # class EmissionFitting:
 #

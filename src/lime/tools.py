@@ -1,4 +1,5 @@
-__all__ = ['label_decomposition',
+__all__ = ['COORD_KEYS',
+           'label_decomposition',
            'unit_convertor',
            'extract_fluxes',
            'relative_fluxes',
@@ -52,8 +53,8 @@ PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'SN_cont': r'$\frac{S}{N}_{cont}$'}
 
 # Variables with the astronomical coordinate information for the creation of new .fits files
-COORD_ENTRIES = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
-                 'CTYPE1', 'CTYPE2']
+COORD_KEYS = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
+              'CTYPE1', 'CTYPE2']
 
 
 # Number conversion to Roman style

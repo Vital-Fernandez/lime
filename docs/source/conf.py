@@ -16,10 +16,24 @@
 
 # Adding library path to the compilation for the autodoc documentation
 import sys
+import os
+import shutil
 from pathlib import Path
 
+
+def all_but_ipynb(dir, contents):
+    result = []
+    for c in contents:
+        if os.path.isfile(os.path.join(dir, c)) and (not c.endswith(".py")):
+            result += [c]
+    return result
+
+
 _lib_path = Path(__file__).parents[2]/'src'
+_examples_path = Path(__file__).parents[2]/'examples'
+_tutorials_path = Path(__file__).parents[2]/'docs/source/tutorials'
 sys.path.append(str(_lib_path))
+sys.path.append(str(_examples_path))
 
 # -- Project information -----------------------------------------------------
 
@@ -28,7 +42,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '0.9.25'
+release = '0.9.26'
 
 # -- General configuration ---------------------------------------------------
 
@@ -72,3 +86,6 @@ imgmath_use_preview = True
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+shutil.rmtree(_tutorials_path, ignore_errors=True)
+shutil.copytree(_examples_path, _tutorials_path, dirs_exist_ok=True)

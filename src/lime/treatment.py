@@ -11,7 +11,7 @@ from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, label_decomposition, air_
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe
+from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header
 from .transitions import Line
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
@@ -545,7 +545,8 @@ class Spectrum(LineFinder):
 class Cube:
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, pixel_mask=None, obj_name=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, pixel_mask=None, obj_name=None,
+                 wcs=None):
 
         # Review the inputs
         check_inputs(input_wave, input_flux, input_err, self)
@@ -563,6 +564,7 @@ class Cube:
         self.units_wave = units_wave
         self.units_flux = units_flux
         self._masked_inputs = False
+        self.wcs = wcs
 
         # Treatments objects
         self.fit = CubeTreatment(self)
@@ -589,7 +591,7 @@ class Cube:
         return
 
     def spatial_masker(self, line, band=None, param=None, percentiles=(90, 95, 99), mask_ref=None, min_percentil=None,
-                       output_address=None, header_dict={}, bands_frame=None):
+                       output_address=None, user_hdr=None, bands_frame=None):
 
         """
         This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
@@ -612,18 +614,6 @@ class Cube:
 
         :param output_address: Output address for the mask fits file.
         :type output_address: str, optional
-
-        :param min_level: Minimum level for the masks calculation. If none is provided the minimum value from the contour_levels
-                          vector will be used.
-        :type min_level: float, optional
-
-        :param show_plot: If true a plot will be displayed with the mask calculation. Additionally, if an output_address is
-                          provided the plot will be saved in the parent folder as image taking into consideration the
-                          mask_ref value.
-        :type show_plot: bool, optional
-
-        :param fits_header: Dictionary with key-values to be included in the output .fits file header.
-        :type fits_header: dict, optional
 
         :return:
         """
@@ -701,25 +691,33 @@ class Cube:
         # Use as HDU as container for the mask
         hdul = fits.HDUList([fits.PrimaryHDU()])
 
+        # Recover coordinates from the wcs to store in the headers:
+        hdr_coords = extract_wcs_header(self.wcs, drop_dispersion_axis=True)
+
         for idx_region, region_items in enumerate(mask_dict.items()):
             region_label, region_mask = region_items
 
             # Metadata for the fits page
-            header_lime = {'PARAM': param,
-                           'PARAMIDX': boundary_dict[region_label],
-                           'PARAMVAL': param_level[region_label],
-                           'NUMSPAXE': np.sum(region_mask)}
-            fits_hdr = fits.Header(header_lime)
+            hdr_i = fits.Header({'PARAM': param,
+                                 'PARAMIDX': boundary_dict[region_label],
+                                 'PARAMVAL': param_level[region_label],
+                                 'NUMSPAXE': np.sum(region_mask)})
 
-            if header_dict is not None:
-                fits_hdr.update(header_dict)
+            # Add WCS information
+            if hdr_coords is not None:
+                hdr_i.update(hdr_coords)
+
+            # Add user information
+            if user_hdr is not None:
+                page_hdr = user_hdr.get(f'{mask_ref}_{region_label}', None)
+                page_hdr = user_hdr if page_hdr is None else page_hdr
+                hdr_i.update(page_hdr)
 
             # Extension for the mask
             mask_ext = region_label if mask_ref is None else f'{mask_ref}_{region_label}'
 
             # Mask HDU
-            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=fits_hdr)
-
+            mask_hdu = fits.ImageHDU(name=mask_ext, data=region_mask.astype(int), ver=1, header=hdr_i)
             hdul.append(mask_hdu)
 
         # Output folder computed from the output address

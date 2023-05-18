@@ -946,6 +946,9 @@ class CubeInspector:
         # Check that the images have the same size
         check_image_size(self.bg_image, self.fg_image, self.masks_dict)
 
+        # Use the input wcs or use the parent one
+        wcs = self._cube.wcs if wcs is None else wcs
+
         # Image mesh grid
         frame_size = self._cube.flux.shape
         y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
@@ -996,7 +999,8 @@ class CubeInspector:
             if wcs is None:
                 self._ax0 = self._fig.add_subplot(gs_image[0])
             else:
-                self._ax0 = self._fig.add_subplot(gs_image[0], projection=wcs, slices=('x', 'y', 1))
+                slices = ('x', 'y', 1) if wcs.naxis == 3 else ('x', 'y')
+                self._ax0 = self._fig.add_subplot(gs_image[0], projection=wcs, slices=slices)
 
             # Spectrum plot
             self._ax1 = self._fig.add_subplot(gs[1])

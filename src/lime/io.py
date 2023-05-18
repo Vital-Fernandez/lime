@@ -8,7 +8,7 @@ __all__ = [
     'join_logs',
     'log_parameters_calculation',
     'log_to_HDU',
-    'save_param_maps',
+    'save_parameter_maps',
     '_LOG_DTYPES_REC',
     '_LOG_EXPORT',
     '_LOG_COLUMNS']
@@ -713,7 +713,7 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     else:
         _logger.critical(
-            f'Not a recognize log format. Please use a pandas dataframe or a string/Path object for file {log}')
+            f'Not a recognize log format. Please use a pandas dataframe or a string/Path object for file {input_log}')
         exit(1)
 
     # Parse the combined expression
@@ -731,6 +731,24 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     return
 
+
+def extract_wcs_header(wcs, drop_dispersion_axis=False):
+
+    if wcs is not None:
+
+        # Remove 3rd dimensional axis if present
+        if drop_dispersion_axis:
+            input_wcs = wcs.dropaxis(2) if wcs.naxis == 3 else wcs
+        else:
+            input_wcs = wcs
+
+        # Convert to HDU header
+        hdr_coords = input_wcs.to_fits()[0].header
+
+    else:
+        hdr_coords = None
+
+    return hdr_coords
 
 # TODO this task should be included in log_to_HDU
 def log_to_RA(log, column_types=None):
@@ -763,12 +781,9 @@ def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
         linesSA = log.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
         linesCol = fits.ColDefs(linesSA)
-        linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name)
 
-        if header_dict is not None:
-            if len(header_dict) != 0:
-                for key, value in header_dict.items():
-                    linesHDU.header[key] = value
+        hdr = fits.Header(header_dict) if isinstance(header_dict, dict) else header_dict
+        linesHDU = fits.BinTableHDU.from_columns(linesCol, name=ext_name, header=hdr)
 
     # Empty log
     else:
@@ -785,6 +800,7 @@ def hdu_to_log(hdu):
     log.set_index('index', inplace=True)
 
     return log
+
 
 def load_fits(file_address, instrument, frame_idx=None):
 
@@ -972,9 +988,9 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     return
 
 
-def save_param_maps(log_file_address, params_list, lines_list, output_folder, spatial_mask_file=None, ext_mask='all',
-                    image_shape=None, ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None,
-                    page_hdr={}):
+def save_parameter_maps(log_file_address, parameter_list, line_list, output_folder, spatial_mask_file=None, ext_mask='all',
+                        image_shape=None, ext_log='_LINESLOG', default_spaxel_value=np.nan, output_files_prefix=None,
+                        user_hdr=None, wcs=None):
     """
 
     This function loads a ``.fits`` file with the line log measurements and generates a set of spatial images from a dictionary
@@ -995,11 +1011,11 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
     :param log_file_address: fits file address location with the line SMACS_v2.0
     :type log_file_address: str
 
-    :param params_list: Array with the parameters to map from log measurements, e.g. np.array([intg_flux, v_r])
-    :type params_list: np.array
+    :param parameter_list: Array with the parameters to map from log measurements, e.g. np.array([intg_flux, v_r])
+    :type parameter_list: np.array
 
-    :param lines_list: Array with the lines to map from log measurements, e.g. np.array(['H1_6563A', 'O3_5007A'])
-    :type lines_list: np.array
+    :param line_list: Array with the lines to map from log measurements, e.g. np.array(['H1_6563A', 'O3_5007A'])
+    :type line_list: np.array
 
     :param output_folder: Output address for the fits maps
     :type output_folder: str
@@ -1078,17 +1094,15 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
 
     # Generate containers for the data:
     images_dict = {}
-    # for param, line_list in param_dict.items():
-    for param in params_list:
+    for param in parameter_list:
 
         # Make sure is an array and loop throuh them
-        for line in lines_list:
+        for line in line_list:
             images_dict[f'{param}-{line}'] = np.full(image_shape, default_spaxel_value)
 
     # Loop through the spaxels and fill the parameter images
     n_spaxels = spaxel_list.shape[0]
     spaxel_range = np.arange(n_spaxels)
-    headers_dict = {}
 
     with fits.open(log_file_address) as logHDUs:
 
@@ -1106,28 +1120,46 @@ def save_param_maps(log_file_address, params_list, lines_list, output_folder, sp
                 log_lines = log_data['index']
 
                 # Loop through the parameters and the lines:
-                for param in params_list:
-                    idcs_log = np.argwhere(np.in1d(log_lines, lines_list))
+                for param in parameter_list:
+                    idcs_log = np.argwhere(np.in1d(log_lines, line_list))
                     for i_line in idcs_log:
                         images_dict[f'{param}-{log_lines[i_line][0]}'][idx_j, idx_i] = log_data[param][i_line][0]
 
     # New line after the rustic progress bar
     print()
 
+    # Recover coordinates from the wcs to store in the headers:
+    hdr_coords = extract_wcs_header(wcs, drop_dispersion_axis=True)
+
     # Save the parameter maps as individual fits files with one line per page
     output_files_prefix = '' if output_files_prefix is None else output_files_prefix
-    for param in params_list:
+    for param in parameter_list:
 
         # Primary header
         paramHDUs = fits.HDUList()
         paramHDUs.append(fits.PrimaryHDU())
 
         # ImageHDU for the parameter maps
-        for line in lines_list:
-            hdr = fits.Header({'PARAM': param, 'LINE': param})
-            hdr.update(page_hdr)
-            data = images_dict[f'{param}-{line}']
-            paramHDUs.append(fits.ImageHDU(name=line, data=data, header=hdr, ver=1))
+        for line in line_list:
+
+            # Create page header with the default data
+            hdr_i = fits.Header()
+            hdr_i['LINE'] = (line, 'Line label')
+            hdr_i['PARAM'] = (param, 'LiMe parameter label')
+
+            # Add WCS information
+            if hdr_coords is not None:
+                hdr_i.update(hdr_coords)
+
+            # Add user information
+            if user_hdr is not None:
+                page_hdr = user_hdr.get(f'{param}-{line}', None)
+                page_hdr = user_hdr if page_hdr is None else page_hdr
+                hdr_i.update(page_hdr)
+
+            # Create page HDU entry
+            HDU_i = fits.ImageHDU(name=line, data=images_dict[f'{param}-{line}'], header=hdr_i, ver=1)
+            paramHDUs.append(HDU_i)
 
         # Write to new file
         output_file = Path(output_folder)/f'{output_files_prefix}{param}.fits'
