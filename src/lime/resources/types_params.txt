@@ -6,7 +6,7 @@ gauss_flux                1                0          1           1    <f8      
 gauss_err                 1                0          1           1    <f8    $F_{err,\,gauss}$         inten
 eqw                       0                0          1           1    <f8                $Eqw$         wave
 eqw_err                   0                0          1           1    <f8          $Eqw_{err}$         wave
-ion                       0                0          1           0   <U50                  Ion         str
+particle                  0                0          1           0   <U50             Particle         str
 latex_label               0                0          1           0  <U100           Transition         str
 profile_label             0                0          0           1  <U120           Components         str
 pixel_mask                0                0          0           1  <U100     $Masked\,Pixels$         str
@@ -39,6 +39,7 @@ sigma_vel                 0                0          1           1    <f8      
 sigma_vel_err             0                0          1           1    <f8 $\sigma_{vel,\,err}$         vel
 sigma_thermal             0                0          1           1    <f8        $\sigma_{th}$         vel
 sigma_instr               0                0          0           1    <f8     $\sigma_{instr}$         vel
+n_pixels                  0                0          0           1    <f8         $n_{pixels}$         none
 pixel_vel                 0                0          0           1    <f8        $pixel_{vel}$         vel
 FWHM_intg                 0                0          0           1    <f8        $FWHM_{intg}$         wave
 FWHM_g                    0                0          1           1    <f8       $FWHM_{gauss}$         wave
@@ -55,3 +56,8 @@ aic                       0                0          0           1    <f8      
 bic                       0                0          0           1    <f8                  BIC         none
 observations              0                0          0           1   <U50         Observations         str
 comments                  0                0          0           1   <U50             Comments         str
+wave_vac                  0                0          1           0    <f8       \lambda_{vac}$         wave
+transition                0                0          1           0    <U5  Trnsition-component         str
+rel_int                   0                0          1           0    <f8          $Int_{rel}$         none
+
+

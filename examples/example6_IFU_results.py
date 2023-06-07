@@ -11,6 +11,8 @@ bands_file_0 = Path('./sample_data/SHOC579_MASK0_bands.txt')
 spatial_mask_file = Path('./sample_data/SHOC579_mask.fits')
 output_lines_log_file = Path('./sample_data/SHOC579_log.fits')
 
+bands_df = lime.line_bands()
+
 # Load the configuration file:
 obs_cfg = lime.load_cfg(cfg_file)
 
@@ -54,7 +56,7 @@ fits_file = f'./sample_data/SHOC579_gauss_flux.fits'
 for ion, lines in lines_ratio.items():
 
     # Recover the parameter measurements
-    ion_array, wave_array, latex_array = lime.label_decomposition(lines)
+    latex_array = lime.label_decomposition(lines, output_params=['latex_label'])[0]
     ratio_map = fits.getdata(fits_file, lines[0]) / fits.getdata(fits_file, lines[1])
 
     # Get the astronomical coordinates from one of the headers of the lines log

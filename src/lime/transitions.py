@@ -1,13 +1,17 @@
 import logging
 
 import numpy as np
-from numpy import array, abs, nan, all, diff, char, searchsorted, unique, empty, arange, zeros
+import pandas as pd
+from numpy import array, abs, round, all, diff, char, searchsorted, unique, empty, arange, zeros
 from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
-from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, _LOG_DTYPES_REC, results_to_log
+from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
 
 _logger = logging.getLogger('LiMe')
 
+_COMPs_KEYS = {'k': 'kinem',
+               'p': 'profile_comp',
+               't': 'transition_comp'}
 
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
@@ -21,6 +25,61 @@ def int_to_roman(num):
             num -= VAL_LIST[i]
         i += 1
     return roman_num
+
+
+def particle_notation(particle, transition):
+
+    try:
+
+        # Isolate particle and ionization
+        atom, ionization = particle[:-1], int(particle[-1])
+
+        # Get ionization numeral
+        ionization_roman = int_to_roman(ionization)
+        part_label = f'{atom}{ionization_roman}'
+
+        # Collisional excited
+        if transition == 'col':
+            part_label = f'$[{part_label}]'
+
+        # Semi-forbidden
+        elif transition == 'sem':
+            part_label = f'${part_label}]'
+
+        # Recombination
+        else:
+            part_label = f'${part_label}'
+
+    except:
+        part_label = f'{particle}-$'
+
+    return part_label
+
+
+def air_to_vacuum_function(input_array, sig_fig=None):
+
+    input_array = np.array(input_array, ndmin=1)
+
+    if 'U' in str(input_array.dtype): #TODO finde better way
+
+        ion_array, wave_array, latex_array = label_decomposition(input_array)
+        air_wave = wave_array
+    else:
+        air_wave = input_array
+
+    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
+    output_array = (air_wave * 0.0001 * refraction_index) * 10000
+
+    if sig_fig is not None:
+        output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
+
+    if 'U' in str(input_array.dtype):
+        vacuum_wave = output_array.astype(str)
+        output_array = np.core.defchararray.add(ion_array, '_')
+        output_array = np.core.defchararray.add(output_array, vacuum_wave)
+        output_array = np.core.defchararray.add(output_array, 'A')
+
+    return output_array
 
 
 def check_units_from_wave(str_wave):
@@ -90,76 +149,43 @@ def check_line_in_log(input_label, log=None, tol=1):
     return input_label
 
 
-def label_components(input_label, scalar_output=False):
-
-    # Confirm input array has one dimension
-    input_label = array(input_label, ndmin=1)
-
-    # Check there are unique elements
-    uniq, count = unique(input_label, return_counts=True)
-    if any(count > 1):
-        _logger.critical(f'There are repeated entries in the input label: {input_label}')
-
-    ion, wave = empty(input_label.size).astype(str), empty(input_label.size)
-    units_wave, kinem = empty(input_label.size).astype(str), zeros(input_label.size, dtype=int)
-
-    for i, label in enumerate(input_label):
-
-        # Transition label items assuming '_' separation
-        trans_items = label.split('_')
-
-        # Element producing the transition
-        ion[i] = trans_items[0]
-
-        # Wavelength and units
-        wave[i], units_wave[i] = check_units_from_wave(trans_items[1])
-
-        # Kinematic element
-        kinem[i] = 0
-        if len(trans_items) > 2:
-            if (trans_items[2][0] == 'w') or (
-                    trans_items[2][0] == 'k'):  # TODO make this one always k, maybe a dictionary
-                kinem[i] = trans_items[2][1]
-
-    if scalar_output and input_label.size == 1:
-        ion, wave, units_wave, kinem = ion[0], wave[0], units_wave[0], kinem[0]
-
-    return ion, wave, units_wave, kinem
-
-
-def latex_from_label(label, ion=None, wave=None, units_wave=None, kinem=None, recomb_atom=('H1', 'He1', 'He2'),
-                     scalar_output=False, comps_dict={}):
+def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=None, transition_comp=None, scalar_output=False,
+                     decimals=None):
 
     # Use input values if provided else compute from label
-    if (ion is None) or (wave is None) or (wave is None):
-        ion, wave, units_wave, kinem = label_components(label)
+    if (particle is None) or (wave is None) or (wave is None) or (kinem is None) or (transition_comp is None):
+        particle, wave, units_wave, kinem, profile_comp, transition_comp = label_composition(label)
 
-    # Brand to 1d array
+    # Reshape to 1d array
     else:
-        ion = array(ion, ndmin=1)
+        particle = array(particle, ndmin=1)
         wave = array(wave, ndmin=1)
         units_wave = array(units_wave, ndmin=1)
         kinem = array(kinem, ndmin=1)
+        transition_comp = array(transition_comp, ndmin=1)
 
-    n_items = ion.size
+    n_items = particle.size
     latex_array = empty(n_items).astype('object')
+
+    # Significant figures
+    if decimals is None:
+        wave = np.round(wave, 0).astype(int)
+    else:
+        wave = np.round(wave, decimals)
 
     for i in arange(n_items):
 
-        atom, ionization = ion[i][:-1], int(ion[i][-1])
+        # Particle label
+        part_label = particle_notation(particle[i], transition_comp[i])
 
+        # Wavelength and units label
         units_latex = UNITS_LATEX_DICT[units_wave[i]]
 
-        ionization_roman = int_to_roman(ionization)
+        # Kinematic label
+        kinetic_comp = '' if kinem[i] == 0 else f'-k_{kinem[i]}'
 
-        wave_round = int(wave[i])
-
-        kinetic_comp = '' if kinem[i] == 0 else f'-k{kinem[i]}'
-
-        if ion[i] in recomb_atom:
-            latex_array[i] = f'${atom}{ionization_roman}{wave_round}{units_latex}{kinetic_comp}$'
-        else:
-            latex_array[i] = f'$[{atom}{ionization_roman}]{wave_round}{units_latex}{kinetic_comp}$'
+        # Combine items
+        latex_array[i] = f'{part_label}{wave[i]}{units_latex}{kinetic_comp}$'
 
     # Scalar output if requested and 1 length array
     if scalar_output:
@@ -169,36 +195,152 @@ def latex_from_label(label, ion=None, wave=None, units_wave=None, kinem=None, re
     return latex_array
 
 
-def log_from_line_list(lines, comps_dict, headers=None):
+def label_composition(line_list, ref_df=None, default_profile=None):
 
-    # TODO this is the new label decomposition
-    if headers is None:
-        headers = _LOG_DTYPES_REC
+    # Empty containers for the label componentes
+    n_comps = len(line_list)
+    ion = empty(n_comps).astype(str)
+    wavelength = empty(n_comps)
+    units_wave = empty(n_comps).astype(str)
+    kinem = zeros(n_comps, dtype=int)
+    profile_comp = [None] * n_comps
+    transition_comp = np.array(['rec'] * n_comps)
 
-    # Minimum one size:
-    lines = np.array(lines, ndmin=1)
+    # Loop through the components and get the components
+    for i, line in enumerate(line_list):
 
-    # Generate container
-    log = DataFrame(np.empty(0, dtype=headers))
+        line_items = line.split('_')
 
-    # Loop through the lines
-    for i, line in enumerate(lines):
-        line_obj = Line(line, fit_conf=comps_dict)
-        results_to_log(line_obj, log, norm_flux=1, units_wave=line_obj.units_wave)
+        # Check the line has the items
+        if len(line_items) < 2:
+            raise LiMe_Error(f'The blend/merged component "{line}" in the transition list "{line_list}" does not have a'
+                             f' recognised format. Please use a "Particle_WavelengthUnits" format in the configuration'
+                             f'file')
 
-    return log
+        # Particle properties
+        ion[i] = line_items[0]
+
+        # Wavelength properties
+        wavelength[i], units_wave[i] = check_units_from_wave(line_items[1])
+
+        # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'}
+        comp_conf = {optC[0]: optC[2:] for optC in line_items[2:]}
+
+        # Kinematic component
+        kinem[i] = int(comp_conf.get('k', 0))
+
+        # Profile component
+        profile_comp[i] = comp_conf.get('p', None)
+        if profile_comp[i] is None:
+            if default_profile is not None:
+                profile_comp[i] = default_profile
+            else:
+                profile_comp[i] = 'g-emi'
+
+        # Transition component
+        trans = comp_conf.get('t', None)
+
+        if (trans is None) and (ref_df is not None):
+            if line in ref_df.index and 'transition' in ref_df.columns:
+                trans = ref_df.loc[line, 'transition']
+
+        if trans is None:
+            trans = 'col' if ion[i] not in ('H1', 'He1', 'He2') else 'rec'
+
+        transition_comp[i] = trans
+
+    return ion, wavelength, units_wave, kinem, profile_comp, transition_comp
+
+
+def label_decomposition(lines_list, bands_df=None, fit_conf=None, output_params=('particle', 'wavelength', 'latex_label'),
+                        scalar_output=False):
+
+    """
+
+    This function returns the particle, wavelength and transition label latex from the input line list with the LiMe line
+    notation.
+
+    :param lines: A string or array of strings with the LiMe transition notation, e.g. O3_5007A
+    :type lines: str, list
+
+    :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
+                        assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
+                        excited state.
+    :type recomb_atom: str, list
+
+    :param comp_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
+    :type comp_dict: dict, optional
+
+    :param scalar_output: Boolean for a scalar output in case of a single input line input.
+    :type scalar_output: bool, optional
+
+    :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
+    :type user_format: dict, optional
+
+    :param units_wave: Label wavelength units. The default value "A" is angstrom.
+    :type units_wave: str, optional
+
+    :return: 3 arrays (or scalars) with the input transition line(s) particle, wavelength and scientific notation in latex format.
+    :rtype: numpy.ndarray
+
+    :Example:
+        >>> import lime
+        >>> lime.label_decomposition('O3_5007A', scalar_output=True)
+        O3, 5007.0, '$5007\\AA\\,[OIII]$'
+        >>> lime.label_decomposition('H1_6563A_b', comp_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
+        ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
+
+    """
+
+    headers = ['particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp', 'transition_comp']
+    lines_df = pd.DataFrame(index=np.array(lines_list, ndmin=1), columns=headers)
+
+    # Loop through the lines and derive their properties:
+    for label in lines_df.index:
+        line = Line(label, bands_df, fit_conf)
+
+        lines_df.loc[label, :] = (line.particle[0], line.wavelength[0], line.latex_label[0], line.kinem[0], line.profile_comp[0],
+                                  line.transition_comp[0])
+
+    # Adjust column types
+    lines_df['wavelength'] = pd.to_numeric(lines_df['wavelength'])
+
+    # Recover the columns requested by the user
+    output = []
+    for i, param in enumerate(output_params):
+        output.append(lines_df[param].to_numpy(copy=True))
+
+    # If requested and single line, return the input as a scalar
+    if scalar_output and (output[0].shape[0] == 1):
+        output = tuple(item[0] for item in output)
+    else:
+        output = tuple(output)
+
+    # TODO should we output as single array only if one property is requested?
+
+    return output
 
 
 class Line:
 
-    def __init__(self, label, band=None, fit_conf=None, emission_check=True, cont_from_bands=True, ref_log=None,
-                 z_line=None, interpret=True):
+    def __init__(self, label, band=None, fit_conf=None, profile=None, cont_from_bands=True, z_line=None,
+                 interpret=True):
 
-        self.label, self.mask = label, array([nan] * 6)
-        self.blended_check, self.merged_check = False, False
+        # Label attributes
+        self.label = label
+        self.mask = None
+        self.latex_label = None,
         self.profile_label, self.list_comps = 'no', None
-        self.ion, self.wavelength, self.units_wave, self.kinem, self.latex_label = None, None, None, None, None
 
+        self.particle = None
+        self.wavelength, self.units_wave = None, None
+        self.blended_check, self.merged_check = False, False
+
+        self.kinem = None
+        self.profile_comp = None
+        self.transition_comp = None
+
+        # Measurements attributes
         self.intg_flux, self.intg_err = None, None
         self.peak_wave, self.peak_flux = None, None
         self.eqw, self.eqw_err = None, None
@@ -215,6 +357,7 @@ class Line:
         self.snr_line, self.snr_cont = None, None
         self.observations, self.comments = 'no', 'no'
         self.pixel_mask = 'no'
+        self.n_pixels = None
         self.FWHM_intg, self.FWHM_g, self.FWZI = None, None, None
         self.w_i, self.w_f = None, None
         self.v_med, self.v_50 = None, None
@@ -224,15 +367,73 @@ class Line:
         self.aic, self.bic = None, None
         self.pixelWidth = None
 
-        self._fit_conf = None
-        self._emission_check = emission_check
+        # Extra checks
+        self._p_type = profile
         self._cont_from_adjacent = cont_from_bands
         self._decimal_wave = False
         self._narrow_check = False
 
         # Interpret the line from the user reference
         if interpret:
-            self._line_derivation(label, band, fit_conf, ref_log=ref_log)
+            self._from_label(label, band, fit_conf)
+
+        return
+
+    def _from_label(self, label, band=None, fit_conf=None):
+
+        # If band is not provided use default database
+        if band is None:
+            band = _PARENT_BANDS
+        band = check_file_dataframe(band, DataFrame, copy_input=False)
+
+        # Check line in log
+        self.label = check_line_in_log(label, band)
+
+        # Copy the input configuration dictionary
+        fit_conf = {} if fit_conf is None else fit_conf
+
+        # Get label components
+        comps_list = self.label.split('_')
+        n_comps = len(comps_list)
+        if n_comps < 2:
+            raise LiMe_Error(f'The {self.label} the line label format is not recognized. '
+                             f'Please use a "Particle_WavelengthUnits" format.')
+
+        # Check the modularity      (only 2 comps)    (case b-6)
+        modularity_comp = comps_list[-1] if (comps_list[-1] == 'b') or (comps_list[-1] == 'm') else None
+        self._modularity_component(modularity_comp, fit_conf)
+
+        # Review the components of the line
+        ref_bands_df = band if isinstance(band, DataFrame) else None
+        items = label_composition(self.list_comps, ref_df=ref_bands_df, default_profile=self._p_type)
+        self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = items
+
+        # Provide a bands from the log if possible
+        if isinstance(band, DataFrame):
+
+            # Query for the input label
+            if self.label in band.index:
+                self.mask = band.loc[self.label, 'w1':'w6'].to_numpy().astype(float)
+
+            # Remove blended/merged suffix to check
+            elif (self.blended_check or self.merged_check) and (self.label[:-2] in band.index):
+                self.mask = band.loc[self.label[:-2], 'w1':'w6'].to_numpy().astype(float)
+
+            # Could not find the mask
+            else:
+                self.mask = None
+
+        else:
+            self.mask = np.array(band)
+
+        # Check if there are masked pixels in the line
+        self.pixel_mask = fit_conf.get(f'{self.label}_mask', 'no')
+
+        # Check if the wavelength has decimal transition
+        self._decimal_wave = True if '.' in self.label else False
+
+        # Compute latex entry if necessary
+        self._review_latex_label(band)
 
         return
 
@@ -261,7 +462,7 @@ class Line:
                     inline.__setattr__(param, param_value)
 
                 # Recover "complex" attributes
-                for param in ['ion', 'wavelength', 'latex_label']:
+                for param in ['particle', 'wavelength', 'latex_label']:
                     inline.__setattr__(param, log.loc[label, param])
 
                 # Band
@@ -287,7 +488,7 @@ class Line:
 
                 # List comps
                 if inline.blended_check:
-                    inline.list_comps = array(inline.profile_label.split('-'))
+                    inline.list_comps = array(inline.profile_label.split('+'))
 
                 else:
                     inline.list_comps = array([inline.label])
@@ -300,76 +501,77 @@ class Line:
 
         return inline
 
-    def _line_derivation(self, label, band, fit_conf=None, ref_log=None):
+    def _modularity_component(self, modularity_label, fit_conf=None):
 
-        # Discriminate between string and float transitions
-        ref_log = ref_log if ref_log is not None else _PARENT_BANDS
-        self.label = check_line_in_log(label, ref_log)
+        # Not a single line
+        if modularity_label is not None:
 
-        # Copy the input configuration dictionary # TODO do we need to do a copy here
-        self._fit_conf = {} if fit_conf is None else fit_conf.copy()
+            if modularity_label == 'b':
+                self.blended_check = True
 
-        # List of components and label for the multi-profile
-        self.profile_label = self._fit_conf.get(self.label, 'no')  # TODO change this one to None
+            elif modularity_label == 'm':
+                self.merged_check = True
 
-        # Distinguish between merged and blended
-        suffix = self.label[-2:]
-        if (suffix == '_b') or (suffix == '_m'):
-            if self.profile_label != 'no':
-                if suffix == '_b':
-                    self.blended_check = True
-                else:
-                    self.merged_check = True
             else:
-                _logger.warning(f'The line {self.label} has the "{suffix}" suffix but no components have been specified '
-                                f'for the fitting')
+                raise LiMe_Error(f'The modularity component {modularity_label} in the input line "{self.label}" is not'
+                                 f' recognized')
 
-        # Blended lines have various elements in the list, single and merged only one
-        self.list_comps = self.profile_label.split('-') if self.blended_check else [self.label]
+        # Recover the profile components
+        if self.merged_check or self.blended_check:
 
-        # Get transition data from label
-        self.ion, self.wavelength, self.units_wave, self.kinem = label_components(self.list_comps)
+            # Check for profile label
+            self.profile_label = None if fit_conf is None else fit_conf.get(self.label, None)
 
-        # Provide a band from the log if available the band
-        if band is None:
-            query_label = self.label if self.profile_label == 'no' else self.label[:-2]
-            if query_label in ref_log.index:
-                try:
-                    self.mask = ref_log.loc[query_label, 'w1':'w6'].values
-                except KeyError:
-                    _logger.info(f'Failure to get bands for line {self.label} from input log')
+            # Reset and warned the line has a suffix but there are no components provided
+            if self.profile_label is None:
+                self.merged_check, self.blended_check = False, False
+
+        # List of components only for blended
+        if (self.merged_check or self.blended_check) and (self.profile_label is not None):
+            self.list_comps = self.profile_label.split('+') if self.blended_check else [self.label]
+
+            # Check if there are repeated elements
+            if len(self.list_comps) > 1:
+                uniq, count = unique(self.list_comps, return_counts=True)
+                if any(count > 1):
+                    _logger.warning(f'There are repeated entries in the line label: {self.label} = {self.list_comps}')
+
         else:
-            self.mask = band
+            self.list_comps = [self.label]
 
-        # Warn if the band wavelengths are not sorted and the theoretical value is not within the line region
-        if not np.any(np.isnan(self.mask)):
-            if not all(diff(self.mask) >= 0):
-                _logger.warning(f'The line {label} band wavelengths are not sorted: {band}')
-            if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
-                _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths: '
-                                f'w3 = {self.mask[2]};  w4 = {self.mask[3]}')
-        else:
-            _logger.info(f'Transition {self.label} contains NaN entries')
+        return
 
-        # Check if there are masked pixels in the line
-        self.pixel_mask = self._fit_conf.get(f'{self.label}_mask', 'no')
+    def _review_latex_label(self, bands_df):
 
-        # Check if the wavelength has decimal transition
-        self._decimal_wave = True if '.' in self.label else False
+        # Check if there is a latex label on the database
+        latex_exists = False
+        if isinstance(bands_df, DataFrame):
+            if 'latex_label' in bands_df.columns:
+                if np.sum(bands_df.index.isin(self.list_comps)) == len(self.list_comps):
+                    latex_exists = True
 
-        # Generate the latex label
-        if self.merged_check:       # Merged
-            latex_list = list(latex_from_label(self.profile_label.split('-')))
+        # Merged
+        if self.merged_check:
+            if latex_exists:
+                latex_list = list(bands_df.loc[self.list_comps, 'latex_label'].to_numpy())
+            else:
+                latex_list = list(latex_from_label(self.profile_label.split('+')))
             self.latex_label = array('+'.join(latex_list), ndmin=1)
 
-        elif self.blended_check:    # Blended
-            self.latex_label = latex_from_label(self.profile_label.split('-'))
-
-        else:                       # Single
-            self.latex_label = latex_from_label(None, self.ion, self.wavelength, self.units_wave, self.kinem)
+        # Blended and single
+        else:
+            if latex_exists:
+                self.latex_label = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
+            else:
+                self.latex_label = latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
+                                                    self.transition_comp)
 
         return
 
     def __str__(self):
+
+        return self.label
+
+    def __repr__(self):
 
         return self.label

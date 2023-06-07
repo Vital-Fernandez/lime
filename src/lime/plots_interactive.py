@@ -6,13 +6,12 @@ from pathlib import Path
 from matplotlib import pyplot as plt, gridspec, rc_context
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
-from pygments.lexer import default
 
 from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
     determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
-from .tools import label_decomposition, blended_label_from_log
-from .transitions import label_components, latex_from_label
+from .tools import blended_label_from_log
+from .transitions import label_decomposition
 from astropy.table import Table
 
 
@@ -40,7 +39,7 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
 
         # Join the lists and sort by wavelength
         user_mask = pd.concat([user_mask, input_mask_crop.loc[idcsNoMatch]])
-        ion_array, wave_array, latex_array = label_decomposition(user_mask.index.values) # TODO need alternative function
+        wave_array = label_decomposition(user_mask.index.to_numpy(), output_params=['wavelength'])[0]
         idx_array = np.argsort(wave_array)
         user_mask = user_mask.iloc[idx_array]
         active_lines = active_lines[idx_array]
@@ -76,7 +75,7 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
     active_lines = active_lines[idx_rows_cont]
 
     # Add wavelength to mask
-    ion_array, wave_array, latex_array = label_decomposition(user_mask.index.to_numpy())  # TODO need alternative function
+    wave_array = label_decomposition(user_mask.index.to_numpy(), output_params=['wavelength'])[0]
     user_mask['wavelength'] = wave_array
 
     return user_mask, active_lines
@@ -187,8 +186,8 @@ class BandsInspection:
 
         return
 
-    def bands(self, bands_file, parent_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              maximize=False, plt_cfg={}, ax_cfg={}, redshift_log=None, object_ref=None, redshift_column='redshift'):
+    def bands(self, bands, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
+              object_label=None, redshift_log=None, redshift_column='redshift', maximize=False, plt_cfg={}, ax_cfg={}):
 
         """
         This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
@@ -260,22 +259,22 @@ class BandsInspection:
         self._log_address = None
         self._rest_frame = True
         self._redshift_log_path = None if redshift_log is None else Path(redshift_log)
-        self._obj_ref = object_ref
+        self._obj_ref = object_label
         self._redshift_column = redshift_column
 
         # Input is a mask is address and it will be also used to save the file
         if self._log_address is None:
-            if isinstance(bands_file, (str, Path)):
-                self._log_address = Path(bands_file)
+            if isinstance(bands, (str, Path)):
+                self._log_address = Path(bands)
                 if not self._log_address.parent.is_dir():
                     _logger.warning(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
         # If not parent mask use the default database
-        if parent_bands is None:
-            parent_mask = _LINES_DATABASE_FILE
+        if ref_bands is None:
+            ref_bands = _LINES_DATABASE_FILE
 
         # Establish the reference lines log to inspect the mask
-        self.log, self._activeLines = check_previous_mask(parent_mask, bands_file, self._spec.wave_rest)
+        self.log, self._activeLines = check_previous_mask(ref_bands, bands, self._spec.wave_rest)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
@@ -306,10 +305,10 @@ class BandsInspection:
 
                 # Main structure
                 self._fig = plt.figure()
-
                 gs0 = self._fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
                 gs_lines = gs0[0].subgridspec(n_rows, n_cols, hspace=0.5)
-                self.ax_list = gs_lines.subplots().flatten()
+
+                self.ax_list = gs_lines.subplots().flatten() if n_lines > 1 else [gs_lines.subplots()]
 
                 # Generate plot
                 spanSelectDict = {}
@@ -383,7 +382,7 @@ class BandsInspection:
 
             # Check components
             blended_check, profile_label = blended_label_from_log(line, self.log)
-            list_comps = profile_label.split('-') if blended_check else [line]
+            list_comps = profile_label.split('+') if blended_check else [line]
 
             # Reference _frame for the plot
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
@@ -605,8 +604,15 @@ class RedshiftInspection:
             self._compute_redshift(redshift_output=redshift_pred)
 
             # Get the lines transitions and latex labels
-            ion_array, self._waves_array, units_wave_array, kinem_array = label_components(reference_lines)
-            self._latex_array = latex_from_label(None, ion_array, self._waves_array, units_wave_array, kinem_array)
+            reference_bands_df = check_file_dataframe(reference_lines, pd.DataFrame)
+            if reference_bands_df is None:
+                raise LiMe_Error(f'Reference lines could not be read: Input "{reference_lines}"')
+            else:
+                if isinstance(reference_bands_df, pd.DataFrame):
+                    reference_lines = reference_bands_df.index.to_numpy()
+
+            self._waves_array, self._latex_array = label_decomposition(reference_lines, output_params=('wavelength',
+                                                                                                       'latex_label'))
 
             # Sort by wavelength
             idcs_sorted = np.argsort(self._waves_array)
@@ -850,7 +856,7 @@ class CubeInspector:
 
         return
 
-    def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99], bands_frame=None,
+    def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99],
              bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
              wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, masks_file=None, lines_log_address=None,
              maximise=False, rest_frame=False, log_scale=False, ext_log='_LINESLOG'):
@@ -920,11 +926,11 @@ class CubeInspector:
         self.mask_file = masks_file
 
         # Prepare the background image data
-        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
+        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band,
                                                                        percentil_bg, bg_scale, contours_check=False)
 
         # Prepare the foreground image data
-        line_fg, self.fg_image, self.fg_levels, self.fg_scale = determine_cube_images(self._cube, line_fg, band_fg, bands_frame,
+        line_fg, self.fg_image, self.fg_levels, self.fg_scale = determine_cube_images(self._cube, line_fg, band_fg,
                                                                        percentils_fg, fg_scale, contours_check=True)
 
         # Mesh for the countours

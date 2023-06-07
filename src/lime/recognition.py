@@ -9,7 +9,7 @@ from sys import exit
 from lmfit.models import PolynomialModel
 from inspect import signature
 from .io import LiMe_Error
-from .tools import label_decomposition
+from .transitions import label_decomposition
 import astropy.units as au
 
 _logger = logging.getLogger('LiMe')
@@ -347,7 +347,7 @@ class LineFinder:
         matched_DF['signal_peak'] = np.nan
 
         # Theoretical wave values
-        ion_array, waveTheory, latexLabel_array = label_decomposition(matched_DF.index.values, units_wave=self.units_wave)
+        waveTheory = label_decomposition(matched_DF.index.values, output_params=['wavelength'])[0]
         matched_DF['wavelength'] = waveTheory
 
         # Match the lines with the theoretical emission
@@ -365,7 +365,7 @@ class LineFinder:
 
         for i in np.arange(wave_peaks.size):
 
-            idx_array = np.where(np.isclose(a=waveTheory, b=wave_peaks[i], atol=tolerance))
+            idx_array = np.where(np.isclose(a=waveTheory.astype(np.float), b=wave_peaks[i], atol=tolerance))
 
             if len(idx_array[0]) == 0:
                 unknownLineLabel = 'xy_{:.0f}A'.format(np.round(wave_peaks[i]))

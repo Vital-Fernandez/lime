@@ -36,10 +36,10 @@ class Error(Exception):
     """LiMe exception function"""
 
 
-from .treatment import Spectrum, Sample, Cube, spectral_bands
+from .treatment import Spectrum, Sample, Cube, line_bands
 from .io import *
 from .tools import *
 from .plots import spatial_mask_generator
-#TODO joblib optional
+from .transitions import Line, label_decomposition
 
 

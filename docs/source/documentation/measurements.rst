@@ -17,15 +17,15 @@ Inputs
 This section includes 3 parameters which are actually provided by the user inputs. However, they are also included in
 the output log for consistency.
 
-* **line** (``.line``, ``str``): This attribute is name of the line the measurements belong to. It has the :ref:`LiMe notation <lineLabel>`:
+* **line** (``.line``, ``str``): This attribute is name of the line the measurements belong to. It has the :math:`\textsc{LiMe}` line notation:
   format.
 
-* **mask** (``.mask``, ``np.array()``): This attribute consists in a six-value vector with the :ref:`line mask <lineMask>`:
+* **band** (``.band``, ``np.array()``): This attribute consists in a six-value vector with the line bands:
   In the ``lime.Spectrum`` object, the mask is stored as a vector under the ``lime.Spectrum.mask`` attribute. In the ``.log``
   the wavelengths are stored in individual columns with the headers: ``w1``, ``w2``, ``w3``, ``w4``, ``w5`` and ``w6``.
 
 * **profile_label** (``.profile_label``, ``str``): This attribute consists in a string with the line components separated
-  by dashes (-). The individual components labels have the :ref:`LiMe notation <lineLabel>`: but they may also have a
+  by dashes (-). The individual components labels have the :math:`\textsc{LiMe}` line notation and they may also have a
   suffix for the kinematic component. In single lines, the default value for this attribute is ``None`` (string variable).
   As an example, two profile labels are included below:
 
@@ -41,10 +41,10 @@ These parameters are not attributes of the ``lime.Spectrum`` class. Nonetheless,
 ``pandas.DataFrame`` and the output measuring logs for their convenience in posterior treatments.
 
 * **wave**: This parameter contains the theoretical, rest-frame, wavelength for the emission line. This value is derived
-  from the :ref:`line entry <lineLabel>`: provided by the user.
+  from the line label provided by the user.
 
 * **ion**: This parameter contains the ion responsible for the emission line photons. This value is derived from the
-  :ref:`line entry <lineLabel>`: provided by the user.
+  line label provided by the user.
 
 * **latex_label**: This parameter contains the transition classical notation in latex format. This string includes the
   profile components if they were provided during the fitting.

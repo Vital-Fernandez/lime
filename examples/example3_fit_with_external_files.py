@@ -17,9 +17,9 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # State the data files
-obsFitsFile = './sample_data/gp121903_ISIS_spectrum.fits'
+obsFitsFile = './sample_data/gp121903_osiris.fits'
 lineMaskFile = './sample_data/osiris_bands.txt'
-cfgFile = './sample_data/config_file.cfg'
+cfgFile = './sample_data/osiris.toml'
 
 # Load spectrum
 wave, flux, header = import_osiris_fits(obsFitsFile)
@@ -48,7 +48,7 @@ lime.save_log(match_bands, obj_bands_file)
 fit_cfg = obs_cfg['gp121903_line_fitting']
 
 # Measure the emission lines
-gp_spec.fit.frame(obj_bands_file, fit_cfg)
+gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='counter')
 
 # Display the fits on the spectrum
 gp_spec.plot.spectrum(include_fits=True)
@@ -58,4 +58,5 @@ gp_spec.plot.grid(gp_spec.log, rest_frame=True)
 
 # Save the data
 gp_spec.save_log('./sample_data/example3_linelog.fits', ext='GP121903a')
+gp_spec.save_log('./sample_data/example3_linelog.txt')
 lime.save_log(gp_spec.log, './sample_data/example3_linelog.fits', ext='GP121903b')

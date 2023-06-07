@@ -5,19 +5,16 @@ from pathlib import Path
 from astropy.io import fits
 
 import lime
-from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, label_decomposition, air_to_vacuum_function, \
-                   FLUX_DENSITY_UNITS, unit_convertor, define_masks, extract_fluxes, relative_fluxes, compute_line_ratios
+from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_convertor,\
+    define_masks, extract_fluxes, relative_fluxes, compute_line_ratios
 
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header
-from .transitions import Line
+from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS
+from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
-
-from matplotlib import pyplot as plt, colors, cm, gridspec, rc_context
-from matplotlib.widgets import RadioButtons
 
 _logger = logging.getLogger('LiMe')
 
@@ -84,17 +81,20 @@ def check_units_norm_redshift(units_wave, units_flux, norm_flux, redshift):
 def check_spectrum_axes(lime_object):
 
     # Check for masked arrays
+    array_labels = ['wave', 'wave_rest', 'flux']
     check_mask = np.zeros(3).astype(bool)
-    for i, arg in enumerate(['wave', 'wave_rest', 'flux']):
+    for i, arg in enumerate(array_labels):
         if np.ma.is_masked(lime_object.__getattribute__(arg)):
             check_mask[i] = True
 
     if np.any(check_mask):
-        lime_object._masked_inputs = True
+        lime_object._masked_inputs = True # TODO this one should go at the begining and review inputs
         if ~np.all(check_mask):
-            _logger.warning(f'Make sure *all* your input wavelength, flux and uncertainty are masked arrays')
+            for i, arg in enumerate(array_labels):
+                if not check_mask[i]:
+                    _logger.warning(f'Your {arg} array does not include a pixel mask this can caused issues on the fittings')
 
-    # Check that the flux and wavelength normalization #TODO ONLY DO THIS IN REVISION
+    # Check that the flux and wavelength normalization #
     # if not isinstance(lime_object, Cube):
     #     if np.nanmedian(lime_object.flux) < 0.0001:
     #         _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
@@ -152,96 +152,89 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
 
     # Normalize the spectrum
     if input_flux is not None:
-        flux = flux / norm_flux
+        flux = flux / norm_flux # TODO check this input changes outside on the user script
         if input_err is not None:
             err_flux = err_flux / norm_flux
 
     # Masked the arrays if requested
     if pixel_mask is not None:
-        wave = np.ma.masked_array(wave, pixel_mask)
-        wave_rest = np.ma.masked_array(wave_rest, pixel_mask)
+
+        # Confirm boolean mask
+        bool_mask = pixel_mask.astype(bool)
+
+        # Check for non-1D arrays
+        if len(pixel_mask.shape) == 1:
+            wave = np.ma.masked_array(wave, bool_mask)
+            wave_rest = np.ma.masked_array(wave_rest, bool_mask)
 
         # Spectrum or Cube spectral masking
-        if len(input_flux.shape) == 1:
-            mask_array = pixel_mask
-        else:
-            mask_array = np.ones(flux.shape).astype(bool)
-            mask_array[pixel_mask, :, :] = pixel_mask
-        flux = np.ma.masked_array(flux, mask_array)
+        flux = np.ma.masked_array(flux, bool_mask)
+
+        # if len(input_flux.shape) == 1:
+        #     mask_array = pixel_mask
+        # else:
+        #     mask_array = np.ones(flux.shape).astype(bool)
+        #     mask_array[pixel_mask, :, :] = pixel_mask
 
         if err_flux is not None:
-            err_flux = np.ma.masked_array(err_flux, mask_array)
+            err_flux = np.ma.masked_array(err_flux, bool_mask)
 
     return wave, wave_rest, flux, err_flux
 
 
-def spectral_bands(wave_inter=None, lines_list=None, ion_list=None, z_range=None,
-                   parent_mask_address=None, units_wave='A', sig_fig=4, vacuum_conversion=False):
+def line_bands(wave_inter=None, lines_list=None, particle_list=None, z_range=None,
+               ref_bands=None, units_wave='A', decimals=None, vacuum_conversion=False):
 
     # Use the default lime mask if none provided
-    if parent_mask_address is None:
-        parent_mask_address = Path(__file__).parent/'resources'/'parent_mask.txt'
+    if ref_bands is None:
+        ref_bands = _PARENT_BANDS
 
-
-    # Check that the file exists: #TODO remove blended, merged extensions from parent mask (or recover them here)
-    if not Path(parent_mask_address).is_file():
-        _logger.warning(f'Parent mask file not found. The input user address was {parent_mask_address}')
-
-    # Load the parent mask
-    mask_df = pd.read_csv(parent_mask_address, delim_whitespace=True, header=0, index_col=0)
+    # Load the reference bands
+    mask_df = check_file_dataframe(ref_bands, pd.DataFrame)
 
     # Recover line label components
-    ion_array, wave_array, latex_array = label_decomposition(mask_df.index.values)
     idcs_rows = np.ones(mask_df.index.size).astype(bool)
 
     # Convert to vacuum wavelengths if requested
     if vacuum_conversion:
 
         # First the table data
-        mask_df = mask_df.apply(air_to_vacuum_function)
+        air_columns = ['wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+        mask_df[air_columns] = mask_df[air_columns].apply(air_to_vacuum_function, raw=True)
 
-        # The line headers
-        wave_array = air_to_vacuum_function(wave_array)
-        if sig_fig is not None:
-            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
-
-        # Reconstruct the line labels for the new units
-        labels_array = np.core.defchararray.add(ion_array, '_')
-        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
-        labels_array = np.core.defchararray.add(labels_array, units_wave)
-
-        # Rename the indeces
-        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
-
-    # Momentarily add columns with the transition wavelength, ion and latex notation
-    mask_df['wave'], mask_df['ion'], mask_df['latex'] = wave_array, ion_array, latex_array
-
-    # Convert the output mask to the units requested by the user
+    # Convert to requested units
     if units_wave != 'A':
 
-        conversion_factor = unit_convertor('A', units_wave,  wave_array=1, dispersion_units='dispersion axis', sig_fig=sig_fig)
-        mask_df.loc[:, 'w1':'w6'] = mask_df.loc[:, 'w1':'w6'] * conversion_factor
-        wave_array = wave_array * conversion_factor
+        conversion_factor = unit_convertor('A', units_wave,  wave_array=1, dispersion_units='dispersion axis')
+        mask_df.loc[:, 'wavelength':'w6'] = mask_df.loc[:, 'wavelength':'w6'] * conversion_factor
 
-        if sig_fig is not None:
-            wave_array = np.round(wave_array, sig_fig) if sig_fig != 0 else np.round(wave_array, sig_fig).astype(int)
+    # Reconstruct the latex label
+    n_bands = mask_df.index.size
+    mask_df['latex_label'] = latex_from_label(None, mask_df['particle'], mask_df['wavelength'],
+                                              np.array([units_wave] * n_bands), np.zeros(n_bands),
+                                              mask_df['transition'], decimals=decimals)
 
-        # Reconstruct the line labels for the new units
-        labels_array = np.core.defchararray.add(ion_array, '_')
-        labels_array = np.core.defchararray.add(labels_array, wave_array.astype(str))
-        labels_array = np.core.defchararray.add(labels_array, units_wave)
+    # Re-write the line band
+    particle_array = mask_df['particle'].to_numpy().astype(str)
 
-        # Rename the indeces
-        mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
+    wave_array = mask_df['wavelength'].to_numpy()
+    wave_array = np.round(wave_array, decimals) if decimals is not None else np.round(wave_array, 0).astype(int)
+    wave_array = wave_array.astype(str)
+
+    labels_array = np.core.defchararray.add(particle_array, '_')
+    labels_array = np.core.defchararray.add(labels_array, wave_array)
+    labels_array = np.core.defchararray.add(labels_array, units_wave)
+
+    mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
 
     # First slice by wavelength and redshift
     if wave_inter is not None:
 
-        # In case the input is an spectrum
+        # In case the input is a spectrum
         if isinstance(wave_inter, Spectrum):
             wave_inter = wave_inter.wave_rest
 
-        # Establish the lower and upper wavelenght limits
+        # Establish the lower and upper wavelength limits
         if np.ma.isMaskedArray(wave_inter):
             w_min, w_max = wave_inter.data[0], wave_inter.data[-1]
         else:
@@ -251,20 +244,18 @@ def spectral_bands(wave_inter=None, lines_list=None, ion_list=None, z_range=None
             z_range = np.array(z_range, ndmin=1)
             w_min, w_max = w_min * (1 + z_range[0]), w_max * (1 + z_range[-1])
 
-        idcs_rows = idcs_rows & (wave_array >= w_min) & (wave_array <= w_max)
+        wavelength_array = mask_df['wavelength']
+        idcs_rows = idcs_rows & (wavelength_array >= w_min) & (wavelength_array <= w_max)
 
-    # Second slice by ion
-    if ion_list is not None:
-        idcs_rows = idcs_rows & mask_df.ion.isin(ion_list)
+    # Second slice by particle
+    if particle_list is not None:
+        idcs_rows = idcs_rows & mask_df.particle.isin(particle_list)
 
     # Finally slice by the name of the lines
     if lines_list is not None:
         idcs_rows = idcs_rows & mask_df.index.isin(lines_list)
 
-    # Return the sliced the parent mask
-    output_mask = mask_df.loc[idcs_rows, 'w1':'w6']
-
-    return output_mask
+    return mask_df.loc[idcs_rows]
 
 
 class Spectrum(LineFinder):
@@ -372,7 +363,13 @@ class Spectrum(LineFinder):
         spec.inst_FWHM = cube.inst_FWHM
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
+
+        # Check if masked array
         spec._masked_inputs = False
+        if np.ma.isMaskedArray(spec.flux):
+            spec._masked_inputs = True
+            spec.wave = np.ma.masked_array(spec.wave, cube.flux[:, idx_j, idx_i].mask)
+            spec.wave_rest = np.ma.masked_array(cube.wave_rest, cube.flux[:, idx_j, idx_i].mask)
 
         return spec
 
@@ -545,8 +542,7 @@ class Spectrum(LineFinder):
 class Cube:
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', spatial_mask=None, pixel_mask=None, obj_name=None,
-                 wcs=None):
+                 inst_FWHM = np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, obj_name=None, wcs=None):
 
         # Review the inputs
         check_inputs(input_wave, input_flux, input_err, self)
@@ -573,14 +569,14 @@ class Cube:
         self.plot = CubeFigures(self)
         self.check = CubeCheck(self)
 
-        # Checks SMACS_v2.0 units
+        # Checks spectrum units
         check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
 
         # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
                                                                           pixel_mask)
 
-        # SMACS_v2.0 normalization, redshift and mask calculation
+        # Spectrum normalization, redshift and mask calculation
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
                                                                                          input_err, pixel_mask,
                                                                                          self.redshift, self.norm_flux)
@@ -590,8 +586,8 @@ class Cube:
 
         return
 
-    def spatial_masker(self, line, band=None, param=None, percentiles=(90, 95, 99), mask_ref=None, min_percentil=None,
-                       output_address=None, user_hdr=None, bands_frame=None):
+    def spatial_masker(self, line, band=None, param='flux', percentiles=(90, 95, 99), mask_ref=None, min_percentil=None,
+                       output_address=None, user_hdr=None):
 
         """
         This function computes a spatial mask for an input flux image given an array of limits for a certain intensity parameter.
@@ -623,13 +619,13 @@ class Cube:
             raise Error(f'The mask percentiles ({percentiles}) must be in increasing order')
         inver_percentiles = np.flip(percentiles)
 
-        if not param in [None, 'SN_line', 'SN_cont']:
+        if not param in ['flux', 'SN_line', 'SN_cont']:
             raise Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
 
 
         # TODO overwrite spatial mask file not update
         # Line for the background image
-        line_bg = Line(line, band, ref_log=bands_frame)
+        line_bg = Line(line, band)
 
         # Get the band indexes
         idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_bg.pixel_mask)

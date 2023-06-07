@@ -5,8 +5,8 @@ from pathlib import Path
 from astropy.io import fits
 
 from . import Error
-from .model import LineFitting
-from .tools import define_masks, label_decomposition, COORD_KEYS, ProgressBar
+from .model import LineFitting, signal_to_noise_rola
+from .tools import define_masks, ProgressBar
 from .recognition import LINE_DETECT_PARAMS
 from .transitions import Line
 from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header
@@ -91,17 +91,17 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
     return
 
 
-def import_line_kinematics(line, z_cor, log, units_wave):
+def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
     # Check if imported kinematics come from blended component
     if line.profile_label != 'no':
-        childs_list = line.profile_label.split('-')
+        childs_list = line.profile_label.split('+')
     else:
         childs_list = np.array(line.label, ndmin=1)
 
     for child_label in childs_list:
 
-        parent_label = line._fit_conf.get(f'{child_label}_kinem')
+        parent_label = fit_conf.get(f'{child_label}_kinem')
 
         if parent_label is not None:
 
@@ -110,23 +110,25 @@ def import_line_kinematics(line, z_cor, log, units_wave):
                 _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
             else:
-                ion_parent, wtheo_parent, latex_parent = label_decomposition(parent_label, scalar_output=True, units_wave=units_wave)
-                ion_child, wtheo_child, latex_child = label_decomposition(child_label, scalar_output=True, units_wave=units_wave)
+
+                line_parent = Line(parent_label)
+                line_child = Line(child_label)
+                wtheo_parent, wtheo_child = line_parent.wavelength[0], line_child.wavelength[0]
 
                 # Copy v_r and sigma_vel in wavelength units
                 for param_ext in ('center', 'sigma'):
                     param_label_child = f'{child_label}_{param_ext}'
 
                     # Warning overwritten existing configuration
-                    if param_label_child in line._fit_conf:
+                    if param_label_child in fit_conf:
                         _logger.warning(f'{param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                     # Case where parent and child are in blended group
                     if parent_label in childs_list:
                         param_label_parent = f'{parent_label}_{param_ext}'
-                        param_expr_parent = f'{wtheo_child / wtheo_parent:0.8f}*{param_label_parent}'
+                        param_expr_parent = f'{wtheo_child/wtheo_parent:0.8f}*{param_label_parent}'
 
-                        line._fit_conf[param_label_child] = {'expr': param_expr_parent}
+                        fit_conf[param_label_child] = {'expr': param_expr_parent}
 
                     # Case we want to copy from previously measured line
                     else:
@@ -138,8 +140,8 @@ def import_line_kinematics(line, z_cor, log, units_wave):
                         else:
                             param_value = wtheo_child / wtheo_parent * sigma_parent
 
-                        line._fit_conf[param_label_child] = {'value': param_value[0], 'vary': False}
-                        line._fit_conf[f'{param_label_child}_err'] = param_value[1]
+                        fit_conf[param_label_child] = {'value': param_value[0], 'vary': False}
+                        fit_conf[f'{param_label_child}_err'] = param_value[1]
 
     return
 
@@ -155,13 +157,13 @@ class SpecTreatment(LineFitting):
         self._spec = spectrum
         self.line = None
 
-    def band(self, label, band_edges=None, fit_conf=None, fit_method='least_squares', emission_check=True,
+    def band(self, label, band_edges=None, fit_conf=None, fit_method='least_squares', profile='g-emi',
              cont_from_bands=True, temp=10000.0):
 
         """
 
          This function fits a line given its line and spectral mask. The line notation consists in the transition
-         ion and wavelength (with units) separated by an underscore, i.e. O3_5007A.
+         particle and wavelength (with units) separated by an underscore, i.e. O3_5007A.
 
          The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
          adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
@@ -206,45 +208,51 @@ class SpecTreatment(LineFitting):
 
          """
 
+        # Make a copy of the fitting configuartion
+        fit_conf = {} if fit_conf is None else fit_conf.copy()
+
         # Interpret the input line
-        self.line = Line(label, band_edges, fit_conf, emission_check, cont_from_bands)
+        self.line = Line(label, band_edges, fit_conf, profile, cont_from_bands)
 
         # Get the bands regions
-        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift), line_mask_entry=self.line.pixel_mask)
+        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift),
+                                          line_mask_entry=self.line.pixel_mask)
+
         emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
+        emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsEmis]
+
         contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
-        err_array = self._spec.err_flux[idcsEmis] if self._spec.err_flux is not None else None
+        contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
 
         # Check the bands size
         review_bands(self.line, emisWave, contWave)
 
         # Non-parametric measurements
-        self.integrated_properties(self.line, emisWave, emisFlux, contWave, contFlux, err_array)
+        self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr)
 
         # Import kinematics if requested
-        import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave)
+        import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, fit_conf)
 
         # Combine bands
         idcsLine = idcsEmis + idcsCont
         x_array, y_array = self._spec.wave[idcsLine], self._spec.flux[idcsLine]
-
-        # Fit weights according to input err
-        if self._spec.err_flux is None:
-            w_array = np.full(x_array.size, 1.0 / self.line.std_cont)
-        else:
-            w_array = 1.0 / self._spec.err_flux[idcsLine]
+        emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
 
         # Gaussian fitting
-        self.profile_fitting(self.line, x_array, y_array, w_array, self._spec.redshift, fit_method, temp,
+        self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, fit_method, temp,
                              self._spec.inst_FWHM)
+
+        # Recalculate the SNR with the gaussian parameters
+        err_cont = self.line.std_cont if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
+        self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
 
         # Save the line parameters to the dataframe
         results_to_log(self.line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
 
         return
 
-    def frame(self, bands_df, fit_conf=None, line_list=None, fit_method='least_squares', line_detection=False,
-              emission_check=True, cont_from_bands=True, temp=10000.0, plot_fit=False,
+    def frame(self, bands_df, fit_conf=None, lines_list=None, fit_method='least_squares', line_detection=False,
+              profile='g-emi', cont_from_bands=True, temp=10000.0, plot_fit=False,
               obj_ref=None, default_conf_key='default_line_fitting', user_detect_conf=None, progress_output='bar'):
 
         # Check if the lines log is a dataframe or a file address
@@ -253,8 +261,8 @@ class SpecTreatment(LineFitting):
         if bands_df is not None:
 
             # Crop the analysis to the target lines
-            if line_list is not None:
-                idcs = bands_df.index.isin(line_list)
+            if lines_list is not None:
+                idcs = bands_df.index.isin(lines_list)
                 bands_df = bands_df.loc[idcs]
 
             # Load configuration for fits
@@ -292,6 +300,23 @@ class SpecTreatment(LineFitting):
             bands_matrix = bands_df.loc[:, 'w1':'w6'].to_numpy()
             n_lines = label_list.size
 
+            # # Check the mask values
+            # if self.mask is not None:
+            #
+            #     if np.any(np.isnan(self.mask)): # TODO Add this to the fitting section
+            #         _logger.warning(f'The line {label} band contains nan entries: {self.mask}')
+            #
+            #     if not all(diff(self.mask) >= 0):
+            #         _logger.info(f'The line {label} band wavelengths are not sorted: {self.mask}')
+            #
+            #     if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
+            #         _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths:'
+            #                         f' w3 = {self.mask[2]};  w4 = {self.mask[3]}')
+
+            # _logger.info(f'The line {self.label} has the "{modularity_label}" suffix but the transition components '
+            #              f'have not been specified') # TODO move these warnings just for the fittings (not the creation)
+
+
             pbar = ProgressBar(progress_output, f'{n_lines} lines')
             if n_lines > 0:
                 for i in np.arange(n_lines):
@@ -303,13 +328,13 @@ class SpecTreatment(LineFitting):
                     pbar.output_message(i, n_lines, pre_text="", post_text=line)
 
                     # Fit the lines
-                    self.band(line, bands_matrix[i], input_conf, fit_method, emission_check, cont_from_bands, temp)
+                    self.band(line, bands_matrix[i], input_conf, fit_method, profile, cont_from_bands, temp)
 
                     if plot_fit:
                         self._spec.plot.band()
 
             else:
-                msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
+                msg = f'No lines were measured from the input dataframe:\n - line_list: {lines_list}\n - line_detection: {line_detection}'
                 _logger.info(msg)
 
         else:
@@ -371,13 +396,13 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf=None, mask_name_list=None, fit_method='least_squares',
-                     line_detection=False, emission_check=True, cont_from_bands=True, temp=10000.0,
-                     output_log=None, default_conf_key='default_line_fitting', log_ext_suffix='_LINESLOG',
+    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf=None, masks_list=None, lines_list=None,
+                     fit_method='least_squares', line_detection=False, profile='g-emi', cont_from_bands=True,
+                     temp=10000.0, output_log=None, default_conf_key='default_line_fitting', log_ext_suffix='_LINESLOG',
                      progress_output='bar', plot_fit=False, n_save=100, user_hdr=None):
 
         # Check if the mask variable is a file or an array
-        mask_dict = check_file_array_mask(spatial_mask, mask_name_list)
+        mask_dict = check_file_array_mask(spatial_mask, masks_list)
 
         # Unpack mask dictionary
         mask_list = np.array(list(mask_dict.keys()))
@@ -480,8 +505,8 @@ class CubeTreatment(LineFitting):
                 spaxel = self._cube.get_spaxel(idx_j, idx_i, spaxel_label)
 
                 # Fit the lines
-                spaxel.fit.frame(bands_df, spaxel_conf, line_list=None, fit_method=fit_method,
-                                 line_detection=line_detection, emission_check=emission_check,
+                spaxel.fit.frame(bands_df, spaxel_conf, lines_list=lines_list, fit_method=fit_method,
+                                 line_detection=line_detection, profile=profile,
                                  cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
                                  obj_ref=None, default_conf_key=None, user_detect_conf=detect_conf)
 

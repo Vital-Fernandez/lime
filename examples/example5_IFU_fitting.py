@@ -4,7 +4,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 # State the data location
-cfg_file = './sample_data/manga.cfg'
+cfg_file = './sample_data/manga.toml'
 cube_file = Path('./sample_data/manga-8626-12704-LOGCUBE.fits.gz')
 bands_file_0 = Path('./sample_data/SHOC579_MASK0_bands.txt')
 spatial_mask_file = Path('./sample_data/SHOC579_mask.fits')
@@ -40,7 +40,7 @@ for i, coords in enumerate(masks_dict['MASK_0']):
     print(f'Spaxel {i}) Coordinates {coords}')
     idx_Y, idx_X = coords
     spaxel = shoc579.get_spaxel(idx_Y, idx_Y)
-    spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], obj_ref='MASK_0', plot_fit=False, progress_output=None)
+    spaxel.fit.frame(bands_file_0, obs_cfg, lines_list=['H1_6563A_b'], obj_ref='MASK_0', plot_fit=False, progress_output=None)
 
 # Fit the lines in all the masks spaxels
 shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=True, output_log=output_lines_log_file)
@@ -50,10 +50,6 @@ spaxel = shoc579.get_spaxel(38, 35)
 spaxel.load_log(output_lines_log_file, ext='38-35_LINESLOG')
 spaxel.plot.band('He1_5016A')
 
-# # Fit the lines in one mask
-# shoc579.fit.spatial_mask(spatial_mask_file, bands_file_0, obs_cfg, mask_name_list=['MASK_0'],
-#                          line_detection=True,  output_log=output_lines_log_file, progress_output='bar',
-#                          plot_fit=False)
 
 # Review the fittings
 shoc579.check.cube('H1_6563A', lines_log_address=output_lines_log_file, masks_file=spatial_mask_file)

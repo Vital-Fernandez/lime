@@ -44,10 +44,19 @@ These are some of the features currently available:
    :name: doc-tree
 
    documentation/installation
-   documentation/fitting
-   documentation/plots
    documentation/measurements
+   documentation/plots
    documentation/api
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Inputs
+   :name: input-tree
+
+   inputs/1_Reading_spectra.ipynb
+   inputs/2_Line_labels.ipynb
+   inputs/3_Line_Bands.ipynb
+   inputs/4_Fitting_configuration
 
 .. toctree::
    :maxdepth: 1

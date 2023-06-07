@@ -30,12 +30,6 @@ from astropy.table import Table
 
 from .tables import table_fluxes
 
-# if version_info[:3] < (3, 10):
-#     print('Hi')
-#     from collections import Sequence
-# else:
-#     from collections.abc import Sequence
-
 try:
     import openpyxl
     openpyxl_check = True
@@ -48,12 +42,11 @@ try:
 except ImportError:
     asdf_check = False
 
-# tomli >= 1.1.0 ; python_version < "3.11"
-#
-# try:
-#     import tomllib
-# except ModuleNotFoundError:
-#     import tomli as tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 
 _logger = logging.getLogger('LiMe')
@@ -93,6 +86,160 @@ KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_
 
 class LiMe_Error(Exception):
     """LiMe exception function"""
+
+
+# Function to load SpecSyzer configuration file
+def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
+
+    """
+    This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
+    check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
+
+    If the user provides a list of objects (via the ``obj_list`` parameter) this function will update each object fitting
+    configuration to include the default configuration. If there are shared entries, the object configuration takes precedence.
+    The object section must have have the "objectName_line_fitting" notation, where the "objectName" is obtained from
+    the object list.
+
+    If the user provides a list of masks (via the ``mask_section`` parameter) this function will update the spaxel line fitting
+    configuration to include the mask configuration. If there are shared entries the spaxel configuration takes preference.
+    The spaxel  section must have follow the "idxY-idxX_line_fitting" notation, where "idxY-idxX" are the y and x indices
+    of the masked spaxel obtained from the mask.
+
+    .. attention::
+        For the right formatting of the line fitting configuration entries the user must include the "line_fitting" string
+        in the file configuration section name. For example:
+
+    .. code-block::
+
+        [default_line_fitting]
+        H1_6563A_b = H1_6563A-N1_6584A-N1_6548A
+
+        [IZwicky18_line_fitting]
+        O2_3726A_m = O2_3726A-O2_3729A
+
+        [123-84_line_fitting]
+        H1_6563A_b = H1_6563A-N1_6584A
+
+    :param file_address: configuration file location
+    :type file_address: str or ~pathlib.Path
+
+    :param def_cfg_sec: the section(s) with the line fitting configuration, e.g. 'default_line_fitting'
+    :type def_cfg_sec: str or list, optional
+
+    :return: Parsed configuration data
+    :rtype: dict
+
+    """
+
+    file_path = Path(file_address)
+
+    # Open the file
+    if file_path.is_file():
+
+        # Toml file
+        if file_path.suffix == '.toml':
+            toml_check = True
+            with open(file_path, mode="rb") as fp:
+                cfg = tomllib.load(fp)
+
+        # ini file
+        else:
+            toml_check = False
+            cfg = configparser.ConfigParser()
+            cfg.optionxform = str
+            cfg.read(file_address)
+    else:
+        raise LiMe_Error(f'The configuration file was not found at: {file_address}')
+
+    # Convert the configuration entries from the string format if possible
+
+    if not toml_check:
+        cfg_lime = {}
+
+        for section in cfg.sections():
+            cfg_lime[section] = {}
+            for option_key in cfg.options(section):
+                option_value = cfg[section][option_key]
+                cfg_lime[section][option_key] = format_option_value(option_value, option_key, section)
+
+    else:
+        cfg_lime = cfg
+
+        for section, items in cfg.items():
+            if section.endswith(fit_cfg_suffix):
+                for i_key, i_value in items.items():
+                    cfg_lime[section][i_key] = format_option_value(i_value, i_key, section)
+
+    return cfg_lime
+
+
+# Function to save SpecSyzer configuration file
+def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
+
+    """
+    This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
+    overwrites the data
+
+    """
+    # TODO add mechanic for commented conf lines. Currently they are being erased in the load/safe process
+
+    # Creating a new file (overwritting old if existing)
+    if section_name == None:
+
+        # Check all entries are dictionaries
+        values_list = [*param_dict.values()]
+        section_check = all(isinstance(x, dict) for x in values_list)
+        assert section_check, f'ERROR: Dictionary for {output_file} cannot be converted to configuration file. Confirm all its values are dictionaries'
+
+        output_cfg = configparser.ConfigParser()
+        output_cfg.optionxform = str
+
+        # Loop throught he sections and options to create the files
+        for section_name, options_dict in param_dict.items():
+            output_cfg.add_section(section_name)
+            for option_name, option_value in options_dict.items():
+                option_formatted = formatStringOutput(option_value, option_name, section_name)
+                output_cfg.set(section_name, option_name, option_formatted)
+
+        # Save to a text format
+        with open(output_file, 'w') as f:
+            output_cfg.write(f)
+
+    # Updating old file
+    else:
+
+        # Confirm file exists
+        file_check = os.path.isfile(output_file)
+
+        # Load original cfg
+        if file_check:
+            output_cfg = configparser.ConfigParser()
+            output_cfg.optionxform = str
+            output_cfg.read(output_file)
+        # Create empty cfg
+        else:
+            output_cfg = configparser.ConfigParser()
+            output_cfg.optionxform = str
+
+        # Clear section upon request
+        if clear_section:
+            if output_cfg.has_section(section_name):
+                output_cfg.remove_section(section_name)
+
+        # Add new section if it is not there
+        if not output_cfg.has_section(section_name):
+            output_cfg.add_section(section_name)
+
+        # Map key values to the expected format and store them
+        for option_name, option_value in param_dict.items():
+            option_formatted = formatStringOutput(option_value, option_name, section_name)
+            output_cfg.set(section_name, option_name, option_formatted)
+
+        # Save to a text file
+        with open(output_file, 'w') as f:
+            output_cfg.write(f)
+
+    return
 
 
 def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
@@ -369,7 +516,7 @@ def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
     for i, comp in enumerate(line.list_comps):
 
         # Convert current measurement to a pandas series container
-        log.loc[comp, ['ion', 'wavelength', 'latex_label']] = line.ion[i], line.wavelength[i], line.latex_label[i]
+        log.loc[comp, ['particle', 'wavelength', 'latex_label']] = line.particle[i], line.wavelength[i], line.latex_label[i]
         log.loc[comp, 'w1':'w6'] = line.mask
 
         # Treat every line
@@ -390,44 +537,25 @@ def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
     return
 
 
-def check_file_dataframe(input, variable_type, ext='LINESLOG', sample_levels=['id', 'line'], copy_output=True,
-                         key_address=None):
+def check_file_dataframe(df_variable, variable_type, ext='LINESLOG', sample_levels=('id', 'line'), copy_input=True):
 
-    if isinstance(input, variable_type):
-        if copy_output:
-            output = input.copy()
+    if isinstance(df_variable, variable_type):
+        if copy_input:
+            output = df_variable.copy()
         else:
-            output = input
+            output = df_variable
 
-    elif Path(input).is_file():
-        output = load_log(input, ext=ext, sample_levels=sample_levels)
+    elif isinstance(df_variable, (str, Path)):
+        input_path = Path(df_variable)
+        if input_path.is_file():
+            output = load_log(df_variable, ext=ext, sample_levels=sample_levels)
+        else:
+            output = None
 
     else:
-        output = None
+        output = df_variable
 
     return output
-
-def check_file_config(fit_conf=None, detect_conf=None, conf_key=None, detect_key=None):
-
-    if fit_conf is not None:
-
-        # Recover configuration file if requested
-        if isinstance(fit_conf, (Path, str)):
-            fit_conf = load_cfg(fit_conf)
-
-            if conf_key is not None:
-                output_conf = fit_conf.get(conf_key, {})
-            else:
-                output_conf = fit_conf
-
-        # Recover requested detection configuration
-        if detect_conf is None:
-
-            if detect_key is not None:
-                detect_conf = fit_conf.get()
-
-
-    return fit_conf, detect_conf
 
 _parent_bands_file = Path(__file__).parent/'resources/parent_mask.txt'
 _PARENT_BANDS = load_log(_parent_bands_file)
@@ -443,6 +571,7 @@ def check_numeric_Value(s):
 
 # Function to map a string to its variable-type
 def format_option_value(entry_value, key_label, section_label='', float_format=None, nan_format='nan'):
+
     output_variable = None
 
     # None variable
@@ -452,25 +581,28 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
     # Dictionary blended lines
     elif 'line_fitting' in section_label:
         output_variable = {}
-        keys_and_values = entry_value.split(',')
-        for pair in keys_and_values:
+        try:
+            keys_and_values = entry_value.split(',')
+            for pair in keys_and_values:
 
-            # Conversion for parameter class atributes
-            if ':' in pair:
-                key, value = pair.split(':')
-                if value == 'None':
-                    output_variable[key] = None
-                elif key in ['value', 'min', 'max']:
-                    output_variable[key] = float(value)
-                elif key == 'vary':
-                    output_variable[key] = strtobool(value) == 1
+                # Conversion for parameter class atributes
+                if ':' in pair:
+                    key, value = pair.split(':')
+                    if value == 'None':
+                        output_variable[key] = None
+                    elif key in ['value', 'min', 'max']:
+                        output_variable[key] = float(value)
+                    elif key == 'vary':
+                        output_variable[key] = strtobool(value) == 1
+                    else:
+                        output_variable[key] = value
+                elif '_mask' in key_label:
+                    output_variable = entry_value
+                # Conversion for non-parameter class atributes (only str conversion possible)
                 else:
-                    output_variable[key] = value
-            elif '_mask' in key_label:
-                output_variable = entry_value
-            # Conversion for non-parameter class atributes (only str conversion possible)
-            else:
-                output_variable = check_numeric_Value(entry_value)
+                    output_variable = check_numeric_Value(entry_value)
+        except:
+            raise LiMe_Error(f'Failure to convert configuration entry: {key_label} = {entry_value} in section {section_label}')
 
     # Arrays (The last boolean overrides the parameters
     # TODO keys with array are always converted to numpy array even if just one
@@ -526,178 +658,6 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
             output_variable = check_numeric_Value(entry_value)
 
     return output_variable
-
-
-# Function to load SpecSyzer configuration file #TODO change default name default_line_fitting
-def load_cfg(file_address, obj_list=None, mask_section=None, def_cfg_sec='line_fitting'):
-
-    """
-    This function reads a configuration file with the `standard ini format <https://en.wikipedia.org/wiki/INI_file>`_. Please
-    check the ``.format_option_value`` function for the special keywords conversions done by LiMe.
-
-    If the user provides a list of objects (via the ``obj_list`` parameter) this function will update each object fitting
-    configuration to include the default configuration. If there are shared entries, the object configuration takes precedence.
-    The object section must have have the "objectName_line_fitting" notation, where the "objectName" is obtained from
-    the object list.
-
-    If the user provides a list of masks (via the ``mask_section`` parameter) this function will update the spaxel line fitting
-    configuration to include the mask configuration. If there are shared entries the spaxel configuration takes preference.
-    The spaxel  section must have follow the "idxY-idxX_line_fitting" notation, where "idxY-idxX" are the y and x indices
-    of the masked spaxel obtained from the mask.
-
-    .. attention::
-        For the right formatting of the line fitting configuration entries the user must include the "line_fitting" string
-        in the file configuration section name. For example:
-
-    .. code-block::
-
-        [default_line_fitting]
-        H1_6563A_b = H1_6563A-N1_6584A-N1_6548A
-
-        [IZwicky18_line_fitting]
-        O2_3726A_m = O2_3726A-O2_3729A
-
-        [123-84_line_fitting]
-        H1_6563A_b = H1_6563A-N1_6584A
-
-    :param file_address: configuration file location
-    :type file_address: str or ~pathlib.Path
-
-    :param obj_list: the section:option location for the list of objects, e.g. {'sample data': 'obj_list'}
-    :type obj_list: dict, optional # TODO this one could be a section.option, file, list/array
-
-    :param mask_section: the section:option location of the spatial masks, e.g. {'sample data': 'obj_mask_list'}
-    :type mask_section: dict, optional
-
-    :param def_cfg_sec: the section(s) with the line fitting configuration, e.g. 'default_line_fitting'
-    :type def_cfg_sec: str or list, optional
-
-    :return: Parsed configuration data
-    :rtype: dict
-
-    """
-
-    # Open the file
-    if Path(file_address).is_file():
-        cfg = configparser.ConfigParser()
-        cfg.optionxform = str
-        cfg.read(file_address)
-    else:
-        raise LiMe_Error(f'Configuration file not found at: {file_address}')
-
-    # Convert the configuration entries from the string format if possible
-    cfg_lime = {}
-    for section in cfg.sections():
-        cfg_lime[section] = {}
-        for option_key in cfg.options(section):
-            option_value = cfg[section][option_key]
-            cfg_lime[section][option_key] = format_option_value(option_value, option_key, section)
-
-    # Update the object line fitting sections if provided by user
-    if obj_list is not None:
-
-        # Get the default configuration
-        assert def_cfg_sec in cfg_lime, f'- ERROR: No {def_cfg_sec} section in file {file_address}'
-        global_cfg = cfg_lime[def_cfg_sec]
-
-        if isinstance(obj_list, dict):
-
-            for sec_objs, opt_objs in obj_list.items():
-
-                # Get the list of objects
-                assert sec_objs in cfg_lime, f'- ERROR: No {sec_objs} section in file {file_address}'
-                assert opt_objs in cfg_lime[sec_objs], f'- ERROR: No {opt_objs} option in section {sec_objs} in file {file_address}'
-                objList = cfg_lime[sec_objs][opt_objs]
-
-        elif isinstance(obj_list, (Sequence, np.ndarray)):
-            objList = obj_list
-
-        else:
-            _logger.warning(f'The input obj_list variable type ({type(obj_list)}) is not recognized. Please use a dictionary, a string for an output'
-                            f'file or a list/array of objects')
-            raise
-
-        # Loop through the objects
-        for obj in objList:
-            global_dict = copy.deepcopy(global_cfg)
-
-            local_label = f'{obj}_line_fitting'
-            local_dict = cfg_lime[local_label] if local_label in cfg_lime else {}
-
-            # Local configuration overwriting global
-            global_dict.update(local_dict)
-            cfg_lime[local_label] = global_dict
-
-    return cfg_lime
-
-
-# Function to save SpecSyzer configuration file
-def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
-
-    """
-    This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
-    overwrites the data
-
-    """
-    # TODO add mechanic for commented conf lines. Currently they are being erased in the load/safe process
-
-    # Creating a new file (overwritting old if existing)
-    if section_name == None:
-
-        # Check all entries are dictionaries
-        values_list = [*param_dict.values()]
-        section_check = all(isinstance(x, dict) for x in values_list)
-        assert section_check, f'ERROR: Dictionary for {output_file} cannot be converted to configuration file. Confirm all its values are dictionaries'
-
-        output_cfg = configparser.ConfigParser()
-        output_cfg.optionxform = str
-
-        # Loop throught he sections and options to create the files
-        for section_name, options_dict in param_dict.items():
-            output_cfg.add_section(section_name)
-            for option_name, option_value in options_dict.items():
-                option_formatted = formatStringOutput(option_value, option_name, section_name)
-                output_cfg.set(section_name, option_name, option_formatted)
-
-        # Save to a text format
-        with open(output_file, 'w') as f:
-            output_cfg.write(f)
-
-    # Updating old file
-    else:
-
-        # Confirm file exists
-        file_check = os.path.isfile(output_file)
-
-        # Load original cfg
-        if file_check:
-            output_cfg = configparser.ConfigParser()
-            output_cfg.optionxform = str
-            output_cfg.read(output_file)
-        # Create empty cfg
-        else:
-            output_cfg = configparser.ConfigParser()
-            output_cfg.optionxform = str
-
-        # Clear section upon request
-        if clear_section:
-            if output_cfg.has_section(section_name):
-                output_cfg.remove_section(section_name)
-
-        # Add new section if it is not there
-        if not output_cfg.has_section(section_name):
-            output_cfg.add_section(section_name)
-
-        # Map key values to the expected format and store them
-        for option_name, option_value in param_dict.items():
-            option_formatted = formatStringOutput(option_value, option_name, section_name)
-            output_cfg.set(section_name, option_name, option_formatted)
-
-        # Save to a text file
-        with open(output_file, 'w') as f:
-            output_cfg.write(f)
-
-    return
 
 
 def log_parameters_calculation(input_log, parameter_list, formulae_list):

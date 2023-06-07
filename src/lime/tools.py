@@ -1,5 +1,4 @@
 __all__ = ['COORD_KEYS',
-           'label_decomposition',
            'unit_convertor',
            'extract_fluxes',
            'relative_fluxes',
@@ -66,177 +65,6 @@ def int_to_roman(num):
             num -= VAL_LIST[i]
         i += 1
     return roman_num
-
-
-# Extract transition elements from a line label
-def label_decomposition(lines, recomb_atom=('H1', 'He1', 'He2'), comp_dict={}, scalar_output=False,
-                        user_format={}, units_wave='A'):
-
-    """
-
-    This function returns the ion, wavelength and transition label latex from the input line list with the LiMe line
-    notation.
-
-    :param lines: A string or array of strings with the LiMe transition notation, e.g. O3_5007A
-    :type lines: str, list
-
-    :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
-                        assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
-                        excited state.
-    :type recomb_atom: str, list
-
-    :param comp_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
-    :type comp_dict: dict, optional
-
-    :param scalar_output: Boolean for a scalar output in case of a single input line input.
-    :type scalar_output: bool, optional
-
-    :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
-    :type user_format: dict, optional
-
-    :param units_wave: Label wavelength units. The default value "A" is angstrom.
-    :type units_wave: str, optional
-
-    :return: 3 arrays (or scalars) with the input transition line(s) ion, wavelength and scientific notation in latex format.
-    :rtype: numpy.ndarray
-
-    :Example:
-        >>> import lime
-        >>> lime.label_decomposition('O3_5007A', scalar_output=True)
-        O3, 5007.0, '$5007\\AA\\,[OIII]$'
-        >>> lime.label_decomposition('H1_6563A_b', comp_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
-        ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
-
-    """
-
-    # Confirm input array has one dimension
-    # TODO for blended lines it may be better to return all the blended components individually
-    lines = np.array(lines, ndmin=1)
-
-    # TODO current workflow breaks if repeated labels
-    try:
-        uniq, count = np.unique(lines, return_counts=True)
-        assert not np.any(count > 1)
-    except AssertionError as err:
-        _logger.critical('The input line list has repeated line names')
-        raise err
-
-    # Containers for input data
-    ion_dict, wave_dict, latexLabel_dict = {}, {}, {}
-
-    for lineLabel in lines:
-
-        # Case the user provides his own format
-        if lineLabel in user_format:
-            ion_dict[lineLabel], wave_dict[lineLabel], latexLabel_dict[lineLabel] = user_format[lineLabel]
-
-        # Default format
-        else:
-
-            # Check if line reference corresponds to blended component
-            mixture_line = False
-            if (lineLabel[-2:] == '_b') or (lineLabel[-2:] == '_m'):
-                mixture_line = True
-                if lineLabel in comp_dict:
-                    lineRef = comp_dict[lineLabel]
-                else:
-                    lineRef = lineLabel[:-2]
-            else:
-                lineRef = lineLabel
-
-            # Split the components if they exists
-            lineComponents = lineRef.split('-')
-
-            # Decomponse each component
-            latexLabel = ''
-            for line_i in lineComponents:
-
-                # Check that the line has the right units
-                kinem_comp_check = False if line_i.count('_') == 1 else True
-
-                # Get ion:
-                ion = line_i[0:line_i.find('_')]
-                square_brackets = [bracket for bracket in ion if bracket in ['[', ']']]
-                n_brackets = len(square_brackets)
-
-                # if 'r_' in line_i: # Case recombination lines
-                #     ion = line_i[0:line_i.find('_')-1]
-                # else:
-                #     ion = line_i[0:line_i.find('_')]
-
-                # Get wavelength and their units # TODO add more units and more facilities for extensions
-                # TODO warning if label does not have those units
-                if (line_i.endswith(units_wave)) or kinem_comp_check:
-                    wavelength = line_i[line_i.find('_') + 1:line_i.rfind(units_wave)]
-                    units = UNITS_LATEX_DICT[units_wave]
-                    ext = f'-{line_i[line_i.rfind("_")+1:]}' if kinem_comp_check else ''
-                else:
-                    wavelength = line_i[line_i.find('_') + 1:]
-                    units = ''
-                    ext = ''
-
-                # Define the label # TODO Remove first check and make the anotation compulsary # Add option to exclude brackets or provide status, ionization element appart
-                if n_brackets == 0:
-
-                    atom, ionization = ion[:-1], int(ion[-1])
-                    ionizationRoman = int_to_roman(ionization)
-
-                    if ion in recomb_atom:
-                        comp_line = f'{atom}{ionizationRoman}'
-                    else:
-                        comp_line = f'[{atom}{ionizationRoman}]'
-
-                # Forbidden line
-                elif n_brackets == 2:
-                    atom, ionization = ion[1:-2], int(ion[-2])
-                    ionizationRoman = int_to_roman(ionization)
-                    comp_line = f'[{atom}{ionizationRoman}]'
-
-                # Semi-forbidden line
-                else:
-                    atom, ionization = ion[0:-2], int(ion[-2])
-                    ionizationRoman = int_to_roman(ionization)
-                    comp_line = f'{atom}{ionizationRoman}]'
-
-                # Adding the wavelength and units
-                comp_line += f'\,{wavelength}{units}{ext}'
-
-                # In the case of a mixture line we take component with the _b as the parent
-                if mixture_line:
-                    if lineLabel[:-2] == line_i:
-                        ion_dict[lineRef] = ion
-                        wave_dict[lineRef] = float(wavelength)
-                        latexLabel = comp_line if len(latexLabel) == 0 else f'{latexLabel}+{comp_line}'
-                    else:
-                        latexLabel = comp_line if len(latexLabel) == 0 else f'{latexLabel}+{comp_line}'
-
-                # This logic will expand the blended lines, but the output list will be larger than the input one
-                else:
-                    ion_dict[line_i] = ion
-                    wave_dict[line_i] = float(wavelength)
-                    latexLabel_dict[line_i] = '$'+comp_line+'$'
-
-            if mixture_line:
-                latexLabel_dict[lineRef] = '$'+latexLabel +'$'
-
-    # Convert to arrays
-    label_array = np.array([*ion_dict.keys()], ndmin=1)
-    ion_array = np.array([*ion_dict.values()], ndmin=1)
-    wavelength_array = np.array([*wave_dict.values()], ndmin=1)
-    latexLabel_array = np.array([*latexLabel_dict.values()], ndmin=1)
-
-    # Check if the number of output lines is the same
-    if not label_array.size == wavelength_array.size:
-        _logger.critical(f'Number of input lines is different from number of output lines')
-
-    # If requested and single line, return the input as a scalar
-    # TODO add warnings if output arrays are empty
-    if ion_array.size == 1 and scalar_output:
-        output = (ion_array[0], wavelength_array[0], latexLabel_array[0])
-    else:
-        output = (ion_array, wavelength_array, latexLabel_array)
-
-    return output
 
 
 # Favoured method to get line fluxes according to resolution
@@ -594,31 +422,6 @@ def refraction_index_air_vacuum(wavelength_array, units='A'):
     return refraction_index
 
 
-def air_to_vacuum_function(input_array, sig_fig=0):
-
-    input_array = np.array(input_array, ndmin=1)
-
-    if 'U' in str(input_array.dtype): #TODO finde better way
-        ion_array, wave_array, latex_array = label_decomposition(input_array)
-        air_wave = wave_array
-    else:
-        air_wave = input_array
-
-    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
-    output_array = (air_wave * 0.0001 * refraction_index) * 10000
-
-    if sig_fig == 0:
-        output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
-
-    if 'U' in str(input_array.dtype):
-        vacuum_wave = output_array.astype(str)
-        output_array = np.core.defchararray.add(ion_array, '_')
-        output_array = np.core.defchararray.add(output_array, vacuum_wave)
-        output_array = np.core.defchararray.add(output_array, 'A')
-
-    return output_array
-
-
 def format_line_mask_option(entry_value, wave_array):
 
     # Check if several entries
@@ -641,6 +444,7 @@ def format_line_mask_option(entry_value, wave_array):
 def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no'):
 
     # Make sure it is a matrix
+    # TODO warning for mask outside limimes
     masks_array = np.array(masks_array, ndmin=2)
 
     # Check if it is a masked array

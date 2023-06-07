@@ -18,7 +18,7 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # Address of the Green Pea galaxy spectrum
-fits_file = './sample_data/gp121903_ISIS_spectrum.fits'
+fits_file = 'sample_data/gp121903_osiris.fits'
 
 # Load spectrum
 wave, flux, hdr = import_osiris_fits(fits_file)
@@ -43,7 +43,7 @@ gp_spec.plot.band()
 
 # Fit configuration
 line = 'H1_6563A_b'
-fit_conf = {'H1_6563A_b': 'H1_6563A-N2_6584A-N2_6548A',
+fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
             'N2_6548A_amp': {'expr': 'N2_6584A_amp/2.94'},
             'N2_6548A_kinem': 'N2_6584A'}
 

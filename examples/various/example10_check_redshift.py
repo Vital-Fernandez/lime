@@ -17,7 +17,7 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # State the data files
-obsFitsFile = './sample_data/gp121903_ISIS_spectrum.fits'
+obsFitsFile = './sample_data/gp121903_osiris.fits'
 lineMaskFile = './sample_data/osiris_bands.txt'
 cfgFile = './sample_data/config_file.cfg'
 
@@ -33,7 +33,7 @@ norm_flux = obs_cfg['sample_data']['norm_flux']
 gp_spec = lime.Spectrum(wave, flux, norm_flux=norm_flux)
 
 # Reference lines for the redshift calculation
-band_df = lime.spectral_bands(lines_list=['H1_6563A', 'H1_4861A', 'O3_5007A', 'O3_4363A'])
+band_df = lime.line_bands(lines_list=['H1_6563A', 'H1_4861A', 'O3_5007A', 'O3_4363A'])
 
 # Providing a table where the redshift prediction is saved
 redshift_table = './sample_data/reshift_table.txt'

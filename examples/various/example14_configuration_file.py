@@ -4,7 +4,7 @@ def my_func(a, b=2, c=3):
 
     return a + b + c
 
-with open('conf.toml', 'r') as file:
+with open('../sample_data/cfg.toml', 'r') as file:
     cfg = toml.load(file)
 
 

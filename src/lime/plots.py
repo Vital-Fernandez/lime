@@ -9,10 +9,10 @@ import pandas as pd
 from pathlib import Path
 
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
-from .tools import label_decomposition, blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
+from .tools import blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
 from .tools import define_masks, format_line_mask_option
 from .io import load_log, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
-from .transitions import check_line_in_log, Line
+from .transitions import check_line_in_log, Line, label_decomposition
 
 _logger = logging.getLogger('LiMe')
 
@@ -548,13 +548,13 @@ def check_image_size(bg_image, fg_image, mask_dict):
     return
 
 
-def determine_cube_images(cube, line, band, bands_frame, percentiles, color_scale, contours_check=False):
+def determine_cube_images(cube, line, band, percentiles, color_scale, contours_check=False):
 
     # Generate line object
     if line is not None:
 
         # Determine the line of reference
-        line = Line(line, band, ref_log=bands_frame)
+        line = Line(line, band)
 
         # Compute the band map slice
         idcsEmis, idcsCont = define_masks(cube.wave, line.mask * (1 + cube.redshift), line.pixel_mask)
@@ -743,7 +743,7 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
         # Check if blended or single/merged
         idcs_comp = None
         if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] != 'no') and (len(line_list) > 1):
-            profile_comps = log.loc[line, 'profile_label'].split('-')
+            profile_comps = log.loc[line, 'profile_label'].split('+')
             idx_line = profile_comps.index(line)
             n_comps = len(profile_comps)
             if profile_comps.index(line) == 0:
@@ -1034,7 +1034,7 @@ class LiMePlots:
                     cont_i = cont_array[:, i_group[0]:i_group[-1]+1]
                     gauss_i = gaussian_array[:, i_group[0]:i_group[-1]+1]
 
-                    line_comps = profile_group.split('-')
+                    line_comps = profile_group.split('+')
                     self._gaussian_profiles_plotting(line_comps, self.log,
                                                      wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
                                                      axis=ax, cont_bands=None,
@@ -1068,147 +1068,147 @@ class LiMePlots:
 
         return
 
-    def plot_fit_components(self, line=None, plt_cfg={}, ax_cfg={}, output_address=None, log_scale=False, frame='observed'):
-
-        # Get lattest fit if line not provided (confirmed the lattest line is not blended and hence the _b not in log)
-        if (line is None) and (self.line is not None):
-            if self.line.endswith('_b'):
-                line = self.line[:-2]
-
-        line = self.line if line is None else line
-
-        # Confirm if it is a blended line
-        blended_check, profile_label = blended_label_from_log(line, self.log)
-
-        # Adjust default theme
-        PLT_CONF = STANDARD_PLOT.copy()
-        AXES_CONF = STANDARD_AXES.copy()
-        PLT_CONF['axes.labelsize'] = 14
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
-        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
-        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
-
-        # User configuration overrites user
-        PLT_CONF = {**PLT_CONF, **plt_cfg}
-        AXES_CONF = {**AXES_CONF, **ax_cfg}
-
-        with rc_context(PLT_CONF):
-
-            # List the profile components
-            list_comps = profile_label.split('-') if blended_check else [line]
-
-            # In case the input list of lines is different from the order stored in the SMACS_v2.0, the latter takes precedence
-            if blended_check:
-                log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
-                list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
-
-            # Reference _frame for the plot
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self.wave, self.flux, self.redshift, frame)
-
-            # Determine the line region # WARNING it needs to be a bit larger than original mask
-            w1 = self.log.loc[line, 'w1'] * (1 + self.redshift)
-            w6 = self.log.loc[line, 'w6'] * (1 + self.redshift)
-            idx1, idx6 = np.searchsorted(wave_plot, (w1, w6))
-            idcs_plot = np.full(wave_plot.size, False)
-
-            idx_low = idx1 - 1 if idx1-1 >= 0 else idx1
-            idx_high = idx6 + 1 if idx6+1 < wave_plot.size else idx6
-            idcs_plot[idx_low:idx_high] = True
-
-            # Continuum level
-            cont_level = self.log.loc[line, 'cont']
-            cont_std = self.log.loc[list_comps[0], 'std_cont']
-
-            # Calculate the line components for upper plot
-            wave_array, cont_array = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift))
-            wave_array, gaussian_array = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift))
-
-            # Calculate the fluxes for the residual plot
-            cont_i_resd = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
-            gaussian_i_resd = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
-            total_resd = gaussian_i_resd.sum(axis=1) + cont_i_resd[:, 0]
-
-            # Two axes figure, upper one for the line lower for the residual
-            gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
-            spec_ax = plt.subplot(gs[0])
-            resid_ax = plt.subplot(gs[1], sharex=spec_ax)
-
-            # Plot the Line spectrum
-            color = self._color_dict['fg']
-            spec_ax.step(wave_plot[idcs_plot]/z_corr, flux_plot[idcs_plot]*z_corr, where='mid', color=color)
-
-            # Plot the gauss curve elements
-            self._gaussian_profiles_plotting(list_comps, self.log, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
-                                             axis=spec_ax, peak_check=False, cont_bands=True,
-                                             wave_array=wave_array, cont_array=cont_array, gaussian_array=gaussian_array)
-
-            # Lower plot residual
-            label_residual = r'$\frac{F_{obs} - F_{fit}}{F_{cont}}$'
-            residual = ((flux_plot[idcs_plot] - total_resd/self.norm_flux)/(cont_level/self.norm_flux))
-            resid_ax.step(wave_plot[idcs_plot]/z_corr, residual*z_corr, where='mid', color=self._color_dict['fg'])
-
-            # Shade Continuum flux standard deviation # TODO revisit this calculation
-            label = r'$\sigma_{Continuum}/\overline{F_{cont}}$'
-            y_limit = cont_std/cont_level
-            resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
-
-            # Marked masked pixels if they are there
-            if np.any(idcs_mask): # TODO this check should be for the line region Combine with next
-                x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
-                y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
-                spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'],
-                                label='Masked pixels')
-
-            # Plot masked pixels if possible
-            self._mask_pixels_plotting(list_comps[0], wave_plot, flux_plot, z_corr, spec_ax, self.log)
-
-            # Shade the pixel error spectrum if available:
-            if self.err_flux is not None:
-                label = r'$\sigma_{pixel}/\overline{F(cont)}$'
-                err_norm = self.err_flux[idcs_plot] / (cont_level/self.norm_flux)
-                resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm*z_corr, err_norm*z_corr, label=label,
-                                      facecolor='salmon', alpha=0.3)
-
-            # Switch y_axis to logarithmic scale if requested
-            if log_scale:
-                spec_ax.set_yscale('log')
-
-            if mplcursors_check:
-                for label, lineProfile in self._legends_dict.items():
-                    mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
-
-            # Add the figure labels
-            spec_ax.set(**AXES_CONF)
-            spec_ax.set_xlabel(None)
-            spec_ax.legend()
-
-            # Spec upper and lower limit based on absorption or emission
-            if self._emission_check:
-                spec_ax.set_ylim(None, self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux*2)
-            else:
-                spec_ax.set_ylim(self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux/2, None)
-
-            # Residual x axis limit from spec axis
-            resid_ax.set_xlim(spec_ax.get_xlim())
-
-            # Residual y axis limit from std at line location
-            idx_w3, idx_w4 = np.searchsorted(wave_plot[idcs_plot], self.log.loc[line, 'w3':'w4'] * (1+self.redshift))
-            resd_limit = np.std(residual[idx_w3:idx_w4]) * 5
-
-            try:
-                resid_ax.set_ylim(-resd_limit, resd_limit)
-            except ValueError:
-                _logger.warning(f'Nan or inf entries in axis limit for {self.line}')
-
-            # Residual plot labeling
-            resid_ax.legend(loc='upper left')
-            resid_ax.set_ylabel(label_residual, fontsize=22)
-            resid_ax.set_xlabel(AXES_CONF['xlabel'])
-
-            # By default plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', fig_obj=None)
-
-        return
+    # def plot_fit_components(self, line=None, plt_cfg={}, ax_cfg={}, output_address=None, log_scale=False, frame='observed'):
+    #
+    #     # Get lattest fit if line not provided (confirmed the lattest line is not blended and hence the _b not in log)
+    #     if (line is None) and (self.line is not None):
+    #         if self.line.endswith('_b'):
+    #             line = self.line[:-2]
+    #
+    #     line = self.line if line is None else line
+    #
+    #     # Confirm if it is a blended line
+    #     blended_check, profile_label = blended_label_from_log(line, self.log)
+    #
+    #     # Adjust default theme
+    #     PLT_CONF = STANDARD_PLOT.copy()
+    #     AXES_CONF = STANDARD_AXES.copy()
+    #     PLT_CONF['axes.labelsize'] = 14
+    #     norm_label = r' $\,/\,{}$'.format(latex_science_float(self.norm_flux)) if self.norm_flux != 1.0 else ''
+    #     AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self.units_flux]})$' + norm_label
+    #     AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self.units_wave]})$'
+    #
+    #     # User configuration overrites user
+    #     PLT_CONF = {**PLT_CONF, **plt_cfg}
+    #     AXES_CONF = {**AXES_CONF, **ax_cfg}
+    #
+    #     with rc_context(PLT_CONF):
+    #
+    #         # List the profile components
+    #         list_comps = profile_label.split('+') if blended_check else [line]
+    #
+    #         # In case the input list of lines is different from the order stored in the SMACS_v2.0, the latter takes precedence
+    #         if blended_check:
+    #             log_list = list(self.log.loc[self.log.profile_label == profile_label].index.values)
+    #             list_comps = log_list if not np.array_equal(list_comps, log_list) else list_comps
+    #
+    #         # Reference _frame for the plot
+    #         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self.wave, self.flux, self.redshift, frame)
+    #
+    #         # Determine the line region # WARNING it needs to be a bit larger than original mask
+    #         w1 = self.log.loc[line, 'w1'] * (1 + self.redshift)
+    #         w6 = self.log.loc[line, 'w6'] * (1 + self.redshift)
+    #         idx1, idx6 = np.searchsorted(wave_plot, (w1, w6))
+    #         idcs_plot = np.full(wave_plot.size, False)
+    #
+    #         idx_low = idx1 - 1 if idx1-1 >= 0 else idx1
+    #         idx_high = idx6 + 1 if idx6+1 < wave_plot.size else idx6
+    #         idcs_plot[idx_low:idx_high] = True
+    #
+    #         # Continuum level
+    #         cont_level = self.log.loc[line, 'cont']
+    #         cont_std = self.log.loc[list_comps[0], 'std_cont']
+    #
+    #         # Calculate the line components for upper plot
+    #         wave_array, cont_array = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift))
+    #         wave_array, gaussian_array = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift))
+    #
+    #         # Calculate the fluxes for the residual plot
+    #         cont_i_resd = linear_continuum_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
+    #         gaussian_i_resd = gaussian_profiles_computation(list_comps, self.log, z_corr=(1+self.redshift), x_array=wave_plot[idcs_plot])
+    #         total_resd = gaussian_i_resd.sum(axis=1) + cont_i_resd[:, 0]
+    #
+    #         # Two axes figure, upper one for the line lower for the residual
+    #         gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+    #         spec_ax = plt.subplot(gs[0])
+    #         resid_ax = plt.subplot(gs[1], sharex=spec_ax)
+    #
+    #         # Plot the Line spectrum
+    #         color = self._color_dict['fg']
+    #         spec_ax.step(wave_plot[idcs_plot]/z_corr, flux_plot[idcs_plot]*z_corr, where='mid', color=color)
+    #
+    #         # Plot the gauss curve elements
+    #         self._gaussian_profiles_plotting(list_comps, self.log, wave_plot[idcs_plot], flux_plot[idcs_plot], z_corr,
+    #                                          axis=spec_ax, peak_check=False, cont_bands=True,
+    #                                          wave_array=wave_array, cont_array=cont_array, gaussian_array=gaussian_array)
+    #
+    #         # Lower plot residual
+    #         label_residual = r'$\frac{F_{obs} - F_{fit}}{F_{cont}}$'
+    #         residual = ((flux_plot[idcs_plot] - total_resd/self.norm_flux)/(cont_level/self.norm_flux))
+    #         resid_ax.step(wave_plot[idcs_plot]/z_corr, residual*z_corr, where='mid', color=self._color_dict['fg'])
+    #
+    #         # Shade Continuum flux standard deviation # TODO revisit this calculation
+    #         label = r'$\sigma_{Continuum}/\overline{F_{cont}}$'
+    #         y_limit = cont_std/cont_level
+    #         resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -y_limit, +y_limit, facecolor='yellow', alpha=0.5, label=label)
+    #
+    #         # Marked masked pixels if they are there
+    #         if np.any(idcs_mask): # TODO this check should be for the line region Combine with next
+    #             x_mask = wave_plot[idcs_plot][idcs_mask[idcs_plot]]
+    #             y_mask = flux_plot[idcs_plot][idcs_mask[idcs_plot]]
+    #             spec_ax.scatter(x_mask/z_corr, y_mask*z_corr, marker="x", color=self._color_dict['mask_marker'],
+    #                             label='Masked pixels')
+    #
+    #         # Plot masked pixels if possible
+    #         self._mask_pixels_plotting(list_comps[0], wave_plot, flux_plot, z_corr, spec_ax, self.log)
+    #
+    #         # Shade the pixel error spectrum if available:
+    #         if self.err_flux is not None:
+    #             label = r'$\sigma_{pixel}/\overline{F(cont)}$'
+    #             err_norm = self.err_flux[idcs_plot] / (cont_level/self.norm_flux)
+    #             resid_ax.fill_between(wave_plot[idcs_plot]/z_corr, -err_norm*z_corr, err_norm*z_corr, label=label,
+    #                                   facecolor='salmon', alpha=0.3)
+    #
+    #         # Switch y_axis to logarithmic scale if requested
+    #         if log_scale:
+    #             spec_ax.set_yscale('log')
+    #
+    #         if mplcursors_check:
+    #             for label, lineProfile in self._legends_dict.items():
+    #                 mplcursors.cursor(lineProfile).connect("add", lambda sel, label=label: sel.annotation.set_text(label))
+    #
+    #         # Add the figure labels
+    #         spec_ax.set(**AXES_CONF)
+    #         spec_ax.set_xlabel(None)
+    #         spec_ax.legend()
+    #
+    #         # Spec upper and lower limit based on absorption or emission
+    #         if self._p_type:
+    #             spec_ax.set_ylim(None, self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux*2)
+    #         else:
+    #             spec_ax.set_ylim(self.log.loc[line, 'peak_flux']*z_corr/self.norm_flux/2, None)
+    #
+    #         # Residual x axis limit from spec axis
+    #         resid_ax.set_xlim(spec_ax.get_xlim())
+    #
+    #         # Residual y axis limit from std at line location
+    #         idx_w3, idx_w4 = np.searchsorted(wave_plot[idcs_plot], self.log.loc[line, 'w3':'w4'] * (1+self.redshift))
+    #         resd_limit = np.std(residual[idx_w3:idx_w4]) * 5
+    #
+    #         try:
+    #             resid_ax.set_ylim(-resd_limit, resd_limit)
+    #         except ValueError:
+    #             _logger.warning(f'Nan or inf entries in axis limit for {self.line}')
+    #
+    #         # Residual plot labeling
+    #         resid_ax.legend(loc='upper left')
+    #         resid_ax.set_ylabel(label_residual, fontsize=22)
+    #         resid_ax.set_xlabel(AXES_CONF['xlabel'])
+    #
+    #         # By default plot on screen unless an output address is provided
+    #         save_close_fig_swicth(output_address, 'tight', fig_obj=None)
+    #
+    #     return
 
     def plot_line_velocity(self, line=None, output_address=None, log_scale=False, plt_cfg={}, ax_cfg={}):
 
@@ -1688,7 +1688,9 @@ class Plotter:
                          facecolors='none', edgecolors=self._color_dict['peak'])
 
         # Get the line labels and the bands labels for the lines
-        ion_array, wave_array, latex = label_decomposition(match_log.index.values, units_wave=units_wave)
+        # ion_array, wave_array, latex = label_decomposition(match_log.index.values, units_wave=units_wave)
+        wave_array, latex = label_decomposition(match_log.index.values, output_params=('wavelength', 'latex_label'))
+
         w3 = match_log.w3.values * (1 + redshift)
         w4 = match_log.w4.values * (1 + redshift)
         idcsLineBand = np.searchsorted(x, np.array([w3, w4]))
@@ -1951,7 +1953,7 @@ class SpectrumFigures(Plotter):
                         # Check components
                         line_i = lineList[i]
                         blended_check, profile_label = blended_label_from_log(line_i, log)
-                        list_comps = profile_label.split('-') if blended_check else [line_i]
+                        list_comps = profile_label.split('+') if blended_check else [line_i]
 
                         # Reference _frame for the plot
                         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
@@ -2012,7 +2014,12 @@ class SpectrumFigures(Plotter):
         return in_fig
 
     def band(self, line=None, band_edges=None, include_fits=True, rest_frame=False, y_scale='auto', trans_line=False,
-             in_fig=None, in_axis=None, fig_cfg={}, ax_cfg={}, output_address=None, maximise=False, return_fig=False):
+             output_address=None, in_fig=None, fig_cfg={}, ax_cfg={}, maximise=False):
+
+
+        # Unpack variables
+        log, norm_flux, redshift = self._spec.log, self._spec.norm_flux, self._spec.redshift
+        units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
 
         # Display check for the user figures
         display_check = True if in_fig is None else False
@@ -2028,8 +2035,7 @@ class SpectrumFigures(Plotter):
 
             # Adjust the default theme
             fig_cfg.setdefault('axes.labelsize', 14)
-            PLT_CONF, AXES_CONF = self._figure_format(fig_cfg, ax_cfg, self._spec.norm_flux, self._spec.units_wave,
-                                                      self._spec.units_flux)
+            PLT_CONF, AXES_CONF = self._figure_format(fig_cfg, ax_cfg, norm_flux, units_wave, units_flux)
 
             # Create and fill the figure
             with rc_context(PLT_CONF):
@@ -2051,27 +2057,30 @@ class SpectrumFigures(Plotter):
 
                 # Reference _frame for the plot
                 wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                              self._spec.redshift, rest_frame)
+                                                                              redshift, rest_frame)
                 err_plot = self._spec.err_flux
 
                 # Establish the limits for the line spectrum plot
                 mask = band_edges * (1 + self._spec.redshift)
-                idcsM = np.searchsorted(wave_plot, mask)
+                idcsM = np.searchsorted(wave_plot, mask) # TODO remove this one
+                idcsEmis, idcsCont = define_masks(self._spec.wave, band_edges * (1 + self._spec.redshift),
+                                                  line_mask_entry=log.loc[line, 'pixel_mask'])
+                idcs_line = idcsEmis + idcsCont
 
                 # Plot the spectrum
                 label = '' if include_fits else line
                 in_ax[0].step(wave_plot[idcsM[0]:idcsM[5]] / z_corr, flux_plot[idcsM[0]:idcsM[5]] * z_corr,
-                                 where='mid', color=self._color_dict['fg'], label=label)
+                              where='mid', color=self._color_dict['fg'], label=label)
 
                 # Add the fitting results
                 if include_fits:
 
                     # Check components
-                    blended_check, profile_label = blended_label_from_log(line, self._spec.log)
-                    list_comps = profile_label.split('-') if blended_check else [line]
+                    blended_check, profile_label = blended_label_from_log(line, log)
+                    list_comps = profile_label.split('+') if blended_check else [line]
 
-                    wave_array, gaussian_array = gaussian_profiles_computation(list_comps, self._spec.log, (1 + self._spec.redshift))
-                    wave_array, cont_array = linear_continuum_computation(list_comps, self._spec.log, (1 + self._spec.redshift))
+                    wave_array, gaussian_array = gaussian_profiles_computation(list_comps, log, (1 + redshift))
+                    wave_array, cont_array = linear_continuum_computation(list_comps, log, (1 + redshift))
 
                     # Continuum bands
                     self._bands_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcsM, line)
@@ -2079,18 +2088,20 @@ class SpectrumFigures(Plotter):
                     # Gaussian profiles
                     idcs_lines = self._spec.log.index.isin(list_comps)
                     line_g_list = _gaussian_line_profiler(in_ax[0], list_comps, wave_array, gaussian_array, cont_array,
-                                                               z_corr, self._spec.log.loc[idcs_lines], self._spec.norm_flux,
+                                                               z_corr, log.loc[idcs_lines], norm_flux,
                                                                color_dict=self._color_dict)
 
                     # Add the interactive text
-                    _mplcursor_parser(line_g_list, list_comps, self._spec.log, self._spec.norm_flux, self._spec.units_wave,
-                                           self._spec.units_flux)
+                    _mplcursor_parser(line_g_list, list_comps, log, norm_flux, units_wave, units_flux)
+
+
+                    cont_linear_flux = (log.loc[list_comps[0], 'm_cont'] * wave_plot[idcsCont] + log.loc[list_comps[0], 'n_cont'])
+                    linear_cont_std = np.std(cont_linear_flux - flux_plot[idcsCont]*norm_flux)
 
                     # Residual flux component
                     err_region = None if err_plot is None else err_plot[idcsM[0]:idcsM[5]]
                     self._residual_line_plotter(in_ax[1], wave_plot[idcsM[0]:idcsM[5]], flux_plot[idcsM[0]:idcsM[5]],
-                                                err_region, list_comps, z_corr, self._spec.log, self._spec.norm_flux,
-                                                self._spec.redshift, idcs_mask[idcsM[0]:idcsM[5]])
+                                                err_region, list_comps, z_corr, idcs_mask[idcsM[0]:idcsM[5]], linear_cont_std)
 
                     # Synchronizing the x-axis
                     in_ax[1].set_xlim(in_ax[0].get_xlim())
@@ -2099,11 +2110,11 @@ class SpectrumFigures(Plotter):
 
                 # Plot the masked pixels
                 _masks_plot(in_ax[0], [line], wave_plot[idcsM[0]:idcsM[5]], flux_plot[idcsM[0]:idcsM[5]], z_corr,
-                            self._spec.log, idcs_mask[idcsM[0]:idcsM[5]], self._color_dict)
+                            log, idcs_mask[idcsM[0]:idcsM[5]], self._color_dict)
 
-                # Line location
-                if trans_line:
-                    in_ax[0].axvline(line.wavelength, linestyle='--', alpha=0.5, color=self._color_dict['fg'])
+                # # Line location
+                # if trans_line:
+                #     in_ax[0].axvline(line.wavelength, linestyle='--', alpha=0.5, color=self._color_dict['fg'])
 
                 # Display the legend
                 in_ax[0].legend()
@@ -2235,11 +2246,17 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def _residual_line_plotter(self, axis, x, y, err, list_comps, z_corr, log, norm_flux, redshift, spec_mask):
+    def _residual_line_plotter(self, axis, x, y, err, list_comps, z_corr, spec_mask, cont_std):
+
+        # Unpack properties
+        log, norm_flux, redshift = self._spec.log, self._spec.norm_flux, self._spec.redshift
 
         # Continuum level
-        cont_level = self._spec.log.loc[list_comps[0], 'cont']
-        cont_std = self._spec.log.loc[list_comps[0], 'std_cont']
+        cont_level = log.loc[list_comps[0], 'cont']
+        # cont_std = log.loc[list_comps[0], 'std_cont']
+
+        # Continuum std (we don't use line std_cont to compare both calculations)
+
 
         # Calculate the fluxes for the residual plot
         cont_i_resd = linear_continuum_computation(list_comps, log, z_corr=(1 + redshift), x_array=x)
@@ -2340,17 +2357,17 @@ class CubeFigures(Plotter):
         return
 
     def cube(self, line, band=None, percentile_bg=60, line_fg=None, band_fg=None, percentiles_fg=(90, 95, 99),
-             bands_frame=None, bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r',
+             bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r',
              mask_alpha=0.2, wcs=None, plt_cfg=None, ax_cfg=None, in_fig=None, in_ax=None, masks_file=None,
              output_address=None, maximise=False):
 
 
         # Prepare the background image data
-        line_bg, bg_image, bg_levels, bg_scale = determine_cube_images(self._cube, line, band, bands_frame,
+        line_bg, bg_image, bg_levels, bg_scale = determine_cube_images(self._cube, line, band,
                                                                        percentile_bg, bg_scale, contours_check=False)
 
         # Prepare the foreground image data
-        line_fg, fg_image, fg_levels, fg_scale = determine_cube_images(self._cube, line_fg, band_fg, bands_frame,
+        line_fg, fg_image, fg_levels, fg_scale = determine_cube_images(self._cube, line_fg, band_fg,
                                                                        percentiles_fg, fg_scale, contours_check=True)
 
         # Mesh for the countours

@@ -1,66 +1,64 @@
+# import lime
+# from pathlib import Path
+#
+# conf_file_ini = Path(f'../sample_data/manga.cfg')
+# conf_file_toml = Path(f'../sample_data/manga.toml')
+#
+# cfg_ini = lime.load_cfg(conf_file_ini)
+# cfg_toml = lime.load_cfg(conf_file_toml)
+#
+# print(cfg_ini)
+# print(cfg_toml)
+
+
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button
+from astropy.io import fits
+from pathlib import Path
+from astropy.wcs import WCS
+import lime
+
+# fits_path = Path(f'../sample_data/SHOC579_SDSS_dr18.fits')
+#
+# # Open the fits file
+# extension = 2
+# with fits.open(fits_path) as hdul:
+#     data = hdul[extension].data
+#     header = hdul[extension].header
+#
+# flux_array = data['flux'] * 1e-17
+#
+# ivar_array = data['ivar']
+# pixel_mask = ivar_array == 0
+#
+# wave_vac_array = np.power(10, data['loglam'])
+#
+spectra_path = Path('../sample_data')
+fits_path = spectra_path/'manga-8626-12704-LOGCUBE.fits.gz'
+
+# Open the MANGA cube fits file
+with fits.open(fits_path) as hdul:
+
+    # Wavelength 1D array
+    wave = hdul['WAVE'].data
+
+    # Flux 3D array
+    flux_cube = hdul['FLUX'].data * 1e-17
+
+    # Convert inverse variance cube to standard error masking 0-value pixels first
+    ivar_cube = hdul['IVAR'].data
+    pixel_mask_cube = ivar_cube == 0
+    pixel_mask_cube = pixel_mask_cube.reshape(ivar_cube.shape)
+    err_cube = np.sqrt(1/np.ma.masked_array(ivar_cube, pixel_mask_cube)) * 1e-17
+
+    # Header
+    hdr = hdul['FLUX'].header
 
 
-# The parametrized function to be plotted
-def f(t, amplitude, frequency):
-    return amplitude * np.sin(2 * np.pi * frequency * t)
+wcs = WCS(hdr)
 
-t = np.linspace(0, 1, 1000)
-
-# Define initial parameters
-init_amplitude = 5
-init_frequency = 3
-
-# Create the figure and the line that we will manipulate
-fig, ax = plt.subplots()
-line, = ax.plot(t, f(t, init_amplitude, init_frequency), lw=2)
-ax.set_xlabel('Time [s]')
-
-# adjust the main plot to make room for the sliders
-fig.subplots_adjust(left=0.25, bottom=0.25)
-
-# Make a horizontal slider to control the frequency.
-axfreq = fig.add_axes([0.25, 0.1, 0.65, 0.03])
-freq_slider = Slider(
-    ax=axfreq,
-    label='Frequency [Hz]',
-    valmin=0.1,
-    valmax=30,
-    valinit=init_frequency,
-)
-
-# Make a vertically oriented slider to control the amplitude
-axamp = fig.add_axes([0.1, 0.25, 0.0225, 0.63])
-amp_slider = Slider(
-    ax=axamp,
-    label="Amplitude",
-    valmin=0,
-    valmax=10,
-    valinit=init_amplitude,
-    orientation="vertical"
-)
-
-
-# The function to be called anytime a slider's value changes
-def update(val):
-    line.set_ydata(f(t, amp_slider.val, val))
-    fig.canvas.draw_idle()
-
-
-# register the update function with each slider
-freq_slider.on_changed(update)
-amp_slider.on_changed(update)
-
-# Create a `matplotlib.widgets.Button` to reset the sliders to initial values.
-resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
-button = Button(resetax, 'Reset', hovercolor='0.975')
-
-
-def reset(event):
-    freq_slider.reset()
-    amp_slider.reset()
-button.on_clicked(reset)
-
-plt.show()
+cube = lime.Cube(wave, flux_cube, err_cube, redshift=0.0475, norm_flux=1e-17, pixel_mask=pixel_mask_cube, wcs=wcs)
+spaxel = cube.get_spaxel(38, 35)
+spaxel.plot.spectrum(rest_frame=True)
+spaxel.fit.band('S3_6312A')
+spaxel.plot.band()
+spaxel.con
