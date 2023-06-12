@@ -1,7 +1,7 @@
 LiMe: A Line Measuring library
 ================================
 
-.. image:: ../../examples/images/logo_transparent.png
+.. image:: ./_static/logo_transparent.png
     :scale: 12%
     :align: center
 
