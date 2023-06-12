@@ -321,7 +321,7 @@ class BandsInspection:
                                                                       self._on_select_MI,
                                                                       'horizontal',
                                                                       useblit=True,
-                                                                      rectprops=dict(alpha=0.5, facecolor='tab:blue'),
+                                                                      props=dict(alpha=0.5, facecolor='tab:blue'),
                                                                       button=1)
                     else:
                         # Clear not filled axes

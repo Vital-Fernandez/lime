@@ -26,7 +26,7 @@ _setup_cfg.optionxform = str
 _setup_cfg.read(os.path.join(_dir_path, 'config.cfg'))
 
 __version__ = _setup_cfg['metadata']['version']
-_lines_database_path = (os.path.join(_dir_path, '/resources/parent_mask.txt'))
+_lines_database_path = (os.path.join(_dir_path, 'resources/parent_bands.txt'))
 
 # Logging configuration
 _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')

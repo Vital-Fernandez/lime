@@ -55,7 +55,7 @@ _logger = logging.getLogger('LiMe')
 _params_table_file = Path(__file__).parent/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
 
-_LINES_DATABASE_FILE = Path(__file__).parent/'resources/parent_mask.txt'
+_LINES_DATABASE_FILE = Path(__file__).parent/'resources/parent_bands.txt'
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -421,11 +421,23 @@ def save_log(log_dataframe, file_address, ext='LINESLOG', parameters='all', fits
                 #     log.to_excel(writer, sheet_name=ext)
 
                 if file_type == '.xlsx':
-                    book = openpyxl.load_workbook(log_path)
-                    with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
-                        writer.book = book
-                        writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    # book = openpyxl.load_workbook(log_path)
+                    # with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
+                    #     writer.book = book
+                    #     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    #     lines_log.to_excel(writer, sheet_name=ext)
+
+                    with pd.ExcelWriter(log_path, mode='a', if_sheet_exists="replace") as writer:
                         lines_log.to_excel(writer, sheet_name=ext)
+
+                    # with pd.ExcelWriter("nameagain.xlsx", engine='openpyxl', mode='a') as writer:
+
+                    # writer = pd.ExcelWriter(path, engine='openpyxl')
+                    # writer.book = book
+
+                    #     df3.to_excel(writer, sheet_name="x6")
+                    #     df4.to_excel(writer, sheet_name="x7")
+
                 else:
                     # TODO this does not write to a xlsx file
                     with pd.ExcelWriter(log_path, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
@@ -557,7 +569,7 @@ def check_file_dataframe(df_variable, variable_type, ext='LINESLOG', sample_leve
 
     return output
 
-_parent_bands_file = Path(__file__).parent/'resources/parent_mask.txt'
+_parent_bands_file = Path(__file__).parent/'resources/parent_bands.txt'
 _PARENT_BANDS = load_log(_parent_bands_file)
 
 # Function to check if variable can be converte to float else leave as string
@@ -966,7 +978,7 @@ def save_parameter_maps(log_file_address, parameter_list, line_list, output_fold
         approach rather than spatial mask may require a long time to query the log file pages.
 
     The output ``.fits`` image maps include a header with the ``PARAM`` and ``LINE`` with the line and parameter labels
-    respectively (see `measurements <documentation/measurements.html>`_).
+    respectively (see `measurements <introduction/measurements.html>`_).
 
     :param log_file_address: fits file address location with the line SMACS_v2.0
     :type log_file_address: str

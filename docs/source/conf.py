@@ -30,10 +30,14 @@ def all_but_ipynb(dir, contents):
 
 
 _lib_path = Path(__file__).parents[2]/'src'
+_doc_folder = Path(__file__).parents[2]/'docs/source'
 _examples_path = Path(__file__).parents[2]/'examples'
-_tutorials_path = Path(__file__).parents[2]/'docs/source/tutorials'
-sys.path.append(str(_lib_path))
-sys.path.append(str(_examples_path))
+# _tutorials_path = Path(__file__).parents[2]/'docs/source/tutorials'
+# sys.path.append(str(_lib_path))
+# sys.path.append(str(_examples_path))
+sys.path.append(_lib_path.as_posix())
+sys.path.append(_examples_path.as_posix())
+
 
 # -- Project information -----------------------------------------------------
 
@@ -42,7 +46,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '0.9.30'
+release = '0.9.35'
 
 # -- General configuration ---------------------------------------------------
 
@@ -87,5 +91,9 @@ imgmath_use_preview = True
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-shutil.rmtree(_tutorials_path, ignore_errors=True)
-shutil.copytree(_examples_path, _tutorials_path, dirs_exist_ok=True)
+shutil.rmtree(_doc_folder/'images', ignore_errors=True)
+shutil.rmtree(_doc_folder/'inputs', ignore_errors=True)
+shutil.rmtree(_doc_folder/'outputs', ignore_errors=True)
+shutil.rmtree(_doc_folder/'sample_data', ignore_errors=True)
+shutil.rmtree(_doc_folder/'tutorials', ignore_errors=True)
+shutil.copytree(_examples_path, _doc_folder, dirs_exist_ok=True)

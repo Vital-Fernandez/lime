@@ -214,40 +214,46 @@ class SpecTreatment(LineFitting):
         # Interpret the input line
         self.line = Line(label, band_edges, fit_conf, profile, cont_from_bands)
 
-        # Get the bands regions
-        idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift),
-                                          line_mask_entry=self.line.pixel_mask)
+        # Check if the line location is provided
+        if self.line.mask is not None:
 
-        emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
-        emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsEmis]
+            # Get the bands regions
+            idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift),
+                                              line_mask_entry=self.line.pixel_mask)
 
-        contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
-        contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
+            emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
+            emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsEmis]
 
-        # Check the bands size
-        review_bands(self.line, emisWave, contWave)
+            contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
+            contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
 
-        # Non-parametric measurements
-        self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr)
+            # Check the bands size
+            review_bands(self.line, emisWave, contWave)
 
-        # Import kinematics if requested
-        import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, fit_conf)
+            # Non-parametric measurements
+            self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr)
 
-        # Combine bands
-        idcsLine = idcsEmis + idcsCont
-        x_array, y_array = self._spec.wave[idcsLine], self._spec.flux[idcsLine]
-        emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
+            # Import kinematics if requested
+            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, fit_conf)
 
-        # Gaussian fitting
-        self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, fit_method, temp,
-                             self._spec.inst_FWHM)
+            # Combine bands
+            idcsLine = idcsEmis + idcsCont
+            x_array, y_array = self._spec.wave[idcsLine], self._spec.flux[idcsLine]
+            emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
 
-        # Recalculate the SNR with the gaussian parameters
-        err_cont = self.line.std_cont if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
-        self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
+            # Gaussian fitting
+            self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, fit_method, temp,
+                                 self._spec.inst_FWHM)
 
-        # Save the line parameters to the dataframe
-        results_to_log(self.line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
+            # Recalculate the SNR with the gaussian parameters
+            err_cont = self.line.std_cont if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
+            self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
+
+            # Save the line parameters to the dataframe
+            results_to_log(self.line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
+
+        else:
+            _logger.warning(f'The line band for transition {self.line} was not found on the input database')
 
         return
 
@@ -481,8 +487,8 @@ class CubeTreatment(LineFitting):
 
             # Load the mask log if provided
             if bands_frame is None:
-                bands_mask_path = detect_conf['input_log']
-                bands_mask_path = Path().absolute()/bands_mask_path[1:] if bands_mask_path[0] == '.' else Path(bands_mask_path)
+                bands_mask_folder = detect_conf['input_log']
+                bands_mask_path = Path(bands_mask_folder).absolute() if bands_mask_folder[0] == '.' else Path(bands_mask_path)
                 bands_df = load_log(bands_mask_path)
 
             # Loop through the spaxels

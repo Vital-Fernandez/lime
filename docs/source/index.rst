@@ -1,8 +1,8 @@
 LiMe: A Line Measuring library
 ================================
 
-.. image:: ./_static/logo_transparent.png
-    :scale: 30%
+.. image:: ../../examples/images/logo_transparent.png
+    :scale: 12%
     :align: center
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
@@ -27,13 +27,13 @@ These are some of the features currently available:
    `sample data folder <https://github.com/Vital-Fernandez/lime/tree/master/examples/sample_data>`_ and try to run the
    `examples <https://github.com/Vital-Fernandez/lime/tree/master/examples>`_.
 
-   🚀 For a quick start go to the **Tutorials** section. These are organized by increasing complexity and they
+   🚀 For a quick start go to the **Tutorials** section. These examples are organized by increasing complexity and they
    provide a working knowledge of the library algorithms.
 
-   🌀 To learn more about the library design check the :ref:`inputs <inputs>` and :ref:`profile fitting <profileFitting>`
-   documentation. The library functions description can be found at the :ref:`API <api>`.
+   🌀 To learn more about the library design, please check the **Inputs** section to understand how to adapt LiMe to your workflow.
+   The library functions description can be found at the :ref:`API <api>`.
 
-   📈 The outputs physical description is available in the :ref:`measurements <measurements_page>` documentation.
+   📈 The tabulated and graphical measurements description is available in the **Outputs** section.
 
 
 .. :ref:`doc-tree`
@@ -43,29 +43,35 @@ These are some of the features currently available:
    :caption: Documentation
    :name: doc-tree
 
-   documentation/installation
-   documentation/measurements
-   documentation/plots
-   documentation/api
+   introduction/installation
+   introduction/api
 
 .. toctree::
    :maxdepth: 1
    :caption: Inputs
    :name: input-tree
 
-   inputs/1_Reading_spectra.ipynb
-   inputs/2_Line_labels.ipynb
-   inputs/3_Line_Bands.ipynb
-   inputs/4_Fitting_configuration
+   inputs/n_inputs1_spectra.ipynb
+   inputs/n_inputs2_line_labels.ipynb
+   inputs/n_inputs3_line_bands.ipynb
+   inputs/n_inputs4_fit_configuration.ipynb
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Outputs
+   :name: output-tree
+
+   outputs/outputs1_measurements.rst
+   outputs/n_outputs2_plots.ipynb
 
 .. toctree::
    :maxdepth: 1
    :caption: Tutorials
    :name: tutorial-tree
 
-   tutorials/notebook1_SingleLineFitting.ipynb
-   tutorials/notebook2_Line_bands_inspection.ipynb
-   tutorials/notebook3_CompleteSpectrumFitting.ipynb
-   tutorials/notebook4_IFU_Spatial_Masking.ipynb
-   tutorials/notebook5_IFU_Line_Fitting.ipynb
-   tutorials/notebook6_IFU_results.ipynb
+   tutorials/n_tutorial1_single_line_fit.ipynb
+   tutorials/n_tutorial2_lines_inspection.ipynb
+   tutorials/n_tutorial3_complete_spectrum.ipynb
+   tutorials/n_tutorial4_IFU_masking.ipynb
+   tutorials/n_tutorial5_IFU_fitting.ipynb
+   tutorials/n_tutorial6_IFU_results.ipynb
