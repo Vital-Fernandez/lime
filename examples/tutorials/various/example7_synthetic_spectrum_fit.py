@@ -74,7 +74,7 @@ for lineLabel in mask_df.index.values:
     # Run the fit
     wave_regions = mask_df.loc[lineLabel, 'w1':'w6'].values
     # synth_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=cfg_dict)
-    synth_spec.fit.band(lineLabel, wave_regions, fit_conf=cfg_dict)
+    synth_spec.fit.bands(lineLabel, wave_regions, fit_conf=cfg_dict)
 
 
     # Display the results

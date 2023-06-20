@@ -37,7 +37,7 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
 gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
 
 # Find lines
-match_bands = gp_spec.line_detection(bands, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 0.7])
+match_bands = gp_spec.line_detection(bands, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 0.7])
 gp_spec.plot.spectrum(label='GP121903 matched lines', line_bands=match_bands, log_scale=True)
 
 # Saving GP121903 bands
@@ -54,9 +54,8 @@ gp_spec.fit.frame(obj_bands_file, fit_cfg, progress_output='counter')
 gp_spec.plot.spectrum(include_fits=True)
 
 # Display a grid with the fits
-gp_spec.plot.grid(gp_spec.log, rest_frame=True)
+gp_spec.plot.grid(rest_frame=True)
 
 # Save the data
-gp_spec.save_log('../sample_data/example3_linelog.fits', ext='GP121903a')
 gp_spec.save_log('../sample_data/example3_linelog.txt')
 lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', ext='GP121903b')

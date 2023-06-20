@@ -252,43 +252,37 @@ def label_composition(line_list, ref_df=None, default_profile=None):
     return ion, wavelength, units_wave, kinem, profile_comp, transition_comp
 
 
-def label_decomposition(lines_list, bands_df=None, fit_conf=None, output_params=('particle', 'wavelength', 'latex_label'),
+def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('particle', 'wavelength', 'latex_label'),
                         scalar_output=False):
 
     """
+    This function takes a ``lines_list`` and returns several arrays with the requested parameters.
 
-    This function returns the particle, wavelength and transition label latex from the input line list with the LiMe line
-    notation.
+    If the user provides a `bands dataframe <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
+    (``bands`` argument) dataframe and a `fitting documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+    (``fit_conf`` argument) the function will use this information to compute the requested outputs. Otherwise, only the
+    `line label <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_ will be used to derive
+    the information.
 
-    :param lines: A string or array of strings with the LiMe transition notation, e.g. O3_5007A
-    :type lines: str, list
+    The ``params_list`` argument establishes the output parameters arrays. The options available are: "particle",
+    "wavelength", "latex_label", "kinem", "profile_comp" and "transition_comp".
 
-    :param recomb_atom: An array with the ions producing photons from a recombination process. By default the function
-                        assumes that these are H1, He1 and He2 while the metal ions produce photons from a collisional
-                        excited state.
-    :type recomb_atom: str, list
+    If the ``lines_list`` argument only has one element the user can request an scalar output with ``scalar_output=True``.
 
-    :param comp_dict: Dictionary with the user latex format for the latex labels, overwritting the default notation.
-    :type comp_dict: dict, optional
+    :param lines_list: Array of lines in LiMe notation.
+    :type lines_list: list
 
-    :param scalar_output: Boolean for a scalar output in case of a single input line input.
-    :type scalar_output: bool, optional
+    :param bands: Bands dataframe (or file address to the dataframe).
+    :type bands: pandas.Dataframe, str, path.Pathlib, optional
 
-    :param user_format: Dictionary with the user notation for the latex labels. This overwrites the default notation.
-    :type user_format: dict, optional
+    :param fit_conf: Fitting configuration.
+    :type fit_conf: dict, optional
 
-    :param units_wave: Label wavelength units. The default value "A" is angstrom.
-    :type units_wave: str, optional
+    :param params_list: List of output parameters. The default value is ('particle', 'wavelength', 'latex_label')
+    :type params_list: tuple, optional
 
-    :return: 3 arrays (or scalars) with the input transition line(s) particle, wavelength and scientific notation in latex format.
-    :rtype: numpy.ndarray
-
-    :Example:
-        >>> import lime
-        >>> lime.label_decomposition('O3_5007A', scalar_output=True)
-        O3, 5007.0, '$5007\\AA\\,[OIII]$'
-        >>> lime.label_decomposition('H1_6563A_b', comp_dict={"H1_6563A_b":"H1_6563A-N2_6584A-N2_6548A"})
-        ['H1'], [6563.], ['$6563\\AA\\,HI+6584\\AA\\,[NII]+6548\\AA\\,[NII]$']
+    :param scalar_output: Set to True for a Scalar output.
+    :type scalar_output: bool
 
     """
 
@@ -297,7 +291,7 @@ def label_decomposition(lines_list, bands_df=None, fit_conf=None, output_params=
 
     # Loop through the lines and derive their properties:
     for label in lines_df.index:
-        line = Line(label, bands_df, fit_conf)
+        line = Line(label, bands, fit_conf)
 
         lines_df.loc[label, :] = (line.particle[0], line.wavelength[0], line.latex_label[0], line.kinem[0], line.profile_comp[0],
                                   line.transition_comp[0])
@@ -307,7 +301,7 @@ def label_decomposition(lines_list, bands_df=None, fit_conf=None, output_params=
 
     # Recover the columns requested by the user
     output = []
-    for i, param in enumerate(output_params):
+    for i, param in enumerate(params_list):
         output.append(lines_df[param].to_numpy(copy=True))
 
     # If requested and single line, return the input as a scalar

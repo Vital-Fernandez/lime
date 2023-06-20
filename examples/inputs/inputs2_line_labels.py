@@ -38,5 +38,5 @@ particle_array, wave_array, latex_array = lime.label_decomposition(line_list)
 for i, particle in enumerate(particle_array):
     print(f'{i}) {particle}, {wave_array[i]}, {latex_array[i]}')
 
-wave, latex = lime.label_decomposition('H1_6563A', scalar_output=True, output_params=('wavelength', 'latex_label'))
+wave, latex = lime.label_decomposition('H1_6563A', scalar_output=True, params_list=('wavelength', 'latex_label'))
 print(f'\nIndividual line components: {wave, latex}')

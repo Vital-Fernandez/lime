@@ -7,8 +7,8 @@ import lime
 bands_df = lime.line_bands()
 
 # Limited selection from the default database with magnitudes conversion
-print(lime.line_bands(wave_inter=(300, 900), particle_list=('He1', 'O3', 'S2'),
-                units_wave='nm', decimals=None, vacuum_conversion=True))
+print(lime.line_bands(wave_intvl=(300, 900), particle_list=('He1', 'O3', 'S2'),
+                      units_wave='nm', decimals=None, vacuum=True))
 
 # Recovering columns from a dataframe
 print(bands_df.columns)

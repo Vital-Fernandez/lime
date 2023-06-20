@@ -36,10 +36,10 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
-gp_spec.fit.band(line, band_edges)
+gp_spec.fit.bands(line, band_edges)
 
 # Plot the results from the last fitting
-gp_spec.plot.band()
+gp_spec.plot.bands()
 
 # Fit configuration
 line = 'H1_6563A_b'
@@ -48,11 +48,11 @@ fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
             'N2_6548A_kinem': 'N2_6584A'}
 
 # Second attempt including the fit configuration
-gp_spec.fit.band(line, band_edges, fit_conf)
-gp_spec.plot.band(line)
+gp_spec.fit.bands(line, band_edges, fit_conf)
+gp_spec.plot.bands(line)
 
 # You can also save the fitting plot to a file
-gp_spec.plot.band(output_address=f'../sample_data/{line}.png')
+gp_spec.plot.bands(output_address=f'../sample_data/{line}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
 print(gp_spec.log)

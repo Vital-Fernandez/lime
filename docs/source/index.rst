@@ -40,7 +40,7 @@ These are some of the features currently available:
 
 .. toctree::
    :maxdepth: 1
-   :caption: Documentation
+   :caption: Reference
    :name: doc-tree
 
    introduction/installation

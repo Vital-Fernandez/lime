@@ -9,7 +9,7 @@ from .model import LineFitting, signal_to_noise_rola
 from .tools import define_masks, ProgressBar
 from .recognition import LINE_DETECT_PARAMS
 from .transitions import Line
-from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header
+from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -157,62 +157,70 @@ class SpecTreatment(LineFitting):
         self._spec = spectrum
         self.line = None
 
-    def band(self, label, band_edges=None, fit_conf=None, fit_method='least_squares', profile='g-emi',
-             cont_from_bands=True, temp=10000.0):
+    def bands(self, label, bands=None, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
+              temp=10000.0):
 
         """
 
-         This function fits a line given its line and spectral mask. The line notation consists in the transition
-         particle and wavelength (with units) separated by an underscore, i.e. O3_5007A.
+        This function fits a line on the spectrum object from a given band.
 
-         The location mask consists in a 6 values array with the wavelength boundaries for the line location and two
-         adjacent continua. These wavelengths must be sorted by increasing order and in the rest _frame.
+        The first input is the line ``label``. The user can provide a string with the default `LiMe notation
+        <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_. Otherwise, the user can
+        provide the transition wavelength in the same units as the spectrum and the transition will be queried from the
+        ``bands`` argument.
 
-         The user can specify the properties of the fitting: Number of components and parameter boundaries. Please check
-         the documentation for the complete description.
+        The second input is the line ``bands`` this argument can be a six value array with the same units as the
+        spectrum wavelength specifying the line position and continua location. Otherwise, the ``bands`` can be a pandas
+        dataframe (or the frame address) and the wavelength array will be automatically query from it.
 
-         The user can specify the minimization algorithm for the `LmFit library <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+        If the ``bands`` are not provided by the user, the default bands database will be used. You can learn more on
+        `the bands documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_.
 
-         By default, the algorithm assumes an emission line. The user can set the parameter ``emission=False`` for an
-         absorption.
+        The third input is a dictionary the fitting configuration ``fit_conf`` attribute. You can learn more on the
+        `profile fitting documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
 
-         If the sigma spectrum was not provided, the fitting estimates the pixel uncertainty from the adjacent continua flux
-         standard deviation assuming a linear profile. If the parameter ``adjacent_cont=True`` the adjacent continua is also
-         use to calculate the continuum at the line location. Otherwise, only the line continuum is calculated only with the
-         first and last pixel in the line band (the 3rd and 4th values in the ``line_wavelengths`` array)
+        The ``min_method`` argument provides the minimization algorithm for the `LmFit functions
+        <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
 
-         For the calculation of the thermal broadening on the emission lines the user can include the line electron
-         temperature in Kelvin. The default value is 10000 K
+        By default, the profile fitting assumes an emission Gaussian shape, with ``profile="g-emi"``. The profile keywords
+        are described on the `label documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
 
-         :param line: line line in the ``LiMe`` notation, i.e. H1_6563A_b
-         :type line: string
+        The ``cont_from_bands=True`` argument forces the continuum to be measured from the adjacent line bands. If
+        ``cont_from_bands=False`` the continuum gradient is calculated from the first and last pixel from the line band
+        (w3-w4)
 
-         :param band_edges: 6 wavelengths spectral mask with the blue continuum, line and red continuum bands.
-         :type band_edges: numpy.ndarray
+        For the calculation of the thermal broadening on the emission lines the user can include the line electron
+        temperature in Kelvin. The default value ``temp`` is 10000 K.
 
-         :param user_cfg: Dictionary with the fitting configuration.
-         :type user_cfg: dict, optional
+        :param label: Line label or wavelength transition to be queried on the ``bands`` dataframe.
+        :type label: str, float, optional
 
-         :param fit_method: Minimizing algorithm for the LmFit library. The default method is ``leastsq``.
-         :type fit_method: str, optional
+        :param bands: Bands six-value array, bands dataframe (or file address to the dataframe).
+        :type bands: np.array, pandas.dataframe, str, Path, optional
 
-         :param emission: Boolean check for the line type. The default is ``True`` for an emission line
-         :type emission: bool, optional
+        :param fit_conf: Fitting configuration.
+        :type fit_conf: dict, optional
 
-         :param adjacent_cont: Boolean check for the line continuum calculation. The default value ``True`` includes the
-                               adjacent continua array
-         :type adjacent_cont: bool, optional
+        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+                            The default value is 'least_squares'
+        :type min_method: str, optional
 
-         :param temp_line: Line electron temperature for the thermal broadening calculation.
-         :type temp_line: bool, optional
+        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
+        :type profile: str, optional
 
-         """
+        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
+        :type cont_from_bands: bool, optional
+
+        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
+        :type temp: bool, optional
+
+        """
 
         # Make a copy of the fitting configuartion
         fit_conf = {} if fit_conf is None else fit_conf.copy()
 
         # Interpret the input line
-        self.line = Line(label, band_edges, fit_conf, profile, cont_from_bands)
+        self.line = Line(label, bands, fit_conf, profile, cont_from_bands)
 
         # Check if the line location is provided
         if self.line.mask is not None:
@@ -242,7 +250,7 @@ class SpecTreatment(LineFitting):
             emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
 
             # Gaussian fitting
-            self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, fit_method, temp,
+            self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, min_method, temp,
                                  self._spec.inst_FWHM)
 
             # Recalculate the SNR with the gaussian parameters
@@ -257,19 +265,95 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def frame(self, bands_df, fit_conf=None, lines_list=None, fit_method='least_squares', line_detection=False,
-              profile='g-emi', cont_from_bands=True, temp=10000.0, plot_fit=False,
-              obj_ref=None, default_conf_key='default_line_fitting', user_detect_conf=None, progress_output='bar'):
+    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
+              temp=10000.0, line_list=None, default_conf_key='default', id_conf_label=None, line_detection=False,
+              plot_fit=False, progress_output='bar'):
+
+        """
+
+        This function measures multiple lines on the spectrum object from a bands dataframe.
+
+        The input ``bands_df`` can be a pandas.Dataframe or a link to its file.
+
+        The argument ``fit_conf`` provides the `profile-fitting configuration <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+
+        The ``min_method`` argument provides the minimization algorithm for the `LmFit functions
+        <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+
+        By default, the profile fitting assumes an emission Gaussian shape, with ``profile="g-emi"``. The profile keywords
+        are described on the `label documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+
+        The ``cont_from_bands=True`` argument forces the continuum to be measured from the adjacent line bands. If
+        ``cont_from_bands=False`` the continuum gradient is calculated from the first and last pixel from the line band
+        (w3-w4).
+
+        For the calculation of the thermal broadening on the emission lines the user can include the line electron
+        temperature in Kelvin. The default value ``temp`` is 10000 K.
+
+        The user can limit the fitting to certain bands with the ``lines_list`` argument.
+
+        If the input ``fit_conf`` has multiple sections, this function will read the parameters from the ``default_conf_key``
+        argument, whose default value is "default". If the input dictionary also has a section title with the
+        ``id_conf_label`` _line_fitting the ``default_conf_key`` _line_fitting parameters will be **updated** by the
+        object configuration.
+
+        If ``line_detection=True`` the input ``bands_df`` measurements will be limited to those bands with a line detection.
+        The local configuration for the line detection algorithm can be provided from the fit_conf entries.
+
+        If ``plot_fit=True`` this function will plot profile after each fitting.
+
+        The ``progress_output`` argument determines the progress console message. A "bar" value will show a progress bar,
+        while a "counter" value will print a message with the current line being measured. Finally, a None value will not
+        show any message.
+
+        :param bands: Bands dataframe (or file address to the dataframe).
+        :type bands: pandas.Dataframe, str, path.Pathlib
+
+        :param fit_conf: Fitting configuration.
+        :type fit_conf: dict, optional
+
+        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+                            The default value is 'least_squares'
+        :type min_method: str, optional
+
+        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
+        :type profile: str, optional
+
+        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
+        :type cont_from_bands: bool, optional
+
+        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
+        :type temp: bool, optional
+
+        :param line_list: Line list to measure from the bands dataframe.
+        :type line_list: list, optional
+
+        :param default_conf_key: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_conf_key: str, optional
+
+        :param id_conf_label: Label for the object configuration section in the ```fit_conf`` variable.
+        :type id_conf_label: str, optional
+
+        :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
+        :type line_detection: bool, optional
+
+        :param plot_fit: Set to True to plot the profile fitting at each iteration.
+        :type plot_fit: bool, optional
+
+        :param progress_output: Progress message output. The options are "bar" (default), "counter" and "None".
+        :type progress_output: str, optional
+
+        """
 
         # Check if the lines log is a dataframe or a file address
-        bands_df = check_file_dataframe(bands_df, pd.DataFrame)
+        bands = check_file_dataframe(bands, pd.DataFrame)
 
-        if bands_df is not None:
+        if bands is not None:
 
             # Crop the analysis to the target lines
-            if lines_list is not None:
-                idcs = bands_df.index.isin(lines_list)
-                bands_df = bands_df.loc[idcs]
+            if line_list is not None:
+                idcs = bands.index.isin(line_list)
+                bands = bands.loc[idcs]
 
             # Load configuration for fits
             if fit_conf is not None:
@@ -280,30 +364,23 @@ class SpecTreatment(LineFitting):
 
                 # Update the configuration
                 else:
-                    input_conf = fit_conf.get(default_conf_key, {**fit_conf})
+                    input_conf = fit_conf.get(f'{default_conf_key}_line_fitting', {**fit_conf})
 
                     # User configuration overwrite default
-                    if obj_ref is not None:  # User configuration overwrite default
-                        input_conf = {**input_conf, **fit_conf.get(f'{obj_ref}_line_fitting', {})}
+                    if id_conf_label is not None:  # User configuration overwrite default
+                        input_conf = {**input_conf, **fit_conf.get(f'{id_conf_label}_line_fitting', {})}
             else:
                 input_conf = {}
 
             # Line detection if requested
             if line_detection:
 
-                # User configuration overwrites default
-                if user_detect_conf is not None:
-                    detect_conf = {**LINE_DETECT_PARAMS, **user_detect_conf}
-                else:
-                    detect_conf = LINE_DETECT_PARAMS.copy()
-                detect_conf['input_log'] = bands_df
-
-                # Perform de line detection
-                bands_df = self._spec.line_detection(**detect_conf)
+                detect_conf = fit_conf.get('line_detection', {})
+                bands = self._spec.line_detection(bands, **detect_conf)
 
             # Loop through the lines
-            label_list = bands_df.index.to_numpy()
-            bands_matrix = bands_df.loc[:, 'w1':'w6'].to_numpy()
+            label_list = bands.index.to_numpy()
+            bands_matrix = bands.loc[:, 'w1':'w6'].to_numpy()
             n_lines = label_list.size
 
             # # Check the mask values
@@ -334,13 +411,13 @@ class SpecTreatment(LineFitting):
                     pbar.output_message(i, n_lines, pre_text="", post_text=line)
 
                     # Fit the lines
-                    self.band(line, bands_matrix[i], input_conf, fit_method, profile, cont_from_bands, temp)
+                    self.bands(line, bands_matrix[i], input_conf, min_method, profile, cont_from_bands, temp)
 
                     if plot_fit:
-                        self._spec.plot.band()
+                        self._spec.plot.bands()
 
             else:
-                msg = f'No lines were measured from the input dataframe:\n - line_list: {lines_list}\n - line_detection: {line_detection}'
+                msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
                 _logger.info(msg)
 
         else:
@@ -402,49 +479,139 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, spatial_mask, bands_frame=None, fit_conf=None, masks_list=None, lines_list=None,
-                     fit_method='least_squares', line_detection=False, profile='g-emi', cont_from_bands=True,
-                     temp=10000.0, output_log=None, default_conf_key='default_line_fitting', log_ext_suffix='_LINESLOG',
-                     progress_output='bar', plot_fit=False, n_save=100, user_hdr=None):
+    def spatial_mask(self, mask_file, output_log_file, bands=None, fit_conf=None, mask_list=None, line_list=None,
+                     log_ext_suffix='_LINESLOG', min_method='least_squares', profile='g-emi',
+                     cont_from_bands=True, temp=10000.0, default_conf_key='default', line_detection=False,
+                     progress_output='bar', plot_fit=False, header=None, n_save=100):
+
+        """
+
+        This function measures lines on an IFS cube from an input binary spatial ``mask_file``.
+
+        The results are stored in a multipage ".fits" file, each page contains a measurements and it is named after the
+        spatial array coordinates and the ``log_ext_suffix`` (i.e. "idx_j-idx_i_LINESLOG")
+
+        The input ``bands`` can be a pandas.Dataframe or an address to the file. The user can specify one bands file
+        per mask page on the ``mask_file``. To do this, the ``fit_conf`` argument must include a section for every mask
+        on the ``mask_list`` (i.e. "Mask1_line_fitting"). This function will check for a key "bands" and load the
+        corresponding bands.
+
+        The fitting configuration in the ``fit_conf`` argument accepts a three-level configuration. At the lowest level,
+        The ``default_conf_key`` points towards the default configuration for all the spaxels analyzed on the cube
+        (i.e. "default_line_fitting"). At an intermediate level, the parameters from the section with a name from the
+        ``mask_list`` (i.e. "Mask1_line_fitting") will be applied to the spaxels in the corresponding mask. Finally, at
+        the highest level, the user can provide a spaxel fitting configuration with the spatial array coordiantes
+        "50-28_LINESLOG". In all these cases the higher level configurate **updates** the lower levels (only common entries
+        are replaced)
+
+        .. attention::
+            In this multi-level configuration design, the higher level entries **update** the lower level entries:
+            only shared entries are overwritten, the final configuration will include all the entries from the
+            default mask and spaxel sections.
+
+        If the ``line_detection`` is set to True the function proceeds to run the line detection algorithm prior to the
+        fitting of the lines. The user provide the configuration parameters for the line_detection function in the
+        ``fit_conf`` argument. At the default, mask or spaxel configuration the user needs to specify these entries with
+        the "function name" + "." + "function argument" (i.e. "line_detection.line_type='emission'"). The multi-level
+        configuration described above will be applied to this function parameters as well.
+
+        .. note::
+            The parameters for the ``line.detection`` can be found on the documentation. The user doesn't need to specify
+            a "lime_detection.bands" parameter. The input bands from the corresponding mask will be used.
+
+        :param mask_file: Address of binary spatial mask file
+        :type mask_file: str, pathlib.Path
+
+        :param output_log_file: File address for the output measurements log.
+        :type output_log_file: str, pathlib.Path
+
+        :param bands: Bands dataframe (or file address to the dataframe).
+        :type bands: pandas.Dataframe, str, path.Pathlib
+
+        :param fit_conf: Fitting configuration.
+        :type fit_conf: dict, optional
+
+        :param mask_list: Masks name list to explore on the ``masks_file``.
+        :type mask_list: list, optional
+
+        :param line_list: Line list to measure from the bands dataframe.
+        :type line_list: list, optional
+
+        :param log_ext_suffix: Suffix for the measurements log pages. The default value is "_LINESLOG".
+        :type log_ext_suffix: str, optional.
+
+        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+                            The default value is 'least_squares'
+        :type min_method: str, optional
+
+        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
+        :type profile: str, optional
+
+        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
+        :type cont_from_bands: bool, optional
+
+        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
+        :type temp: bool, optional
+
+        :param default_conf_key: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_conf_key: str, optional
+
+        :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
+        :type line_detection: bool, optional
+
+        :param plot_fit: Set to True to plot the spectrum lines fitting at each iteration.
+        :type plot_fit: bool, optional
+
+        :param progress_output: Progress message output. The options are "bar" (default), "counter" and "None".
+        :type progress_output: str, optional
+
+        :param header: Dictionary for parameter ".fits" file headers.
+        :type header: dict, optional
+
+        :param n_save: Spectra number after which saving the measurements log. The default value is 100. 
+        :type n_save: int, optional
+
+        """
 
         # Check if the mask variable is a file or an array
-        mask_dict = check_file_array_mask(spatial_mask, masks_list)
+        mask_dict = check_file_array_mask(mask_file, mask_list)
 
         # Unpack mask dictionary
         mask_list = np.array(list(mask_dict.keys()))
         mask_data_list = list(mask_dict.values())
 
         # Default fitting configuration
-        fit_conf = {} if fit_conf is None else fit_conf
-        default_conf = fit_conf.get(default_conf_key, {})
+        fit_conf = {} if fit_conf is None else fit_conf.copy()
+        default_conf = fit_conf.get(f'{default_conf_key}_line_fitting', {})
 
         # Check if the lines table is a dataframe or a file
-        if bands_frame is not None:
-            bands_df = check_file_dataframe(bands_frame, pd.DataFrame)
+        if bands is not None:
+            bands = check_file_dataframe(bands, pd.DataFrame)
 
         # Check all the masks line fitting for a lines dataframe
         else:
             for mask_name in mask_list:
 
-                error_message = 'You did not provide an input bands log for the analysis.\n' \
-                                f'In this case you need to specify an "input_log=log_file_address" in the ' \
-                                f'"[{mask_name}_line_detection]" of your configuration file'
+                existing_mask_check = True
+                mask_conf = fit_conf.get(f'{mask_name}_line_fitting', None)
 
-                mask_conf = fit_conf.get(f'{mask_name}_line_detection', None)
                 if mask_conf is not None:
-                    log_address_value = mask_conf.get('input_log', None)
+                    log_address_value = mask_conf.get('bands', None)
                     if log_address_value is None:
-                        raise Error(error_message)
+                        existing_mask_check = False
                 else:
+                    existing_mask_check = False
+
+                if existing_mask_check is not True:
+                    error_message = 'Since an input "bands" log for the analysis was not introduce in the function,\n' \
+                                   f'you need to specify an "bands=log_file_address" entry the ' \
+                                   f'"[{mask_name}_file]" of your configuration file'
                     raise Error(error_message)
 
-        # Check if output log
-        if output_log is None:
-            raise(Error(f'No output log file address to save the line measurements log'))
-        else:
-            output_log = Path(output_log)
-            if not output_log.parent.is_dir():
-                raise(Error(f'The folder of the output log file does not exist at {output_log}'))
+        # Check if the output log folder exists
+        output_log_file = Path(output_log_file)
+        if not output_log_file.parent.is_dir():
+            raise LiMe_Error(f'The folder of the output log file does not exist at {output_log_file}')
 
         # Determine the spaxels to treat at each mask
         total_spaxels, spaxels_dict = 0, {}
@@ -476,20 +643,17 @@ class CubeTreatment(LineFitting):
             mask_hdr = mask_data_list[i][1]
             idcs_spaxels = spaxels_dict[i]
 
-            # Get mask line detection configuration
-            if line_detection:
-                detect_conf = {**LINE_DETECT_PARAMS, **fit_conf.get(f'{mask_name}_line_detection', {})}
-            else:
-                detect_conf = None
-
             # Get mask line fitting configuration
             mask_conf = {**default_conf, **fit_conf.get(f'{mask_name}_line_fitting', {})}
+            mask_detect = mask_conf.get('line_detection', {}).copy()
 
             # Load the mask log if provided
-            if bands_frame is None:
-                bands_mask_folder = detect_conf['input_log']
-                bands_mask_path = Path(bands_mask_folder).absolute() if bands_mask_folder[0] == '.' else Path(bands_mask_path)
-                bands_df = load_log(bands_mask_path)
+            if bands is None:
+                bands_file = fit_conf[f'{mask_name}_line_fitting']['bands']
+                bands_path = Path(bands_file).absolute() if bands_file[0] == '.' else Path(bands_file)
+                bands_in = load_log(bands_path)
+            else:
+                bands_in = bands
 
             # Loop through the spaxels
             n_spaxels = idcs_spaxels.shape[0]
@@ -502,19 +666,25 @@ class CubeTreatment(LineFitting):
 
                 # Get the spaxel fitting configuration
                 spaxel_conf = fit_conf.get(f'{spaxel_label}_line_fitting')
+
+                # Update the dicts functions of the spaxel conf
+                if line_detection and (spaxel_conf is not None):
+                    spaxel_conf['line_detection'] = {**mask_detect, **spaxel_conf.get('line_detection', {})}
+
+                # Update mask conf with spaxel conf
                 spaxel_conf = mask_conf if spaxel_conf is None else {**mask_conf, **spaxel_conf}
 
                 # Spaxel progress message
                 pbar.output_message(j, n_spaxels, pre_text="", post_text=f'Coord. {idx_j}-{idx_i}')
 
                 # Get spaxel data
-                spaxel = self._cube.get_spaxel(idx_j, idx_i, spaxel_label)
+                spaxel = self._cube.get_spectrum(idx_j, idx_i, spaxel_label)
 
                 # Fit the lines
-                spaxel.fit.frame(bands_df, spaxel_conf, lines_list=lines_list, fit_method=fit_method,
+                spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile,
                                  cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
-                                 obj_ref=None, default_conf_key=None, user_detect_conf=detect_conf)
+                                 id_conf_label=None, default_conf_key=None)
 
                 # Create page header with the default data
                 hdr_i = fits.Header()
@@ -524,9 +694,9 @@ class CubeTreatment(LineFitting):
                     hdr_i.update(hdr_coords)
 
                 # Add user information
-                if user_hdr is not None:
-                    page_hdr = user_hdr.get(f'{spaxel_label}{log_ext_suffix}', None)
-                    page_hdr = user_hdr if page_hdr is None else page_hdr
+                if header is not None:
+                    page_hdr = header.get(f'{spaxel_label}{log_ext_suffix}', None)
+                    page_hdr = header if page_hdr is None else page_hdr
                     hdr_i.update(page_hdr)
 
                 # Save to a fits file
@@ -538,14 +708,14 @@ class CubeTreatment(LineFitting):
                     spax_counter += 1
                 else:
                     spax_counter = 0
-                    hdul_log.writeto(output_log, overwrite=True, output_verify='fix')
+                    hdul_log.writeto(output_log_file, overwrite=True, output_verify='fix')
 
                 # Plot the fittings if requested:
                 if plot_fit:
                     spaxel.plot.spectrum(include_fits=True, rest_frame=True)
 
             # Save the log at each new mask
-            hdul_log.writeto(output_log, overwrite=True, output_verify='fix')
+            hdul_log.writeto(output_log_file, overwrite=True, output_verify='fix')
 
         return
 

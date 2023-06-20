@@ -39,7 +39,7 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
 
         # Join the lists and sort by wavelength
         user_mask = pd.concat([user_mask, input_mask_crop.loc[idcsNoMatch]])
-        wave_array = label_decomposition(user_mask.index.to_numpy(), output_params=['wavelength'])[0]
+        wave_array = label_decomposition(user_mask.index.to_numpy(), params_list=['wavelength'])[0]
         idx_array = np.argsort(wave_array)
         user_mask = user_mask.iloc[idx_array]
         active_lines = active_lines[idx_array]
@@ -75,7 +75,7 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
     active_lines = active_lines[idx_rows_cont]
 
     # Add wavelength to mask
-    wave_array = label_decomposition(user_mask.index.to_numpy(), output_params=['wavelength'])[0]
+    wave_array = label_decomposition(user_mask.index.to_numpy(), params_list=['wavelength'])[0]
     user_mask['wavelength'] = wave_array
 
     return user_mask, active_lines
@@ -186,69 +186,68 @@ class BandsInspection:
 
         return
 
-    def bands(self, bands, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              object_label=None, redshift_log=None, redshift_column='redshift', maximize=False, plt_cfg={}, ax_cfg={}):
+    def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
+              z_log_address=None, object_label=None, z_column='redshift', fig_cfg={}, ax_cfg={}, maximize=False):
 
         """
-        This class plots the masks from the ``_log_address`` as a grid for the input spectrum. Clicking and
-        dragging the mouse within a line cell will update the line band region, both in the plot and the ``_log_address``
-        file provided.
 
-        Assuming that the band wavelengths `w1` and `w2` specify the adjacent blue (left continuum), the `w3` and `w4`
-        wavelengths specify the line band and the `w5` and `w6` wavelengths specify the adjacent red (right continuum)
-        the interactive selection has the following rules:
+        This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
+        function is run a second time, the user selections won't be overwritten.
 
-        * The plot wavelength range is always 5 pixels beyond the mask bands. Therefore dragging the mouse beyond the
-          mask limits (below `w1` or above `w6`) will change the displayed range. This can be used to move beyond the
-          original mask limits.
+        The ``bands_file`` argument provides to the output database on which the user selections will be saved.
 
-        * Selections between the `w2` and `w5` wavelength bands are always assigned to the line region mask as the new
-          `w3` and `w4` values.
+        The ``ref_bands`` argument provides the reference database. The default database will be used if none is provided.
 
-        * Due to the previous point, to increase the `w2` value or to decrease `w5` value the user must select a region
-          between `w1` and `w3` or `w4` and `w6` respectively.
+        The ``y_scale`` sets the flux scale for the lines grid.
+        The default "auto" value automatically switches between the matplotlib `scale keywords
+        <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html>`_, otherwise the user can set a
+        uniform scale for all.
 
-        The user can limit the number of lines displayed on the screen using the ``lines_interval`` parameter. This
-        parameter can be an array of strings with the labels of the target lines or a two value integer array with the
-        interval of lines to plot.
+        If the user wants to adjust the observation redshift and save the new values the ``z_log_address`` sets an output
+        dataframe. The ``object_label`` and ``z_column`` provide the row and column indexes to save the new redshift.
 
-        Lines in the mask file outside the spectral wavelength range will be excluded from the plot: w2 and w5 smaller
-        and greater than the blue and red wavelegnth values respectively.
+        The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
+        and "title". It is not necessary to include all the keys in this argument.
 
-        :param log_address: Address for the lines log mask file.
-        :type log_address: str
+        The `online documentation <https://lime-stable.readthedocs.io/en/latest/tutorials/n_tutorial2_lines_inspection.html>`_
+        provides more details on the mechanics of this plot function.
 
-        :param input_wave: Wavelength array of the input spectrum.
-        :type input_wave: numpy.array
+        :param bands_file: Output file address for user bands selection.
+        :type bands_file: str, pathlib.Path
 
-        :param input_flux: Flux array for the input spectrum.
-        :type input_flux: numpy.array
+        :param ref_bands: Reference bands dataframe or its file address. The default database will be used if none is provided.
+        :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
 
-        :param input_err: Sigma array of the `input_flux`
-        :type input_err: numpy.array, optional
+        :param y_scale: Matplotlib `scale keywords <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html>`_.
+                        The default value is "auto".
+        :type y_scale: str, optional.
 
-        :param redshift: Spectrum redshift
-        :type redshift: float, optional
+        :param n_cols: Number of columns in plot grid. The default value is 6.
+        :type n_cols: int, optional.
 
-        :param norm_flux: Spectrum flux normalization
-        :type norm_flux: float, optional
+        :param n_rows: Number of rows in plot grid.
+        :type n_rows: int, optional.
 
-        :param crop_waves: Wavelength limits in a two value array
-        :type crop_waves: np.array, optional
+        :param col_row_scale: Multiplicative factor for the grid plots width and height. The default value is (2, 1.5).
+        :type col_row_scale: tuple, optional.
 
-        :param n_cols: Number of columns of the grid plot
-        :type n_cols: integer
+        :param z_log_address: Output address for redshift dataframe file.
+        :type z_log_address: str, pathlib.Path, optional
 
-        :param n_rows: Number of columns of the grid plot
-        :type n_rows: integer
+        :param object_label: Object label for redshift dataframe row indexing.
+        :type object_label: str, optional
 
-        :param lines_interval: List of lines or mask file line interval to display on the grid plot. In the later case
-                               this interval must be a two value array.
-        :type lines_interval: list
+        :param z_column: Column label for redshift dataframe column indexing. The default value is "redshift".
+        :type z_column: str, optional
 
-        :param y_scale: Y axis scale. The default value (auto) will switch between between linear and logarithmic scale
-                        strong and weak lines respectively. Use ``linear`` and ``log`` for a fixed scale for all lines.
-        :type y_scale: str, optional
+        :param fig_cfg: Dictionary with the matplotlib `rcParams parameters <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg: dict, optional
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
 
         """
 
@@ -258,14 +257,14 @@ class BandsInspection:
         self._y_scale = y_scale
         self._log_address = None
         self._rest_frame = True
-        self._redshift_log_path = None if redshift_log is None else Path(redshift_log)
+        self._redshift_log_path = None if z_log_address is None else Path(z_log_address)
         self._obj_ref = object_label
-        self._redshift_column = redshift_column
+        self._redshift_column = z_column
 
         # Input is a mask is address and it will be also used to save the file
         if self._log_address is None:
-            if isinstance(bands, (str, Path)):
-                self._log_address = Path(bands)
+            if isinstance(bands_file, (str, Path)):
+                self._log_address = Path(bands_file)
                 if not self._log_address.parent.is_dir():
                     _logger.warning(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
@@ -274,7 +273,7 @@ class BandsInspection:
             ref_bands = _LINES_DATABASE_FILE
 
         # Establish the reference lines log to inspect the mask
-        self.log, self._activeLines = check_previous_mask(ref_bands, bands, self._spec.wave_rest)
+        self.log, self._activeLines = check_previous_mask(ref_bands, bands_file, self._spec.wave_rest)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
@@ -294,7 +293,7 @@ class BandsInspection:
             # Set the plot format where the user's overwrites the default
             default_fig_cfg = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1]),
                                'axes.titlesize': 11}
-            default_fig_cfg.update(plt_cfg)
+            default_fig_cfg.update(fig_cfg)
             PLT_CONF, self._AXES_CONF = self._figure_format(default_fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
                                                             units_wave=self._spec.units_wave,
                                                             units_flux=self._spec.units_flux)
@@ -347,7 +346,7 @@ class BandsInspection:
                         self.z_df = pd.DataFrame(index=[self._obj_ref], columns=[self._redshift_column])
 
                     if self._redshift_column not in self.z_df.columns:
-                        raise LiMe_Error(f'Input redshift log file does not have a {redshift_column} column.')
+                        raise LiMe_Error(f'Input redshift log file does not have a {z_column} column.')
 
                     # Add the current value
                     self.z_df.loc[self._obj_ref, self._redshift_column] = self._spec.redshift
@@ -611,7 +610,7 @@ class RedshiftInspection:
                 if isinstance(reference_bands_df, pd.DataFrame):
                     reference_lines = reference_bands_df.index.to_numpy()
 
-            self._waves_array, self._latex_array = label_decomposition(reference_lines, output_params=('wavelength',
+            self._waves_array, self._latex_array = label_decomposition(reference_lines, params_list=('wavelength',
                                                                                                        'latex_label'))
 
             # Sort by wavelength
@@ -823,7 +822,7 @@ class RedshiftInspection:
         return
 
 
-class CubeInspector:
+class CubeInspection:
 
     def __init__(self):
 
@@ -856,69 +855,100 @@ class CubeInspector:
 
         return
 
-    def cube(self, line, band=None, percentil_bg=60, line_fg=None, band_fg=None, percentils_fg=[90, 95, 99],
-             bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r', mask_alpha=0.2,
-             wcs=None, plt_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, masks_file=None, lines_log_address=None,
-             maximise=False, rest_frame=False, log_scale=False, ext_log='_LINESLOG'):
+    def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
+             fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
+             rest_frame=False, log_scale=False, fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, lines_log_file=None,
+             ext_log='_LINESLOG', wcs=None, maximize=False):
 
         """
-        This class provides an interactive plot for IFU (Integra Field Units) data cubes consisting in two figures:
-        On the left-hand side, a 2D image of the cube read from the ``image_bg`` parameter. This plot can include
-        intensity contours from the ``contour_levels`` parameter. By default, the intensity contours are calculated from
-        the ``image_bg`` matrix array unless an optional foreground ``image_fg`` array is provided. The spaxel selection
-        is accomplished with a mouse right click.
 
-        On the right-hand side, the selected spaxel spectrum is plotted. The user can select either window region using
-        the matplotlib window *zoom* or *span* tools. As a new spaxel is selected the plotting limits in either figure
-        should not change. To restore the plot axes limits you can click the *reset* (house icon).
+        This function opens an interactive plot to display and individual spaxel spectrum from the selection on the
+        image map.
 
-        The user can provide a ``lines_log_address`` with the line measurements of the plotted object. In this case,
-        the plot will include the fitted line profiles. The *.fits* file HDUs will be queried by the spaxel coordinates.
-        The default format is ``{idx_j}-{idx_i}_LINESLOG)`` where idx_j and idx_i are the spaxel Y and X coordinates
-        respectively
+        The left-hand side plot displays an image map with the flux sum of a line band as described on the
+        Cube.plot.cube documentation.
 
-        :param wave: One dimensional array with the SMACS_v2.0 wavelength range.
-        :type wave: numpy.array
+        A right-click on a spaxel of the band image map will plot the selected spaxel spectrum on the right-hand side plot.
+        This will also mark the spaxel with a red cross.
 
-        :param cube_flux: Three dimensional array with the IFU cube flux
-        :type cube_flux: numpy.array
+        If the user provides a ``masks_file`` the plot window will include a dot mask selector. Activating one mask will
+        overplotted on the image band. A double left click on the image band will add/remove a spaxel to the current
+        pixel selected masks. If the spaxel was part of another mask it will be removed from the previous mask region.
 
-        :param image_bg Two dimensional array with the flux band image for the plot background
-        :type image_bg: numpy.array
+        If the user provides a ``lines_log_file`` .fits file, the fitted profiles will be included on its corresponding
+        spaxel spectrum plot. The measurements logs on this ".fits" file must be named using the spaxel array coordinate
+        and the suffix on the ``ext_log`` argument.
 
-        :param image_fg: Two dimensional array with the flux band image to plot foreground contours
-        :type image_fg: numpy.array, optional
+        If the user has installed the library `mplcursors <https://mplcursors.readthedocs.io/en/stable/>`_, a left-click
+        on a fitted profile will pop-up properties of the fitting, right-click to delete the annotation.
 
-        :param contour_levels: One dimensional array with the flux contour levels in increasing order.
-        :type contour_levels: numpy.array, optional
+        :param line: Line label for the spatial map background image.
+        :type line: str
 
-        :param color_norm: `Color normalization <https://matplotlib.org/stable/tutorials/colors/colormapnorms.html#sphx-glr-tutorials-colors-colormapnorms-py>`_
-                            form the galaxy image plot
-        :type color_norm: matplotlib.colors.Normalize, optional
+        :param bands: Bands dataframe (or file address to the dataframe).
+        :type bands: pandas.Dataframe, str, path.Pathlib, optional
 
-        :param redshift: Object astronomical redshift
-        :type redshift: float, optional
+        :param line_fg: Line label for the spatial map background image contours
+        :type line_fg: str, optional
 
-        :param lines_log_address: Address of the *.fits* file with the object line measurements.
-        :type lines_log_address: str, optional
+        :param min_pctl_bg: Minimum band flux percentile for spatial map background image. The default value is 60.
+        :type min_pctl_bg: float, optional
 
-        :param fits_header: *.fits* header with the entries for the astronomical coordinates plot conversion.
-        :type fits_header: dict, optional
+        :param cont_pctls_fg: Band flux percentiles for foreground ``line_fg`` contours. The default value is (90, 95, 99)
+        :type cont_pctls_fg: tuple, optional
 
-        :param plt_cfg: Dictionary with the configuration for the matplotlib rcParams style.
-        :type plt_cfg: dict, optional
+        :param bg_cmap: Background image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is "gray".
+        :type bg_cmap: str, optional
 
-        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
-        :type ax_cfg: dict, optional
+        :param fg_cmap: Foreground image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is "viridis".
+        :type fg_cmap: str, optional
 
-        :param ext_suffix: Suffix of the line SMACS_v2.0 extensions. The default value is “_LINESLOG”.
-        :type ext_suffix: str, optional
+        :param bg_norm: Background image `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is `SymLogNorm <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+        :type bg_norm: Normalization from matplotlib.colors, optional
 
-        :param units_wave: Wavelength array physical units. The default value is introduced as "A"
-        :type units_wave: str, optional
+        :param fg_norm: Foreground contours `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is `LogNorm <https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.LogNorm.html>`_.
+        :type fg_norm: Normalization from matplotlib.colors, optional
 
-        :param units_flux: Flux array physical units. The default value is erg/cm^2/s/A
-        :type units_flux: str, optional
+        :param masks_file: File address for binary spatial masks
+        :type masks_file: str, optional
+
+        :param masks_cmap: Binary masks `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+        :type masks_cmap: str, optional
+
+        :param masks_alpha: Transparency alpha value. The default value is 0.2 (0 to 1 scale).
+        :type masks_alpha: float, optional
+
+        :param rest_frame: Set to True for a display in rest frame. The default value is False
+        :type rest_frame: bool, optional
+
+        :param log_scale: Set to True for a display with a logarithmic scale flux. The default value is False
+        :type log_scale: bool, optional
+
+        :param fig_cfg: `Matplotlib RcParams <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_
+                        parameters for the figure format
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg_image: Dictionary with the image band flux plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg_image: dict, optional
+
+        :param ax_cfg_spec: Dictionary with the spaxel spectrum plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg_spec: dict, optional
+
+        :param lines_log_file: Address for the line measurements log ".fits" file.
+        :type lines_log_file: str, pathlib.Path, optional
+
+        :param ext_log: Suffix for the line measurements log spaxel page name
+        :type ext_log: str, optional
+
+        :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
+        :type wcs: astropy WCS, optional
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
 
         """
 
@@ -926,12 +956,12 @@ class CubeInspector:
         self.mask_file = masks_file
 
         # Prepare the background image data
-        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, band,
-                                                                       percentil_bg, bg_scale, contours_check=False)
+        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, bands,
+                                                                                      min_pctl_bg, bg_norm, contours_check=False)
 
         # Prepare the foreground image data
-        line_fg, self.fg_image, self.fg_levels, self.fg_scale = determine_cube_images(self._cube, line_fg, band_fg,
-                                                                       percentils_fg, fg_scale, contours_check=True)
+        line_fg, self.fg_image, self.fg_levels, self.fg_scale = determine_cube_images(self._cube, line_fg, bands,
+                                                                                      cont_pctls_fg, fg_norm, contours_check=True)
 
         # Mesh for the countours
         if line_fg is not None:
@@ -941,7 +971,7 @@ class CubeInspector:
             self.fg_mesh = None
 
         # Colors
-        self.bg_color, self.fg_color, self.mask_color, self.mask_alpha = bg_color, fg_color, mask_color, mask_alpha
+        self.bg_color, self.fg_color, self.mask_color, self.mask_alpha = bg_cmap, fg_cmap, masks_cmap, masks_alpha
 
         # Frame
         self.rest_frame, self.log_scale = rest_frame, log_scale
@@ -969,11 +999,11 @@ class CubeInspector:
             self.mask_ext = self.ext_log
 
         # Load the complete fits lines log if input
-        if lines_log_address is not None:
-            if Path(lines_log_address).is_file():
-                self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+        if lines_log_file is not None:
+            if Path(lines_log_file).is_file():
+                self.hdul_linelog = fits.open(lines_log_file, lazy_load_hdus=False)
             else:
-                _logger.info(f'The lines log at {lines_log_address} was not found.')
+                _logger.info(f'The lines log at {lines_log_file} was not found.')
 
         # State the plot labelling
         default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, line_fg, self.masks_dict)
@@ -983,7 +1013,7 @@ class CubeInspector:
         # User configuration overwrite default figure format
         local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
                      'xtick.labelsize': 10, 'ytick.labelsize': 10}
-        self.fig_conf = parse_figure_format(plt_cfg, local_cfg)
+        self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
 
         # Container for both axes format
         self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
@@ -1024,8 +1054,8 @@ class CubeInspector:
                     circle.set_width(0.04)
 
             # Load the complete fits lines log if input
-            if lines_log_address is not None:
-                self.hdul_linelog = fits.open(lines_log_address, lazy_load_hdus=False)
+            if lines_log_file is not None:
+                self.hdul_linelog = fits.open(lines_log_file, lazy_load_hdus=False)
 
             # Plot the data
             self.data_plots()
@@ -1037,7 +1067,7 @@ class CubeInspector:
                 radio.on_clicked(self.mask_selection)
 
             # Display the figure
-            save_close_fig_swicth(maximise=maximise, bbox_inches='tight')
+            save_close_fig_swicth(maximise=maximize, bbox_inches='tight')
 
             # Close the lines log if it has been opened
             if isinstance(self.hdul_linelog, fits.hdu.HDUList):
@@ -1208,13 +1238,13 @@ class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
         return
 
 
-class CubeCheck(Plotter, CubeInspector):
+class CubeCheck(Plotter, CubeInspection):
 
     def __init__(self, cube):
 
         # Instantiate the dependencies
         Plotter.__init__(self)
-        CubeInspector.__init__(self)
+        CubeInspection.__init__(self)
 
         # Lime cube object with the scientific data
         self._cube = cube

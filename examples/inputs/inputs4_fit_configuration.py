@@ -69,13 +69,13 @@ fit_cfg = obs_cfg['gp121903_line_fitting']
 # gp_spec.fit.band('O3_5007A_b', bands.loc['O3_5007A', 'w1':'w6'], fit_cfg)
 # gp_spec.plot.band("O3_5007A_b", rest_frame=True)
 
-gp_spec.fit.band('H1_4861A', bands, fit_cfg)
-gp_spec.plot.band()
+gp_spec.fit.bands('H1_4861A', bands, fit_cfg)
+gp_spec.plot.bands()
 
 # Fit of a line importing the kinematics from an external line
 Halpha_cfg = {'H1_6563A_b'      : 'H1_6563A+N2_6584A+N2_6548A',
               'H1_6563A_kinem'  : "H1_4861A",
               'N2_6584A_kinem'  : "H1_4861A",
               'N2_6548A_kinem'  : "H1_4861A"}
-gp_spec.fit.band('H1_6563A_b', bands, Halpha_cfg)
-gp_spec.plot.band()
+gp_spec.fit.bands('H1_6563A_b', bands, Halpha_cfg)
+gp_spec.plot.bands()

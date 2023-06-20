@@ -1,5 +1,5 @@
 __all__ = ['COORD_KEYS',
-           'unit_convertor',
+           'unit_conversion',
            'extract_fluxes',
            'relative_fluxes',
            'compute_line_ratios',
@@ -383,8 +383,42 @@ def latex_science_float(f, dec=2):
         return float_str
 
 
-def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, sig_fig=None,
-                   mask_check=False):
+def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, decimals=None,
+                    mask_check=False):
+
+    """
+
+    This function converts the input array (wavelength or flux) ``in_units`` into the requested ``out_units``.
+
+    .. attention::
+        Due to the nature of the ``flux_array``, the user also needs to include the ``wave_array`` and its units in the
+        ``dispersion_units``. units
+
+    The user can also provide the number of ``decimals`` to round the output array.
+
+    :param in_units: Input array units
+    :type in_units: str
+
+    :param out_units: Output array untis
+    :type out_units: str
+
+    :param wave_array: Wavelength array
+    :type wave_array: numpy.array
+
+    :param flux_array: Flux array
+    :type flux_array: numpy.array
+
+    :param dispersion_units:
+    :type dispersion_units:
+
+    :param decimals: Number of decimals.
+    :type decimals: int, optional
+
+    :param mask_check: Re-apply the numpy array mask to the output array. The default value is True.
+    :type mask_check: bool, optional
+
+    """
+
 
     # Converting the wavelength array
     if (in_units in DISPERSION_UNITS) and (out_units in DISPERSION_UNITS):
@@ -409,10 +443,10 @@ def unit_convertor(in_units, out_units, wave_array=None, flux_array=None, disper
     else:
         output_array = output_array.value
 
-    if sig_fig is None:
+    if decimals is None:
         return output_array
     else:
-        return np.round(output_array, sig_fig)
+        return np.round(output_array, decimals)
 
 
 def refraction_index_air_vacuum(wavelength_array, units='A'):

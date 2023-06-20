@@ -11,7 +11,7 @@ from pathlib import Path
 from .model import c_KMpS, gaussian_profiles_computation, linear_continuum_computation
 from .tools import blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
 from .tools import define_masks, format_line_mask_option
-from .io import load_log, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
+from .io import check_file_dataframe, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from .transitions import check_line_in_log, Line, label_decomposition
 
 _logger = logging.getLogger('LiMe')
@@ -1689,7 +1689,7 @@ class Plotter:
 
         # Get the line labels and the bands labels for the lines
         # ion_array, wave_array, latex = label_decomposition(match_log.index.values, units_wave=units_wave)
-        wave_array, latex = label_decomposition(match_log.index.values, output_params=('wavelength', 'latex_label'))
+        wave_array, latex = label_decomposition(match_log.index.values, params_list=('wavelength', 'latex_label'))
 
         w3 = match_log.w3.values * (1 + redshift)
         w4 = match_log.w4.values * (1 + redshift)
@@ -1754,59 +1754,63 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def spectrum(self, extra_comp=None, line_bands=None, label=None, noise_region=None, log_scale=False,
-                 output_address=None, rest_frame=False, include_fits=False, include_cont=False, in_fig=None, in_ax=None,
-                 fig_cfg={}, ax_cfg={}, maximize=False):
+    def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
+                 include_fits=False, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
 
         """
 
-        This function plots the spectrum defined by the `Spectrum class <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum>`_
+        This function plots the spectrum flux versus wavelength.
 
-        The user can include an additional flux array (for example the uncertainty spectrum) to be plotted.
+        The user can include the line bands on the plot if added via the ``line_bands`` attribute.
 
-        Additionally, the user can include the outputs from the `.match_line_mask <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
-        function to plot the emission peaks and the matched lines. Moreover, if the parameter ``include_fits=True`` the plot
-        will include the gaussian profiles stored in the lines ``.log``.
+        The user can provide a label for the spectrum legend via the ``label`` argument.
 
-        The user can specify the plot _frame of reference via the ``_frame='obs'`` or ``_frame='rest'`` parameter. Moreover,
-        the user can provide dictionaries for the matplotlib `figure <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams>`_
-        and `axis <https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set.html#matplotlib.axes.Axes.set>`_ styles.
+        If the user provides an ``output_address`` the plot will be stored into an image file instead of being displayed
+        into a window.
 
-        Finally, if the user provides an ``output_address``, the spectrum will be saved as an image instead of being displayed.
+        If the user has installed the library `mplcursors <https://mplcursors.readthedocs.io/en/stable/>`_, a left-click
+        on a fitted profile will pop-up properties of the fitting, right-click to delete the annotation. This requires
+        ``include_fits=True``.
 
-        :param comp_array: Additional flux array to be plotted alongside the spectrum flux.
-        :type comp_array: numpy.array, optional
+        By default, this function creates a matplotlib figure and axes set to plot the data. However, the user can
+        provide their own ``in_fig`` to plot the data. This will return the data-plotted figure object.
 
-        :param peaks_table: Table with the emission and absorptions detected by the `.match_line_mask function <https://lime-stable.readthedocs.io/en/latest/documentation/api.html#lime.treatment.Spectrum.match_line_mask>`_
-        :type peaks_table: astropy.Table, optional
+        The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
+        and "title". It is not necessary to include all the keys in this argument.
 
-        :param match_log: Lines log with the emission/absorptions which have matched the peaks/trough by the .match_line_mask.
-        :type match_log: pandas.Dataframe, optional
-
-        :param noise_region: 2 value array with the wavelength limits. This region will be shaded in the output plot.
-        :type noise_region: np.array, optional
-
-        :param log_scale: Set to True for a vertical (flux) axis logarithmic scale. The default value is False
-        :type log_scale: bool, optional
-
-        :param plt_cfg: Dictionary with the configuration for the matplotlib `rcParams routine <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
-        :type plt_cfg: bool, optional
-
-        :param ax_cfg: Dictionary with the configuration for the matplotlib axes style.
-        :type ax_cfg: bool, optional
-
-        :param label: Label for the spectrum plot legend, The default value is 'Observed spectrum'
-        :type label: str, optional
-
-        :param output_address: File location to store the plot as an image. If provided, the plot won't be displayed on
-                               the screen.
+        :param output_address: File location to store the plot.
         :type output_address: str, optional
 
-        :param include_fits: Check to include the gaussian profile fittings in the plot. The default value is False.
-        :type include_fits: Check to include the gaussian profile fittings in the plot.
+        :param label: Label for the spectrum plot legend. The default label is 'Observed spectrum'.
+        :type label: str, optional
 
-        :param frame: Frame of reference for the spectrum plot: "observed" or "rest". The default value is observed.
-        :param _frame: str, optional
+        :param line_bands: Bands Dataframe (or path to dataframe).
+        :type line_bands: pd.Dataframe, str, path, optional
+
+        :param rest_frame: Set to True for a display in rest frame. The default value is False
+        :type rest_frame: bool, optional
+
+        :param log_scale: Set to True for a display with a logarithmic scale flux. The default value is False
+        :type log_scale: bool, optional
+
+        :param include_fits: Set to True to display fitted profiles. The default value is False.
+        :type include_fits:  bool, optional
+
+        :param include_cont: Set to True to display fitted continuum. The default value is False.
+        :type include_cont: bool, optional
+
+        :param fig_cfg: `Matplotlib RcParams <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_
+                        parameters for the figure format
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg: dict, optional
+
+        :param in_fig: Matplotlib figure object to plot the data.
+        :type in_fig: matplotlib.figure
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
 
         """
 
@@ -1824,7 +1828,7 @@ class SpectrumFigures(Plotter):
 
             # Generate the figure object and figures
             if in_fig is None:
-                in_fig, in_ax = self._plot_container(in_fig, in_ax, AXES_CONF)
+                in_fig, in_ax = self._plot_container(in_fig, None, AXES_CONF)
             else:
                 in_ax = in_fig.add_subplot()
                 in_ax.set(**AXES_CONF)
@@ -1837,22 +1841,11 @@ class SpectrumFigures(Plotter):
             # Plot the spectrum
             in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=self._color_dict['fg'])
 
-            # Ass extra SMACS_v2.0 if requested # TODO a more complex mechanic would be usefull
-            if extra_comp is not None:
-                if len(extra_comp) == len(wave_plot):
-                    in_ax.step(wave_plot / z_corr, extra_comp, label='Sigma Continuum', linestyle=':', where='mid')
-                else:
-                    _logger.warning('The extra component array has different length than the spectrum wavelength array. '
-                                    'It could not be plotted')
-
             # Plot peaks and troughs if provided
             if line_bands is not None:
+                line_bands = check_file_dataframe(line_bands, pd.DataFrame)
                 self._line_matching_plot(in_ax, line_bands, wave_plot, flux_plot, z_corr, self._spec.redshift,
                                          self._spec.units_wave)
-
-            # Shade noise region if provided # TODO state colors for this one
-            if noise_region is not None:
-                in_ax.axvspan(noise_region[0], noise_region[1], alpha=0.15, color='tab:cyan', label='Noise region')
 
             # List of lines in the log
             line_list = self._spec.log.index.values
@@ -1898,15 +1891,63 @@ class SpectrumFigures(Plotter):
 
         return in_fig
 
-    def grid(self, log=None, rest_frame=True, y_scale='auto', include_fits=True, output_address=None, n_cols=6,
-             n_rows=None, col_row_scale=(2, 1.5), maximize=False, fig_cfg={}, ax_cfg={}, in_fig=None):
+    def grid(self, output_address=None, rest_frame=True, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
+             include_fits=True, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
 
-        # Display chec k for the user figures
+        """
+
+        This function plots the lines from the object spectrum log as a grid.
+
+        If the user has installed the library `mplcursors <https://mplcursors.readthedocs.io/en/stable/>`_, a left-click
+        on a fitted profile will pop-up properties of the fitting, right-click to delete the annotation.
+
+        If the user provides an ``output_address`` the plot will be stored into an image file instead of being displayed
+        into a window.
+
+        The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
+        and "title". It is not necessary to include all the keys in this argument.
+
+        By default, this function creates a matplotlib figure and axes set to plot the data. However, the user can
+        provide their own ``in_fig`` to plot the data. This will return the data-plotted figure object.
+
+        :param output_address: Image file address for plot.
+        :type output_address: str, pathlib.Path, optional
+
+        :param rest_frame: Set to True to plot the spectrum to rest frame. Optional False.
+        :type rest_frame: bool, optional
+
+        :param y_scale: Matplotlib `scale keyword <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_. The default value is "auto".
+        :type y_scale: str, optional.
+
+        :param n_cols: Number of columns in plot grid. The default value is 6.
+        :type n_cols: int, optional.
+
+        :param n_rows: Number of rows in plot grid.
+        :type n_rows: int, optional.
+
+        :param col_row_scale: Multiplicative factor for the grid plots width and height. The default value is (2, 1.5).
+        :type col_row_scale: tuple, optional.
+
+        :param include_fits: Set to True to display fitted profiles. The default value is False.
+        :type include_fits:  bool, optional
+
+        :param fig_cfg: Matplotlib `RcParams <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_
+                        parameters for the figure format
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg: dict, optional
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
+
+        """
+
+        # Display check for the user figures
         display_check = True if in_fig is None else False
 
-        # If not mask provided use the log
-        if log is None:
-            log = self._spec.log
+        # Link to observation log
+        log = self._spec.log
 
         # Check that the log type and content
         if not isinstance(log, pd.DataFrame):
@@ -2013,10 +2054,60 @@ class SpectrumFigures(Plotter):
 
         return in_fig
 
-    def band(self, line=None, band_edges=None, include_fits=True, rest_frame=False, y_scale='auto', trans_line=False,
-             output_address=None, in_fig=None, fig_cfg={}, ax_cfg={}, maximise=False):
+    def bands(self, line=None, bands=None, output_address=None, include_fits=True, rest_frame=False, y_scale='auto',
+              in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
 
+        """
 
+        This function plots a spectrum ``line``. If a ``line`` is not provided the function will select the last line
+        from the measurements log.
+
+        The user can also introduce a ``bands`` dataframe (or its file path) to query the input ``line``.
+
+        If the user provides an ``output_address`` the plot will be stored into an image file instead of being displayed
+        in a window.
+
+        The ``y_scale`` argument sets the flux scale for the lines grid. The default "auto" value automatically switches
+        between the `matplotlib scale keywords <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_,
+        otherwise the user can set a uniform scale for all.
+
+        The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
+        and "title". It is not necessary to include all the keys in this argument.
+
+        :param line: Line label to display.
+        :type line: str, optional
+
+        :param bands: Bands array or dataframe (or its file) to display.
+        :type bands: np.array, pandas.Dataframe, str, path.pathlib, optional
+
+        :param output_address: File location to store the plot.
+        :type output_address: str, optional
+
+        :param include_fits: Set to True to display fitted profiles. The default value is False.
+        :type include_fits:  bool, optional
+
+        :param rest_frame: Set to True for a display in rest frame. The default value is False
+        :type rest_frame: bool, optional
+
+        :param y_scale: `Matplotlib scale keyword <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html>`_. The default value is "auto".
+        :type y_scale: str, optional.
+
+        :param in_fig: Matplotlib figure object to plot the data.
+        :type in_fig: matplotlib.figure
+
+        :param fig_cfg: Dictionary with the matplotlib `rcParams parameters <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg: dict, optional
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
+
+        :return:
+        """
+
+        # TODO check plot without fit
         # Unpack variables
         log, norm_flux, redshift = self._spec.log, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
@@ -2025,10 +2116,10 @@ class SpectrumFigures(Plotter):
         display_check = True if in_fig is None else False
 
         # Establish the line and band to user for the analysis
-        line, band_edges = check_line_for_bandplot(line, band_edges, self._spec, _PARENT_BANDS)
+        line, bands = check_line_for_bandplot(line, bands, self._spec, _PARENT_BANDS)
 
         # Proceed to plot
-        if (line is not None) and (band_edges is not None):
+        if (line is not None) and (bands is not None):
 
             # Guess whether we need both lines
             include_fits = include_fits and (line in self._spec.log.index)
@@ -2061,9 +2152,9 @@ class SpectrumFigures(Plotter):
                 err_plot = self._spec.err_flux
 
                 # Establish the limits for the line spectrum plot
-                mask = band_edges * (1 + self._spec.redshift)
+                mask = bands * (1 + self._spec.redshift)
                 idcsM = np.searchsorted(wave_plot, mask) # TODO remove this one
-                idcsEmis, idcsCont = define_masks(self._spec.wave, band_edges * (1 + self._spec.redshift),
+                idcsEmis, idcsCont = define_masks(self._spec.wave, bands * (1 + self._spec.redshift),
                                                   line_mask_entry=log.loc[line, 'pixel_mask'])
                 idcs_line = idcsEmis + idcsCont
 
@@ -2123,7 +2214,7 @@ class SpectrumFigures(Plotter):
                 _auto_flux_scale(in_ax[0], y=flux_plot[idcsM[0]:idcsM[5]] * z_corr, y_scale=y_scale)
 
                 # By default, plot on screen unless an output address is provided
-                in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximise, display_check)
+                in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
 
         else:
             in_fig = None
@@ -2286,7 +2377,7 @@ class SpectrumFigures(Plotter):
         try:
             axis.set_ylim(-resd_limit, resd_limit)
         except ValueError:
-            _logger.warning(f'Nan or inf entries in axis limit for {self.band}')
+            _logger.warning(f'Nan or inf entries in axis limit for {self.bands}')
 
         # Residual plot labeling
         axis.legend(loc='upper left')
@@ -2356,19 +2447,99 @@ class CubeFigures(Plotter):
 
         return
 
-    def cube(self, line, band=None, percentile_bg=60, line_fg=None, band_fg=None, percentiles_fg=(90, 95, 99),
-             bg_scale=None, fg_scale=None, bg_color='gray', fg_color='viridis', mask_color='viridis_r',
-             mask_alpha=0.2, wcs=None, plt_cfg=None, ax_cfg=None, in_fig=None, in_ax=None, masks_file=None,
-             output_address=None, maximise=False):
+    def cube(self, line, bands=None, line_fg=None, output_address=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99),
+             bg_cmap='gray', fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r',
+             masks_alpha=0.2, wcs=None, fig_cfg=None, ax_cfg=None, in_fig=None, maximise=False):
 
+
+        """
+
+        This function plots the map of a flux band sum for a cube integral field unit observation.
+
+        The ``line`` argument provides the label for the background image. Its bands are read from the ``bands`` argument
+        dataframe. If none is provided, the default lines database will be used to query the bands. Similarly, if the user
+        provides a foreground ``line_fg`` the plot will include intensity contours from its corresponding band.
+
+        The user can provide a map baground and foreground contours `matplotlib color normalization
+        <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_. Otherwise, a
+        logarithmic normalization will be used.
+
+        If the user does not provide a color normalizations at ``bg_norm`` and ``fg_norm``. A logarithmic normalization
+        will be used. In this scenario ``min_pctl_bg`` establishes the minimum flux percentile flux for the
+        background image. The number and separation of flux foreground contours is calculated from the sequence in the
+        ``cont_pctls_fg``.
+
+        If the user provides the address to a binary fits file to a mask file, this will be overploted on the map as
+        shaded pixels.
+
+        :param line: Line label for the spatial map background image.
+        :type line: str
+
+        :param bands: Bands dataframe (or file address to the dataframe).
+        :type bands: pandas.Dataframe, str, path.Pathlib, optional
+
+        :param line_fg: Line label for the spatial map background image contours
+        :type line_fg: str, optional
+
+        :param output_address: File location to store the plot.
+        :type output_address: str, optional
+
+        :param min_pctl_bg: Minimum band flux percentile for spatial map background image. The default value is 60.
+        :type min_pctl_bg: float, optional
+
+        :param cont_pctls_fg: Band flux percentiles for foreground ``line_fg`` contours. The default value is (90, 95, 99)
+        :type cont_pctls_fg: tuple, optional
+
+        :param bg_cmap: Background image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is "gray".
+        :type bg_cmap: str, optional
+
+        :param fg_cmap: Foreground image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is "viridis".
+        :type fg_cmap: str, optional
+
+        :param bg_norm: Background image `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is `SymLogNorm <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+        :type bg_norm: Normalization from matplotlib.colors, optional
+
+        :param fg_norm: Foreground contours `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+                        The default value is `LogNorm <https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.LogNorm.html>`_.
+        :type fg_norm: Normalization from matplotlib.colors, optional
+
+        :param masks_file: File address for binary spatial masks
+        :type masks_file: str, optional
+
+        :param masks_cmap: Binary masks `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
+        :type masks_cmap: str, optional
+
+        :param masks_alpha: Transparency alpha value. The default value is 0.2 (0 to 1 scale).
+        :type masks_alpha: float, optional
+
+        :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
+        :type wcs: astropy WCS, optional
+
+        :param fig_cfg: `Matplotlib RcParams <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_
+                        parameters for the figure format
+        :type fig_cfg: dict, optional
+
+        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
+        :type ax_cfg: dict, optional
+
+        :param in_fig: Matplotlib figure object to plot the data.
+        :type in_fig: matplotlib.figure
+
+        :param maximize: Maximise plot window. The default value is False.
+        :type maximize:  bool, optional
+
+        """
 
         # Prepare the background image data
-        line_bg, bg_image, bg_levels, bg_scale = determine_cube_images(self._cube, line, band,
-                                                                       percentile_bg, bg_scale, contours_check=False)
+        line_bg, bg_image, bg_levels, bg_norm = determine_cube_images(self._cube, line, bands,
+                                                                      min_pctl_bg, bg_norm, contours_check=False)
 
         # Prepare the foreground image data
-        line_fg, fg_image, fg_levels, fg_scale = determine_cube_images(self._cube, line_fg, band_fg,
-                                                                       percentiles_fg, fg_scale, contours_check=True)
+        line_fg, fg_image, fg_levels, fg_norm = determine_cube_images(self._cube, line_fg, bands,
+                                                                      cont_pctls_fg, fg_norm, contours_check=True)
 
         # Mesh for the countours
         if line_fg is not None:
@@ -2391,7 +2562,7 @@ class CubeFigures(Plotter):
 
         # User figure format overwrite default format
         local_cfg = {'figure.figsize': (5 if masks_file is None else 10, 5), 'axes.titlesize': 12, 'legend.fontsize': 10}
-        PLT_CONF = parse_figure_format(plt_cfg, local_cfg)
+        PLT_CONF = parse_figure_format(fig_cfg, local_cfg)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
@@ -2408,11 +2579,11 @@ class CubeFigures(Plotter):
             self._ax.update(AXES_CONF)
 
             # Plot the image
-            image_plot(self._ax, bg_image, fg_image, fg_levels, fg_mesh, bg_scale, fg_scale, bg_color, fg_color)
+            image_plot(self._ax, bg_image, fg_image, fg_levels, fg_mesh, bg_norm, fg_norm, bg_cmap, fg_cmap)
 
             # Plot the spatial masks
             if len(masks_dict) > 0:
-                legend_hdl = spatial_mask_plot(self._ax, masks_dict, mask_color, mask_alpha, self._cube.units_flux)
+                legend_hdl = spatial_mask_plot(self._ax, masks_dict, masks_cmap, masks_alpha, self._cube.units_flux)
                 self._ax.legend(handles=legend_hdl, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
             # By default, plot on screen unless an output address is provided

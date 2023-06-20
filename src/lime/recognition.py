@@ -8,7 +8,7 @@ from scipy import signal
 from sys import exit
 from lmfit.models import PolynomialModel
 from inspect import signature
-from .io import LiMe_Error
+from .io import LiMe_Error, check_file_dataframe
 from .transitions import label_decomposition
 import astropy.units as au
 
@@ -151,18 +151,65 @@ class LineFinder:
 
         return detection_mask
 
-    def line_detection(self, input_log=None, poly_degree=[3, 7, 7, 7], emis_threshold=[5, 3, 2, 2], noise_sigma_factor=3,
-                       line_type='emission', width_tol=5, width_mode='fixed', ml_detection=False, plot_cont_calc=False,
+    def line_detection(self, bands=None, cont_fit_degree=(3, 7, 7, 7), cont_int_thres=(5, 3, 2, 2), noise_sigma_factor=3,
+                       line_type='emission', width_tol=5, band_modification=None, ml_detection=None, plot_cont_calc=False,
                        plot_peak_calc=False):
+
+        """
+
+        This function compares the input lines bands in the observation spectrum to confirm the presence of lines.
+
+        The input bands can be specified as a pandas dataframe or the path to its file via the ``bands_df`` argument.
+
+        Prior to the line detection, the spectrum continuum is fit in an iterative process. The ``cont_fit_degree`` array
+        provides the order of the fitting polynomial, while the ``cont_int_thres`` array provides the threshold intensity
+        factor for the threshold flux above and below the continuum to exclude at each iteration.
+
+        After the continuum has been normalized, the ``noise_sigma_factor`` establishes the standard deviation factor
+        beyond which a positive line detection is assumed.
+
+        The additional arguments provide additional tools to adjust the line detection and show the steps/results.
+
+        :param bands: Input bands dataframe or the address to its file.
+        :type bands: pandas.Dataframe, str, pathlib.Path
+
+        :param cont_fit_degree: Continuum polynomial fitting degree.
+        :type cont_fit_degree: tuple, optional
+
+        :param cont_int_thres: Continuum intensity threshold to include pixels.
+        :type cont_int_thres: tuple, optional
+
+        :param noise_sigma_factor: Continuum standard deviation factor for line detection. The default value is 3.
+        :type noise_sigma_factor: float, optional
+
+        :param line_type: Line type. The default value is "emission".
+        :type line_type: str, optional
+
+        :param width_tol: Minimum number of pixels between peaks/troughs. The default value is 5.
+        :type width_tol: float, optional
+
+        :param band_modification: Method to adjust the line band with. The default value is None.
+        :type band_modification: str, optional
+
+        :param ml_detection: Machine learning algorithm to detect lines. The default value is None.
+        :type ml_detection: str, optional
+
+        :param plot_cont_calc: Plot the continuum fit at each iteration. The default value is False
+        :type plot_cont_calc: bool, optional
+
+        :param plot_peak_calc: Plot the detected peaks/troughs. The default value is False
+        :type plot_peak_calc: bool, optional
+
+        """
 
         # TODO input log should not be None... Maybe read database
 
         # Fit the continuum
-        cont_flux, cond_Std = self.continuum_fitting(degree_list=poly_degree, threshold_list=emis_threshold,
+        cont_flux, cond_Std = self.continuum_fitting(degree_list=cont_fit_degree, threshold_list=cont_int_thres,
                                                      return_std=True, plot_results=plot_cont_calc)
 
         # Check via machine learning algorithm
-        if ml_detection:
+        if ml_detection is not None:
             self.ml_model = joblib.load(MACHINE_PATH)
             ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
         else:
@@ -173,10 +220,11 @@ class LineFinder:
         idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
-        if input_log is not None:
+        bands = check_file_dataframe(bands, pd.DataFrame)
+        if bands is not None:
 
             # Match peaks with theoretical lines
-            matched_DF = self.label_peaks(idcs_peaks, input_log, width_tol=width_tol, width_mode=width_mode,
+            matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, band_modification=band_modification,
                                           line_type=line_type)
 
             return matched_DF
@@ -263,7 +311,7 @@ class LineFinder:
             peaks_table = self.peak_indexing(flux_no_continuum, noise_region_obs, detect_threshold)
 
             # Match peaks with theoretical lines
-            matched_DF = self.label_peaks(peaks_table, log, width_tol=width_tol, width_mode=width_mode,
+            matched_DF = self.label_peaks(peaks_table, log, width_tol=width_tol, band_modification=width_mode,
                                           line_type=line_type)
 
             return peaks_table, matched_DF
@@ -322,7 +370,7 @@ class LineFinder:
 
         return linesTable
 
-    def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, width_mode='auto', detect_check=False):
+    def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, band_modification=None, detect_check=False):
 
         # TODO auto param should be changed to boolean
         # Establish the type of input values for the peak indexes, first numpy array
@@ -347,7 +395,7 @@ class LineFinder:
         matched_DF['signal_peak'] = np.nan
 
         # Theoretical wave values
-        waveTheory = label_decomposition(matched_DF.index.values, output_params=['wavelength'])[0]
+        waveTheory = label_decomposition(matched_DF.index.values, params_list=['wavelength'])[0]
         matched_DF['wavelength'] = waveTheory
 
         # Match the lines with the theoretical emission
@@ -388,13 +436,14 @@ class LineFinder:
                 minSeparation = 4 if blended_check else 2
 
                 # Width is only computed for blended lines
-                if width_mode == 'auto':
-                    if blended_check is False:
-                        emission_check = True if line_type == 'emission' else False
-                        idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation, emission_check=emission_check)
-                        idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation, emission_check=emission_check)
-                        matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
-                        matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
+                if band_modification is not None:
+                    if band_modification == 'auto':
+                        if blended_check is False:
+                            emission_check = True if line_type == 'emission' else False
+                            idx_min = compute_line_width(idcsLinePeak[i], self.flux, delta_i=-1, min_delta=minSeparation, emission_check=emission_check)
+                            idx_max = compute_line_width(idcsLinePeak[i], self.flux, delta_i=1, min_delta=minSeparation, emission_check=emission_check)
+                            matched_DF.loc[row_index, 'w3'] = self.wave_rest[idx_min]
+                            matched_DF.loc[row_index, 'w4'] = self.wave_rest[idx_max]
 
         # Include_only_detected
         idcs_unknown = matched_DF['observation'] == 'not_detected'
