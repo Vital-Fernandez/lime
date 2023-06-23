@@ -43,7 +43,8 @@ for i, coords in enumerate(masks_dict['MASK_0']):
     spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], id_conf_label='MASK_0', plot_fit=False, progress_output=None)
 
 # Fit the lines in all the masks spaxels
-shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=True, output_log_file=output_lines_log_file)
+shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=True, output_address=output_lines_log_file)
+# shoc579.fit.spatial_mask(spatial_mask_file, bands=bands_file_0, line_list=['O3_5007A_b'], fit_conf=obs_cfg['o3_line_fitting'], line_detection=False, output_address=output_lines_log_file)
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)

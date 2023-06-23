@@ -123,7 +123,7 @@ class LineFinder:
 
         # Plot the results
         if plot_results:
-            self._plot_peak_detection(peak_fp, limit_threshold, continuum, ml_mask=ml_mask,
+            self.plot._plot_peak_detection(peak_fp, limit_threshold, continuum, ml_mask=ml_mask,
                                       plot_title='Peak detection results ')
 
         return peak_fp
@@ -176,7 +176,7 @@ class LineFinder:
         :param cont_fit_degree: Continuum polynomial fitting degree.
         :type cont_fit_degree: tuple, optional
 
-        :param cont_int_thres: Continuum intensity threshold to include pixels.
+        :param cont_int_thres: Continuum maximum intensity threshold to include pixels.
         :type cont_int_thres: tuple, optional
 
         :param noise_sigma_factor: Continuum standard deviation factor for line detection. The default value is 3.

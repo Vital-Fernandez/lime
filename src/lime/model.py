@@ -638,8 +638,8 @@ class LineFitting:
                     A_factor = ((line.v_90 - line.v_med) - (line.v_med-line.v_10)) / W_80
                     K_factor = W_90 / (1.397 * line.FWHM_intg)
 
-        else:
-            _logger.warning(f'{line.label} failure to measure the non-parametric FWHM')
+        # else:
+        #     _logger.warning(f'{line.label} failure to measure the non-parametric FWHM')
 
         return
 

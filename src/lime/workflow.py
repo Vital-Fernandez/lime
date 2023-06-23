@@ -7,60 +7,11 @@ from astropy.io import fits
 from . import Error
 from .model import LineFitting, signal_to_noise_rola
 from .tools import define_masks, ProgressBar
-from .recognition import LINE_DETECT_PARAMS
 from .transitions import Line
-from .io import check_file_dataframe, load_spatial_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error
+from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
-
-
-def check_file_array_mask(var, mask_list=None):
-
-    # Check if file
-    if isinstance(var, (str, Path)):
-
-        input = Path(var)
-        if input.is_file():
-            mask_dict = load_spatial_mask(var, mask_list)
-        else:
-            raise Error(f'No spatial mask file at {Path(var).as_posix()}')
-
-    # Array
-    elif isinstance(var, (np.ndarray, list)):
-
-        # Re-adjust the variable
-        var = np.ndarray(var, ndmin=3)
-        masks_array = np.squeeze(np.array_split(var, var.shape[0], axis=0))
-
-        # Confirm boolean array
-        if masks_array.dtype != bool:
-            _logger.warning(f'The input mask array should have a boolean variables (True/False)')
-
-        # Incase user gives a str
-        mask_list = [mask_list] if isinstance(mask_list, str) else mask_list
-
-        # Check if there is a mask list
-        if len(mask_list) == 0:
-            mask_list = [f'SPMASK{i}' for i in range(masks_array.shape[0])]
-
-        # Case the number of masks names and arrays is different
-        elif masks_array.shape[0] != len(mask_list):
-            _logger.warning(f'The number of input spatial mask arrays is different than the number of mask names')
-
-        # Everything is fine
-        else:
-            mask_list = mask_list
-
-        # Create mask dict with empty headers
-        mask_dict = dict(zip(mask_list, (masks_array, {})))
-
-    else:
-
-        raise Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
-                    f' numpy array or a list/array of numpy arrays')
-
-    return mask_dict
 
 
 def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
@@ -144,6 +95,65 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
                         fit_conf[f'{param_label_child}_err'] = param_value[1]
 
     return
+
+
+def check_cube_bands(input_bands, mask_list, fit_cfg):
+
+    if input_bands is None:
+
+        # Recover the mask_configuration as a list
+        for mask_name in mask_list:
+
+            mask_fit_cfg = fit_cfg.get(f'{mask_name}_line_fitting')
+
+            missing_mask = False
+            if mask_fit_cfg is not None:
+                if mask_fit_cfg.get('bands') is None:
+                    missing_mask = True
+            else:
+                missing_mask = True
+
+            if missing_mask:
+                error_message = 'No input "bands" provided. In this case you need to include the \n' \
+                                f'you need to specify an "bands=log_file_address" entry the ' \
+                                f'"[{mask_name}_file]" of your fitting configuration file'
+                raise LiMe_Error(error_message)
+
+    return
+
+
+def recover_level_conf(fit_cfg, mask_key, default_key):
+
+    default_cfg = fit_cfg.get(f'{default_key}_line_fitting') if default_key is not None else None
+    mask_cfg = fit_cfg.get(f'{mask_key}_line_fitting') if mask_key is not None else None
+
+    # Proceed to update the levels
+    if (default_cfg is not None) and (mask_cfg is not None):
+
+        # Default configuration
+        default_conf = {} if default_cfg is None else default_cfg
+        default_detect = default_conf.get('line_detection')
+
+        # Mask conf
+        mask_conf = {} if mask_cfg is None else mask_cfg
+        mask_detect = mask_conf.get('line_detection')
+
+        # Update the levels
+        output_conf = {**default_conf, **mask_conf}
+
+        # If no line detection don't add it
+        if mask_detect is not None:
+            output_conf['line_detection'] = mask_detect
+        elif default_detect is not None:
+            output_conf['line_detection'] = default_detect
+        else:
+            pass
+
+    # Case there are not leveled entries
+    else:
+        output_conf = fit_cfg
+
+    return output_conf
 
 
 class SpecTreatment(LineFitting):
@@ -355,27 +365,13 @@ class SpecTreatment(LineFitting):
                 idcs = bands.index.isin(line_list)
                 bands = bands.loc[idcs]
 
-            # Load configuration for fits
-            if fit_conf is not None:
-
-                # Just pass the input conf
-                if default_conf_key is None:
-                    input_conf = {**fit_conf}
-
-                # Update the configuration
-                else:
-                    input_conf = fit_conf.get(f'{default_conf_key}_line_fitting', {**fit_conf})
-
-                    # User configuration overwrite default
-                    if id_conf_label is not None:  # User configuration overwrite default
-                        input_conf = {**input_conf, **fit_conf.get(f'{id_conf_label}_line_fitting', {})}
-            else:
-                input_conf = {}
+            # Load configuration
+            fit_conf = {} if fit_conf is None else fit_conf
+            input_conf = recover_level_conf(fit_conf, id_conf_label, default_conf_key)
 
             # Line detection if requested
             if line_detection:
-
-                detect_conf = fit_conf.get('line_detection', {})
+                detect_conf = input_conf.get('line_detection', {})
                 bands = self._spec.line_detection(bands, **detect_conf)
 
             # Loop through the lines
@@ -479,7 +475,7 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, mask_file, output_log_file, bands=None, fit_conf=None, mask_list=None, line_list=None,
+    def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINESLOG', min_method='least_squares', profile='g-emi',
                      cont_from_bands=True, temp=10000.0, default_conf_key='default', line_detection=False,
                      progress_output='bar', plot_fit=False, header=None, n_save=100):
@@ -522,8 +518,8 @@ class CubeTreatment(LineFitting):
         :param mask_file: Address of binary spatial mask file
         :type mask_file: str, pathlib.Path
 
-        :param output_log_file: File address for the output measurements log.
-        :type output_log_file: str, pathlib.Path
+        :param output_address: File address for the output measurements log.
+        :type output_address: str, pathlib.Path
 
         :param bands: Bands dataframe (or file address to the dataframe).
         :type bands: pandas.Dataframe, str, path.Pathlib
@@ -572,49 +568,27 @@ class CubeTreatment(LineFitting):
         :type n_save: int, optional
 
         """
-
-        # Check if the mask variable is a file or an array
-        mask_dict = check_file_array_mask(mask_file, mask_list)
-
-        # Unpack mask dictionary
-        mask_list = np.array(list(mask_dict.keys()))
-        mask_data_list = list(mask_dict.values())
-
-        # Default fitting configuration
-        fit_conf = {} if fit_conf is None else fit_conf.copy()
-        default_conf = fit_conf.get(f'{default_conf_key}_line_fitting', {})
-
-        # Check if the lines table is a dataframe or a file
         if bands is not None:
             bands = check_file_dataframe(bands, pd.DataFrame)
 
-        # Check all the masks line fitting for a lines dataframe
-        else:
-            for mask_name in mask_list:
+        # Check if the mask variable is a file or an array
+        mask_maps = check_file_array_mask(mask_file, mask_list)
+        mask_list = np.array(list(mask_maps.keys()))
+        mask_data_list = list(mask_maps.values())
 
-                existing_mask_check = True
-                mask_conf = fit_conf.get(f'{mask_name}_line_fitting', None)
+        # Default fitting configuration
+        fit_conf = {} if fit_conf is None else fit_conf.copy()
 
-                if mask_conf is not None:
-                    log_address_value = mask_conf.get('bands', None)
-                    if log_address_value is None:
-                        existing_mask_check = False
-                else:
-                    existing_mask_check = False
-
-                if existing_mask_check is not True:
-                    error_message = 'Since an input "bands" log for the analysis was not introduce in the function,\n' \
-                                   f'you need to specify an "bands=log_file_address" entry the ' \
-                                   f'"[{mask_name}_file]" of your configuration file'
-                    raise Error(error_message)
+        # Check we are not missing bands
+        check_cube_bands(bands, mask_list, fit_conf)
 
         # Check if the output log folder exists
-        output_log_file = Path(output_log_file)
-        if not output_log_file.parent.is_dir():
-            raise LiMe_Error(f'The folder of the output log file does not exist at {output_log_file}')
+        output_address = Path(output_address)
+        if not output_address.parent.is_dir():
+            raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
 
         # Determine the spaxels to treat at each mask
-        total_spaxels, spaxels_dict = 0, {}
+        spax_counter, total_spaxels, spaxels_dict = 0, 0, {}
         for idx_mask, mask_data in enumerate(mask_data_list):
             spa_mask, hdr_mask = mask_data
             idcs_spaxels = np.argwhere(spa_mask)
@@ -622,17 +596,11 @@ class CubeTreatment(LineFitting):
             total_spaxels += len(idcs_spaxels)
             spaxels_dict[idx_mask] = idcs_spaxels
 
-        # Spaxel counter to save the data everytime n_save is reached
-        spax_counter = 0
-
         # HDU_container
         hdul_log = fits.HDUList([fits.PrimaryHDU()])
 
         # Header data
-        if self._cube.wcs is not None:
-            hdr_coords = extract_wcs_header(self._cube.wcs, drop_dispersion_axis=True)
-        else:
-            hdr_coords = None
+        hdr_coords = extract_wcs_header(self._cube.wcs, drop_axis='spectral') if self._cube.wcs is not None else None
 
         # Loop through the masks
         n_masks = len(mask_list)
@@ -643,13 +611,12 @@ class CubeTreatment(LineFitting):
             mask_hdr = mask_data_list[i][1]
             idcs_spaxels = spaxels_dict[i]
 
-            # Get mask line fitting configuration
-            mask_conf = {**default_conf, **fit_conf.get(f'{mask_name}_line_fitting', {})}
-            mask_detect = mask_conf.get('line_detection', {}).copy()
+            # Recover the fitting configuration
+            mask_conf = recover_level_conf(fit_conf, default_conf_key, mask_name)
 
             # Load the mask log if provided
             if bands is None:
-                bands_file = fit_conf[f'{mask_name}_line_fitting']['bands']
+                bands_file = mask_conf['bands']
                 bands_path = Path(bands_file).absolute() if bands_file[0] == '.' else Path(bands_file)
                 bands_in = load_log(bands_path)
             else:
@@ -666,12 +633,6 @@ class CubeTreatment(LineFitting):
 
                 # Get the spaxel fitting configuration
                 spaxel_conf = fit_conf.get(f'{spaxel_label}_line_fitting')
-
-                # Update the dicts functions of the spaxel conf
-                if line_detection and (spaxel_conf is not None):
-                    spaxel_conf['line_detection'] = {**mask_detect, **spaxel_conf.get('line_detection', {})}
-
-                # Update mask conf with spaxel conf
                 spaxel_conf = mask_conf if spaxel_conf is None else {**mask_conf, **spaxel_conf}
 
                 # Spaxel progress message
@@ -682,9 +643,9 @@ class CubeTreatment(LineFitting):
 
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
-                                 line_detection=line_detection, profile=profile,
-                                 cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
-                                 id_conf_label=None, default_conf_key=None)
+                                 line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
+                                 temp=temp, progress_output=None, plot_fit=None, id_conf_label=None,
+                                 default_conf_key=None)
 
                 # Create page header with the default data
                 hdr_i = fits.Header()
@@ -708,14 +669,14 @@ class CubeTreatment(LineFitting):
                     spax_counter += 1
                 else:
                     spax_counter = 0
-                    hdul_log.writeto(output_log_file, overwrite=True, output_verify='fix')
+                    hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
 
                 # Plot the fittings if requested:
                 if plot_fit:
                     spaxel.plot.spectrum(include_fits=True, rest_frame=True)
 
             # Save the log at each new mask
-            hdul_log.writeto(output_log_file, overwrite=True, output_verify='fix')
+            hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
 
         return
 

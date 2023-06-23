@@ -3,15 +3,17 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from astropy.io import fits
+from collections import UserDict
 
 import lime
 from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_conversion,\
-    define_masks, extract_fluxes, relative_fluxes, compute_line_ratios
+    define_masks, extract_fluxes, relative_fluxes, compute_line_ratios, ProgressBar
 
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS
+from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS,\
+    check_file_array_mask
 from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
@@ -391,7 +393,7 @@ class Spectrum(LineFinder):
         self.inst_FWHM = None
         self.units_wave = None
         self.units_flux = None
-        self._masked_inputs = False
+        self._masked_inputs = False # TODO quitar este
 
         # Treatments objects
         self.fit = SpecTreatment(self)
@@ -725,7 +727,6 @@ class Cube:
 
     """
 
-
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
                  inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, wcs=None):
 
@@ -891,7 +892,7 @@ class Cube:
         hdul = fits.HDUList([fits.PrimaryHDU()])
 
         # Recover coordinates from the wcs to store in the headers:
-        hdr_coords = extract_wcs_header(self.wcs, drop_dispersion_axis=True)
+        hdr_coords = extract_wcs_header(self.wcs, drop_axis='spectral')
 
         for idx_region, region_items in enumerate(mask_dict.items()):
             region_label, region_mask = region_items
@@ -955,70 +956,236 @@ class Cube:
 
         return Spectrum.from_cube(self, idx_j, idx_i, label)
 
+    def export_spaxels(self, output_address, mask_file, mask_list=None, log_ext_suffix='_LINESLOG', progress_output='bar'):
 
-class Sample(dict):
+        # Check if the mask variable is a file or an array
+        mask_dict = check_file_array_mask(mask_file, mask_list)
 
-    def __init__(self, label_list=None, observation_list=None, log_list=None, level_names=['id', 'line'], ext_list='LINESLOG'):
+        # Unpack mask dictionary
+        mask_list = np.array(list(mask_dict.keys()))
+        mask_data_list = list(mask_dict.values())
+
+        # Checks for the data type
+        err_check = False if self.err_flux is None else True
+        masked_check = False if np.ma.isMaskedArray(self.flux) is False else True
+
+        # Check if the output log folder exists
+        output_address = Path(output_address)
+        if not output_address.parent.is_dir():
+            raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
+
+        # Determine the spaxels to treat at each mask
+        total_spaxels, spaxels_dict = 0, {}
+        for idx_mask, mask_data in enumerate(mask_data_list):
+            spa_mask, hdr_mask = mask_data
+            idcs_spaxels = np.argwhere(spa_mask)
+
+            total_spaxels += len(idcs_spaxels)
+            spaxels_dict[idx_mask] = idcs_spaxels
+
+        # Spaxel counter to save the data everytime n_save is reached
+        spax_counter = 0
+
+        # HDU_container
+        hdul = fits.HDUList([fits.PrimaryHDU()])
+
+        # Header data
+        if self.wcs is not None:
+            hdr_coords = extract_wcs_header(self.wcs, drop_axis='spatial')
+        else:
+            hdr_coords = None
+
+        # Loop through the masks
+        n_masks = len(mask_list)
+        for i in np.arange(n_masks):
+
+            # Mask progress indexing
+            mask_name = mask_list[i]
+            idcs_spaxels = spaxels_dict[i]
+
+            # Loop through the spaxels
+            n_spaxels = idcs_spaxels.shape[0]
+            pbar = ProgressBar(progress_output, f'{n_spaxels} spaxels')
+            print(f'\n\nSpatial mask {i + 1}/{n_masks}) {mask_name} ({n_spaxels} spaxels)')
+            for j in np.arange(n_spaxels):
+
+                idx_j, idx_i = idcs_spaxels[j]
+                spaxel_label = f'{idx_j}-{idx_i}'
+                ext_label = f'{spaxel_label}{log_ext_suffix}'
+
+                # Spaxel progress message
+                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'Coord. {spaxel_label}')
+
+                # Recover the spectrum
+                spec_flux = self.flux[:, idx_j, idx_i] * self.norm_flux
+                spec_err_flux = self.err_flux[:, idx_j, idx_i] * self.norm_flux if err_check else None
+
+                # Remove mask
+                if masked_check:
+                    spec_flux = spec_flux.data
+                    spec_err_flux = spec_err_flux.data if err_check else None
+
+                # Convert to table-HDU format
+                if err_check:
+                    data_array = np.rec.fromarrays([spec_flux, spec_err_flux], dtype=[('flux', '>f8'), ('flux_err', '>f8')])
+                else:
+                    data_array = np.rec.fromarrays([spec_flux], dtype=[('flux', '<f8')])
+
+                # Create spaxel_page
+                table_hdu_i = fits.TableHDU(data_array, header=hdr_coords, name=ext_label)
+                hdul.append(table_hdu_i)
+
+        hdul.writeto(output_address, overwrite=True)
+        hdul.close()
+
+        return
+
+class Observation:
+
+    def __init__(self, ID, redshift=None, norm_flux=None, units_wave=None, units_flux=None, inst_FWHM=None, wcs=None,
+                 log=None, file_adress=None, var_type=None):
+
+        self.ID = ID
+        self.redshift = redshift
+        self.norm_flux = norm_flux
+        self.units_wave = units_wave
+        self.units_flux = units_flux
+        self.inst_FWHM = inst_FWHM
+        self.wcs = wcs
+
+        self.log = log
+        self.file_address = file_adress
+        self.var_type = var_type
+
+        self.spec = None
+        self.cube = None
+
+        return
+
+    @classmethod
+    def from_lime_obj(cls, ID, lime_obj):
+
+        obs = cls(ID)
+
+        # Recover attributes from the LiMe object
+        for attr in ('redshift', 'norm_flux', 'units_wave', 'units_flux', 'inst_FWHM', 'wcs'):
+            if hasattr(lime_obj, attr):
+                obs.__setattr__(attr, lime_obj.__getattribute__(attr))
+
+        # Store the spectra
+        if isinstance(lime_obj, Spectrum):
+            obs.spec = lime_obj
+        elif isinstance(lime_obj, Cube):
+            obs.cube = lime_obj
+        else:
+            pass
+
+        return obs
+
+    def __str__(self):
+
+        return self.ID
+
+    def __repr__(self):
+
+        return self.ID
+
+
+class Sample(UserDict):
+
+    def __init__(self, norm_flux=1, units_wave='A', units_flux='Flam', load_function=None, observation_dict=None):
 
         '''
         First entry of mutli index is the object name
         '''
 
-        # Inherit the default dictionary properties
-        obj_dict = {}
-        super().__init__(obj_dict)
+        # Initiate the user dictionary with a dictionary of observations if provided
+        super().__init__(observation_dict)
 
-        # Attributes
+        # Object indexing
         self.label_list = None
-        self.obj_list = None
+        self.objects = None
         self.group_list = None
-
         self.log = None
 
-        self.norm_flux = None
-        self.units_wave = None
-        self.units_flux = None
+        # Log uniform properties
+        self.norm_flux = norm_flux
+        self.units_wave = units_wave
+        self.units_flux = units_flux
 
         # Functionality objects
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
+        self.load_function = load_function
+
+        return
+
+    def add_observation(self, ID, redshift=0, norm_flux=1, units_wave='A', units_flux='Flam', inst_FWHM=None, wcs=None,
+                        log=None, file_adress=None, obs_type='spectrum'):
+
+        # Establish the type of observations
+        if obs_type not in ('spectrum', 'cube'):
+            raise LiMe_Error(f'The input obs_type "{obs_type}" is not recognized. Please use: '
+                             f'Spectrum, Cube, Observation')
+
+        # Add an object to the container
+        self[ID] = Observation(ID, redshift, norm_flux, units_wave, units_flux, inst_FWHM, wcs, log, file_adress,
+                               obs_type)
+
+        # Renew the list of objects
+        self.objects = np.array(list(self.keys()))
+
+        # # Check if the units and normalizations match
+        # if len(self.keys()) == 1:
+        #     self.norm_flux = lime_obj.norm_flux
+        #     self.units_wave, self.units_flux = lime_obj.units_wave, lime_obj.units_flux
+        #
+        # else:
+        #     for prop in ['norm_flux', 'units_wave', 'units_flux']:
+        #         if self.__getattribute__(prop) != lime_obj.__getattribute__(prop):
+        #             _logger.warning(f'The {prop} of object {ID} do not match those in the sample:'
+        #                             f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
+
+        return
+
+    def add_log_list(self, id_list, log_list=None, level_names=('id', 'line'), ext_list='LINESLOG'):
 
         # Check labels are provided
-        if label_list is not None:
-            label_list = np.array([label_list], ndmin=1).squeeze()
-            self.obj_list = label_list if len(label_list.shape) == 1 else label_list[:, 0]
+        if id_list is not None:
+            id_list = np.array([id_list], ndmin=1).squeeze()
+            self.objects = id_list if len(id_list.shape) == 1 else id_list[:, 0]
 
             # Get the sub-groups array
-            if len(label_list.shape) > 1:
-                self.group_list = label_list[:, 1:]
+            if len(id_list.shape) > 1:
+                self.group_list = id_list[:, 1:]
 
             # Generate label list
-            self.label_list = list(self.obj_list.astype(str))
+            self.label_list = list(self.objects.astype(str))
             if self.group_list is not None:
                 for i, label in enumerate(self.label_list):
                     self.label_list[i] = f'{label},{",".join(self.group_list[i])}'
             self.label_list = np.array(self.label_list)
 
-            # Store the observations
-            if observation_list is not None:
-                for i, obs in enumerate(observation_list):
+            # # Store the observations
+            # if observation_list is not None:
+            #     for i, obs in enumerate(observation_list):
+            #
+            #         # Check for non-LiMe objects
+            #         if not isinstance(obs, (lime.Spectrum, lime.Cube)):
+            #             raise LiMe_Error(f'Object {label} of type {type(obs)} is not a LiMe object')
+            #
+            #         # Check units and normalization
+            #         for attr in ['norm_flux', 'units_wave', 'units_flux']:
+            #             attr_value_sample = self.__getattribute__(attr)
+            #             attr_value_obj = obs.__getattribute__(attr)
+            #             if attr_value_sample is None:
+            #                 self.__setattr__(attr, obs.__getattribute__(attr))
+            #             else:
+            #                 if attr_value_sample != attr_value_obj:
+            #                     _logger.warning(f'Observation { self.label_list[i]} {attr} value ({attr_value_obj}) '
+            #                                        f'does not sample value ({attr_value_sample})')
 
-                    # Check for non-LiMe objects
-                    if not isinstance(obs, (lime.Spectrum, lime.Cube)):
-                        raise LiMe_Error(f'Object {label} of type {type(obs)} is not a LiMe object')
-
-                    # Check for the SMACS_v2.0 units and normalization
-                    for attr in ['norm_flux', 'units_wave', 'units_flux']:
-                        attr_value_sample = self.__getattribute__(attr)
-                        attr_value_obj = obs.__getattribute__(attr)
-                        if attr_value_sample is None:
-                            self.__setattr__(attr, obs.__getattribute__(attr))
-                        else:
-                            if attr_value_sample != attr_value_obj:
-                                _logger.warning(f'Observation { self.label_list[i]} {attr} value ({attr_value_obj}) '
-                                                   f'does not sample value ({attr_value_sample})')
-
-            # Store the SMACS_v2.0
+            # Store the objects
             log_dict = {}
             if log_list is not None:
 
@@ -1036,33 +1203,22 @@ class Sample(dict):
 
                 # Concact the panel
                 obj_list, log_list = list(log_dict.keys()), list(log_dict.values())
-                self.log = pd.concat(list(log_dict.values()), axis=0, keys=list(log_dict.keys()))
+                self.log = pd.concat(obj_list, axis=0, keys=log_list)
                 self.log.rename_axis(index=level_names, inplace=True)
 
         return
 
-    def add_object(self, label, obs_type='spectrum', **kwargs):
+    def __getitem__(self, key):
 
-        # Establish the type of observations
-        if obs_type == 'spectrum':
-            lime_obj = Spectrum(id_label=label, **kwargs)
+        obs = self.data.get(key, None)
 
-        # Add object to the container
-        self[label] = lime_obj
-
-        # Renew the list of objects
-        self.obj_list = np.array(list(self.keys()))
-
-        # Check if the units and normalizations match
-        if len(self.keys()) == 1:
-            self.norm_flux = lime_obj.norm_flux
-            self.units_wave, self.units_flux = lime_obj.units_wave, lime_obj.units_flux
-
+        # Load the spectrum
+        if obs is not None:
+            setattr(obs, obs.var_type, self.load_function(obs, self.log))
         else:
-            for prop in ['norm_flux', 'units_wave', 'units_flux']:
-                if self.__getattribute__(prop) != lime_obj.__getattribute__(prop):
-                    _logger.warning(f'The {prop} of object {label} do not match those in the sample:'
-                                    f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
+            raise LiMe_Error(f'Observation {key} was not found on the sample.')
+
+        return obs
 
     def load_log(self, log_var, ext='LINESLOG', sample_levels=['id', 'line']):
 

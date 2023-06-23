@@ -13,6 +13,11 @@ O3_5007A_b = "O3_5007A+O3_5007A_k-1+He1_5016A"
 He1_5016A_center = "min:5014,max:5018"
 He1_5016A_sigma = "min:1.0,max:2.0"
 
+[o3_line_fitting]
+O3_5007A_b = "O3_5007A+O3_5007A_k-1"
+O3_5007A_k-1_amp = "expr:<10.0*O3_5007A_amp"
+O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
+
 [MASK_0_line_fitting]
 bands = "../sample_data/SHOC579_MASK0_bands.txt"
 

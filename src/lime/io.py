@@ -20,6 +20,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from . import Error
 from sys import exit, stdout, version_info
 from pathlib import Path
 from distutils.util import strtobool
@@ -84,7 +85,7 @@ FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lam
 KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}{s}\right)$', r'$\sigma_{int}\left(\nicefrac{km}{s}\right)$', r'Flux $(\nicefrac{erg}{cm^{-2} s^{-1} \AA^{-1})}$']
 KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
 
-
+# TODO replace this error with the one of .ini
 class LiMe_Error(Exception):
     """LiMe exception function"""
 
@@ -664,13 +665,22 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
     return
 
 
-def extract_wcs_header(wcs, drop_dispersion_axis=False):
+def extract_wcs_header(wcs, drop_axis=None):
 
     if wcs is not None:
 
         # Remove 3rd dimensional axis if present
-        if drop_dispersion_axis:
-            input_wcs = wcs.dropaxis(2) if wcs.naxis == 3 else wcs
+        if drop_axis is not None:
+            if drop_axis == 'spectral':
+                input_wcs = wcs.dropaxis(2) if wcs.naxis == 3 else wcs
+            elif drop_axis == 'spatial':
+                if wcs.naxis == 3:
+                    input_wcs = wcs.dropaxis(1)
+                    input_wcs = wcs.dropaxis(0)
+            else:
+                raise LiMe_Error(f'Fits coordinates axis: "{drop_axis}" not recognized. Please use: "spectral" or'
+                                 f' "spatial"')
+
         else:
             input_wcs = wcs
 
@@ -1066,7 +1076,7 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
     print()
 
     # Recover coordinates from the wcs to store in the headers:
-    hdr_coords = extract_wcs_header(wcs, drop_dispersion_axis=True)
+    hdr_coords = extract_wcs_header(wcs, drop_axis='spectral')
 
     # Save the parameter maps as individual fits files with one line per page
     output_file_prefix = '' if output_file_prefix is None else output_file_prefix
@@ -1150,3 +1160,50 @@ def load_spatial_mask(mask_file, mask_list=None, return_coords=False):
 
     return spatial_mask_dict
 
+
+def check_file_array_mask(var, mask_list=None):
+
+    # Check if file
+    if isinstance(var, (str, Path)):
+
+        input = Path(var)
+        if input.is_file():
+            mask_dict = load_spatial_mask(var, mask_list)
+        else:
+            raise Error(f'No spatial mask file at {Path(var).as_posix()}')
+
+    # Array
+    elif isinstance(var, (np.ndarray, list)):
+
+        # Re-adjust the variable
+        var = np.ndarray(var, ndmin=3)
+        masks_array = np.squeeze(np.array_split(var, var.shape[0], axis=0))
+
+        # Confirm boolean array
+        if masks_array.dtype != bool:
+            _logger.warning(f'The input mask array should have a boolean variables (True/False)')
+
+        # Incase user gives a str
+        mask_list = [mask_list] if isinstance(mask_list, str) else mask_list
+
+        # Check if there is a mask list
+        if len(mask_list) == 0:
+            mask_list = [f'SPMASK{i}' for i in range(masks_array.shape[0])]
+
+        # Case the number of masks names and arrays is different
+        elif masks_array.shape[0] != len(mask_list):
+            _logger.warning(f'The number of input spatial mask arrays is different than the number of mask names')
+
+        # Everything is fine
+        else:
+            mask_list = mask_list
+
+        # Create mask dict with empty headers
+        mask_dict = dict(zip(mask_list, (masks_array, {})))
+
+    else:
+
+        raise Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
+                    f' numpy array or a list/array of numpy arrays')
+
+    return mask_dict

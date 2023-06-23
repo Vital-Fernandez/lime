@@ -36,7 +36,7 @@ class Error(Exception):
     """LiMe exception function"""
 
 
-from .treatment import Spectrum, Sample, Cube, line_bands
+from .astronomy import Spectrum, Sample, Cube, line_bands
 from .io import *
 from .tools import *
 from .plots import spatial_mask_generator

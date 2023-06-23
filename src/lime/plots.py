@@ -1738,6 +1738,97 @@ class Plotter:
 
         return
 
+    def _plot_continuum_fit(self, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor, plot_title=''):
+
+        PLOT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+
+        norm_flux = self._spec.norm_flux
+        wave = self._spec.wave
+        flux = self._spec.flux
+        units_wave = self._spec.units_wave
+        units_flux = self._spec.units_flux
+        redshift = self._spec.redshift
+
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
+        AXES_CONF['title'] = plot_title
+
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, 'observed')
+
+        with rc_context(PLOT_CONF):
+
+            fig, ax = plt.subplots()
+
+            # Object spectrum
+            ax.step(wave_plot, flux_plot, label='Object spectrum', color=self._color_dict['fg'], where='mid')
+
+            # Band limits
+            label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
+            ax.axhspan(low_lim, high_lim, alpha=0.2, label=label, color=self._color_dict['line_band'])
+            ax.axhline(np.median(flux_plot[idcs_cont]), label='Median flux', linestyle=':', color='black')
+
+            # Masked and rectected pixels
+            ax.scatter(wave_plot[~idcs_cont], flux_plot[~idcs_cont], label='Rejected pixels', color=self._color_dict['peak'], facecolor='none')
+            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], marker='x', label='Masked pixels', color=self._color_dict['mask_marker'])
+
+            # Output continuum
+            ax.plot(wave_plot, continuum_fit, label='Continuum')
+
+            ax.update(AXES_CONF)
+            ax.legend()
+            plt.tight_layout()
+            plt.show()
+
+        return
+
+    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum=None, plot_title='', ml_mask=None):
+
+        PLOT_CONF = STANDARD_PLOT.copy()
+        AXES_CONF = STANDARD_AXES.copy()
+
+        norm_flux = self._spec.norm_flux
+        wave = self._spec.wave
+        flux = self._spec.flux
+        units_wave = self._spec.units_wave
+        units_flux = self._spec.units_flux
+        redshift = self._spec.redshift
+
+        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
+        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
+        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
+        AXES_CONF['title'] = plot_title
+
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, 'observed')
+
+        continuum = continuum if continuum is not None else np.zeros(flux.size)
+
+        with rc_context(PLOT_CONF):
+
+            fig, ax = plt.subplots()
+            ax.step(wave_plot, flux_plot, color=self._color_dict['fg'], label='Object spectrum', where='mid')
+
+            if ml_mask is not None:
+                if np.any(ml_mask):
+                    ax.scatter(wave_plot[ml_mask], flux_plot[ml_mask], label='ML detection', color='palegreen')
+
+            ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=self._color_dict['peak'], facecolors='none')
+            ax.fill_between(wave_plot, continuum, detect_limit, facecolor=self._color_dict['line_band'], label='Noise_region', alpha=0.5)
+
+            if continuum is not None:
+                ax.plot(wave_plot, continuum, label='Continuum')
+
+            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], label='Masked pixels', marker='x',
+                       color=self._color_dict['mask_marker'])
+
+            ax.legend()
+            ax.update(AXES_CONF)
+            plt.tight_layout()
+            plt.show()
+
+        return
+
 
 class SpectrumFigures(Plotter):
 

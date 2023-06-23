@@ -39,6 +39,9 @@ Tools
 
 .. autofunction:: lime.label_decomposition
 
+.. autofunction:: lime.Spectrum.line_detection
+
+
 Astronomical objects
 --------------------
 
