@@ -23,6 +23,7 @@ The current version of :math:`\textsc{LiMe}` has these dependencies:
 * Matplotlib_
 * LmFit_ (fitting library)
 * Astropy_ (loading and saving *.fits* files)
+* tomli_ (read configuration files with toml_ files for python < 3.11)
 
 The following dependencies are not compulsory but they provide more options for the library inputs/outputs:
 
@@ -45,6 +46,8 @@ Any comments/problems/request can be added as an issue on the github_ page.
 .. _Matplotlib: https://matplotlib.org/stable/users/installing/index.html
 .. _LmFit: https://lmfit.github.io/lmfit-py/installation.html
 .. _Astropy: https://docs.astropy.org/en/stable/install.html
+.. _tomli: https://pypi.org/project/tomli/#installation
+.. _toml: https://toml.io/en/
 
 .. _Specutils: https://specutils.readthedocs.io/en/stable/installation.html
 .. _PyLatex: https://jeltef.github.io/PyLaTeX/current/

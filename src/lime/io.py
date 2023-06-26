@@ -521,10 +521,6 @@ def results_to_log(line, log, norm_flux):
         log.at[comp, 'w5'] = line.mask[4]
         log.at[comp, 'w6'] = line.mask[5]
 
-        # # Convert current measurement to a pandas series container
-        # log.loc[comp, ['particle', 'wavelength', 'latex_label']] = line.particle[i], line.wavelength[i], line.latex_label[i]
-        # log.loc[comp, 'w1':'w6'] = line.mask
-
         # Treat every line
         for param in _ATTRIBUTES_FIT:
 
