@@ -1,43 +1,43 @@
 import subprocess
 import os
-
-class Person:
-    def __init__(self, name, age):
-        self.name = name
-        self.age = age
-
-    @classmethod
-    def create_from_birth_year(cls, name, birth_year):
-        current_year = 2023  # Assuming the current year is 2023
-        age = current_year - birth_year
-        return cls(name, age)
-
-    @classmethod
-    def create_from_dict(cls, person_dict):
-        name = person_dict['name']
-        age = person_dict['age']
-        return cls(name, age)
-
-    def display(self):
-        print(f"Name: {self.name}, Age: {self.age}")
-
-
-# Creating objects using different class methods
-person1 = Person.create_from_birth_year('John', 1990)
-person2 = Person.create_from_dict({'name': 'Alice', 'age': 25})
-
-# Displaying the objects
-person1.display()  # Output: Name: John, Age: 33
-person2.display()  # Output: Name: Alice, Age: 25
-
-
-# os.chdir(f'../../../')
 #
-# def launch_jupyter_notebook():
-#     subprocess.run(["jupyter", "notebook"])
+# class Person:
+#     def __init__(self, name, age):
+#         self.name = name
+#         self.age = age
 #
-# if __name__ == "__main__":
-#     launch_jupyter_notebook()
+#     @classmethod
+#     def create_from_birth_year(cls, name, birth_year):
+#         current_year = 2023  # Assuming the current year is 2023
+#         age = current_year - birth_year
+#         return cls(name, age)
+#
+#     @classmethod
+#     def create_from_dict(cls, person_dict):
+#         name = person_dict['name']
+#         age = person_dict['age']
+#         return cls(name, age)
+#
+#     def display(self):
+#         print(f"Name: {self.name}, Age: {self.age}")
+#
+#
+# # Creating objects using different class methods
+# person1 = Person.create_from_birth_year('John', 1990)
+# person2 = Person.create_from_dict({'name': 'Alice', 'age': 25})
+#
+# # Displaying the objects
+# person1.display()  # Output: Name: John, Age: 33
+# person2.display()  # Output: Name: Alice, Age: 25
+
+
+os.chdir(f'../../../')
+
+def launch_jupyter_notebook():
+    subprocess.run(["jupyter", "notebook"])
+
+if __name__ == "__main__":
+    launch_jupyter_notebook()
 
 # import lime
 # from pathlib import Path

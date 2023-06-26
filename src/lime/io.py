@@ -9,7 +9,7 @@ __all__ = [
     'log_parameters_calculation',
     'log_to_HDU',
     'save_parameter_maps',
-    '_LOG_DTYPES_REC',
+    '_LOG_EXPORT_RECARR',
     '_LOG_EXPORT',
     '_LOG_COLUMNS']
 
@@ -20,7 +20,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import Error
+from . import Error, __version__
 from sys import exit, stdout, version_info
 from pathlib import Path
 from distutils.util import strtobool
@@ -31,6 +31,7 @@ from astropy.table import Table
 
 import lime
 from .tables import table_fluxes
+
 
 try:
     import openpyxl
@@ -68,14 +69,19 @@ _LOG_COLUMNS_LATEX = dict(zip(_PARAMS_CONF_TABLE.index.values,
                           _PARAMS_CONF_TABLE.loc[:, 'latex_label'].values))
 
 # Array with the parameters to be included in the output log
-_LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.values.astype(bool)].index.values
+_LOG_EXPORT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.to_numpy().astype(bool)].index.to_numpy()
+_LOG_EXPORT_TYPES = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.to_numpy().astype(bool)].dtype.to_numpy()
+_LOG_EXPORT_DICT = dict(zip(_LOG_EXPORT, _LOG_EXPORT_TYPES))
+_LOG_EXPORT_RECARR = np.dtype(list(_LOG_EXPORT_DICT.items()))
+
+# Attributes with measurements for log
+_ATTRIBUTES_FIT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Fit_attributes.to_numpy().astype(bool)].index.to_numpy()
 
 # Dictionary with the parameter dtypes
-_LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.values,
-                           _PARAMS_CONF_TABLE.dtype.values))
+_LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.to_numpy(),
+                           _PARAMS_CONF_TABLE.dtype.to_numpy()))
 
 # Numpy recarray dtype for the pandas dataframe creation
-_LOG_DTYPES_REC = np.dtype(list(_LOG_TYPES_DICT.items()))
 
 GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
 
@@ -208,7 +214,7 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
     return
 
 
-def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
+def load_log(file_address, page='LINELOG', sample_levels=['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
@@ -216,7 +222,7 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
     The expected file types are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx". The dataframes expected format is discussed
     on the `line bands <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_ and `measurements <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_ documentation.
 
-    For ".fits" and ".xlsx" files the user can provide a page name ``ext`` for the HDU/sheet. The default name is "LINESLOG".
+    For ".fits" and ".xlsx" files the user can provide a page name ``ext`` for the HDU/sheet. The default name is "_LINELOG".
 
     To reconstruct a `MultiIndex dataframe <https://pandas.pydata.org/docs/user_guide/advanced.html#advanced-hierarchical>`_
     the user needs to specify the ``sample_levels``.
@@ -224,8 +230,8 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
     :param file_address: Input log address.
     :type file_address: str, Path
 
-    :param ext: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "LINESLOG".
-    :type ext: str, optional
+    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "_LINELOG".
+    :type page: str, optional
 
     :param sample_levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
     :type sample_levels: list, optional
@@ -246,23 +252,23 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
 
         # Fits file:
         if file_type == '.fits':
-            log = Table.read(log_path, ext, character_as_bytes=False).to_pandas()
+            log = Table.read(log_path, page, character_as_bytes=False).to_pandas()
             log.set_index('index', inplace=True)
 
         # Excel table
         elif file_type in ['.xlsx' or '.xls']:
-            log = pd.read_excel(log_path, sheet_name=ext, header=0, index_col=0)
+            log = pd.read_excel(log_path, sheet_name=page, header=0, index_col=0)
 
         # ASDF file
         elif file_type == '.asdf':
             with asdf.open(log_path) as af:
-                log_RA = af[ext]
+                log_RA = af[page]
                 log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
                 log.set_index('index', inplace=True)
 
         # Text file
         elif file_type == '.txt':
-            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
+            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
             log = pd.read_csv(log_path, sep=';', delim_whitespace=False, header=0, index_col=0)
@@ -281,7 +287,7 @@ def load_log(file_address, ext='LINESLOG', sample_levels=['id', 'line']):
     return log
 
 
-def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=None):
+def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=None, store_version=True):
 
     """
 
@@ -290,7 +296,7 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
     The accepted extensions are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
 
     For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-    The default name is "LINESLOG".
+    The default name is "LINELOG".
 
     The user can specify the ``parameters`` to be saved in the output file.
 
@@ -305,11 +311,14 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
     :param parameters: Output parameters list. The default value is "all"
     :type parameters: list
 
-    :param ext: Name of the HDU/sheet for ".fits"/".xlsx" files.
-    :type ext: str, optional
+    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
+    :type page: str, optional
 
     :param header: Dictionary for ".fits" and ".asdf" file headers.
     :type header: dict, optional
+
+    :param store_version: Save LiMe version as footnote or page header on the output log. The default value is True.
+    :type store_version: bool, optional
 
     """
 
@@ -330,7 +339,7 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
         if parameters != 'all':
             parameters_list = np.array(parameters, ndmin=1)
             lines_log = log[parameters_list]
-            param_dtypes = [_LOG_DTYPES_REC[param] for param in parameters_list]
+            param_dtypes = [_LOG_EXPORT_RECARR[param] for param in parameters_list]
 
         else:
             lines_log = log
@@ -341,6 +350,7 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_string()
+                string_DF = string_DF if store_version is False else string_DF + f'\n#LiMe_{__version__}'
                 output_file.write(string_DF.encode('UTF-8'))
 
         elif file_type == '.csv':
@@ -349,22 +359,27 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
                 string_DF = lines_log.to_csv(sep=';', na_rep='NaN')
                 output_file.write(string_DF.encode('UTF-8'))
 
-        # Pdf fluxes table
+        # Pdf fluxes table # TODO error while saving all parameters
         elif file_type == '.pdf':
 
-            # Recover the fit components for merged lines from the log
-            if 'profile_label' in log.columns:
-                idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
-                fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
-            else:
-                fit_conf = {}
+            # # Recover the fit components for merged lines from the log
+            # if 'profile_label' in log.columns:
+            #     idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
+            #     fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
+            # else:
+            #     fit_conf = {}
             table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
-                         lines_notation=log.latex_label.values)
+                         lines_notation=log.latex_label.values, store_version=store_version)
 
         # Log in a fits format
         elif file_type == '.fits':
             if isinstance(lines_log, pd.DataFrame):
-                lineLogHDU = log_to_HDU(lines_log, ext_name=ext, header_dict=header)
+
+                if store_version:
+                    header = {} if header is None else header
+                    header['LiMe'] = __version__
+
+                lineLogHDU = log_to_HDU(lines_log, ext_name=page, header_dict=header)
 
                 if log_path.is_file(): # TODO this strategy is slow for many inputs
                     try:
@@ -384,17 +399,27 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
                 # New excel
                 if not log_path.is_file():
                     with pd.ExcelWriter(log_path) as writer:
-                        lines_log.to_excel(writer, sheet_name=ext)
+                        lines_log.to_excel(writer, sheet_name=page)
+
+                        if store_version:
+                            df_empty = pd.DataFrame()
+                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
+
+                        # lines_log.to_csv()
 
                 # Updating existing file
                 else:
-
                     book = openpyxl.load_workbook(log_path)
-                    writer = pd.ExcelWriter(log_path, engine='openpyxl')
-                    writer.book = book
+                    with pd.ExcelWriter(log_path, engine='openpyxl') as writer:
 
-                    dataframe.to_excel(writer, sheet_name=ext, index=False)
-                    writer.close()
+                        writer.book = book
+                        dataframe.to_excel(writer, sheet_name=page, index=True)
+
+                        if store_version:
+                            df_empty = pd.DataFrame()
+                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
+
+                    book.close()
 
             else:
                 _logger.critical(f'openpyxl is not installed. Lines log {file_address} could not be saved')
@@ -402,7 +427,7 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
         # Advance Scientific Storage Format
         elif file_type == '.asdf':
 
-            tree = {ext: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
+            tree = {page: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
 
             # Create new file
             if not log_path.is_file():
@@ -426,7 +451,7 @@ def save_log(dataframe, file_address, ext='LINESLOG', parameters='all', header=N
     return
 
 
-def join_logs(id_list, log_list, level_list=None, ext='LINESLOG', **kwargs):
+def join_logs(id_list, log_list, level_list=None, ext='LINELOG', **kwargs):
 
     # Check if multi-index is not using the default names
     if level_list is not None:
@@ -480,34 +505,45 @@ def join_logs(id_list, log_list, level_list=None, ext='LINESLOG', **kwargs):
     return output_log
 
 
-def results_to_log(line, log, norm_flux, units_wave, export_params=_LOG_EXPORT):
+def results_to_log(line, log, norm_flux):
 
     # Loop through the line components
     for i, comp in enumerate(line.list_comps):
 
-        # Convert current measurement to a pandas series container
-        log.loc[comp, ['particle', 'wavelength', 'latex_label']] = line.particle[i], line.wavelength[i], line.latex_label[i]
-        log.loc[comp, 'w1':'w6'] = line.mask
+        # # Add new row
+        # log.loc[comp] = np.empty(0, dtype=_LOG_EXPORT_RECARR)
+
+        # Add bands wavelengths
+        log.at[comp, 'w1'] = line.mask[0]
+        log.at[comp, 'w2'] = line.mask[1]
+        log.at[comp, 'w3'] = line.mask[2]
+        log.at[comp, 'w4'] = line.mask[3]
+        log.at[comp, 'w5'] = line.mask[4]
+        log.at[comp, 'w6'] = line.mask[5]
+
+        # # Convert current measurement to a pandas series container
+        # log.loc[comp, ['particle', 'wavelength', 'latex_label']] = line.particle[i], line.wavelength[i], line.latex_label[i]
+        # log.loc[comp, 'w1':'w6'] = line.mask
 
         # Treat every line
-        for param in export_params:
+        for param in _ATTRIBUTES_FIT:
 
             # Get component parameter
             param_value = line.__getattribute__(param)
             if _LOG_COLUMNS[param][2] and (param_value is not None):
                 param_value = param_value[i]
 
-            # De normalize
+            # De-normalize
             if _LOG_COLUMNS[param][0]:
                 if param_value is not None:
                     param_value = param_value * norm_flux
 
-            log.loc[comp, param] = param_value
+            log.at[comp, param] = param_value
 
     return
 
 
-def check_file_dataframe(df_variable, variable_type, ext='LINESLOG', sample_levels=('id', 'line'), copy_input=True):
+def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_levels=('id', 'line'), copy_input=True):
 
     if isinstance(df_variable, variable_type):
         if copy_input:
@@ -518,7 +554,7 @@ def check_file_dataframe(df_variable, variable_type, ext='LINESLOG', sample_leve
     elif isinstance(df_variable, (str, Path)):
         input_path = Path(df_variable)
         if input_path.is_file():
-            output = load_log(df_variable, ext=ext, sample_levels=sample_levels)
+            output = load_log(df_variable, page=ext, sample_levels=sample_levels)
         else:
             output = None
 
@@ -931,7 +967,7 @@ def progress_bar(i, i_max, post_text, n_bar=10):
 
 
 def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, mask_file=None, mask_list='all',
-                        image_shape=None, log_ext_suffix='_LINESLOG', spaxel_fill_value=np.nan, output_file_prefix=None,
+                        image_shape=None, log_ext_suffix='_LINELOG', spaxel_fill_value=np.nan, output_file_prefix=None,
                         header=None, wcs=None):
 
     """
@@ -951,7 +987,7 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
         size this approach may require a long time to query the log file pages.
 
     The expected page name in the input ``lines_log_file`` is "idx_j-idx_i_log_ext_suffix" where "idx_j" and "idx_i"
-    are the y and x array coordinates of the cube coordinates, by default ``log_ext_suffix='_LINESLOG'``.
+    are the y and x array coordinates of the cube coordinates, by default ``log_ext_suffix='_LINELOG'``.
 
     The output ``.fits`` parameter page header includes the ``PARAM`` and ``LINE`` entries with the line and parameter
     labels respectively. The user should also include a ``wcs`` argument to export the astronomical coordinates to the
@@ -981,7 +1017,7 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
     :param spaxel_fill_value: Map filling value for empty pixels. The default value is "numpy.nan".
     :param spaxel_fill_value: float, optional
 
-    :param log_ext_suffix: Suffix for the lines log extension. The default value is "_LINESLOG"
+    :param log_ext_suffix: Suffix for the lines log extension. The default value is "_LINELOG"
     :param log_ext_suffix: str, optional
 
     :param output_file_prefix: Prefix for the output parameter ".fits" file. The default value is None.

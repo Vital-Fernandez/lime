@@ -858,7 +858,7 @@ class CubeInspection:
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, lines_log_file=None,
-             ext_log='_LINESLOG', wcs=None, maximize=False):
+             ext_log='_LINELOG', wcs=None, maximize=False):
 
         """
 

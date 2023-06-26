@@ -59,13 +59,12 @@ print(gp_spec.log)
 
 # It can be saved into different types of document using the function
 gp_spec.save_log('../sample_data/example1_linelog.txt')
-gp_spec.save_log('../sample_data/example1_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_err'])
-gp_spec.save_log('../sample_data/example1_linelog.fits', ext='GP121903')
-gp_spec.save_log('../sample_data/example1_linelog.xlsx', ext='GP121903')
-gp_spec.save_log('../sample_data/example1_linelog.asdf', ext='GP121903')
+gp_spec.save_log('../sample_data/example1_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_flux_err'])
+gp_spec.save_log('../sample_data/example1_linelog.fits', page='GP121903')
+gp_spec.save_log('../sample_data/example1_linelog.xlsx', page='GP121903')
+gp_spec.save_log('../sample_data/example1_linelog.asdf', page='GP121903')
 
 # A lines log can also be saved/loaded using the lime functions:
 log_address = '../sample_data/example1_linelog.fits'
-lime.save_log(gp_spec.log, log_address, ext='GP121903')
-log = lime.load_log(log_address, ext='GP121903')
-print(f'Is the original log equal to the one saved and loaded from a fits file?\n{gp_spec.log.equals(log)}')
+lime.save_log(gp_spec.log, log_address, page='GP121903')
+log = lime.load_log(log_address, page='GP121903')

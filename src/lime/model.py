@@ -200,16 +200,16 @@ def mult_err_propagation(nominal_array, err_array, result):
 def review_err_propagation(line, idx_line, comp):
 
     # Check gaussian flux error
-    if (line.gauss_err[idx_line] == 0.0) and (line.amp_err[idx_line] != 0.0) and (line.sigma_err[idx_line] != 0.0):
-        line.gauss_err[idx_line] = mult_err_propagation(np.array([line.amp[idx_line], line.sigma[idx_line]]),
-                                                        np.array([line.amp_err[idx_line], line.sigma_err[idx_line]]),
-                                                        line.gauss_flux[idx_line])
+    if (line.gauss_flux_err[idx_line] == 0.0) and (line.amp_err[idx_line] != 0.0) and (line.sigma_err[idx_line] != 0.0):
+        line.gauss_flux_err[idx_line] = mult_err_propagation(np.array([line.amp[idx_line], line.sigma[idx_line]]),
+                                                             np.array([line.amp_err[idx_line], line.sigma_err[idx_line]]),
+                                                             line.gauss_flux[idx_line])
 
     # Check equivalent width error
     if line.blended_check:
-        if (line.eqw_err[idx_line] == 0.0) and (line.std_cont != 0.0) and (line.gauss_err[idx_line] != 0.0):
+        if (line.eqw_err[idx_line] == 0.0) and (line.std_cont != 0.0) and (line.gauss_flux_err[idx_line] != 0.0):
             line.eqw_err[idx_line] = mult_err_propagation(np.array([line.cont, line.gauss_flux[idx_line]]),
-                                                          np.array([line.std_cont, line.gauss_err[idx_line]]),
+                                                          np.array([line.std_cont, line.gauss_flux_err[idx_line]]),
                                                           line.eqw[idx_line])
 
     # Check the error from the _kinem command imports
@@ -310,7 +310,7 @@ class LineFitting:
 
         # Assign values
         line.intg_flux = areasArray.mean()
-        line.intg_err = areasArray.std()
+        line.intg_flux_err = areasArray.std()
 
         # Compute the integrated singal to noise # TODO is this an issue for absorptions
         amp_ref = line.peak_flux - line.cont
@@ -436,7 +436,7 @@ class LineFitting:
 
         line.v_r, line.v_r_err = np.empty(n_comps), np.empty(n_comps)
         line.sigma_vel, line.sigma_vel_err = np.empty(n_comps), np.empty(n_comps)
-        line.gauss_flux, line.gauss_err = np.empty(n_comps), np.empty(n_comps)
+        line.gauss_flux, line.gauss_flux_err = np.empty(n_comps), np.empty(n_comps)
 
         line.FWHM_g = np.empty(n_comps)
         line.sigma_thermal = np.empty(n_comps)
@@ -468,11 +468,11 @@ class LineFitting:
 
             # Gaussian area
             line.gauss_flux[i] = self.fit_output.params[f'{comp}_area'].value
-            line.gauss_err[i] = self.fit_output.params[f'{comp}_area'].stderr
+            line.gauss_flux_err[i] = self.fit_output.params[f'{comp}_area'].stderr
 
             # Equivalent with gaussian flux for blended components TODO compute self.cont from linear fit
             if line.blended_check:
-                line.eqw[i], line.eqw_err[i] = line.gauss_flux[i] / line.cont, line.gauss_err[i] / line.cont
+                line.eqw[i], line.eqw_err[i] = line.gauss_flux[i] / line.cont, line.gauss_flux_err[i] / line.cont
 
             # Kinematics
             line.v_r[i] = c_KMpS * (line.center[i] - ref_wave[i])/ref_wave[i]

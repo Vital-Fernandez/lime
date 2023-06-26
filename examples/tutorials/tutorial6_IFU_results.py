@@ -35,11 +35,11 @@ shoc579.check.cube('H1_6563A', lines_log_file=output_lines_log_file, masks_file=
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)
-spaxel.load_log(output_lines_log_file, ext='38-35_LINESLOG')
+spaxel.load_log(output_lines_log_file, page='38-35_LINELOG')
 spaxel.plot.grid()
 
 # Export the measurements log as maps:
-param_list = ['intg_flux', 'intg_err', 'gauss_flux', 'gauss_err', 'v_r', 'v_r_err']
+param_list = ['intg_flux', 'intg_flux_err', 'gauss_flux', 'gauss_flux_err', 'v_r', 'v_r_err']
 lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A', 'S3_6312A', 'S3_9069A', 'S3_9531A']
 lime.save_parameter_maps(output_lines_log_file, '../sample_data/', param_list, lines_list,
                          mask_file=spatial_mask_file, output_file_prefix='SHOC579_', wcs=wcs)

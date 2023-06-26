@@ -1,6 +1,7 @@
 import numpy as np
 from functools import partial
 from collections.abc import Sequence
+from . import __version__
 
 try:
     import pylatex
@@ -72,7 +73,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None):
+def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None, store_version=True):
 
     # Check pylatex is installed else leave
     if pylatex_check:
@@ -92,9 +93,6 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
     else:
         idx_blended_label = None
 
-    # Get the line latex label for the table
-    # ion_array, wavelength_array, latexLabel_array = label_decomposition(lines_df.index.values, comp_dict=fit_conf, units_wave=self.units_wave)
-
     # Create pdf
     pdf = PdfMaker()
     pdf.create_pdfDoc(pdf_type='table')
@@ -113,10 +111,15 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         lastRow_check = True if lineLabel == obsLines[-1] else False
         pdf.addTableRow(row_raw, last_row=lastRow_check)
 
+    if store_version:
+        versioning = r'\textsc{{{}}} {}'.format(f'LiMe', __version__)
+        pdf.table.add_row([pylatex.NoEscape(r'\footnotesize{{{}}}'.format(versioning))],
+                          escape=False, strict=False)
+
     # Save the pdf table
     if table_type == 'pdf':
         try:
-            pdf.generate_pdf(table_address, clean_tex=True)
+            pdf.generate_pdf(table_address, clean_tex=False)
         except:
             print('-- PDF compilation failure')
 
@@ -185,7 +188,7 @@ class PdfMaker:
                 self.pdfDoc.packages.append(pylatex.Package('nicefrac'))
                 self.pdfDoc.packages.append(pylatex.Package('siunitx'))
                 self.pdfDoc.packages.append(pylatex.Package('makecell'))
-                # self.pdfDoc.packages.append(pylatex.Package('color', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
+                self.pdfDoc.packages.append(pylatex.Package('footnote'))
                 self.pdfDoc.packages.append(pylatex.Package('colortbl', options=['usenames', 'dvipsnames', ]))  # Package to crop pdf to a figure
                 self.pdfDoc.packages.append(pylatex.Package('xcolor', options=['table']))
 
@@ -315,6 +318,9 @@ class PdfMaker:
         # Default formatting
         if row_format == 'auto':
             output_row = list(map(partial(format_for_table, rounddig=rounddig), input_row))
+        else:
+            print('BICHO')
+            output_row = input_row
 
         # TODO clean this theming to default values
         if (color_font is not None) or (self.theme_table != 'white'):

@@ -335,10 +335,10 @@ class Line:
         self.transition_comp = None
 
         # Measurements attributes
-        self.intg_flux, self.intg_err = None, None
+        self.intg_flux, self.intg_flux_err = None, None
         self.peak_wave, self.peak_flux = None, None
         self.eqw, self.eqw_err = None, None
-        self.gauss_flux, self.gauss_err = None, None
+        self.gauss_flux, self.gauss_flux_err = None, None
         self.cont, self.std_cont =None, None
         self.m_cont, self.n_cont = None, None
         self.amp, self.center, self.sigma = None, None, None

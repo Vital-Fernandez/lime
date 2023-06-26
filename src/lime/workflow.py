@@ -268,7 +268,7 @@ class SpecTreatment(LineFitting):
             self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
 
             # Save the line parameters to the dataframe
-            results_to_log(self.line, self._spec.log, self._spec.norm_flux, self._spec.units_wave)
+            results_to_log(self.line, self._spec.log, self._spec.norm_flux)
 
         else:
             _logger.warning(f'The line band for transition {self.line} was not found on the input database')
@@ -276,7 +276,7 @@ class SpecTreatment(LineFitting):
         return
 
     def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              temp=10000.0, line_list=None, default_conf_key='default', id_conf_label=None, line_detection=False,
+              temp=10000.0, line_list=None, default_conf_prefix='default', id_conf_prefix=None, line_detection=False,
               plot_fit=False, progress_output='bar'):
 
         """
@@ -338,11 +338,11 @@ class SpecTreatment(LineFitting):
         :param line_list: Line list to measure from the bands dataframe.
         :type line_list: list, optional
 
-        :param default_conf_key: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_conf_key: str, optional
+        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_conf_prefix: str, optional
 
-        :param id_conf_label: Label for the object configuration section in the ```fit_conf`` variable.
-        :type id_conf_label: str, optional
+        :param id_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
+        :type id_conf_prefix: str, optional
 
         :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
         :type line_detection: bool, optional
@@ -367,7 +367,7 @@ class SpecTreatment(LineFitting):
 
             # Load configuration
             fit_conf = {} if fit_conf is None else fit_conf
-            input_conf = recover_level_conf(fit_conf, id_conf_label, default_conf_key)
+            input_conf = recover_level_conf(fit_conf, id_conf_prefix, default_conf_prefix)
 
             # Line detection if requested
             if line_detection:
@@ -476,16 +476,16 @@ class CubeTreatment(LineFitting):
         self._spec = None
 
     def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
-                     log_ext_suffix='_LINESLOG', min_method='least_squares', profile='g-emi',
-                     cont_from_bands=True, temp=10000.0, default_conf_key='default', line_detection=False,
-                     progress_output='bar', plot_fit=False, header=None, n_save=100):
+                     log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
+                     temp=10000.0, default_conf_prefix='default', line_detection=False, progress_output='bar',
+                     plot_fit=False, header=None, n_save=100):
 
         """
 
         This function measures lines on an IFS cube from an input binary spatial ``mask_file``.
 
         The results are stored in a multipage ".fits" file, each page contains a measurements and it is named after the
-        spatial array coordinates and the ``log_ext_suffix`` (i.e. "idx_j-idx_i_LINESLOG")
+        spatial array coordinates and the ``log_ext_suffix`` (i.e. "idx_j-idx_i_LINELOG")
 
         The input ``bands`` can be a pandas.Dataframe or an address to the file. The user can specify one bands file
         per mask page on the ``mask_file``. To do this, the ``fit_conf`` argument must include a section for every mask
@@ -497,7 +497,7 @@ class CubeTreatment(LineFitting):
         (i.e. "default_line_fitting"). At an intermediate level, the parameters from the section with a name from the
         ``mask_list`` (i.e. "Mask1_line_fitting") will be applied to the spaxels in the corresponding mask. Finally, at
         the highest level, the user can provide a spaxel fitting configuration with the spatial array coordiantes
-        "50-28_LINESLOG". In all these cases the higher level configurate **updates** the lower levels (only common entries
+        "50-28_LINELOG". In all these cases the higher level configurate **updates** the lower levels (only common entries
         are replaced)
 
         .. attention::
@@ -533,7 +533,7 @@ class CubeTreatment(LineFitting):
         :param line_list: Line list to measure from the bands dataframe.
         :type line_list: list, optional
 
-        :param log_ext_suffix: Suffix for the measurements log pages. The default value is "_LINESLOG".
+        :param log_ext_suffix: Suffix for the measurements log pages. The default value is "_LINELOG".
         :type log_ext_suffix: str, optional.
 
         :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
@@ -549,8 +549,8 @@ class CubeTreatment(LineFitting):
         :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
         :type temp: bool, optional
 
-        :param default_conf_key: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_conf_key: str, optional
+        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_conf_prefix: str, optional
 
         :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
         :type line_detection: bool, optional
@@ -612,7 +612,7 @@ class CubeTreatment(LineFitting):
             idcs_spaxels = spaxels_dict[i]
 
             # Recover the fitting configuration
-            mask_conf = recover_level_conf(fit_conf, default_conf_key, mask_name)
+            mask_conf = recover_level_conf(fit_conf, default_conf_prefix, mask_name)
 
             # Load the mask log if provided
             if bands is None:
@@ -644,8 +644,8 @@ class CubeTreatment(LineFitting):
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
-                                 temp=temp, progress_output=None, plot_fit=None, id_conf_label=None,
-                                 default_conf_key=None)
+                                 temp=temp, progress_output=None, plot_fit=None, id_conf_prefix=None,
+                                 default_conf_prefix=None)
 
                 # Create page header with the default data
                 hdr_i = fits.Header()

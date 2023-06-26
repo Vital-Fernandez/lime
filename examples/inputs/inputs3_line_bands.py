@@ -35,10 +35,10 @@ print(bands_df.loc['H1_1215A', 'w1':'w6'].to_numpy())
 # Save to the current folder in several formats:
 lime.save_log(bands_df, 'bands_frame.txt')
 lime.save_log(bands_df, 'bands_frame.pdf', parameters=['wavelength', 'latex_label'])
-lime.save_log(bands_df, 'bands_frame.xlsx', ext='BANDS')
-lime.save_log(bands_df, 'bands_frame.fits', ext='BANDS')
+lime.save_log(bands_df, 'bands_frame.xlsx', page='BANDS')
+lime.save_log(bands_df, 'bands_frame.fits', page='BANDS')
 
 # Load the database into a pandas daframe
 bands_df = lime.load_log('bands_frame.txt')
-bands_df = lime.load_log('bands_frame.xlsx', ext='BANDS')
-bands_df = lime.load_log('bands_frame.fits', ext='BANDS')
+bands_df = lime.load_log('bands_frame.xlsx', page='BANDS')
+bands_df = lime.load_log('bands_frame.fits', page='BANDS')

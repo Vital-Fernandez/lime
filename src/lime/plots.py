@@ -73,11 +73,11 @@ def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux)
     normFlux_latex = f' $({latex_science_float(norm_flux)})$' if norm_flux != 1 else ''
 
     intg_flux = latex_science_float(log.loc[line, 'intg_flux']/norm_flux)
-    intg_err = latex_science_float(log.loc[line, 'intg_err']/norm_flux)
+    intg_err = latex_science_float(log.loc[line, 'intg_flux_err']/norm_flux)
     legend_text += r'$F_{{intg}} = {}\pm{}\,$'.format(intg_flux, intg_err) + line_flux_latex + normFlux_latex + '\n'
 
     gauss_flux = latex_science_float(log.loc[line, 'gauss_flux']/norm_flux)
-    gauss_err = latex_science_float(log.loc[line, 'gauss_err']/norm_flux)
+    gauss_err = latex_science_float(log.loc[line, 'gauss_flux_err']/norm_flux)
     legend_text += r'$F_{{gauss}} = {}\pm{}\,$'.format(gauss_flux, gauss_err) + line_flux_latex + normFlux_latex + '\n'
 
     v_r = r'{:.1f}'.format(log.loc[line, 'v_r'])
@@ -1420,10 +1420,10 @@ class LiMePlots:
                         normFlux_latex = f' ${latex_science_float(self.norm_flux)}$' if self.norm_flux != 1 else ''
 
                         intg_flux = latex_science_float(log.loc[line_list[i], 'intg_flux'] / self.norm_flux, dec=3)
-                        intg_err = latex_science_float(log.loc[line_list[i], 'intg_err'] / self.norm_flux, dec=3)
+                        intg_err = latex_science_float(log.loc[line_list[i], 'intg_flux_err'] / self.norm_flux, dec=3)
 
                         gauss_flux = latex_science_float(log.loc[line_list[i], 'gauss_flux'] / self.norm_flux, dec=3)
-                        gauss_err = latex_science_float(log.loc[line_list[i], 'gauss_err'] / self.norm_flux, dec=3)
+                        gauss_err = latex_science_float(log.loc[line_list[i], 'gauss_flux_err'] / self.norm_flux, dec=3)
 
                         box_text = r'$F_{{intg}} = {}\pm{}\,$'.format(intg_flux, intg_err)
                         box_text += f'({normFlux_latex}) {units_flux_latex}\n'

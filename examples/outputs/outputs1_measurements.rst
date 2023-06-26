@@ -267,7 +267,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
   where :math:`A_i` is Gaussian component amplitude (``.amp``) and :math:`\sigma_{i}` gaussian component standard deviation (``.sigma``)
 
-* **gauss_err** (``.gauss_err``, ``np.array()``): This array contains the uncertainty of the Gaussian components flux.
+* **gauss_flux_err** (``.gauss_flux_err``, ``np.array()``): This array contains the uncertainty of the Gaussian components flux.
 
 
 Diagnostics

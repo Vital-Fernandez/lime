@@ -83,9 +83,9 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=N
     # Mixture model: Integrated fluxes for all lines except blended
     if flux_type == 'mixture' and np.any(idcs_blended):
         obsFlux = log['intg_flux'].to_numpy(copy=True)
-        obsErr = log['intg_err'].to_numpy(copy=True)
+        obsErr = log['intg_flux_err'].to_numpy(copy=True)
         obsFlux[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_flux'].to_numpy(copy=True)
-        obsErr[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_err'].to_numpy(copy=True)
+        obsErr[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_flux_err'].to_numpy(copy=True)
 
     # Use the one requested by the user
     else:
@@ -117,7 +117,7 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=N
 
 
 # Compute the fluxes
-def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_err'], column_names=None,
+def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_flux_err'], column_names=None,
                     column_positions=None):
 
     '''
@@ -250,7 +250,7 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
     return z_df
 
 
-def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_err'], sample_levels=['id', 'line'],
+def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_flux_err'], sample_levels=['id', 'line'],
                         object_id='obj_0', keep_empty_columns=True):
 
     # If normalization_line is not none

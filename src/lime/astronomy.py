@@ -12,7 +12,7 @@ from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_DTYPES_REC, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS,\
+from .io import _LOG_EXPORT, _LOG_EXPORT_TYPES, _LOG_EXPORT_DICT, _LOG_EXPORT_RECARR, _ATTRIBUTES_FIT, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
     check_file_array_mask
 from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
@@ -29,6 +29,8 @@ except ImportError:
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
+
+
 
 
 def check_inputs(wave, flux, err_flux, lime_object):
@@ -423,7 +425,7 @@ class Spectrum(LineFinder):
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
         spec.redshift = cube.redshift
-        spec.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
+        spec.log = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
         spec.inst_FWHM = cube.inst_FWHM
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
@@ -467,7 +469,7 @@ class Spectrum(LineFinder):
         check_spectrum_axes(self)
 
         # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
-        self.log = pd.DataFrame(np.empty(0, dtype=_LOG_DTYPES_REC))
+        self.log = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
 
         return
 
@@ -564,7 +566,7 @@ class Spectrum(LineFinder):
 
         return
 
-    def save_log(self, file_address, ext='LINESLOG', param_list='all', header=None):
+    def save_log(self, file_address, page='LINELOG', param_list='all', header=None, store_version=True):
 
         """
 
@@ -573,7 +575,7 @@ class Spectrum(LineFinder):
         The accepted extensions  are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
 
         For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-        The default name is "LINESLOG".
+        The default name is "LINELOG".
 
         The user can specify the ``parameters`` to be saved in the output file.
 
@@ -585,20 +587,23 @@ class Spectrum(LineFinder):
         :param param_list: Output parameters list. The default value is "all"
         :type param_list: list
 
-        :param ext: Name for the HDU/sheet for ".fits"/".xlsx" files.
-        :type ext: str, optional
+        :param page: Name for the HDU/sheet for ".fits"/".xlsx" files.
+        :type page: str, optional
 
         :param header: Dictionary for ".fits" and ".asdf" files.
         :type header: dict, optional
 
+        :param store_version: Save LiMe version as footnote or page header on the output log. The default value is True.
+        :type store_version: bool, optional
+
         """
 
         # Save the file
-        save_log(self.log, file_address, ext, param_list, header)
+        save_log(self.log, file_address, page, param_list, header, store_version)
 
         return
 
-    def load_log(self, file_address, ext='LINESLOG'):
+    def load_log(self, file_address, page='LINELOG'):
 
         """
 
@@ -609,13 +614,13 @@ class Spectrum(LineFinder):
         :param file_address: Input log address.
         :type file_address: str, Path
 
-        :param ext: Name of the HDU/sheet for ".fits"/".xlsx" files.
-        :type ext: str, optional
+        :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
+        :type page: str, optional
 
         """
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(file_address, pd.DataFrame, ext=ext)
+        log_df = check_file_dataframe(file_address, pd.DataFrame, ext=page)
 
         # Security checks:
         if log_df.index.size > 0:
@@ -956,7 +961,7 @@ class Cube:
 
         return Spectrum.from_cube(self, idx_j, idx_i, label)
 
-    def export_spaxels(self, output_address, mask_file, mask_list=None, log_ext_suffix='_LINESLOG', progress_output='bar'):
+    def export_spaxels(self, output_address, mask_file, mask_list=None, log_ext_suffix='_LINELOG', progress_output='bar'):
 
         # Check if the mask variable is a file or an array
         mask_dict = check_file_array_mask(mask_file, mask_list)
@@ -1148,7 +1153,7 @@ class Sample(UserDict):
 
         return
 
-    def add_log_list(self, id_list, log_list=None, level_names=('id', 'line'), ext_list='LINESLOG'):
+    def add_log_list(self, id_list, log_list=None, level_names=('id', 'line'), ext_list='LINELOG'):
 
         # Check labels are provided
         if id_list is not None:
@@ -1220,7 +1225,7 @@ class Sample(UserDict):
 
         return obs
 
-    def load_log(self, log_var, ext='LINESLOG', sample_levels=['id', 'line']):
+    def load_log(self, log_var, ext='LINELOG', sample_levels=['id', 'line']):
 
         # Load the log file if it is a log file
         log_df = check_file_dataframe(log_var, pd.DataFrame, ext=ext, sample_levels=sample_levels)
@@ -1252,7 +1257,7 @@ class Sample(UserDict):
 
         return
 
-    def save_log(self, file_address, ext='LINESLOG', param_list='all', fits_header=None):
+    def save_log(self, file_address, ext='LINELOG', param_list='all', fits_header=None):
 
         # Save the file
         save_log(self.log, file_address, ext, param_list, fits_header)
