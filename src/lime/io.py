@@ -51,6 +51,11 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
+try:
+    import tomli_w
+    tomli_w_check = True
+except ImportError:
+    tomli_w_check = False
 
 _logger = logging.getLogger('LiMe')
 
@@ -154,62 +159,72 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
 
     """
     # TODO add mechanic for commented conf lines. Currently they are being erased in the load/safe process
+    output_path = Path(output_file)
+
+    if output_path.suffix == '.toml':
+        if tomli_w_check:
+            with open(output_path, "wb") as f:
+                tomli_w.dump(param_dict, f)
+        else:
+            raise LiMe_Error(f'tomli-w library is not installed. Toml files cannot be saved')
 
     # Creating a new file (overwritting old if existing)
-    if section_name == None:
+    else:
 
-        # Check all entries are dictionaries
-        values_list = [*param_dict.values()]
-        section_check = all(isinstance(x, dict) for x in values_list)
-        assert section_check, f'ERROR: Dictionary for {output_file} cannot be converted to configuration file. Confirm all its values are dictionaries'
+        if section_name == None:
 
-        output_cfg = configparser.ConfigParser()
-        output_cfg.optionxform = str
+            # Check all entries are dictionaries
+            values_list = [*param_dict.values()]
+            section_check = all(isinstance(x, dict) for x in values_list)
+            assert section_check, f'ERROR: Dictionary for {output_file} cannot be converted to configuration file. Confirm all its values are dictionaries'
 
-        # Loop throught he sections and options to create the files
-        for section_name, options_dict in param_dict.items():
-            output_cfg.add_section(section_name)
-            for option_name, option_value in options_dict.items():
+            output_cfg = configparser.ConfigParser()
+            output_cfg.optionxform = str
+
+            # Loop throught he sections and options to create the files
+            for section_name, options_dict in param_dict.items():
+                output_cfg.add_section(section_name)
+                for option_name, option_value in options_dict.items():
+                    option_formatted = formatStringOutput(option_value, option_name, section_name)
+                    output_cfg.set(section_name, option_name, option_formatted)
+
+            # Save to a text format
+            with open(output_file, 'w') as f:
+                output_cfg.write(f)
+
+        # Updating old file
+        else:
+
+            # Confirm file exists
+            file_check = os.path.isfile(output_file)
+
+            # Load original cfg
+            if file_check:
+                output_cfg = configparser.ConfigParser()
+                output_cfg.optionxform = str
+                output_cfg.read(output_file)
+            # Create empty cfg
+            else:
+                output_cfg = configparser.ConfigParser()
+                output_cfg.optionxform = str
+
+            # Clear section upon request
+            if clear_section:
+                if output_cfg.has_section(section_name):
+                    output_cfg.remove_section(section_name)
+
+            # Add new section if it is not there
+            if not output_cfg.has_section(section_name):
+                output_cfg.add_section(section_name)
+
+            # Map key values to the expected format and store them
+            for option_name, option_value in param_dict.items():
                 option_formatted = formatStringOutput(option_value, option_name, section_name)
                 output_cfg.set(section_name, option_name, option_formatted)
 
-        # Save to a text format
-        with open(output_file, 'w') as f:
-            output_cfg.write(f)
-
-    # Updating old file
-    else:
-
-        # Confirm file exists
-        file_check = os.path.isfile(output_file)
-
-        # Load original cfg
-        if file_check:
-            output_cfg = configparser.ConfigParser()
-            output_cfg.optionxform = str
-            output_cfg.read(output_file)
-        # Create empty cfg
-        else:
-            output_cfg = configparser.ConfigParser()
-            output_cfg.optionxform = str
-
-        # Clear section upon request
-        if clear_section:
-            if output_cfg.has_section(section_name):
-                output_cfg.remove_section(section_name)
-
-        # Add new section if it is not there
-        if not output_cfg.has_section(section_name):
-            output_cfg.add_section(section_name)
-
-        # Map key values to the expected format and store them
-        for option_name, option_value in param_dict.items():
-            option_formatted = formatStringOutput(option_value, option_name, section_name)
-            output_cfg.set(section_name, option_name, option_formatted)
-
-        # Save to a text file
-        with open(output_file, 'w') as f:
-            output_cfg.write(f)
+            # Save to a text file
+            with open(output_file, 'w') as f:
+                output_cfg.write(f)
 
     return
 

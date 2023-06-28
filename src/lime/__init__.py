@@ -1,5 +1,5 @@
 """
-LiMe - A python package for measuring lines in astronomical SMACS_v2.0
+LiMe - A python package for measuring lines in astronomical spectra
 """
 
 import os

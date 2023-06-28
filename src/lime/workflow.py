@@ -127,8 +127,12 @@ def recover_level_conf(fit_cfg, mask_key, default_key):
     default_cfg = fit_cfg.get(f'{default_key}_line_fitting') if default_key is not None else None
     mask_cfg = fit_cfg.get(f'{mask_key}_line_fitting') if mask_key is not None else None
 
+    # Case there are not leveled entries
+    if (default_cfg is None) and (mask_cfg is None):
+        output_conf = fit_cfg
+
     # Proceed to update the levels
-    if (default_cfg is not None) and (mask_cfg is not None):
+    else:
 
         # Default configuration
         default_conf = {} if default_cfg is None else default_cfg
@@ -148,10 +152,6 @@ def recover_level_conf(fit_cfg, mask_key, default_key):
             output_conf['line_detection'] = default_detect
         else:
             pass
-
-    # Case there are not leveled entries
-    else:
-        output_conf = fit_cfg
 
     return output_conf
 
