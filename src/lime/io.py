@@ -758,7 +758,7 @@ def log_to_RA(log, column_types=None):
 
 def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
-    # For non empty SMACS_v2.0
+    # For non empty logs
     if not log.empty:
 
         if len(column_types) == 0:

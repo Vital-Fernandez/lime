@@ -662,14 +662,16 @@ class CubeTreatment(LineFitting):
 
                 # Save to a fits file
                 linesHDU = log_to_HDU(spaxel.log, ext_name=f'{spaxel_label}{log_ext_suffix}', header_dict=hdr_i)
-                hdul_log.append(linesHDU)
 
-                # Save the data every 100 spaxels
-                if spax_counter < n_save:
-                    spax_counter += 1
-                else:
-                    spax_counter = 0
-                    hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
+                if linesHDU is not None:
+                    hdul_log.append(linesHDU)
+
+                    # Save the data every 100 spaxels
+                    if spax_counter < n_save:
+                        spax_counter += 1
+                    else:
+                        spax_counter = 0
+                        hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
 
                 # Plot the fittings if requested:
                 if plot_fit:
