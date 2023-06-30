@@ -413,7 +413,7 @@ class LineFinder:
 
         for i in np.arange(wave_peaks.size):
 
-            idx_array = np.where(np.isclose(a=waveTheory.astype(np.float), b=wave_peaks[i], atol=tolerance))
+            idx_array = np.where(np.isclose(a=waveTheory.astype(np.float64), b=wave_peaks[i], atol=tolerance))
 
             if len(idx_array[0]) == 0:
                 unknownLineLabel = 'xy_{:.0f}A'.format(np.round(wave_peaks[i]))

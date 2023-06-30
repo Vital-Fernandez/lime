@@ -19,6 +19,7 @@ import copy
 import logging
 import numpy as np
 import pandas as pd
+import toml
 
 from . import Error, __version__
 from sys import exit, stdout, version_info
@@ -52,10 +53,10 @@ except ModuleNotFoundError:
     import tomli as tomllib
 
 try:
-    import tomli_w
-    tomli_w_check = True
+    import toml
+    toml_check = True
 except ImportError:
-    tomli_w_check = False
+    toml_check = False
 
 _logger = logging.getLogger('LiMe')
 
@@ -151,7 +152,7 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
 
 # Function to save SpecSyzer configuration file
-def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
+def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
 
     """
     This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
@@ -162,9 +163,11 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
     output_path = Path(output_file)
 
     if output_path.suffix == '.toml':
-        if tomli_w_check:
-            with open(output_path, "wb") as f:
-                tomli_w.dump(param_dict, f)
+        # TODO review convert numpy arrays and floats64
+        if toml_check:
+            toml_str = toml.dumps(param_dict)
+            with open(output_path, "w") as f:
+                f.write(toml_str)
         else:
             raise LiMe_Error(f'tomli-w library is not installed. Toml files cannot be saved')
 

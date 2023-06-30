@@ -96,6 +96,21 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
     return
 
+def check_spectrum_bands(line, wave_rest_array):
+
+    valid_check = True
+    if line.mask is not None:
+        if (wave_rest_array[0] <= line.mask[0]) and (line.mask[-1] <= wave_rest_array[-1]):
+            pass
+        else:
+            _logger.warning(f'Line {line} limits (w1={line.mask[0]}, w6={line.mask[-1]}) outside spectrum wavelength '
+                            f'range (wmin={wave_rest_array[0]}, wmax={wave_rest_array[-1]}) (rest frame values)')
+            valid_check = False
+    else:
+        _logger.warning(f'Line {line} was not found on the input bands database.')
+        valid_check = False
+
+    return valid_check
 
 def check_cube_bands(input_bands, mask_list, fit_cfg):
 
@@ -233,7 +248,9 @@ class SpecTreatment(LineFitting):
         self.line = Line(label, bands, fit_conf, profile, cont_from_bands)
 
         # Check if the line location is provided
-        if self.line.mask is not None:
+        bands_integrity = check_spectrum_bands(self.line, self._spec.wave_rest)
+
+        if bands_integrity:
 
             # Get the bands regions
             idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift),
@@ -269,9 +286,6 @@ class SpecTreatment(LineFitting):
 
             # Save the line parameters to the dataframe
             results_to_log(self.line, self._spec.log, self._spec.norm_flux)
-
-        else:
-            _logger.warning(f'The line band for transition {self.line} was not found on the input database')
 
         return
 
