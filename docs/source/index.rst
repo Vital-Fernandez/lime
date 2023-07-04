@@ -7,8 +7,7 @@ LiMe: A Line Measuring library
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
 for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
-and storing the results. The output measurements support both the posterior analysis of the object's chemical composition
-and plasma kinematics.
+and storing the results. The output measurements are focused on the gas chemical and kinematic analysis.
 
 These are some of the features currently available:
 
