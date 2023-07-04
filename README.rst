@@ -2,6 +2,10 @@
 Line Measurer (LiMe)
 ####################
 
+.. image:: http://www.repostatus.org/badges/latest/active.svg
+	:target: http://www.repostatus.org/#active
+	:alt: Project Status: Active – The project has reached a stable, usable state and is being actively developed.
+
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
 for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
 and storing the results. The output measurements support both the posterior analysis of the object's chemical composition
