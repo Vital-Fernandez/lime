@@ -1,4 +1,4 @@
 ipykernel
 nbsphinx
 lmfit
-tomli
+toml
