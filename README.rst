@@ -1,8 +1,9 @@
 
 .. image:: https://github.com/Vital-Fernandez/lime/blob/master/examples/images/logo_transparent.png?raw=true
-    :scale: 12%
+    :width: 50%
     :align: center
     :alt: Line Measurer (LiMe) library.
+
 
 .. image:: http://www.repostatus.org/badges/latest/active.svg
     :target: http://www.repostatus.org/#active
