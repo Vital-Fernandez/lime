@@ -2,3 +2,4 @@ ipykernel
 nbsphinx
 lmfit
 toml
+tomli
