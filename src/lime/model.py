@@ -334,7 +334,8 @@ class LineFitting:
         idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, line._p_type)
         idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, line._p_type)
 
-        line.w_i, line.w_f = emis_wave[idx_0], emis_wave[idx_f]
+        line.w_i = emis_wave[idx_0] if not np.ma.isMaskedArray(emis_wave[idx_0]) else None
+        line.w_f = emis_wave[idx_f] if not np.ma.isMaskedArray(emis_wave[idx_f]) else None
 
         # Velocity calculations
         velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
@@ -420,7 +421,8 @@ class LineFitting:
 
         # Fit the line
         self.fit_params = fit_model.make_params()
-        self.fit_output = fit_model.fit(y_in, self.fit_params, x=x_in, weights=weights_in, method=fit_method)
+        self.fit_output = fit_model.fit(y_in, self.fit_params, x=x_in, weights=weights_in, method=fit_method,
+                                        nan_policy='omit')
 
         # Check output quality
         review_fitting(line, self.fit_output)
@@ -627,7 +629,13 @@ class LineFitting:
                     percentInterp = interp1d(percentFluxArray, vel_array, kind='slinear', fill_value='extrapolate')
                     velocPercent = percentInterp(TARGET_PERCENTILES)
 
-                    line.v_med, line.v_50 = np.median(vel_array), velocPercent[3] # TODO np.median ignores the mask
+                    # Bug with masked array median operation
+                    if np.ma.isMaskedArray(vel_array):
+                        line.v_med = np.ma.median(vel_array)
+                    else:
+                        line.v_med = np.median(vel_array),
+
+                    line.v_50 = velocPercent[3]
                     line.v_5, line.v_10 = velocPercent[1], velocPercent[2]
                     line.v_90, line.v_95 = velocPercent[4], velocPercent[5]
 

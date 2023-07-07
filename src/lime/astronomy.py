@@ -91,8 +91,9 @@ def check_spectrum_axes(lime_object):
         if np.ma.is_masked(lime_object.__getattribute__(arg)):
             check_mask[i] = True
 
-    if np.any(check_mask):
-        lime_object._masked_inputs = True # TODO this one should go at the begining and review inputs
+    # TODO this one should go at the begining and review inputs
+    if np.any(check_mask) and isinstance(lime_object, Spectrum):
+        lime_object._masked_inputs = True
         if ~np.all(check_mask):
             for i, arg in enumerate(array_labels):
                 if not check_mask[i]:

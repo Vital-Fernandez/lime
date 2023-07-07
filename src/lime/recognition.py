@@ -75,7 +75,12 @@ class LineFinder:
         for i, degree in enumerate(degree_list):
 
             # Establishing the flux limits
-            low_lim, high_lim = np.percentile(input_flux[mask_cont], (16, 84))
+            input_flux_selection = input_flux[mask_cont]
+            if np.ma.isMaskedArray(input_flux_selection): # Bugged numpy
+                low_lim, high_lim = np.nanpercentile(input_flux_selection.filled(np.nan), (16, 84))
+            else:
+                low_lim, high_lim = np.percentile(input_flux_selection, (16, 84))
+
             low_lim, high_lim = low_lim / threshold_list[i], high_lim * threshold_list[i]
 
             # Add new entries to the mask

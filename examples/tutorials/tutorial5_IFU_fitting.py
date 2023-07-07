@@ -1,3 +1,4 @@
+import numpy as np
 import lime
 from pathlib import Path
 from astropy.io import fits
@@ -27,11 +28,12 @@ with fits.open(cube_file) as hdul:
 wcs = WCS(hdr)
 
 # Define a LiMe cube object
-shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs)
+mask_cube = np.isnan(flux_cube)
+shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs, pixel_mask=mask_cube)
 
 # Fit the lines in one spaxel
 spaxel = shoc579.get_spectrum(38, 35)
-spaxel.fit.frame(bands_file_0, obs_cfg, line_detection=True, id_conf_prefix='MASK_0')
+spaxel.fit.frame(bands_file_0, obs_cfg, line_detection=True, id_conf_prefix='MASK_0', progress_output='counter')
 spaxel.plot.spectrum(rest_frame=True, include_fits=True)
 
 # Load the spaxels mask coordinates
@@ -42,7 +44,7 @@ for i, coords in enumerate(masks_dict['MASK_0']):
     spaxel = shoc579.get_spectrum(idx_Y, idx_Y)
     spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], id_conf_prefix='MASK_0', plot_fit=False, progress_output=None)
 
-# Fit the lines in all the masks spaxels
+# # Fit the lines in all the masks spaxels
 shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=True, output_address=output_lines_log_file)
 
 # Check the individual spaxel fitting configuration
