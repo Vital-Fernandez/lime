@@ -27,8 +27,14 @@ if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
 
-PLOT_SIZE_FONT = {'figure.figsize': (10, 5), 'axes.titlesize': 18, 'axes.labelsize': 16, 'legend.fontsize': 12,
-                 'xtick.labelsize': 16, 'ytick.labelsize': 16, 'font.family': 'Times New Roman', 'mathtext.fontset':'cm'}
+PLOT_SIZE_FONT = {'figure.figsize': (10, 5),
+                  'axes.titlesize': 14,
+                  'axes.labelsize': 14,
+                  'legend.fontsize': 12,
+                  'xtick.labelsize': 12,
+                  'ytick.labelsize': 12}
+
+# 'mathtext.fontset': 'cm'
 
 colorDict = {'bg': 'white', 'fg': 'black',
              'cont_band': '#8c564b', 'line_band': '#b5bd61',
@@ -743,11 +749,17 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
         # Check if blended or single/merged
         idcs_comp = None
         if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] != 'no') and (len(line_list) > 1):
-            profile_comps = log.loc[line, 'profile_label'].split('+')
-            idx_line = profile_comps.index(line)
-            n_comps = len(profile_comps)
-            if profile_comps.index(line) == 0:
-                idcs_comp = (log['profile_label'] == log.loc[line, 'profile_label']).values
+            print('Line', line)
+            profile_comps = log.loc[line, 'profile_label']
+            if profile_comps is not None:
+                profile_comps = profile_comps.split('+')
+                idx_line = profile_comps.index(line)
+                n_comps = len(profile_comps)
+                if profile_comps.index(line) == 0:
+                    idcs_comp = (log['profile_label'] == log.loc[line, 'profile_label']).values
+            else: # TODO remove if profile_comps not "no"
+                idx_line = 0
+                n_comps = 1
         else:
             idx_line = 0
             n_comps = 1

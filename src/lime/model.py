@@ -484,7 +484,7 @@ class LineFitting:
             line.FWHM_g[i] = k_FWHM * line.sigma_vel[i]
 
             # Compute the thermal correction
-            atom_mass = self._atomic_mass_dict.get(line.particle[i][:-1], np.nan)
+            atom_mass = self._atomic_mass_dict.get(line.particle[i].symbol, np.nan)
             line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / atom_mass) / 1000
 
             # Check parameters error progragation from the lmfit parameter

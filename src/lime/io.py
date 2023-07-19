@@ -140,13 +140,14 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
         raise LiMe_Error(f'The configuration file was not found at: {file_address}')
 
     # Convert the configuration entries from the string format if possible
-    for section, items in cfg_lime.items():
-        if section.endswith(fit_cfg_suffix):
-            for i_key, i_value in items.items():
-                try:
-                    cfg_lime[section][i_key] = format_option_value(i_value, i_key, section)
-                except:
-                    _logger.critical(f'Failure to convert entry: "{i_key} = {i_value}" at section [{section}] ')
+    if fit_cfg_suffix is not None:
+        for section, items in cfg_lime.items():
+            if section.endswith(fit_cfg_suffix):
+                for i_key, i_value in items.items():
+                    try:
+                        cfg_lime[section][i_key] = format_option_value(i_value, i_key, section)
+                    except:
+                        _logger.critical(f'Failure to convert entry: "{i_key} = {i_value}" at section [{section}] ')
 
     return cfg_lime
 
@@ -232,7 +233,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     return
 
 
-def load_log(file_address, page='LINELOG', sample_levels=['id', 'line']):
+def load_log(file_address, page: str ='LINELOG', sample_levels: list =['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
@@ -574,6 +575,28 @@ def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_level
 
     else:
         output = df_variable
+
+    return output
+
+
+def check_file_configuration(input_cfg, default_cfg_section=None, local_cfg_section=None, cfg_suffix='_model_fitting'):
+
+    if isinstance(input_cfg, dict):
+        cfg_dict = input_cfg.copy()
+    else:
+        cfg_dict = load_cfg(input_cfg, fit_cfg_suffix=None)
+
+    # Get default configuration and updated with local if necessary
+    if default_cfg_section is not None:
+        if f'{default_cfg_section}{cfg_suffix}' in cfg_dict:
+            output = {**cfg_dict[f'{default_cfg_section}{cfg_suffix}']}
+
+            if local_cfg_section is not None:
+                if f'{local_cfg_section}{cfg_suffix}' in cfg_dict:
+                    output = {**output, **cfg_dict[f'{local_cfg_section}{cfg_suffix}']}
+
+    else:
+        output = cfg_dict
 
     return output
 

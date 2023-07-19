@@ -45,7 +45,7 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
     # Check if imported kinematics come from blended component
-    if line.profile_label != 'no':
+    if (line.profile_label != 'no') and (line.profile_label is not None): # TODO make profile label default None
         childs_list = line.profile_label.split('+')
     else:
         childs_list = np.array(line.label, ndmin=1)
@@ -96,9 +96,12 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
     return
 
+
 def check_spectrum_bands(line, wave_rest_array):
 
     valid_check = True
+    wave_rest_array = wave_rest_array.data if np.ma.isMaskedArray(wave_rest_array) else wave_rest_array
+
     if line.mask is not None:
         if (wave_rest_array[0] <= line.mask[0]) and (line.mask[-1] <= wave_rest_array[-1]):
             pass
@@ -263,7 +266,7 @@ class SpecTreatment(LineFitting):
             contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
 
             # Check the bands size
-            review_bands(self.line, emisWave, contWave)
+            review_bands(self.line, emisWave, contWave) # TODO put this one in fit frame
 
             # Non-parametric measurements
             self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr)

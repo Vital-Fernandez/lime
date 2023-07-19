@@ -7,7 +7,7 @@ from collections import UserDict
 
 import lime
 from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_conversion,\
-    define_masks, extract_fluxes, relative_fluxes, compute_line_ratios, ProgressBar
+    define_masks, extract_fluxes, normalize_fluxes, compute_line_ratios, ProgressBar
 
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -1046,6 +1046,7 @@ class Cube:
 
         return
 
+
 class Observation:
 
     def __init__(self, ID, redshift=None, norm_flux=None, units_wave=None, units_flux=None, inst_FWHM=None, wcs=None,
@@ -1172,25 +1173,6 @@ class Sample(UserDict):
                     self.label_list[i] = f'{label},{",".join(self.group_list[i])}'
             self.label_list = np.array(self.label_list)
 
-            # # Store the observations
-            # if observation_list is not None:
-            #     for i, obs in enumerate(observation_list):
-            #
-            #         # Check for non-LiMe objects
-            #         if not isinstance(obs, (lime.Spectrum, lime.Cube)):
-            #             raise LiMe_Error(f'Object {label} of type {type(obs)} is not a LiMe object')
-            #
-            #         # Check units and normalization
-            #         for attr in ['norm_flux', 'units_wave', 'units_flux']:
-            #             attr_value_sample = self.__getattribute__(attr)
-            #             attr_value_obj = obs.__getattribute__(attr)
-            #             if attr_value_sample is None:
-            #                 self.__setattr__(attr, obs.__getattribute__(attr))
-            #             else:
-            #                 if attr_value_sample != attr_value_obj:
-            #                     _logger.warning(f'Observation { self.label_list[i]} {attr} value ({attr_value_obj}) '
-            #                                        f'does not sample value ({attr_value_sample})')
-
             # Store the objects
             log_dict = {}
             if log_list is not None:
@@ -1208,8 +1190,7 @@ class Sample(UserDict):
                         self.label_list[i].load_log(log_df)
 
                 # Concact the panel
-                obj_list, log_list = list(log_dict.keys()), list(log_dict.values())
-                self.log = pd.concat(obj_list, axis=0, keys=log_list)
+                self.log = pd.concat(log_dict, axis=0)
                 self.log.rename_axis(index=level_names, inplace=True)
 
         return
@@ -1273,7 +1254,7 @@ class Sample(UserDict):
     def relative_fluxes(self, normalization_line, flux_entries=['line_flux', 'line_flux_err'], column_names=None,
                         column_positions=[1, 2]):
 
-        return relative_fluxes(self.log, normalization_line, flux_entries, column_names, column_positions)
+        return normalize_fluxes(self.log, normalization_line, flux_entries, column_names, column_positions)
 
     def compute_line_ratios(self, line_ratios=None, flux_headers=['line_flux', 'line_flux_err'],
                             sample_levels=['id', 'line'], keep_empty_columns=True):

@@ -13,6 +13,25 @@ _COMPs_KEYS = {'k': 'kinem',
                'p': 'profile_comp',
                't': 'transition_comp'}
 
+ELEMENTS_DICT = dict(H='Hydrogen', He='Helium', Li='Lithium', Be='Beryllium', B='Boron', C='Carbon', N='Nitrogen', O='Oxygen', F='Fluorine',
+                     Ne='Neon', Na='Sodium', Mg='Magnesium', Al='Aluminum', Si='Silicon', P='Phosphorus', S='Sulfur',
+                     Cl='Chlorine', Ar='Argon', K='Potassium', Ca='Calcium', Sc='Scandium', Ti='Titanium', V='Vanadium',
+                     Cr='Chromium', Mn='Manganese', Fe='Iron', Ni='Nickel', Co='Cobalt', Cu='Copper', Zn='Zinc',
+                     Ga='Gallium', Ge='Germanium', As='Arsenic', Se='Selenium', Br='Bromine', Kr='Krypton', Rb='Rubidium',
+                     Sr='Strontium', Y='Yttrium', Zr='Zirconium', Nb='Niobium', Mo='Molybdenum', Tc='Technetium',
+                     Ru='Ruthenium', Rh='Rhodium', Pd='Palladium', Ag='Silver', Cd='Cadmium', In='Indium', Sn='Tin',
+                     Sb='Antimony', Te='Tellurium', I='Iodine', Xe='Xenon', Cs='Cesium', Ba='Barium', La='Lanthanum',
+                     Ce='Cerium', Pr='Praseodymium', Nd='Neodymium', Pm='Promethium', Sm='Samarium', Eu='Europium',
+                     Gd='Gadolinium', Tb='Terbium', Dy='Dysprosium', Ho='Holmium', Er='Erbium', Tm='Thulium',
+                     Yb='Ytterbium', Lu='Lutetium', Hf='Hafnium', Ta='Tantalum', W='Tungsten', Re='Rhenium', Os='Osmium',
+                     Ir='Iridium', Pt='Platinum', Au='Gold', Hg='Mercury', Tl='Thallium', Pb='Lead', Bi='Bismuth',
+                     Th='Thorium', Pa='Protactinium', U='Uranium', Np='Neptunium', Pu='Plutonium', Am='Americium',
+                     Cm='Curium', Bk='Berkelium', Cf='Californium', Es='Einsteinium', Fm='Fermium', Md='Mendelevium',
+                     No='Nobelium', Lr='Lawrencium', Rf='Rutherfordium', Db='Dubnium', Sg='Seaborgium', Bh='Bohrium',
+                     Hs='Hassium', Mt='Meitnerium', Ds='Darmstadtium', Rg='Roentgenium', Cn='Copernicium', Nh='Nihonium',
+                     Fl='Flerovium', Mc='Moscovium', Lv='Livermorium', Ts='Tennessine', Og='Oganesson')
+
+
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
@@ -27,30 +46,66 @@ def int_to_roman(num):
     return roman_num
 
 
+def recover_ionization(string):
+
+    part_len = len(string)
+    index = part_len - 1  # Start at the last character
+    while index >= 0 and string[index].isdigit():
+        index -= 1
+
+    # All characters
+    if index == part_len - 1:
+        particle, ionization = string, None
+
+    # All numbers
+    elif index < 0:
+        particle, ionization = string, None
+
+    # Particle and ionization
+    else:
+        particle, ionization = string[0:index+1], int(string[index+1:])
+
+    return particle, ionization
+
+
 def particle_notation(particle, transition):
 
-    try:
+    # Pre-assigned a transition time if particle and ionization
+    if transition is None:
 
-        # Isolate particle and ionization
-        atom, ionization = particle[:-1], int(particle[-1])
+        # Check for PyNeb particle notation
+        element = ELEMENTS_DICT.get(particle.symbol)
+        if (element is not None) and (particle.ionization is not None):
 
-        # Get ionization numeral
-        ionization_roman = int_to_roman(ionization)
-        part_label = f'{atom}{ionization_roman}'
+            if particle.label in ('H1', 'He1', 'He2'):
+                transition = 'rec'
+            else:
+                transition = 'col'
 
-        # Collisional excited
-        if transition == 'col':
-            part_label = f'$[{part_label}]'
+    if transition is not None:
 
-        # Semi-forbidden
-        elif transition == 'sem':
-            part_label = f'${part_label}]'
+        try:
 
-        # Recombination
-        else:
-            part_label = f'${part_label}'
+            # Get ionization numeral
+            ionization_roman = int_to_roman(particle.ionization)
+            part_label = f'{particle.symbol}{ionization_roman}'
 
-    except:
+            # Collisional excited
+            if transition == 'col':
+                part_label = f'$[{part_label}]'
+
+            # Semi-forbidden
+            elif transition == 'sem':
+                part_label = f'${part_label}]'
+
+            # Recombination
+            else:
+                part_label = f'${part_label}'
+
+        except:
+            part_label = f'{particle}-$'
+
+    else:
         part_label = f'{particle}-$'
 
     return part_label
@@ -164,7 +219,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
         kinem = array(kinem, ndmin=1)
         transition_comp = array(transition_comp, ndmin=1)
 
-    n_items = particle.size
+    n_items = wave.size
     latex_array = empty(n_items).astype('object')
 
     # Significant figures
@@ -199,12 +254,12 @@ def label_composition(line_list, ref_df=None, default_profile=None):
 
     # Empty containers for the label componentes
     n_comps = len(line_list)
-    ion = empty(n_comps).astype(str)
+    particle = [None] * n_comps #empty(n_comps).astype(str)
     wavelength = empty(n_comps)
     units_wave = empty(n_comps).astype(str)
     kinem = zeros(n_comps, dtype=int)
     profile_comp = [None] * n_comps
-    transition_comp = np.array(['rec'] * n_comps)
+    transition_comp = [None] * n_comps
 
     # Loop through the components and get the components
     for i, line in enumerate(line_list):
@@ -218,7 +273,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
                              f'file')
 
         # Particle properties
-        ion[i] = line_items[0]
+        particle[i] = Particle.from_label(line_items[0])
 
         # Wavelength properties
         wavelength[i], units_wave[i] = check_units_from_wave(line_items[1])
@@ -240,16 +295,13 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         # Transition component
         trans = comp_conf.get('t', None)
 
-        if (trans is None) and (ref_df is not None):
+        if (trans is None) and (ref_df is not None): # TODO check if try except is faster here
             if line in ref_df.index and 'transition' in ref_df.columns:
                 trans = ref_df.loc[line, 'transition']
 
-        if trans is None:
-            trans = 'col' if ion[i] not in ('H1', 'He1', 'He2') else 'rec'
-
         transition_comp[i] = trans
 
-    return ion, wavelength, units_wave, kinem, profile_comp, transition_comp
+    return particle, wavelength, units_wave, kinem, profile_comp, transition_comp
 
 
 def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('particle', 'wavelength', 'latex_label'),
@@ -293,8 +345,8 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     for label in lines_df.index:
         line = Line(label, bands, fit_conf)
 
-        lines_df.loc[label, :] = (line.particle[0], line.wavelength[0], line.latex_label[0], line.kinem[0], line.profile_comp[0],
-                                  line.transition_comp[0])
+        lines_df.loc[label, :] = (line.particle[0].label, line.wavelength[0], line.latex_label[0], line.kinem[0],
+                                  line.profile_comp[0], line.transition_comp[0])
 
     # Adjust column types
     lines_df['wavelength'] = pd.to_numeric(lines_df['wavelength'])
@@ -313,6 +365,51 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     # TODO should we output as single array only if one property is requested?
 
     return output
+
+
+class Particle:
+
+    def __init__(self, label: str = None, symbol: str = None, ionization: int = str):
+
+        self.label = label
+        self.symbol = symbol
+        self.ionization = ionization
+
+        return
+
+    @classmethod
+    def from_label(cls, label):
+
+        symbol, ionization = recover_ionization(label)
+
+        return cls(label, symbol, ionization)
+
+    def __str__(self):
+
+        return self.label
+
+    def __repr__(self):
+
+        return self.label
+
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+
+        _equality = False
+        if isinstance(other, Particle):
+            if (other.label == self.label) and (other.symbol == self.symbol) and (other.ionization == self.ionization):
+                _equality = True
+
+        return _equality
+
+    def __ne__(self, other):
+
+        _inequality = True
+        if isinstance(other, Particle):
+            if (other.label == self.label) and (other.symbol == self.symbol) and (other.ionization == self.ionization):
+                _inequality = False
+
+        return _inequality
 
 
 class Line:
@@ -463,7 +560,7 @@ class Line:
                 inline.mask = log.loc[label, 'w1':'w6'].values
 
                 # Checks:
-                if inline.profile_label != 'no':
+                if inline.profile_label is not None:
                     inline.blended_check, inline.merged_check = False, False
 
                     # Merged line

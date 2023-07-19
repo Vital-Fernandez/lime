@@ -1,7 +1,7 @@
 __all__ = ['COORD_KEYS',
            'unit_conversion',
            'extract_fluxes',
-           'relative_fluxes',
+           'normalize_fluxes',
            'compute_line_ratios',
            'redshift_calculation']
 
@@ -68,7 +68,10 @@ def int_to_roman(num):
 
 
 # Favoured method to get line fluxes according to resolution
-def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=None, column_positions=None):
+def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='line_flux', column_positions=None):
+
+    if flux_type not in ('mixture', 'intg', 'gauss'):
+        raise LiMe_Error(f'Flux type "{flux_type}" is not recognized please one of "intg", "gauss", or "mixture" ')
 
     # Get indeces of blended lines
     if not isinstance(log.index, pd.MultiIndex):
@@ -90,84 +93,152 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_names=N
     # Use the one requested by the user
     else:
         obsFlux = log[f'{flux_type}_flux'].to_numpy(copy=True)
-        obsErr = log[f'{flux_type}_err'].to_numpy(copy=True)
-
-    output_fluxes = [obsFlux, obsErr]
+        obsErr = log[f'{flux_type}_flux_err'].to_numpy(copy=True)
 
     # Add columns to input dataframe
-    if column_names is not None:
-        if column_positions is not None:
-            for i, pos_i in enumerate(column_positions):
-                if column_names[i] not in log.columns:
-                    log.insert(loc=pos_i, column=column_names[i], value=output_fluxes[i])
-                else:
-                    log[column_names[i]] = output_fluxes[i]
-                    # log.insert(loc=column_positions[0], column=column_names[0], value=obsFlux)
-
-        else:
-            log[column_names[0]] = obsFlux
-            log[column_names[1]] = obsErr
-
+    output_fluxes = [obsFlux, obsErr]
+    if column_name is not None:
+        column_positions = 0 if column_positions is None else column_positions
+        log.insert(loc=column_positions, column=f'{column_name}', value=output_fluxes[0])
+        log.insert(loc=column_positions + 1, column=f'{column_name}_err', value=output_fluxes[1])
         function_return = None
-
     else:
-        function_return = obsFlux, obsErr
+        function_return = output_fluxes
 
     return function_return
 
 
+def check_lines_normalization(input_lines, norm_line, log):
+
+    # Single or multi-index behaviour
+    single_index_check = not isinstance(log.index, pd.MultiIndex)
+
+    # If not input lines use all of them
+    if input_lines is None:
+        input_lines = log.index.to_numpy() if single_index_check else log.index.get_level_values('line').unique()
+
+    # 1) One-norm in norm_line  # 2) Multiple-norm in norm_line # 3) Multiple-norm in input_lines
+
+    # Cases 1 and 2
+    if norm_line is not None:
+
+        # Unique normalization
+        if isinstance(norm_line, str) or (len(norm_line) == 1):
+
+            if single_index_check:
+                line_list = list(log.loc[log.index.isin(input_lines)].index.to_numpy())
+            else:
+                line_list = list(log.loc[log.index.get_level_values('line').isin(input_lines)].index.get_level_values('line').unique())
+
+            norm_list = [norm_line] * len(line_list)
+
+        # Multiple normalizations
+        else:
+            if len(input_lines) and len(norm_line):
+                line_list, norm_list = [], []
+                candidate_lines = log.index if single_index_check else log.index.get_level_values('line')
+                for i, line in enumerate(input_lines):
+                    if (line in candidate_lines) and (norm_line[i] in candidate_lines):
+                        line_list.append(line)
+                        norm_list.append(norm_line[i])
+            else:
+                raise LiMe_Error(f'The number of normalization lines does not match the number of input lines:\n'
+                                   f'- Model lines ({input_lines}): {input_lines}\n'
+                                   f'- Norm lines  ({len(norm_line)}): {norm_line}')
+
+    # Case 3
+    else:
+
+        # Split the nominators and denominators
+        line_list, norm_list = [], []
+        for ratio in input_lines:
+
+            if '/' not in ratio:
+                raise LiMe_Error(f'Input line list must use "/" with their normalization (for example H1_6563A/H1_4861A)\n'
+                                   f'The input ratio: {ratio} does not have it. Try to specify a "norm_list" argument instead.')
+
+            nomin_i, denom_i = ratio.replace(" ", "").split('/')
+            line_list.append(nomin_i)
+            norm_list.append(denom_i)
+
+    return line_list, norm_list
+
+
 # Compute the fluxes
-def relative_fluxes(log, normalization_line, flux_entries=['intg_flux', 'intg_flux_err'], column_names=None,
-                    column_positions=None):
+def normalize_fluxes(log, lines_list=None, norm_list=None, flux_column='gauss_flux', column_name='line_flux',
+                     column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line']):
 
     '''
     If the normalization line is not available, no operation is added.
     '''
 
-    # If normalization_line is not none
-    if len(flux_entries) != np.sum(log.columns.isin(flux_entries)):
-        raise LiMe_Error(f'Input log is missing {len(flux_entries)} "flux_entries" in the column headers')
+    # Check columns present in log
+    if (flux_column not in log.columns) or (f'{flux_column}_err' not in log.columns):
+        raise LiMe_Error(f'Input log is missing "{flux_column}" or "{flux_column}_err" columns')
 
-    # Container for params
-    nflux_array, nErr_array = None, None
+    # Check the normalization for the lines
+    line_array, norm_array = check_lines_normalization(lines_list, norm_list, log)
 
-    # Single index dataframes
-    if not isinstance(log.index, pd.MultiIndex):
-        idcs_slice = log.index
+    # Add new columns if necessary
+    if column_name not in log.columns:
+        log.insert(loc=column_position, column=f'{column_name}', value=np.nan)
+        log.insert(loc=column_position+1, column=f'{column_name}_err', value=np.nan)
 
-        if normalization_line in idcs_slice:
-            nflux_array = log.loc[idcs_slice, flux_entries[0]]/log.loc[normalization_line, flux_entries[0]]
-            errLog_n = np.power(log.loc[idcs_slice, flux_entries[1]]/log.loc[idcs_slice, flux_entries[0]], 2)
-            errNorm_n = np.power(log.loc[normalization_line, flux_entries[1]]/log.loc[normalization_line, flux_entries[0]], 2)
-            nErr_array = nflux_array * np.sqrt(errLog_n + errNorm_n)
+    # Add new line with normalization by default
+    if column_normalization_name not in log.columns:
+        log.insert(loc=column_position+2, column=column_normalization_name, value=np.nan)
 
-    # Multi-index dataframes
-    else:
-        log_slice = log.xs(normalization_line, level="line")
-        idcs_slice = log_slice.index
+    # Loop throught the lines to compute their normalization
+    single_index = not isinstance(log.index, pd.MultiIndex)
+    for i in np.arange(len(line_array)):
 
-        if len(log_slice) > 0:
-            nflux_array = log.loc[idcs_slice, flux_entries[0]]/log_slice[flux_entries[0]]
-            errLog_n = np.power(log.loc[idcs_slice, flux_entries[1]]/log.loc[idcs_slice, flux_entries[0]], 2)
-            errNorm_n = np.power(log_slice[flux_entries[1]]/log_slice[flux_entries[0]], 2)
-            nErr_array = nflux_array * np.sqrt(errLog_n + errNorm_n)
+            numer, denom = line_array[i], norm_array[i]
+            numer_flux, denom_flux = None, None
 
-    # Confirm lines were normalized
-    if nflux_array is None:
-        _logger.info(f'The normalization line {normalization_line} is not found on the input log')
+            # Single-index dataframe
+            if single_index:
+                idcs_ratios = numer
+                if (numer in log.index) and (denom in log.index):
+                    numer_flux = log.loc[numer, flux_column]
+                    numer_err = log.loc[numer, f'{flux_column}_err']
 
-    # Check for column names
-    if column_names is None:
-        column_names = [f'n{flux_entries[0]}', f'n{flux_entries[1]}']
+                    denom_flux = log.loc[denom, flux_column]
+                    denom_err = log.loc[denom, f'{flux_column}_err']
 
-    # Add columns to input dataframe
-    if nflux_array is not None:
-        if (column_positions is not None) and (column_names[0] not in log.columns):
-            log.insert(loc=column_positions[0], column=column_names[0], value=np.nan)
-            log.insert(loc=column_positions[1], column=column_names[1], value=np.nan)
+            #Multi-index dataframe
+            else:
 
-        log.loc[idcs_slice, column_names[0]] = nflux_array
-        log.loc[idcs_slice, column_names[1]] = nErr_array
+                idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
+                grouper = log.index.droplevel('line')
+                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+                df_slice = log.loc[idcs_slice]
+
+                # Get fluxes
+                if df_slice.size > 0:
+                    num_slice = df_slice.xs(numer, level=sample_levels[-1], drop_level=False)
+                    numer_flux = num_slice[flux_column].to_numpy()
+                    numer_err = num_slice[f'{flux_column}_err'].to_numpy()
+
+                    denom_slice = df_slice.xs(denom, level=sample_levels[-1], drop_level=False)
+                    denom_flux = denom_slice[flux_column].to_numpy()
+                    denom_err = denom_slice[f'{flux_column}_err'].to_numpy()
+
+                    idcs_ratios = num_slice.index
+
+            # Compute the ratios with error propagation
+            ratio_array, ratio_err = None, None
+            if (numer_flux is not None) and (denom_flux is not None):
+                ratio_array = numer_flux / denom_flux
+                ratio_err = ratio_array * np.sqrt(np.power(numer_err / numer_flux, 2) + np.power(denom_err / denom_flux, 2))
+
+            # Store in dataframe (with empty columns)
+            if (ratio_array is not None) and (ratio_err is not None):
+                log.loc[idcs_ratios, f'{column_name}'] = ratio_array
+                log.loc[idcs_ratios, f'{column_name}_err'] = ratio_err
+
+                # Store normalization line
+                if column_normalization_name is not None:
+                    log.loc[idcs_ratios, f'{column_normalization_name}'] = denom
 
     return
 
@@ -353,14 +424,14 @@ def blended_label_from_log(line, log):
 
     # Default values: single line
     blended_check = False
-    profile_label = 'no'
+    profile_label = None
 
     if line in log.index:
 
         if 'profile_label' in log.columns:
 
-            if log.loc[line, 'profile_label'] == 'no':
-                profile_label = 'no'
+            if log.loc[line, 'profile_label'] is None:
+                profile_label = None
             elif line.endswith('_m'):
                 profile_label = log.loc[line, 'profile_label']
             else:
