@@ -380,13 +380,6 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
         # Pdf fluxes table # TODO error while saving all parameters
         elif file_type == '.pdf':
-
-            # # Recover the fit components for merged lines from the log
-            # if 'profile_label' in log.columns:
-            #     idcs_m = (log.index.str.contains('_m')) & (log.profile_label != 'no')
-            #     fit_conf = dict(zip(log.loc[idcs_m].index.values, log.loc[idcs_m].profile_label.values))
-            # else:
-            #     fit_conf = {}
             table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
                          lines_notation=log.latex_label.values, store_version=store_version)
 

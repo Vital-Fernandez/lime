@@ -48,9 +48,9 @@ spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1])
 wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, spax.err_flux.data * norm_flux
 np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
-# # Plot Spectrum
+# Plot Spectrum
 # spax.plot.spectrum(output_address=spectrum_plot_address)
-#
+
 # # Line fitting
 # spax.fit.bands('Fe3_4658A')
 # spax.plot.bands(output_address=line_plot_address)

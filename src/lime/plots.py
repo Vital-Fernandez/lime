@@ -1006,7 +1006,7 @@ class LiMePlots:
                 wave_array, cont_array = linear_continuum_computation(log.index.values, log, (1 + self.redshift))
 
                 # Separating blended from unblended lines
-                idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label == 'no').values
+                idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label is None).values
 
                 # Plot single lines
                 line_list = self.log.loc[idcs_nonBlended].index

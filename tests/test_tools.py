@@ -108,6 +108,7 @@ def test_extract_fluxes_single_index():
 
     return
 
+
 def test_extract_fluxes_multi_index():
 
     idcs_remove = (obs.log.index.get_level_values('id') == 'obj_1') &\
@@ -136,7 +137,6 @@ def test_extract_fluxes_multi_index():
     assert log2.xs('O3_5007A', level='line')['line_flux']['obj_2'] == ratio['obj_2']
     assert np.isnan(ratio['obj_1'])
     assert 'obj_1' not in log2.xs('O3_5007A', level='line')['line_flux']
-
 
     return
 

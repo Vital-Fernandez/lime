@@ -421,7 +421,7 @@ class Line:
         self.label = label
         self.mask = None
         self.latex_label = None,
-        self.profile_label, self.list_comps = 'no', None
+        self.profile_label, self.list_comps = None, None
 
         self.particle = None
         self.wavelength, self.units_wave = None, None
