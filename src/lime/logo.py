@@ -1,40 +1,12 @@
-# import matplotlib.pyplot as plt
-# import matplotlib.patches as patches
-# from matplotlib import rcParams
-#
-# from matplotlib import font_manager
-#
-# font_manager._rebuild()
-# font_manager.findfont('MTF Saxy', rebuild_if_missing=True)
-#
-# print(font_manager.win32FontDirectory())
-#
-# # build a rectangle in axes coords
-# left, width = .25, .5
-# bottom, height = .25, .5
-# right = left + width
-# top = bottom + height
-#
-# _fig = plt.figure()
-# _ax = _fig.add_axes([0, 0, 1, 1])
-#
-# rcParams['font.family'] = ['MTF Saxy']
-#
-# _ax.text(0.5*(left+right), 0.5*(bottom+top), 'LiMe',
-#         horizontalalignment='center',
-#         verticalalignment='center',
-#         fontsize=200, color='red',
-#         transform=_ax.transAxes)
-#
-# _ax.set_axis_off()
-# plt.show()
-
 import numpy as np
-import lime as lm
 from lime.model import gaussian_model
 from matplotlib import pyplot as plt, rcParams
 from matplotlib import font_manager
 from pathlib import Path
+import shutil
+import matplotlib
+
+matplotlib.font_manager._load_fontmanager(try_read_cache=False)
 
 np.random.seed(2)
 
@@ -46,6 +18,7 @@ curve_dict = {'comp1': {'amp':0.75, 'center':1.00, 'sigma': 2.0},
 cont = 0.6
 err = 0.025
 wave = np.linspace(-30, 30, 100)
+wave_g = np.linspace(-30, 30, 1000)
 noise = np.random.normal(0.0, err, size=wave.size)
 
 flux_dict = {}
@@ -53,20 +26,24 @@ for curve, params in curve_dict.items():
         flux_dict[curve] = gaussian_model(wave, **params)
 flux_comb = flux_dict['comp1'] + flux_dict['comp2'] + cont + noise
 
+flux_dict_g = {}
+for curve, params in curve_dict.items():
+        flux_dict_g[curve] = gaussian_model(wave_g, **params)
+
+
 fig, ax = plt.subplots(dpi=600)
 
-w3, w4 = 0, -1
 w3, w4 = np.searchsorted(wave, (-3.0, 11))
+w_cross1, w_cross2 = np.searchsorted(wave_g, (4.352, 3.942))
 
+ax.step(wave[w3:w4], flux_comb[w3:w4], where='mid', color='black', linewidth=3)
 
-flux_comb = flux_dict['comp1'] + flux_dict['comp2'] + cont + noise
-ax.step(wave[w3:w4], flux_comb[w3:w4], where='mid', color='black', linewidth=4)
+# for curve, flux in flux_dict.items():
+#         ax.plot(wave[w3:w4], flux[w3:w4] + cont, '--', linewidth=1)
+ax.plot(wave_g[0:w_cross1], flux_dict_g['comp1'][0:w_cross1] + cont, '--', linewidth=1.5)
+ax.plot(wave_g[w_cross2:-1], flux_dict_g['comp2'][w_cross2:-1] + cont, '--', linewidth=1.5)
 
-for curve, flux in flux_dict.items():
-        ax.plot(wave[w3:w4], flux[w3:w4] + cont, '--', linewidth=1)
-
-
-dodge = - 0.1
+dodge = 0 #- 0.1
 residual = flux_comb - (flux_dict['comp1'] + flux_dict['comp2']) + dodge
 ax.step(wave, residual, where='mid', color='black')
 

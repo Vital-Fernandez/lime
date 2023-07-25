@@ -172,6 +172,8 @@ def normalize_fluxes(log, lines_list=None, norm_list=None, flux_column='gauss_fl
     If the normalization line is not available, no operation is added.
     '''
 
+    # TODO seems to fail if one in lines_list and one in norm_list
+
     # Check columns present in log
     if (flux_column not in log.columns) or (f'{flux_column}_err' not in log.columns):
         raise LiMe_Error(f'Input log is missing "{flux_column}" or "{flux_column}_err" columns')
@@ -430,7 +432,7 @@ def blended_label_from_log(line, log):
 
         if 'profile_label' in log.columns:
 
-            if log.loc[line, 'profile_label'] is None:
+            if log.loc[line, 'profile_label'] == 'None':
                 profile_label = None
             elif line.endswith('_m'):
                 profile_label = log.loc[line, 'profile_label']

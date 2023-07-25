@@ -55,11 +55,15 @@ np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 # spax.fit.bands('Fe3_4658A')
 # spax.plot.bands(output_address=line_plot_address)
 # spax.check.bands(line_bands_file, n_cols=10)
+# spax.log = spax.log[0:0]
 
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35')
 spax.plot.spectrum(include_fits=True, rest_frame=True)
 spax.save_log(lines_log_file)
+
+# Save iron line plot
+spax.plot.bands('Fe3_4658A_p-g_emis', output_address=line_plot_address)
 
 # Sample with 3 (repeated) observations
 log_dict = {}

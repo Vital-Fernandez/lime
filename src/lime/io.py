@@ -15,11 +15,9 @@ __all__ = [
 
 import os
 import configparser
-import copy
 import logging
 import numpy as np
 import pandas as pd
-import toml
 
 from . import Error, __version__
 from sys import exit, stdout, version_info
@@ -30,7 +28,6 @@ from collections.abc import Sequence
 from astropy.io import fits
 from astropy.table import Table
 
-import lime
 from .tables import table_fluxes
 
 
@@ -82,6 +79,7 @@ _LOG_EXPORT_RECARR = np.dtype(list(_LOG_EXPORT_DICT.items()))
 
 # Attributes with measurements for log
 _ATTRIBUTES_FIT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Fit_attributes.to_numpy().astype(bool)].index.to_numpy()
+_RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
 
 # Dictionary with the parameter dtypes
 _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.to_numpy(),
@@ -522,9 +520,6 @@ def results_to_log(line, log, norm_flux):
     # Loop through the line components
     for i, comp in enumerate(line.list_comps):
 
-        # # Add new row
-        # log.loc[comp] = np.empty(0, dtype=_LOG_EXPORT_RECARR)
-
         # Add bands wavelengths
         log.at[comp, 'w1'] = line.mask[0]
         log.at[comp, 'w2'] = line.mask[1]
@@ -534,7 +529,9 @@ def results_to_log(line, log, norm_flux):
         log.at[comp, 'w6'] = line.mask[5]
 
         # Treat every line
-        for param in _ATTRIBUTES_FIT:
+        for j in _RANGE_ATTRIBUTES_FIT:
+
+            param = _ATTRIBUTES_FIT[j]
 
             # Get component parameter
             param_value = line.__getattribute__(param)
@@ -545,6 +542,11 @@ def results_to_log(line, log, norm_flux):
             if _LOG_COLUMNS[param][0]:
                 if param_value is not None:
                     param_value = param_value * norm_flux
+
+            # Converting None entries to str (9 = profile_label)
+            if j == 9:
+                if param_value is None:
+                    param_value = 'None'
 
             log.at[comp, param] = param_value
 
