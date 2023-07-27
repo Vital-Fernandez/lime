@@ -18,6 +18,7 @@ import configparser
 import logging
 import numpy as np
 import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 from . import Error, __version__
 from sys import exit, stdout, version_info
@@ -205,6 +206,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
                 output_cfg = configparser.ConfigParser()
                 output_cfg.optionxform = str
                 output_cfg.read(output_file)
+
             # Create empty cfg
             else:
                 output_cfg = configparser.ConfigParser()
@@ -272,6 +274,10 @@ def load_log(file_address, page: str ='LINELOG', sample_levels: list =['id', 'li
             log = Table.read(log_path, page, character_as_bytes=False).to_pandas()
             log.set_index('index', inplace=True)
 
+            # Change 'nan' to np.nan
+            idcs_nan_str = log['profile_label'] == 'nan'
+            log.loc[idcs_nan_str, 'profile_label'] = np.nan
+
         # Excel table
         elif file_type in ['.xlsx' or '.xls']:
             log = pd.read_excel(log_path, sheet_name=page, header=0, index_col=0)
@@ -282,6 +288,10 @@ def load_log(file_address, page: str ='LINELOG', sample_levels: list =['id', 'li
                 log_RA = af[page]
                 log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
                 log.set_index('index', inplace=True)
+
+                # Change 'nan' to np.nan
+                idcs_nan_str = log['profile_label'] == 'nan'
+                log.loc[idcs_nan_str, 'profile_label'] = np.nan
 
         # Text file
         elif file_type == '.txt':
@@ -408,28 +418,47 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
                 # New excel
                 if not log_path.is_file():
+
                     with pd.ExcelWriter(log_path) as writer:
                         lines_log.to_excel(writer, sheet_name=page)
 
                         if store_version:
                             df_empty = pd.DataFrame()
-                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
-
-                        # lines_log.to_csv()
+                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}', index=False)
 
                 # Updating existing file
                 else:
-                    book = openpyxl.load_workbook(log_path)
-                    with pd.ExcelWriter(log_path, engine='openpyxl') as writer:
+                    wb = openpyxl.load_workbook(log_path)
 
-                        writer.book = book
-                        dataframe.to_excel(writer, sheet_name=page, index=True)
+                    # Remove if existing and create anew
+                    if page in wb.sheetnames:
+                        wb.remove(wb[page])
+                    sheet = wb.create_sheet(page, index=0)
 
-                        if store_version:
-                            df_empty = pd.DataFrame()
-                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
+                    # Add data one row at a time
+                    for i, row in enumerate(dataframe_to_rows(lines_log, index=True, header=True)):
+                        if len(row) > 1: # TOFIX Remove the frozen list logic
+                            sheet.append(row)
 
-                    book.close()
+                    # Save the data
+                    wb.save(log_path)
+
+                    # Add new sheet
+
+                    # df_old = load_log(log_path)
+                    # # with pd.ExcelWriter(log_path, engine='openpyxl') as writer:
+                    # #
+                    # #     book = openpyxl.load_workbook(log_path)
+                    # #     writer.book = book
+                    # #     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    # #     lines_log.to_excel(writer, sheet_name=page, index=True)
+                    #     # dataframe.to_excel(writer, sheet_name=page, index=True)
+                    #
+                    #     # if store_version:
+                    #     #     df_empty = pd.DataFrame()
+                    #     #     df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
+                    #
+                    #     # book.close()
 
             else:
                 _logger.critical(f'openpyxl is not installed. Lines log {file_address} could not be saved')
@@ -547,6 +576,10 @@ def results_to_log(line, log, norm_flux):
             if j == 9:
                 if param_value is None:
                     param_value = 'None'
+
+            # Just string for particle
+            if j == 7:
+                param_value = param_value.label
 
             log.at[comp, param] = param_value
 

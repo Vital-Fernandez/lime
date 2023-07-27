@@ -34,18 +34,8 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 gp_spec.plot.spectrum(label='GP121903')
 
-# gp_spec.log.at['H1_6563A', 'profile_label'] = None
-# gp_spec.save_log('test_log.txt')
-# log = lime.load_log('test_log.txt')
-
 # Run the fit
 gp_spec.fit.bands(line, band_edges)
-
-# for item in gp_spec.log.columns:
-#     print(item, gp_spec.log.at['H1_6563A', item])
-#
-# for item in log.columns:
-#     print(item, log.at['H1_6563A', item], type(log.at['H1_6563A', item]))
 
 # Plot the results from the last fitting
 gp_spec.plot.bands()

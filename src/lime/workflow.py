@@ -45,7 +45,7 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
     # Check if imported kinematics come from blended component
-    if line.profile_label is not None:
+    if line.profile_label is not np.nan:
         childs_list = line.profile_label.split('+')
     else:
         childs_list = np.array(line.label, ndmin=1)

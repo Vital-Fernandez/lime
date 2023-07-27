@@ -1,9 +1,9 @@
 [project]
 name = "lime-stable"
-version = "0.9.59"
+version = "0.9.62"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-norecursedirs = [".git build node_modules", ".tox", "dist", "build", ".venv"]
-addopts = ["--import-mode=importlib"]
+#norecursedirs = [".git build node_modules", ".tox", "dist", "build", ".venv"]
+#addopts = ["--import-mode=importlib"]
 #testpaths = "tests"

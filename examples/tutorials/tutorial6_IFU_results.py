@@ -3,7 +3,7 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
-lime.line_bands()
+
 # State the data location
 cfg_file = '../sample_data/manga.toml'
 cube_file = Path('../sample_data/manga-8626-12704-LOGCUBE.fits.gz')

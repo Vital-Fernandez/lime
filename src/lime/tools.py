@@ -75,13 +75,13 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
 
     # Get indeces of blended lines
     if not isinstance(log.index, pd.MultiIndex):
-        idcs_blended = (log['profile_label'] != 'no') & (~log.index.str.endswith('_m'))
+        idcs_blended = (log['profile_label'].notnull()) & (~log.index.str.endswith('_m'))
 
     else:
         if sample_level not in log.index.names:
             raise LiMe_Error(f'Input log does not have a index level with column "{sample_level}"')
 
-        idcs_blended = (log['profile_label'] != 'no') & (~log.index.get_level_values('line').str.endswith('_m'))
+        idcs_blended = (log['profile_label'].notnull()) & (~log.index.get_level_values('line').str.endswith('_m'))
 
     # Mixture model: Integrated fluxes for all lines except blended
     if flux_type == 'mixture' and np.any(idcs_blended):
@@ -426,14 +426,14 @@ def blended_label_from_log(line, log):
 
     # Default values: single line
     blended_check = False
-    profile_label = None
+    profile_label = np.nan
 
     if line in log.index:
 
         if 'profile_label' in log.columns:
 
-            if log.loc[line, 'profile_label'] == 'None':
-                profile_label = None
+            if log.loc[line, 'profile_label'] is np.nan:
+                profile_label = np.nan
             elif line.endswith('_m'):
                 profile_label = log.loc[line, 'profile_label']
             else:

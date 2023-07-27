@@ -1053,10 +1053,6 @@ class CubeInspection:
                     # circle.set_height(0.025)
                     circle.set_width(0.04)
 
-            # Load the complete fits lines log if input
-            if lines_log_file is not None:
-                self.hdul_linelog = fits.open(lines_log_file, lazy_load_hdus=False)
-
             # Plot the data
             self.data_plots()
 
@@ -1102,9 +1098,13 @@ class CubeInspection:
 
                 # Better sorry than permission. Faster?
                 try:
-                    lineslogDF = Table.read(self.hdul_linelog[ext_name]).to_pandas()
-                    lineslogDF.set_index('index', inplace=True)
-                    log = lineslogDF
+                    log = Table.read(self.hdul_linelog[ext_name]).to_pandas()
+                    log.set_index('index', inplace=True)
+
+                    # Change 'nan' to np.nan
+                    idcs_nan_str = log['profile_label'] == 'nan'
+                    log.loc[idcs_nan_str, 'profile_label'] = np.nan
+
                 except KeyError:
                     _logger.info(f'Extension {ext_name} not found in the input file')
 

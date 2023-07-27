@@ -748,8 +748,7 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
 
         # Check if blended or single/merged
         idcs_comp = None
-        if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] != 'no') and (len(line_list) > 1):
-            print('Line', line)
+        if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] is not np.nan) and (len(line_list) > 1):
             profile_comps = log.loc[line, 'profile_label']
             if profile_comps is not None:
                 profile_comps = profile_comps.split('+')
@@ -1006,7 +1005,7 @@ class LiMePlots:
                 wave_array, cont_array = linear_continuum_computation(log.index.values, log, (1 + self.redshift))
 
                 # Separating blended from unblended lines
-                idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label is None).values
+                idcs_nonBlended = (self.log.index.str.endswith('_m')) | (self.log.profile_label is np.nan).values
 
                 # Plot single lines
                 line_list = self.log.loc[idcs_nonBlended].index

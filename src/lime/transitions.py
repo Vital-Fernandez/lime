@@ -68,19 +68,27 @@ def recover_ionization(string):
     return particle, ionization
 
 
+def recover_transition(particle):
+
+    # Check for PyNeb particle notation
+    element = ELEMENTS_DICT.get(particle.symbol)
+    if (element is not None) and (particle.ionization is not None):
+
+        if particle.label in ('H1', 'He1', 'He2'):
+            transition = 'rec'
+        else:
+            transition = 'col'
+    else:
+        transition = None
+
+    return transition
+
+
 def particle_notation(particle, transition):
 
     # Pre-assigned a transition time if particle and ionization
     if transition is None:
-
-        # Check for PyNeb particle notation
-        element = ELEMENTS_DICT.get(particle.symbol)
-        if (element is not None) and (particle.ionization is not None):
-
-            if particle.label in ('H1', 'He1', 'He2'):
-                transition = 'rec'
-            else:
-                transition = 'col'
+        transition = recover_transition(particle)
 
     if transition is not None:
 
@@ -295,9 +303,14 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         # Transition component
         trans = comp_conf.get('t', None)
 
+        # If none is provided check from the table
         if (trans is None) and (ref_df is not None): # TODO check if try except is faster here
-            if line in ref_df.index and 'transition' in ref_df.columns:
+            if (line in ref_df.index) and ('transition' in ref_df.columns):
                 trans = ref_df.loc[line, 'transition']
+
+        # Else assume default
+        if trans is None:
+            trans = recover_transition(particle[i])
 
         transition_comp[i] = trans
 
@@ -421,7 +434,7 @@ class Line:
         self.label = label
         self.mask = None
         self.latex_label = None,
-        self.profile_label, self.list_comps = None, None
+        self.profile_label, self.list_comps = np.nan, None
 
         self.particle = None
         self.wavelength, self.units_wave = None, None
@@ -560,7 +573,7 @@ class Line:
                 inline.mask = log.loc[label, 'w1':'w6'].values
 
                 # Checks:
-                if inline.profile_label is not None:
+                if inline.profile_label is not np.nan:
                     inline.blended_check, inline.merged_check = False, False
 
                     # Merged line
@@ -611,14 +624,14 @@ class Line:
         if self.merged_check or self.blended_check:
 
             # Check for profile label
-            self.profile_label = None if fit_conf is None else fit_conf.get(self.label, None)
+            self.profile_label = np.nan if fit_conf is np.nan else fit_conf.get(self.label, np.nan)
 
             # Reset and warned the line has a suffix but there are no components provided
-            if self.profile_label is None:
+            if self.profile_label is np.nan:
                 self.merged_check, self.blended_check = False, False
 
         # List of components only for blended
-        if (self.merged_check or self.blended_check) and (self.profile_label is not None):
+        if (self.merged_check or self.blended_check) and (self.profile_label is not np.nan):
             self.list_comps = self.profile_label.split('+') if self.blended_check else [self.label]
 
             # Check if there are repeated elements

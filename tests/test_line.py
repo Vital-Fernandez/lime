@@ -48,14 +48,14 @@ class TestLineClass:
         assert np.all(line.list_comps == ['O3_5007A'])
 
         assert line.label == 'O3_5007A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert np.all(line.mask == O3_band)
 
         line = Line('O3_5007A_b', band=None, fit_conf=fit_conf)
         assert np.all(line.particle == [Particle.from_label('O3'), Particle.from_label('O3'), Particle.from_label('He1')])
         assert np.all(line.wavelength == np.array([5007., 5007., 5016.]))
         assert np.all(line.kinem == np.array([0, 1, 0]))
-        assert np.all(line.transition_comp == np.array(['col', None, None]))
+        assert np.all(line.transition_comp == np.array(['col', 'col', 'rec']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi', 'g-emi']))
         assert np.all(line.latex_label == np.array([r'$[OIII]5007\AA$', r'$[OIII]5007\AA-k_1$', r'$HeI5016\AA$']))
         assert np.all(line.list_comps == ['O3_5007A', 'O3_5007A_k-1', 'He1_5016A'])
@@ -68,7 +68,7 @@ class TestLineClass:
         assert np.all(line.particle == [Particle('O3', symbol='O', ionization=3)])
         assert np.all(line.wavelength == np.array([5007]))
         assert np.all(line.kinem == np.array([0]))
-        assert np.all(line.transition_comp == np.array([None]))
+        assert np.all(line.transition_comp == np.array(['col']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi']))
         assert np.all(line.latex_label == np.array([r'$[OIII]5007\AA$+$[OIII]5007\AA-k_1$']))
         assert np.all(line.list_comps == ['O3_5007A_m'])
@@ -91,7 +91,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['OIII_5007A'])
 
         assert line.label == 'OIII_5007A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is None
 
         line = Line('Halpha_6563A')
@@ -104,7 +104,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['Halpha_6563A'])
 
         assert line.label == 'Halpha_6563A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is None
 
         line = Line('HIPas4-3_18751A')
@@ -117,7 +117,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['HIPas4-3_18751A'])
 
         assert line.label == 'HIPas4-3_18751A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is None
 
         line = Line('OIII_5007A')
@@ -130,7 +130,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['OIII_5007A'])
 
         assert line.label == 'OIII_5007A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is None
 
         line = Line('C3_1909A')
@@ -143,7 +143,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['C3_1909A'])
 
         assert line.label == 'C3_1909A'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is not None
 
         line = Line('C3_1909A_t-sem', band=None)
@@ -156,7 +156,7 @@ class TestLineClass:
         assert np.all(line.list_comps == ['C3_1909A_t-sem'])
 
         assert line.label == 'C3_1909A_t-sem'
-        assert line.profile_label is None
+        assert line.profile_label is np.nan
         assert line.mask is None
 
         return
