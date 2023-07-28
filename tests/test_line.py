@@ -162,3 +162,12 @@ class TestLineClass:
         return
 
 
+class TestParticleClass:
+
+    def test_pyneb_items(self):
+
+        particle = Particle.from_label('H1')
+
+        assert particle.label == 'H1'
+
+        return
