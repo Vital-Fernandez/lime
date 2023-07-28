@@ -169,5 +169,6 @@ class TestParticleClass:
         particle = Particle.from_label('H1')
 
         assert particle.label == 'H1'
+        assert particle.ionization == 1
 
         return
