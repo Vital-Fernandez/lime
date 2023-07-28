@@ -170,5 +170,11 @@ class TestParticleClass:
 
         assert particle.label == 'H1'
         assert particle.ionization == 1
+        assert particle.symbol == 'H'
+
+        particle2 = Particle('H1', 'H', ionization=1)
+        assert particle2.label == 'H1'
+        assert particle2.ionization == 1
+        assert particle2.symbol == 'H'
 
         return
