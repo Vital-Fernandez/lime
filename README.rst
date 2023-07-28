@@ -1,10 +1,10 @@
 
-.. image:: https://github.com/Vital-Fernandez/lime/blob/master/examples/images/logo_transparent.png?raw=true
+.. image:: docs/source/_static/logo_transparent.png?raw=true
     :width: 50%
     :align: center
     :alt: Line Measurer (LiMe) library.
 
-|Repo status| |Version lime-stable| |PyPI license| |PyPI downloads| |Documentation Status| |Code Size|
+|Repo status| |CI badge| |Documentation Status| |Code cov| |PyPI version| |PyPI downloads| |Code Size| |PyPI license|
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
 for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
@@ -48,3 +48,13 @@ Any comment/issue/request can be added as an issue on the github_ page.
 .. |Code Size| image:: https://img.shields.io/github/languages/code-size/Vital-Fernandez/lime
    :target: http://lime-stable.readthedocs.io/?badge=latest
    :alt: GitHub code size in bytes
+
+.. |Code cov| image:: https://codecov.io/gh/Vital-Fernandez/lime/branch/master/graph/badge.svg?token=4ZW8EATXN7
+   :target: https://codecov.io/gh/Vital-Fernandez/lime
+
+.. |CI badge| image:: https://img.shields.io/circleci/build/gh/Vital-Fernandez/lime/master?logo=CircleCi
+   :target: https://circleci.com/gh/Vital-Fernandez/lime/?branch=master
+
+.. |PyPI version| image:: https://img.shields.io/pypi/v/lime-stable.svg?logo=Python&logoColor=white?labelColor=blue
+   :target: https://pypi.org/project/lime-stable
+
