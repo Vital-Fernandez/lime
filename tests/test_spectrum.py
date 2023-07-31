@@ -8,8 +8,6 @@ from lime.io import _LOG_EXPORT_DICT
 
 # Data for the tests
 file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
-spectrum_plot_address = Path(__file__).parent/'data_tests'/'spectrum_manga_spaxel.png'
-line_plot_address = Path(__file__).parent/'data_tests'/'Fe3_4658A_manga_spaxel.png'
 conf_file_address = Path(__file__).parent/'data_tests'/'manga.toml'
 bands_file_address = Path(__file__).parent/'data_tests'/f'manga_line_bands.txt'
 lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'

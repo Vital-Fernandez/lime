@@ -2,11 +2,19 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-
-lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
+from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum
 
 # Data for the tests
+file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
+lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
 lines_log = lime.load_log(lines_log_address)
+redshift = 0.0475
+norm_flux = 1e-17
+wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
+pixel_mask = np.isnan(err_array)
+
+spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                     pixel_mask=pixel_mask)
 
 # Sample with 3 (repeated) observations
 log_dict = {}
@@ -15,6 +23,15 @@ for i in range(3):
 
 obs = lime.Sample()
 obs.add_log_list(list(log_dict.keys()), list(log_dict.values()))
+
+
+def test_int_to_roman():
+
+    assert int_to_roman(1) == 'I'
+    assert int_to_roman(10) == 'X'
+    assert int_to_roman(1542) == 'MDXLII'
+
+    return
 
 
 def test_extract_fluxes():
@@ -141,22 +158,77 @@ def test_extract_fluxes_multi_index():
     return
 
 
+def test_redshift_calculation():
 
-# def test_relative_fluxes
+    # Single index
+    z_df = lime.redshift_calculation(lines_log)
+    z_df_eqw = lime.redshift_calculation(lines_log, weight_parameter='eqw')
+    z_df_flux_gauss = lime.redshift_calculation(lines_log, weight_parameter='gauss_flux')
+    z_df_strong = lime.redshift_calculation(lines_log, line_list=['O3_5007A', 'H1_6563A'])
 
-# class TestSampleClass:
-#
-#     def test_multindex_log(self):
-#
-#         # Default import
-#         assert isinstance(obs.log.index, pd.MultiIndex)
-#         assert obs.log.index.names == ['id', 'line']
-#         assert np.all(obs.log.index.get_level_values('id').unique() == ['obj_0', 'obj_1', 'obj_2'])
-#
-#         return
-#
-#     def test_extract_fluxes(self):
-#
-#         lime.extract_fluxes(obs.log, )
-#
-#         return
+    assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+
+    assert z_df['weight'][0] is None
+    assert z_df_eqw['weight'][0] == 'eqw'
+    assert z_df_flux_gauss['weight'][0] == 'gauss_flux'
+    assert z_df_strong['weight'][0] is None
+    assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
+
+    # Multi-index
+    z_df = lime.redshift_calculation(obs.log)
+    z_df_eqw = lime.redshift_calculation(obs.log, weight_parameter='eqw')
+    z_df_flux_gauss = lime.redshift_calculation(obs.log, weight_parameter='gauss_flux')
+    z_df_strong = lime.redshift_calculation(obs.log, line_list=['O3_5007A', 'H1_6563A'])
+
+    assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+
+    assert np.all(z_df['weight'].to_numpy() == None)
+    assert np.all(z_df_eqw['weight'] == 'eqw')
+    assert np.all(z_df_flux_gauss['weight'] == 'gauss_flux')
+    assert np.all(z_df_strong['weight'].to_numpy() == None)
+    assert np.all(z_df_strong['lines'] == 'O3_5007A,H1_6563A')
+
+    return
+
+
+def test_unit_conversion():
+
+    spec.unit_conversion(units_wave='nm', units_flux='Jy', norm_flux=1e-8)
+    assert np.allclose(spec.wave.data, wave_array/10, equal_nan=True)
+    assert np.allclose(spec.flux.data[:3], np.array([457.8036672 , 493.54866591, 493.17681153]), equal_nan=True)
+    assert spec.norm_flux == 1e-8
+
+    spec.unit_conversion(units_wave='A', units_flux='Flam', norm_flux=1)
+    assert np.allclose(spec.wave.data, wave_array, equal_nan=True)
+    assert np.allclose(spec.flux.data, flux_array, equal_nan=True)
+    assert spec.norm_flux == 1
+
+    return
+
+
+def test_format_line_mask_option():
+
+    array1 = format_line_mask_option('5000-5009', wave_array)
+    array2 = format_line_mask_option('5000-5009,5876,6550-6570', wave_array)
+
+    assert np.all(array1[0] == np.array([5000, 5009.]))
+
+    assert np.all(array2[0] == np.array([5000, 5009.]))
+    assert np.allclose(array2[1], np.array([5875.26214276, 5876.73785724]))
+    assert np.all(array2[2] == np.array([6550, 6570.]))
+
+    return
+
+
+def test_refraction_index_air_vacuum():
+
+    array1 = refraction_index_air_vacuum(wave_array)
+    assert np.allclose(array1[:3], np.array([1.00030083, 1.00030082, 1.00030081]))
+
+    return

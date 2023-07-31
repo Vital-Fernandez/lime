@@ -2,7 +2,6 @@ __all__ = ['COORD_KEYS',
            'unit_conversion',
            'extract_fluxes',
            'normalize_fluxes',
-           'compute_line_ratios',
            'redshift_calculation']
 
 import logging
@@ -278,7 +277,7 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
         if not sample_check:
             df_slice = input_log
         else:
-            df_slice = input_log.xs(idx, level=sample_levels[:-1])
+            df_slice = input_log.xs(idx, level=sample_levels[0])
 
         # Get the lines requested
         if line_list is not None:
@@ -323,78 +322,78 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
     return z_df
 
 
-def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_flux_err'], sample_levels=['id', 'line'],
-                        object_id='obj_0', keep_empty_columns=True):
-
-    # If normalization_line is not none
-    if len(flux_columns) != np.sum(log.columns.isin(flux_columns)):
-        raise LiMe_Error(f'Input log is missing {len(flux_columns)} "flux_entries" in the column headers')
-
-    # Check if single or multi-index
-    sample_check = isinstance(log.index, pd.MultiIndex)
-
-    if sample_check:
-        idcs = log.index.droplevel(sample_levels[-1]).unique()
-    else:
-        idcs = np.array([object_id])
-
-    ratio_df = pd.DataFrame(index=idcs)
-
-    # Loop through
-    if line_ratios is not None:
-
-        # Loop through the ratios
-        for ratio_str in line_ratios:
-            numer, denom = ratio_str.split('/')
-
-            # Slice the dataframe to objects having both lines
-            numer_flux, denom_flux = None, None
-            if not isinstance(log.index, pd.MultiIndex):
-                if (numer in log.index) and (denom in log.index):
-                    numer_flux = log.loc[numer, flux_columns[0]]
-                    numer_err = log.loc[numer, flux_columns[1]]
-
-                    denom_flux = log.loc[denom, flux_columns[0]]
-                    denom_err = log.loc[denom, flux_columns[1]]
-                    idcs_slice = object_id
-                else:
-                    idcs_slice = ratio_df.index
-
-            else:
-
-                # Slice the dataframe to objects which have both lines
-                idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
-                grouper = log.index.droplevel('line')
-                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
-                df_slice = log.loc[idcs_slice]
-
-                # Get fluxes
-                if df_slice.size > 0:
-                    numer_flux = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[0]]
-                    numer_err = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[1]]
-
-                    denom_flux = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[0]]
-                    denom_err = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[1]]
-                    idcs_slice = numer_flux.index
-                else:
-                    idcs_slice = ratio_df.index
-
-            # Check there have been measure
-            if (numer_flux is not None) and (denom_flux is not None):
-
-                # Compute the ratios with the error propagation
-                ratio_array = numer_flux/denom_flux
-                errRatio_array = ratio_array * np.sqrt(np.power(numer_err/numer_flux, 2) +
-                                                       np.power(denom_err/denom_flux, 2))
-            else:
-                ratio_array, errRatio_array = np.nan, np.nan
-
-            # Store in dataframe (with empty columns)
-            if not ((numer_flux is None) and (denom_flux is None) and (keep_empty_columns is False)):
-                ratio_df.loc[idcs_slice, ratio_str] = ratio_array
-                ratio_df.loc[idcs_slice, f'{ratio_str}_err'] = errRatio_array
-
-    return ratio_df
+# def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_flux_err'], sample_levels=['id', 'line'],
+#                         object_id='obj_0', keep_empty_columns=True):
+#
+#     # If normalization_line is not none
+#     if len(flux_columns) != np.sum(log.columns.isin(flux_columns)):
+#         raise LiMe_Error(f'Input log is missing {len(flux_columns)} "flux_entries" in the column headers')
+#
+#     # Check if single or multi-index
+#     sample_check = isinstance(log.index, pd.MultiIndex)
+#
+#     if sample_check:
+#         idcs = log.index.droplevel(sample_levels[-1]).unique()
+#     else:
+#         idcs = np.array([object_id])
+#
+#     ratio_df = pd.DataFrame(index=idcs)
+#
+#     # Loop through
+#     if line_ratios is not None:
+#
+#         # Loop through the ratios
+#         for ratio_str in line_ratios:
+#             numer, denom = ratio_str.split('/')
+#
+#             # Slice the dataframe to objects having both lines
+#             numer_flux, denom_flux = None, None
+#             if not isinstance(log.index, pd.MultiIndex):
+#                 if (numer in log.index) and (denom in log.index):
+#                     numer_flux = log.loc[numer, flux_columns[0]]
+#                     numer_err = log.loc[numer, flux_columns[1]]
+#
+#                     denom_flux = log.loc[denom, flux_columns[0]]
+#                     denom_err = log.loc[denom, flux_columns[1]]
+#                     idcs_slice = object_id
+#                 else:
+#                     idcs_slice = ratio_df.index
+#
+#             else:
+#
+#                 # Slice the dataframe to objects which have both lines
+#                 idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
+#                 grouper = log.index.droplevel('line')
+#                 idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+#                 df_slice = log.loc[idcs_slice]
+#
+#                 # Get fluxes
+#                 if df_slice.size > 0:
+#                     numer_flux = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[0]]
+#                     numer_err = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[1]]
+#
+#                     denom_flux = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[0]]
+#                     denom_err = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[1]]
+#                     idcs_slice = numer_flux.index
+#                 else:
+#                     idcs_slice = ratio_df.index
+#
+#             # Check there have been measure
+#             if (numer_flux is not None) and (denom_flux is not None):
+#
+#                 # Compute the ratios with the error propagation
+#                 ratio_array = numer_flux/denom_flux
+#                 errRatio_array = ratio_array * np.sqrt(np.power(numer_err/numer_flux, 2) +
+#                                                        np.power(denom_err/denom_flux, 2))
+#             else:
+#                 ratio_array, errRatio_array = np.nan, np.nan
+#
+#             # Store in dataframe (with empty columns)
+#             if not ((numer_flux is None) and (denom_flux is None) and (keep_empty_columns is False)):
+#                 ratio_df.loc[idcs_slice, ratio_str] = ratio_array
+#                 ratio_df.loc[idcs_slice, f'{ratio_str}_err'] = errRatio_array
+#
+#     return ratio_df
 
 
 def compute_FWHM0(idx_peak, spec_flux, delta_wave, cont_flux, emission_check=True):
@@ -523,6 +522,8 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
 
 
 def refraction_index_air_vacuum(wavelength_array, units='A'):
+
+    # TODO add warnings issues with units
 
     refraction_index = (1 + 1e-6 * (287.6155 + 1.62887 / np.power(wavelength_array * 0.0001, 2) + 0.01360 / np.power(wavelength_array * 0.0001, 4)))
 

@@ -7,7 +7,7 @@ from collections import UserDict
 
 import lime
 from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_conversion,\
-    define_masks, extract_fluxes, normalize_fluxes, compute_line_ratios, ProgressBar
+    define_masks, extract_fluxes, normalize_fluxes, ProgressBar
 
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -1251,13 +1251,7 @@ class Sample(UserDict):
 
         return extract_fluxes(self.log, flux_type, sample_level, column_names, column_positions)
 
-    def relative_fluxes(self, normalization_line, flux_entries=['line_flux', 'line_flux_err'], column_names=None,
-                        column_positions=[1, 2]):
+    def normalize_fluxes(self, normalization_line, flux_entries=['line_flux', 'line_flux_err'], column_names=None,
+                         column_positions=[1, 2]):
 
         return normalize_fluxes(self.log, normalization_line, flux_entries, column_names, column_positions)
-
-    def compute_line_ratios(self, line_ratios=None, flux_headers=['line_flux', 'line_flux_err'],
-                            sample_levels=['id', 'line'], keep_empty_columns=True):
-
-        return compute_line_ratios(self.log, line_ratios, flux_headers, sample_levels, object_id=None,
-                                   keep_empty_columns=keep_empty_columns)
