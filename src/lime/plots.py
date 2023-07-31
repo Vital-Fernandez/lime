@@ -723,6 +723,13 @@ def _profile_plot(axis, x, y, label, idx_line=0, n_comps=1, observations_list='y
         # Component
         else:
             cmap = cm.get_cmap(color_dict['comps_map'])
+
+            """  /home/usuario/PycharmProjects/lime/src/lime/plots.py:725: MatplotlibDeprecationWarning: 
+            The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. 
+            Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
+                cmap = cm.get_cmap(color_dict['comps_map'])
+            """
+
             width_i, style, color = 2, ':', cmap(idx_line/n_comps)
 
     # Case where the line has an error

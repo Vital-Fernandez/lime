@@ -11,5 +11,6 @@ pandas==2.0.3
 PyLaTeX==1.4.1
 pytest==7.4.0
 pytest-cov==4.1.0
+pytest-mpl==0.16.1
 scipy==1.11.1
 tomli >= 2.0.0 ; python_version < "3.11"
