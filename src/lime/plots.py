@@ -2371,7 +2371,7 @@ class SpectrumFigures(Plotter):
                 self._fig, self._ax = plt.subplots()
             else:
                 self._fig = in_fig
-                self._ax = self.fig.add_subplot()
+                self._ax = self._fig.add_subplot()
 
             self._ax.set(**AXES_CONF)
             trans = self._ax.get_xaxis_transform()

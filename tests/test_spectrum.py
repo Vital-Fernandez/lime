@@ -54,6 +54,23 @@ class TestSpectrumClass:
 
         return fig
 
+    @pytest.mark.mpl_image_compare
+    def test_plot_grid(self):
+
+        fig = plt.figure()
+        spec.plot.grid(in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_plot_cinematics(self):
+
+        fig = plt.figure()
+        spec.plot.velocity_profile('O3_5007A', in_fig=fig)
+
+        return fig
+
+
     def test_measurements_txt_file(self):
 
         extension = 'txt'

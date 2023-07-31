@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import lime
 from pathlib import Path
 from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum
