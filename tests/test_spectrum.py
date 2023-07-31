@@ -1,7 +1,7 @@
 import numpy as np
 import lime
 from pathlib import Path
-from unittest.mock import patch
+import pytest
 from matplotlib import pyplot as plt
 from matplotlib.testing.compare import compare_images
 from lime.io import _LOG_EXPORT_DICT
@@ -24,6 +24,8 @@ pixel_mask = np.isnan(err_array)
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
 
+spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+
 
 class TestSpectrumClass:
 
@@ -38,27 +40,26 @@ class TestSpectrumClass:
 
         return
 
-    # def test_plot_spectrum(self):
-    #
-    #     image_address = 'test_plot_spectrum.png'
-    #     spec.plot.spectrum(output_address=image_address)
-    #     compare_images(spectrum_plot_address, image_address, tol=0.001, in_decorator=False)
-    #
-    #     return
+    @pytest.mark.mpl_image_compare
+    def test_plot_spectrum(self):
 
-    # def test_plot_bands(self):
-    #
-    #     image_address = 'test_Fe3_4658A_manga_spaxel.png'
-    #     spec.fit.bands('Fe3_4658A')
-    #     spec.plot.bands(output_address=image_address)
-    #     compare_images(line_plot_address, image_address, tol=0.1, in_decorator=False)
-    #
-    #     return
+        fig = plt.figure()
+        spec.plot.spectrum(in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_plot_line(self):
+
+        fig = plt.figure()
+        spec.plot.bands('Fe3_4658A_p-g_emis', in_fig=fig)
+
+        return fig
 
     def test_measurements_txt_file(self):
 
         extension = 'txt'
-        spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+        # spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
         spec.save_log(f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
@@ -88,7 +89,7 @@ class TestSpectrumClass:
     def test_measurements_fits_file(self):
 
         extension = 'fits'
-        spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+        # spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
         spec.save_log(f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
@@ -118,7 +119,7 @@ class TestSpectrumClass:
     def test_measurements_csv_file(self):
 
         extension = 'csv'
-        spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+        # spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
         spec.save_log(f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
@@ -149,7 +150,7 @@ class TestSpectrumClass:
     def test_measurements_xlsx_file(self):
 
         extension = 'xlsx'
-        spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+        # spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
         spec.save_log(f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
@@ -180,7 +181,7 @@ class TestSpectrumClass:
     def test_measurements_asdf_file(self):
 
         extension = 'asdf'
-        spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+        # spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
         spec.save_log(f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
