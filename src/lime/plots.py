@@ -2670,16 +2670,19 @@ class CubeFigures(Plotter):
         AXES_CONF = image_map_labels(ax_cfg, wcs, line_bg, line_fg, masks_dict)
 
         # User figure format overwrite default format
+        display_check = True if in_fig is None else False
         local_cfg = {'figure.figsize': (5 if masks_file is None else 10, 5), 'axes.titlesize': 12, 'legend.fontsize': 10}
         PLT_CONF = parse_figure_format(fig_cfg, local_cfg)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
 
-            if wcs is None:
-                in_fig, in_ax = plt.subplots()
-            else:
+            if in_fig is None:
                 in_fig = plt.figure()
+
+            if wcs is None:
+                in_ax = in_fig.add_subplot()
+            else:
                 slices = ('x', 'y', 1) if wcs.naxis == 3 else ('x', 'y')
                 in_ax = in_fig.add_subplot(projection=wcs, slices=slices)
 
@@ -2697,7 +2700,9 @@ class CubeFigures(Plotter):
 
             # By default, plot on screen unless an output address is provided
             self._fig.canvas.draw()
-            save_close_fig_swicth(output_address, 'tight', self._fig, maximise)
+            print(f'SEGUROOS {display_check}')
+            out_fig = save_close_fig_swicth(output_address, 'tight', self._fig, maximise,
+                                            plot_check=display_check)
 
         return
 
