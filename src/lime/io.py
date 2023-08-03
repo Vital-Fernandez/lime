@@ -885,6 +885,17 @@ def formatStringOutput(value, key, section_label=None, float_format=None, nan_fo
     return formatted_value
 
 
+def progress_bar(i, i_max, post_text, n_bar=10):
+
+    # Size of progress bar
+    j = i/i_max
+    stdout.write('\r')
+    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
+    stdout.write(message)
+    stdout.flush()
+
+    return
+
 def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, mask_file=None, mask_list='all',
                         image_shape=None, log_ext_suffix='_LINELOG', spaxel_fill_value=np.nan, output_file_prefix=None,
                         header=None, wcs=None):
