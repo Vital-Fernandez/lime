@@ -5,7 +5,6 @@ __all__ = [
     'load_log',
     'load_spatial_mask',
     'save_log',
-    'join_logs',
     'log_parameters_calculation',
     'log_to_HDU',
     'save_parameter_maps',
@@ -159,7 +158,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     overwrites the data
 
     """
-    # TODO add mechanic for commented conf lines. Currently they are being erased in the load/safe process
+    # TODO for line_fitting/model save dictionaries as line
     output_path = Path(output_file)
 
     if output_path.suffix == '.toml':
@@ -169,7 +168,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
             with open(output_path, "w") as f:
                 f.write(toml_str)
         else:
-            raise LiMe_Error(f'tomli-w library is not installed. Toml files cannot be saved')
+            raise LiMe_Error(f'toml library is not installed. Toml files cannot be saved')
 
     # Creating a new file (overwritting old if existing)
     else:
@@ -490,60 +489,6 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
     return
 
 
-def join_logs(id_list, log_list, level_list=None, ext='LINELOG', **kwargs):
-
-    # Check if multi-index is not using the default names
-    if level_list is not None:
-        if not np.unique(level_list).size == len(level_list):
-            _logger.warning(f'The level names have a repeated entry: {level_list}')
-
-    # Check if default level names
-    else:
-        level_list = ['id', 'line']
-
-    # Loop through the lines
-    output_list = [None] * len(id_list)
-    for i, log in enumerate(log_list):
-
-        log = check_file_dataframe(log, pd.DataFrame, ext, sample_levels=level_list)
-
-        # Rename lines index to line if necessary
-        if log.index.name is None:
-            log.rename_axis(index=level_list[-1], inplace=True)
-
-        # Add id index
-        if not level_list[0] in log.index.names:
-            log.insert(loc=0, column=level_list[0], value=id_list[i])
-            log.set_index(level_list[0], append=True, inplace=True)
-
-        # Add extra levels
-        for j, level_j in enumerate(level_list):
-            if (j > 0) and (level_j != level_list[-1]):
-                values_level = kwargs.get(level_j)
-
-                # User provides values for the new index
-                if values_level is not None:
-                    if not level_j in log.index.names:
-                        log.insert(loc=0, column=level_j, value=values_level[i])
-                        log.set_index(level_j, append=True, inplace=True)
-
-                # It already exists as a column in the log
-                elif level_j in log.columns:
-                    log.set_index(level_j, append=True, inplace=True)
-
-                # Error, requested but not provided
-                else:
-                    raise LiMe_Error(f'Please provide a list of values for the "{level_j}" frame index')
-
-        # Sort the indeces
-        output_list[i] = log.reorder_levels(level_list)
-
-    # Combine the dataframes
-    output_log = pd.concat(output_list, axis=0)
-
-    return output_log
-
-
 def results_to_log(line, log, norm_flux):
 
     # Loop through the line components
@@ -678,59 +623,6 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
         except:
             raise LiMe_Error(f'Failure to convert configuration entry: {key_label} = {entry_value} in section {section_label}')
 
-    # # Arrays (The last boolean overrides the parameters
-    # # TODO keys with array are always converted to numpy array even if just one
-    #
-    # elif ',' in entry_value:
-    #
-    #     # Specia cases conversion
-    #     if key_label in ['lines']:
-    #         if entry_value == 'all':
-    #             output_variable = 'all'
-    #         else:
-    #             output_variable = np.array(entry_value.split(','))
-    #
-    #     elif '_array' in key_label:
-    #         output_variable = np.fromstring(entry_value, dtype=np.float, sep=',')
-    #
-    #     elif '_prior' in key_label:
-    #         entry_value = entry_value.split(',')
-    #         output_variable = np.array([float(entry_value[i]) if i > 0 else
-    #                                     entry_value[i] for i in range(len(entry_value))], dtype=object)
-    #
-    #     # List of strings
-    #     elif '_list' in key_label:
-    #         output_variable = entry_value.split(',')
-    #
-    #     # Objects arrays
-    #     else:
-    #         newArray = []
-    #         textArrays = entry_value.split(',')
-    #         for item in textArrays:
-    #             convertValue = float(item) if item != 'None' else np.nan
-    #             newArray.append(convertValue)
-    #         output_variable = np.array(newArray)
-    #
-    # # Boolean
-    # elif '_check' in key_label:
-    #     output_variable = strtobool(entry_value) == 1
-    #
-    # # Standard strings
-    # elif ('_folder' in key_label) or ('_file' in key_label):
-    #     output_variable = entry_value
-    #
-    # # Check if numeric possible else string
-    # else:
-    #
-    #     if '_list' in key_label:
-    #         output_variable = [entry_value]
-    #
-    #     elif '_array' in key_label:
-    #         output_variable = np.array([entry_value], ndmin=1)
-    #
-    #     else:
-    #         output_variable = check_numeric_Value(entry_value)
-
     return output_variable
 
 
@@ -765,7 +657,6 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     return
 
-
 def extract_wcs_header(wcs, drop_axis=None):
 
     if wcs is not None:
@@ -793,22 +684,6 @@ def extract_wcs_header(wcs, drop_axis=None):
 
     return hdr_coords
 
-# TODO this task should be included in log_to_HDU
-def log_to_RA(log, column_types=None):
-
-    if column_types is None: #
-        params_dtype = _LOG_TYPES_DICT
-
-    # TODO UPDATE dictionary of formats mechanics
-    else:
-        params_dtype = _LOG_TYPES_DICT.copy()
-        user_dtype = column_types.copy()
-        params_dtype.update(user_dtype)
-
-    logRA = log.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
-
-    return logRA
-
 
 def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
 
@@ -834,15 +709,6 @@ def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
         linesHDU = None
 
     return linesHDU
-
-
-def hdu_to_log(hdu):
-
-    # TODO check this one is good
-    log = Table(hdu).to_pandas()
-    log.set_index('index', inplace=True)
-
-    return log
 
 
 def load_fits(file_address, instrument, frame_idx=None):
@@ -1017,18 +883,6 @@ def formatStringOutput(value, key, section_label=None, float_format=None, nan_fo
         formatted_value = 'None'
 
     return formatted_value
-
-
-def progress_bar(i, i_max, post_text, n_bar=10):
-
-    # Size of progress bar
-    j = i/i_max
-    stdout.write('\r')
-    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
-    stdout.write(message)
-    stdout.flush()
-
-    return
 
 
 def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, mask_file=None, mask_list='all',
