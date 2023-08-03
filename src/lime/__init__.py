@@ -39,7 +39,6 @@ class Error(Exception):
 from .astronomy import Spectrum, Sample, Cube, line_bands
 from .io import *
 from .tools import *
-from .plots import spatial_mask_generator
 from .transitions import Line, label_decomposition
 
 

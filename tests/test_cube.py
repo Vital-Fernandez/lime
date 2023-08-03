@@ -135,3 +135,38 @@ class TestCubeClass:
         cube.plot.cube('H1_6563A', masks_file=spatial_mask_address, in_fig=fig)
 
         return fig
+
+    def test_fit_spatial_mask(self):
+
+        # Export the measurements log as maps:
+        param_list = ['intg_flux', 'intg_flux_err', 'v_r', 'v_r_err']
+        lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A']
+        lime.save_parameter_maps(spatial_log_address, './data_tests', param_list, lines_list,
+                                 mask_file=spatial_mask_address, output_file_prefix='SHOC579_', wcs=wcs)
+
+        param_list = ['gauss_flux', 'gauss_flux_err']
+        lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A']
+        lime.save_parameter_maps(spatial_log_address, './data_tests', param_list, lines_list,
+                                 mask_file=spatial_mask_address, wcs=wcs)
+
+        intg_flux_file = Path(__file__).parent/'data_tests'/f'SHOC579_intg_flux.fits'
+        gauss_flux_file = Path(__file__).parent/'data_tests'/f'gauss_flux.fits'
+
+        assert intg_flux_file.is_file()
+        assert gauss_flux_file.is_file()
+
+        int_flux_map = fits.getdata(intg_flux_file, extname='O3_5007A')
+        gauss_flux_map = fits.getdata(gauss_flux_file, extname='O3_5007A')
+
+        assert np.isnan(int_flux_map).sum() == 5443
+        assert np.isnan(gauss_flux_map).sum() == 5443
+
+        orig_log = lime.load_log(lines_log_address)
+
+        idx_j, idx_x = [int(item) for item in spaxel_label.split('-')]
+
+        assert np.isclose(orig_log.loc['O3_5007A', 'intg_flux'], int_flux_map[idx_j, idx_x])
+        assert np.isclose(orig_log.loc['O3_5007A', 'gauss_flux'], gauss_flux_map[idx_j, idx_x])
+
+        return
+
