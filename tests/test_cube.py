@@ -136,7 +136,7 @@ class TestCubeClass:
 
         return fig
 
-    def test_fit_spatial_mask(self):
+    def test_save_paramter_maps(self):
 
         ouput_folder = Path(__file__).parent/'data_tests'
 
