@@ -5,6 +5,7 @@ import pytest
 from matplotlib import pyplot as plt
 from matplotlib.testing.compare import compare_images
 from lime.io import _LOG_EXPORT_DICT
+from os import remove
 
 # Data for the tests
 file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
@@ -190,6 +191,45 @@ class TestSpectrumClass:
                     else:
                         assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
                                               equal_nan=True)
+
+        return
+
+    def test_extra_pages_xlsx(self):
+
+        file_xlsx = Path(__file__).parent/'data_tests'/'test_lines_log_multi_page.xlsx'
+
+        if file_xlsx.is_file():
+            try:
+                remove(file_xlsx)
+                print(f"File '{file_xlsx}' has been deleted successfully.")
+            except OSError as e:
+                print(f"Error: {e.strerror}")
+
+        log_orig = lime.load_log(lines_log_address)
+
+        for page in ['LINELOG', 'LINESLOG2', 'LINELOG']:
+            spec.save_log(file_xlsx, page=page)
+            log_test = lime.load_log(file_xlsx)
+
+            for line in spec.log.index:
+                for param in spec.log.columns:
+
+                    # String
+                    if _LOG_EXPORT_DICT[param].startswith('<U'):
+                        if log_orig.loc[line, param] is np.nan:
+                            assert log_orig.loc[line, param] is log_test.loc[line, param]
+                        else:
+                            assert log_orig.loc[line, param] == log_test.loc[line, param]
+
+                    # Float
+                    else:
+                        if param not in ['eqw', 'eqw_err']:
+                            print(param, log_orig.loc[line, param], log_test.loc[line, param])
+                            assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
+                                                  equal_nan=True)
+                        else:
+                            assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
+                                                  equal_nan=True)
 
         return
 
