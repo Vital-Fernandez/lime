@@ -113,10 +113,15 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
 
     if crop_waves is not None:
 
-        min_limit = crop_waves[0] if crop_waves[0] != 0 else input_wave[0]
-        max_limit = crop_waves[1] if crop_waves[1] != -1 else input_wave[-1]
+        # min_limit = crop_waves[0] if crop_waves[0] != 0 else input_wave[0]
+        # max_limit = crop_waves[1] if crop_waves[1] != -1 else input_wave[-1]
+        #
+        # idcs_crop = np.searchsorted(input_wave, (min_limit, max_limit))
+        # input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
+        idx_min = np.searchsorted(input_wave, crop_waves[0]) if crop_waves[0] != 0 else 0
+        idx_max = np.searchsorted(input_wave, crop_waves[1]) if crop_waves[1] != -1 else None
 
-        idcs_crop = np.searchsorted(input_wave, (min_limit, max_limit))
+        idcs_crop = (idx_min, idx_max)
         input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
 
         # Spectrum
@@ -648,7 +653,7 @@ class Spectrum(LineFinder):
 
         return
 
-    def udpate_redshift(self, redshift):
+    def update_redshift(self, redshift):
 
         # Check if it is a masked array
         if np.ma.is_masked(self.wave):
