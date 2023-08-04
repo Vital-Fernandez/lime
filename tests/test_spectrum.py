@@ -223,7 +223,7 @@ class TestSpectrumClass:
         spec.save_log(baseline_folder/f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(f'test_lines_log.{extension}')
+        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -253,7 +253,7 @@ class TestSpectrumClass:
         spec.save_log(baseline_folder/f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(f'test_lines_log.{extension}')
+        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -291,7 +291,7 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
 
         for page in ['LINELOG', 'LINESLOG2', 'LINELOG']:
-            spec.save_log(file_xlsx, page=page)
+            spec.save_log(baseline_folder/file_xlsx, page=page)
             log_test = lime.load_log(file_xlsx)
 
             for line in spec.log.index:
