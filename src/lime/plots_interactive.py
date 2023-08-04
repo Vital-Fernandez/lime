@@ -187,7 +187,8 @@ class BandsInspection:
         return
 
     def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              z_log_address=None, object_label=None, z_column='redshift', fig_cfg={}, ax_cfg={}, maximize=False):
+              z_log_address=None, object_label=None, z_column='redshift', fig_cfg={}, ax_cfg={}, in_fig=None,
+              maximize=False):
 
         """
 
@@ -303,7 +304,7 @@ class BandsInspection:
             with rc_context(PLT_CONF):
 
                 # Main structure
-                self._fig = plt.figure()
+                self._fig = plt.figure() if in_fig is None else in_fig
                 gs0 = self._fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
                 gs_lines = gs0[0].subgridspec(n_rows, n_cols, hspace=0.5)
 
@@ -362,7 +363,8 @@ class BandsInspection:
                 self._fig.canvas.mpl_connect('axes_enter_event', self._on_enter_axes_MI)
 
                 # Show the image
-                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize)
+                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize,
+                                      plot_check=True if in_fig is None else False)
 
         else:
             _logger.warning(f'No lines found in the lines mask for the object wavelentgh range')
@@ -509,7 +511,7 @@ class BandsInspection:
 
         # Update the redshift value
         z_new = self._z_orig + (self._inter_z * val)
-        self._spec.udpate_redshift(z_new)
+        self._spec.update_redshift(z_new)
 
         # Re-plot the lines
         for i, line in enumerate(self._lineList):
@@ -857,8 +859,8 @@ class CubeInspection:
 
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
-             rest_frame=False, log_scale=False, fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, lines_log_file=None,
-             ext_log='_LINELOG', wcs=None, maximize=False):
+             rest_frame=False, log_scale=False, fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, in_fig=False,
+             lines_log_file=None, ext_log='_LINELOG', wcs=None, maximize=False):
 
         """
 
@@ -1022,7 +1024,7 @@ class CubeInspection:
         with rc_context(self.fig_conf):
 
             # Figure structure
-            self._fig = plt.figure()
+            self._fig = plt.figure() if in_fig is None else in_fig
             gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[1, 2], height_ratios=[1])
 
             # Create subgrid for buttons if mask file provided
@@ -1063,7 +1065,7 @@ class CubeInspection:
                 radio.on_clicked(self.mask_selection)
 
             # Display the figure
-            save_close_fig_swicth(maximise=maximize, bbox_inches='tight')
+            save_close_fig_swicth(maximise=maximize, bbox_inches='tight', plot_check=True if in_fig is None else False)
 
             # Close the lines log if it has been opened
             if isinstance(self.hdul_linelog, fits.hdu.HDUList):

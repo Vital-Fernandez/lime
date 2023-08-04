@@ -39,11 +39,98 @@ class TestSpectrumClass:
 
         return
 
+    def test_change_spectrum(self):
+
+        # Cropping
+
+        spec0 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask)
+        spec1 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, crop_waves=(5500, -1))
+        spec2 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, crop_waves=(0, 9000))
+        spec3 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, crop_waves=(5500, 9000))
+
+        assert spec0.wave.data[0] == wave_array[0]
+        assert spec0.wave.data[-1] == wave_array[-1]
+
+        assert np.isclose(spec1.wave.data[0], 5500, atol=np.diff(spec1.wave.data).mean())
+        assert spec1.wave.data[-1] == wave_array[-1]
+
+        assert spec2.wave.data[0] == wave_array[0]
+        assert np.isclose(spec2.wave.data[-1], 9000, atol=np.diff(spec2.wave.data).mean())
+
+        assert np.isclose(spec3.wave.data[0], 5500, atol=np.diff(spec3.wave.data).mean())
+        assert np.isclose(spec3.wave.data[-1], 9000, atol=np.diff(spec3.wave.data).mean())
+
+        assert spec0.redshift == redshift
+
+        # Updating redshift
+        spec0.update_redshift(redshift=0.06)
+        assert spec0.redshift == 0.06
+        assert spec0.norm_flux == norm_flux
+        assert np.allclose(wave_array, spec0.wave.data)
+        assert np.allclose(wave_array / (1 + 0.06), spec0.wave_rest.data)
+        assert np.allclose(flux_array, spec0.flux.data * norm_flux, equal_nan=True)
+        assert np.allclose(err_array, spec0.err_flux.data * norm_flux, equal_nan=True)
+
+        spec0.update_redshift(redshift=redshift)
+        assert spec0.norm_flux == norm_flux
+        assert np.allclose(wave_array, spec0.wave.data)
+        assert np.allclose(wave_array / (1 + redshift), spec0.wave_rest.data)
+        assert np.allclose(flux_array, spec0.flux.data * norm_flux, equal_nan=True)
+        assert np.allclose(err_array, spec0.err_flux.data * norm_flux, equal_nan=True)
+
+        return
+
+    @pytest.mark.line_detection_plot
+    def test_line_detection_plot(self):
+
+        match_bands = spec.line_detection(bands_file_address, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 1.5])
+
+        fig = plt.figure()
+        spec.plot.spectrum(in_fig=fig, line_bands=match_bands)
+
+        return fig
+
     @pytest.mark.mpl_image_compare
     def test_plot_spectrum(self):
 
         fig = plt.figure()
         spec.plot.spectrum(in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_plot_spectrum_with_fits(self):
+
+        fig = plt.figure()
+        spec.plot.spectrum(in_fig=fig, include_fits=True)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_check_bands_spectrum(self):
+
+        fig = plt.figure()
+        spec.check.bands(bands_file=bands_file_address, in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_plot_spectrum_maximize(self):
+
+        fig = plt.figure()
+        spec.plot.spectrum(in_fig=fig, include_fits=True, maximize=True)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare
+    def test_plot_spectrum_with_bands(self):
+
+        fig = plt.figure()
+        spec.plot.spectrum(in_fig=fig, line_bands=bands_file_address)
 
         return fig
 
@@ -70,7 +157,6 @@ class TestSpectrumClass:
         spec.plot.velocity_profile('O3_5007A', in_fig=fig)
 
         return fig
-
 
     def test_measurements_txt_file(self):
 
@@ -261,5 +347,19 @@ class TestSpectrumClass:
                     else:
                         assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
                                               equal_nan=True)
+
+        return
+
+    def test_save_load_log(self):
+
+        spec0 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask)
+
+        spec0.load_log(lines_log_address)
+
+        new_log_spectrum = Path(__file__).parent / 'data_tests' / 'manga_lines_log_from_spectrum.txt'
+        spec0.save_log(new_log_spectrum)
+
+        assert new_log_spectrum.is_file()
 
         return
