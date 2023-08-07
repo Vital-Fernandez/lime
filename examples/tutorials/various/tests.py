@@ -1,6 +1,30 @@
-import subprocess
-import os
+# import asdf
+# print(f'Version asdf = {asdf.__version__}')
+# file_name = 'myfile.asdf'
+# af = asdf.AsdfFile({'one': 1})
+
+# with asdf.open(log_path, mode='rw') as af:
+#     af.tree.update(tree)
+#     af.update()
+
+# import fiasco
+# import numpy as np
+# from fiasco import Ion
+# import astropy.units as u
 #
+# temperature = np.logspace(5, 7, 100) * u.K
+# ion = Ion('O 3', temperature)
+# print(ion)
+#
+# Te = np.geomspace(0.1, 100, 51) * u.MK
+# ne = 1e8 * u.cm**-3
+#
+# ion = Ion('O 5+', Te)
+# print(ion)
+#
+# contribution_func = ion.contribution_function(ne)
+# wlen = 1031.93 * u.Angstrom
+
 # class Person:
 #     def __init__(self, name, age):
 #         self.name = name
@@ -31,13 +55,13 @@ import os
 # person2.display()  # Output: Name: Alice, Age: 25
 
 
-os.chdir(f'../../../')
-
-def launch_jupyter_notebook():
-    subprocess.run(["jupyter", "notebook"])
-
-if __name__ == "__main__":
-    launch_jupyter_notebook()
+# os.chdir(f'../../../')
+#
+# def launch_jupyter_notebook():
+#     subprocess.run(["jupyter", "notebook"])
+#
+# if __name__ == "__main__":
+#     launch_jupyter_notebook()
 
 # import lime
 # from pathlib import Path
