@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import lime
 from pathlib import Path
 from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum
@@ -111,7 +112,7 @@ def test_extract_fluxes_single_index():
     # Compound of normalizations
     line_list = ['H1_6563A/H1_4861A', 'O3_5007A/H1_4861A', 'O3_5007A_k-1/H1_4861A_k-1',
                  'O3_4959A_k-1/H1_4861A_k-1', 'H1_4861A_k-1/H1_4861A']
-    lime.normalize_fluxes(log3, lines_list=line_list)
+    lime.normalize_fluxes(log3, line_list=line_list)
 
     f_series = log3['gauss_flux']
     assert log3.loc['H1_6563A', 'line_flux'] == f_series['H1_6563A']/f_series['H1_4861A']
@@ -131,8 +132,9 @@ def test_extract_fluxes_multi_index():
                   (~obs.log.index.get_level_values('line').isin(['H1_6563A', 'O3_4363A', 'H1_4861A']))
 
     log1 = obs.log.loc[~idcs_remove].copy()
-    log2 = obs.log.loc[~idcs_remove].copy()
-    log3 = obs.log.loc[~idcs_remove].copy()
+    log2 = obs.log.copy()
+    log3 = obs.log.copy()
+    log4 = obs.log.copy()
 
     # One line normalization
     lime.normalize_fluxes(log1, norm_list='H1_4861A')
@@ -141,6 +143,7 @@ def test_extract_fluxes_multi_index():
     assert log1.xs('O3_5007A', level='line')['line_flux']['obj_2'] == ratio['obj_2']
     assert np.isnan(ratio['obj_1'])
     assert 'obj_1' not in log1.xs('O3_5007A', level='line')['line_flux']
+    assert np.all(log1['norm_line'] == 'H1_4861A')
 
     # List of normalizations
     norm_list = np.array(['H1_4861A'] * log2.index.size).astype(object)
@@ -150,9 +153,26 @@ def test_extract_fluxes_multi_index():
 
     ratio = log2.xs('O3_5007A', level='line')['gauss_flux'] / log2.xs('H1_4861A', level='line')['gauss_flux']
     assert log2.xs('O3_5007A', level='line')['line_flux']['obj_0'] == ratio['obj_0']
+    assert log2.xs('O3_5007A', level='line')['line_flux']['obj_1'] == ratio['obj_1']
     assert log2.xs('O3_5007A', level='line')['line_flux']['obj_2'] == ratio['obj_2']
-    assert np.isnan(ratio['obj_1'])
-    assert 'obj_1' not in log2.xs('O3_5007A', level='line')['line_flux']
+
+    assert np.all(log2.loc[~idcs_wide, 'norm_line'] == 'H1_4861A')
+    assert np.all(log2.loc[idcs_wide, 'norm_line'] == 'H1_4861A_k-1')
+
+    lime.normalize_fluxes(log3, line_list='H1_6563A', norm_list='H1_4861A')
+    Halpha_norm = lines_log.loc['H1_6563A', 'gauss_flux'] / lines_log.loc['H1_4861A', 'gauss_flux']
+    assert np.all(log3.xs('H1_6563A', level='line')['line_flux'] == Halpha_norm)
+    assert pd.notnull(log3.line_flux).sum() == 3
+
+    lime.normalize_fluxes(log4, line_list=['O3_5007A/H1_4861A', 'N2_6584A/H1_6563A'])
+    O3_norm = lines_log.loc['O3_5007A', 'gauss_flux'] / lines_log.loc['H1_4861A', 'gauss_flux']
+    N2_norm = lines_log.loc['N2_6584A', 'gauss_flux'] / lines_log.loc['H1_6563A', 'gauss_flux']
+
+    assert np.all(log4.xs('O3_5007A', level='line')['line_flux'] == O3_norm)
+    assert np.all(log4.xs('N2_6584A', level='line')['line_flux'] == N2_norm)
+
+    assert np.all(log4.xs('O3_5007A', level='line')['norm_line'] == 'H1_4861A')
+    assert np.all(log4.xs('N2_6584A', level='line')['norm_line'] == 'H1_6563A')
 
     return
 

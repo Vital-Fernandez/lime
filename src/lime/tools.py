@@ -116,6 +116,9 @@ def check_lines_normalization(input_lines, norm_line, log):
     if input_lines is None:
         input_lines = log.index.to_numpy() if single_index_check else log.index.get_level_values('line').unique()
 
+    # In case there is only one input line as str
+    input_lines = [input_lines] if isinstance(input_lines, str) else input_lines
+
     # 1) One-norm in norm_line  # 2) Multiple-norm in norm_line # 3) Multiple-norm in input_lines
 
     # Cases 1 and 2
@@ -164,21 +167,19 @@ def check_lines_normalization(input_lines, norm_line, log):
 
 
 # Compute the fluxes
-def normalize_fluxes(log, lines_list=None, norm_list=None, flux_column='gauss_flux', column_name='line_flux',
+def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='gauss_flux', column_name='line_flux',
                      column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line']):
 
     '''
     If the normalization line is not available, no operation is added.
     '''
 
-    # TODO seems to fail if one in lines_list and one in norm_list
-
     # Check columns present in log
     if (flux_column not in log.columns) or (f'{flux_column}_err' not in log.columns):
         raise LiMe_Error(f'Input log is missing "{flux_column}" or "{flux_column}_err" columns')
 
     # Check the normalization for the lines
-    line_array, norm_array = check_lines_normalization(lines_list, norm_list, log)
+    line_array, norm_array = check_lines_normalization(line_list, norm_list, log)
 
     # Add new columns if necessary
     if column_name not in log.columns:
@@ -209,10 +210,14 @@ def normalize_fluxes(log, lines_list=None, norm_list=None, flux_column='gauss_fl
             #Multi-index dataframe
             else:
 
-                idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
-                grouper = log.index.droplevel('line')
-                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
-                df_slice = log.loc[idcs_slice]
+                if numer == denom:  # Same line normalization
+                    idcs_slice = log.index.get_level_values(sample_levels[-1]) == numer
+                    df_slice = log.loc[idcs_slice]
+                else:  # Rest cases
+                    idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
+                    grouper = log.index.droplevel('line')
+                    idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+                    df_slice = log.loc[idcs_slice]
 
                 # Get fluxes
                 if df_slice.size > 0:

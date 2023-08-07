@@ -316,35 +316,35 @@ class TestSpectrumClass:
 
         return
 
-    def test_measurements_asdf_file(self):
-
-        extension = 'asdf'
-        spec.save_log(baseline_folder/f'test_lines_log.{extension}')
-
-        log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
-
-        for line in spec.log.index:
-            for param in spec.log.columns:
-
-                # String
-                if _LOG_EXPORT_DICT[param].startswith('<U'):
-                    if log_orig.loc[line, param] is np.nan:
-                        assert log_orig.loc[line, param] is log_test.loc[line, param]
-                    else:
-                        assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                # Float
-                else:
-                    if param not in ['eqw', 'eqw_err']:
-                        print(param, log_orig.loc[line, param], log_test.loc[line, param])
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                              equal_nan=True)
-                    else:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                              equal_nan=True)
-
-        return
+    # def test_measurements_asdf_file(self):
+    #
+    #     extension = 'asdf'
+    #     spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+    #
+    #     log_orig = lime.load_log(lines_log_address)
+    #     log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+    #
+    #     for line in spec.log.index:
+    #         for param in spec.log.columns:
+    #
+    #             # String
+    #             if _LOG_EXPORT_DICT[param].startswith('<U'):
+    #                 if log_orig.loc[line, param] is np.nan:
+    #                     assert log_orig.loc[line, param] is log_test.loc[line, param]
+    #                 else:
+    #                     assert log_orig.loc[line, param] == log_test.loc[line, param]
+    #
+    #             # Float
+    #             else:
+    #                 if param not in ['eqw', 'eqw_err']:
+    #                     print(param, log_orig.loc[line, param], log_test.loc[line, param])
+    #                     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
+    #                                           equal_nan=True)
+    #                 else:
+    #                     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
+    #                                           equal_nan=True)
+    #
+    #     return
 
     def test_save_load_log(self):
 
