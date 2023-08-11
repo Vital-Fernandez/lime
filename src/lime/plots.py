@@ -1666,7 +1666,7 @@ class SampleFigures(Plotter):
 
         return
 
-    def spectra(self, log_scale=False, output_address=None, rest_frame=False, include_fits=False,
+    def spectra(self, obj_idcs=None, log_scale=False, output_address=None, rest_frame=False, include_fits=False,
                 in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}):
 
         # Set figure format with the user inputs overwriting the default conf
@@ -1675,59 +1675,72 @@ class SampleFigures(Plotter):
         PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._sample.norm_flux,
                                                   units_wave=self._sample.units_wave, units_flux=self._sample.units_flux)
 
-        # Create and fill the figure
-        with rc_context(PLT_CONF):
+        # Get the spectra list to plot
+        if obj_idcs is None:
+            obj_idx = self._sample.index.droplevel('line') if ('line' in self._sample.index.names) else self._sample.indexs
+            obj_idx = obj_idx.unique()
 
-            # Generate the figure object and figures
-            self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
+        if len(obj_idx) > 0:
 
-            # Loop through the SMACS_v2.0 in the sample
-            for obj_label, spec in self._sample.items():
+            # Create and fill the figure
+            with rc_context(PLT_CONF):
 
-                # Reference _frame for the plot
-                wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,
-                                                                              rest_frame)
+                # Generate the figure object and figures
+                self._fig, self._ax = self._plot_container(in_fig, in_axis, AXES_CONF)
 
-                # Plot the spectrum
-                self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=obj_label, where='mid')
+                # Loop through the SMACS_v2.0 in the sample
+                for sample_idx in obj_idx:
 
-                # List of lines in the log
-                line_list = spec.log.index.values
+                    obj_label = sample_idx[obj_idx.names.index('id')]
+                    spec = self._sample.get_observation(sample_idx)
 
-                # Plot the fittings
-                if include_fits:
+                    # Reference _frame for the plot
+                    wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,
+                                                                                  rest_frame)
 
-                    # Do not include the legend as the labels are necessary for mplcursors
-                    legend_check = False
+                    # Plot the spectrum
+                    self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=obj_label, where='mid')
 
-                    if line_list.size > 0:
+                    # List of lines in the log
+                    line_list = spec.log.index.values
 
-                        wave_array, gaussian_array = gaussian_profiles_computation(line_list, spec.log, (1 + spec.redshift))
-                        wave_array, cont_array = linear_continuum_computation(line_list, spec.log, (1 + spec.redshift))
+                    # Plot the fittings
+                    if include_fits:
 
-                        # Single component lines
-                        line_g_list = self._gaussian_line_profiler(self._ax, line_list,
-                                                                   wave_array, gaussian_array, cont_array,
-                                                                   z_corr, spec.log, spec.norm_flux,)
+                        # Do not include the legend as the labels are necessary for mplcursors
+                        legend_check = False
 
-                        # Add the interactive pop-ups
-                        self._mplcursor_parser(line_g_list, line_list, spec.log, spec.norm_flux, spec.units_wave,
-                                               spec.units_flux)
+                        if line_list.size > 0:
 
-                # Plot the masked pixels
-                _masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, spec.log, idcs_mask)
+                            wave_array, gaussian_array = gaussian_profiles_computation(line_list, spec.log, (1 + spec.redshift))
+                            wave_array, cont_array = linear_continuum_computation(line_list, spec.log, (1 + spec.redshift))
 
-            # Switch y_axis to logarithmic scale if requested
-            if log_scale:
-                self._ax.set_yscale('log')
+                            # Single component lines
+                            line_g_list = self._gaussian_line_profiler(self._ax, line_list,
+                                                                       wave_array, gaussian_array, cont_array,
+                                                                       z_corr, spec.log, spec.norm_flux,)
 
-            # Add or remove legend according to the plot type:
-            # TODO we should be able to separate labels from sample objects from line fits
-            if legend_check:
-                self._ax.legend()
+                            # Add the interactive pop-ups
+                            self._mplcursor_parser(line_g_list, line_list, spec.log, spec.norm_flux, spec.units_wave,
+                                                   spec.units_flux)
 
-            # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', self._fig)
+                    # Plot the masked pixels
+                    _masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, spec.log, idcs_mask)
+
+                # Switch y_axis to logarithmic scale if requested
+                if log_scale:
+                    self._ax.set_yscale('log')
+
+                # Add or remove legend according to the plot type:
+                # TODO we should be able to separate labels from sample objects from line fits
+                if legend_check:
+                    self._ax.legend()
+
+                # By default, plot on screen unless an output address is provided
+                save_close_fig_swicth(output_address, 'tight', self._fig)
+
+        else:
+            _logger.info(f'There are not observations with the input obj_idx "{obj_idcs}" to plot')
 
         return
 
