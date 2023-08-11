@@ -1,5 +1,36 @@
-# import lime
-# from pathlib import Path
+import numpy as np
+import pandas as pd
+import lime
+from pathlib import Path
+from astropy.io import fits
+
+
+def load_function(log_df, id_spec, file_spec, **kwargs):
+
+    # Open fits file
+    ext = 0
+    with fits.open(file_spec) as hdul:
+        data, hdr = hdul[ext].data, hdul[ext].header
+
+    w_min, dw, n_pix = hdr['CRVAL1'], hdr['CD1_1'], hdr['NAXIS1']
+    w_max = w_min + dw * n_pix
+    wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
+
+    log_obj = log_df.xs(id_spec, level='id')
+    redshift = np.nanmean(log_obj.z_line.to_numpy())
+    norm_flux = 1e-17
+
+    spec = lime.Spectrum(wavelength, data, redshift=redshift, norm_flux=norm_flux)
+
+    return spec
+
+id_list = ['GP121903_A', 'GP121903_B']
+log_list = ['../sample_data/example3_linelog.txt', '../sample_data/example3_linelog.txt']
+obs_list = ['gp121903_osiris.fits', 'gp121903_osiris.fits']
+
+sample = lime.Sample.from_file_list(id_list, log_list, obs_list)
+print(sample.log)
+
 # from astropy.io import fits
 # from astropy.wcs import WCS
 # import pandas as pd

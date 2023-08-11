@@ -1,7 +1,29 @@
-# import asdf
-# print(f'Version asdf = {asdf.__version__}')
-# file_name = 'myfile.asdf'
-# af = asdf.AsdfFile({'one': 1})
+import pandas as pd
+import lime
+from pathlib import Path
+
+# Load the lines log as a dataframe
+ceers_log_file = Path(f'/home/usuario/PycharmProjects/lime_online/data/tables/fluxes_log.txt')
+log_df = lime.load_log(ceers_log_file, sample_levels=['sample', 'id', 'line'])
+
+# Rename gauss_flux_err to match the new lime format
+log_df.rename(columns={'gauss_err': 'gauss_flux_err'}, inplace=True)
+
+# Create new column with relative fluxes (depending on the user inputs)
+line_list_norm = ['O3_5008A/H1_4862A', 'N2_6550A/H1_6565A']
+lime.normalize_fluxes(log_df, line_list=line_list_norm, column_name='line_flux')
+
+# Get observations which contain all the lines
+target_lines = ['O3_5008A', 'H1_4862A', 'N2_6550A', 'H1_6565A']
+idcs_slice = log_df.index.get_level_values('line').isin(target_lines)
+grouper = log_df.index.droplevel('line')
+idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(len(target_lines)).array
+slice_log = log_df.loc[idcs_slice]
+
+# Compute the ratios
+O3_ratio = slice_log.xs('O3_5008A', level='line').line_flux
+N2_ratio = slice_log.xs('N2_6550A', level='line').line_flux
+
 
 # with asdf.open(log_path, mode='rw') as af:
 #     af.tree.update(tree)
