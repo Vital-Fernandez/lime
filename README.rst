@@ -1,5 +1,5 @@
 
-.. image:: docs/source/_static/logo_transparent.png?raw=true
+.. image:: https://github.com/Vital-Fernandez/lime/blob/0afedb150b0169deec6c7f159def99750a3a30da/docs/source/_static/logo_transparent.png?raw=true
     :width: 50%
     :align: center
     :alt: Line Measurer (LiMe) library.

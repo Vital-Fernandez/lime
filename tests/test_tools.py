@@ -21,8 +21,9 @@ log_dict = {}
 for i in range(3):
     log_dict[f'obj_{i}'] = lines_log.copy()
 
-obs = lime.Sample()
-obs.add_log_list(list(log_dict.keys()), list(log_dict.values()))
+obj_list = [f'obj_{i}' for i in range(3)]
+log_list = [lines_log_address] * 3
+obs = lime.Sample.from_file_list(obj_list, log_list)
 
 
 def test_int_to_roman():

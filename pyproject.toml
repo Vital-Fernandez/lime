@@ -1,6 +1,6 @@
 [project]
 name = "lime-stable"
-version = "0.9.70"
+version = "0.9.80"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

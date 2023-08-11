@@ -232,7 +232,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     return
 
 
-def load_log(file_address, page: str ='LINELOG', sample_levels: list =['id', 'line']):
+def load_log(file_address, page: str = 'LINELOG', sample_levels: list = ['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
