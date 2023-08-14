@@ -43,6 +43,7 @@ sub_sampleC = sample[idcs]
 # spec.plot.spectrum()
 
 sample.plot.spectra()
+sub_sampleC.plot.spectra()
 
 # spec = sample.load_function(sample.log, 'GP121903_A', 'gp121903_osiris.fits', data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
 

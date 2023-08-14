@@ -1217,36 +1217,39 @@ class Sample(UserDict):
 
         return output
 
-    def get_observation(self, id_key, default_none=False):
+    def get_observation(self, *args, default_none=False):
 
         output = None
         valid_check = self._review_df_indexes()
 
         if valid_check:
 
-            # Check if Pandas indeces or scalar key
-            if isinstance(id_key, pd.Index) or isinstance(id_key, pd.MultiIndex) or isinstance(id_key, pd.Series) or isinstance(id_key, tuple):
-                idcs = id_key
-            else:
-                idcs = self.log.index.get_level_values('id').isin([id_key])
+            # Case only ID, try to find the object spectrum
+            if len(args) == 1:
+                idcs = self.log.index.get_level_values('id').isin(args)
 
-            # Not entry found
-            if np.all(idcs is False):
-                if default_none is False:
-                    raise KeyError(id_key)
-                else:
-                    output = None
+                # Not entry found
+                if np.all(idcs is False):
+                    raise KeyError(args[0])
 
-            else:
+                # Check for logs without lines
+                files = self.log.loc[idcs].index.get_level_values('file').unique()
 
-                spec_label = self.log.loc[idcs].index.get_level_values('id').unique()
-                spec_file = self.log.loc[idcs].index.get_level_values('file').unique()
-                n_obs = spec_label.size
-
-                if n_obs > 1:
+                if files.size > 1:
                     raise LiMe_Error(f'More than one observation meets the input criteria:\n{idcs}')
-                else:
-                    output = self.load_function(self.log, spec_label[0], spec_file[0], **self.load_params)
+
+                spec_label, spec_file = args[0], files[0]
+
+            elif len(args) == 2:
+                spec_label = args[0]
+                spec_file = args[1]
+
+            else:
+                spec_label = args[0]
+                spec_file = args[1]
+
+            # Load the LiMe object
+            output = self.load_function(self.log, spec_label, spec_file, **self.load_params)
 
         return output
 
