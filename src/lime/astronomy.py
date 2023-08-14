@@ -1155,11 +1155,7 @@ class Sample(UserDict):
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
 
-        # # Assign the values
-        # if self.log is not None:
-        #     if isinstance(self.log.index, pd.MultiIndex):
-        #         if 'line' in self.log.index.names:
-        #             self.objects = self.log.index.drop('line')
+        property()
 
         return
 
@@ -1195,87 +1191,87 @@ class Sample(UserDict):
 
         sample_log = pd.concat(df_list)
 
-        return cls(sample_log, norm_flux, units_wave, units_flux, load_function)
+        return cls(sample_log, norm_flux, units_wave, units_flux, load_function, **kwargs)
 
-    # def add_observation(self, ID, redshift=0, norm_flux=1, units_wave='A', units_flux='Flam', inst_FWHM=None, wcs=None,
-    #                     log=None, file_adress=None, obs_type='spectrum'):
-    #
-    #     # Establish the type of observations
-    #     if obs_type not in ('spectrum', 'cube'):
-    #         raise LiMe_Error(f'The input obs_type "{obs_type}" is not recognized. Please use: '
-    #                          f'Spectrum, Cube, Observation')
-    #
-    #     # Add an object to the container
-    #     self[ID] = Observation(ID, redshift, norm_flux, units_wave, units_flux, inst_FWHM, wcs, log, file_adress,
-    #                            obs_type)
-    #
-    #     # Renew the list of objects
-    #     self.objects = np.array(list(self.keys()))
-    #
-    #     # # Check if the units and normalizations match
-    #     # if len(self.keys()) == 1:
-    #     #     self.norm_flux = lime_obj.norm_flux
-    #     #     self.units_wave, self.units_flux = lime_obj.units_wave, lime_obj.units_flux
-    #     #
-    #     # else:
-    #     #     for prop in ['norm_flux', 'units_wave', 'units_flux']:
-    #     #         if self.__getattribute__(prop) != lime_obj.__getattribute__(prop):
-    #     #             _logger.warning(f'The {prop} of object {ID} do not match those in the sample:'
-    #     #                             f' "{lime_obj.__getattribute__(prop)}" in object versus "{self.__getattribute__(prop)}" in sample')
-    #
-    #     return
-    #
-    # def add_log_list(self, id_list, log_list=None, level_names=('id', 'line'), ext_list='LINELOG'):
-    #
-    #     # Check labels are provided
-    #     if id_list is not None:
-    #         id_list = np.array([id_list], ndmin=1).squeeze()
-    #         self.objects = id_list if len(id_list.shape) == 1 else id_list[:, 0]
-    #
-    #         # Get the sub-groups array
-    #         if len(id_list.shape) > 1:
-    #             self.group_list = id_list[:, 1:]
-    #
-    #         # Generate label list
-    #         self.label_list = list(self.objects.astype(str))
-    #         if self.group_list is not None:
-    #             for i, label in enumerate(self.label_list):
-    #                 self.label_list[i] = f'{label},{",".join(self.group_list[i])}'
-    #         self.label_list = np.array(self.label_list)
-    #
-    #         # Store the objects
-    #         log_dict = {}
-    #         if log_list is not None:
-    #
-    #             ext_list = np.array([ext_list], ndmin=1)
-    #             for i, log in enumerate(log_list):
-    #
-    #                 ext = ext_list[0] if len(ext_list) == 1 else ext_list[i]
-    #                 log_df = check_file_dataframe(log, pd.DataFrame, ext=ext)
-    #
-    #                 log_dict[self.label_list[i]] = log_df
-    #
-    #                 # Add to object if it is there
-    #                 if self.label_list[i] in self:
-    #                     self.label_list[i].load_log(log_df)
-    #
-    #             # Concact the panel
-    #             self.log = pd.concat(log_dict, axis=0)
-    #             self.log.rename_axis(index=level_names, inplace=True)
-    #
-    #     return
+    def __getitem__(self, id_key):
 
-    def __getitem__(self, key):
+        output = None
+        valid_check = self._review_df_indexes()
 
-        obs = self.data.get(key, None)
+        # Proceed to selection
+        if valid_check:
 
-        # Load the spectrum
-        if obs is not None:
-            setattr(obs, obs.var_type, self.load_function(obs, self.log))
-        else:
-            raise LiMe_Error(f'Observation {key} was not found on the sample.')
+            # Check if Pandas indeces or scalar key
+            if isinstance(id_key, pd.Index) or isinstance(id_key, pd.MultiIndex) or isinstance(id_key, pd.Series):
+                idcs = id_key
+            else:
+                idcs = self.log.index.get_level_values('id').isin([id_key])
 
-        return obs
+            # Not entry found
+            if np.all(idcs is False):
+                raise KeyError(id_key)
+
+            # Crop sample
+            output = Sample(self.log.loc[idcs], self.norm_flux, self.units_wave, self.units_flux,
+                            self.load_function, **self.load_params)
+
+        return output
+
+    def get_observation(self, *args, default_none=False):
+
+        output = None
+        valid_check = self._review_df_indexes()
+
+        if valid_check:
+
+            # Case only ID, try to find the object spectrum
+            if len(args) == 1:
+                idcs = self.log.index.get_level_values('id').isin(args)
+
+                # Not entry found
+                if np.all(idcs is False):
+                    raise KeyError(args[0])
+
+                # Check for logs without lines
+                files = self.log.loc[idcs].index.get_level_values('file').unique()
+
+                if files.size > 1:
+                    raise LiMe_Error(f'More than one observation meets the input criteria:\n{idcs}')
+
+                spec_label, spec_file = args[0], files[0]
+
+            elif len(args) == 2:
+                spec_label = args[0]
+                spec_file = args[1]
+
+            else:
+                spec_label = args[0]
+                spec_file = args[1]
+
+            # Load the LiMe object
+            output = self.load_function(self.log, spec_label, spec_file, **self.load_params)
+
+        return output
+
+    @property
+    def index(self):
+        return self.log.index
+
+    @property
+    def ids(self):
+        return self.log.index.get_level_values('id')
+
+    @property
+    def files(self):
+        return self.log.index.get_level_values('file')
+
+    @property
+    def lines(self):
+        return self.log.index.get_level_values('line')
+
+    @property
+    def size(self):
+        return self.log.index.get_level_values('id').size
 
     def load_log(self, log_var, ext='LINELOG', sample_levels=['id', 'line']):
 
@@ -1325,3 +1321,29 @@ class Sample(UserDict):
                          column_positions=[1, 2]):
 
         return normalize_fluxes(self.log, normalization_line, flux_entries, column_names, column_positions)
+
+    def _review_df_indexes(self):
+
+        # Check there is a log
+        check = False
+
+        if self.log is None:
+            _logger.info(f'Sample does not contain observations')
+
+        # Check there is load function
+        elif self.load_function is None:
+            _logger.info(f'The sample does not contain a load_function')
+
+        # Check there is a 'file' index
+        elif 'id' not in self.log.index.names:
+            _logger.info(f'The sample log does not contain an "id" index column the observation label')
+
+        # Check there is a 'file' index
+        elif 'file' not in self.log.index.names:
+            _logger.info(f'The sample log does not contain a "file" index column with the observation file')
+
+        else:
+            check = True
+
+        return check
+

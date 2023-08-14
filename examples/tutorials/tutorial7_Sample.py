@@ -5,11 +5,12 @@ from pathlib import Path
 from astropy.io import fits
 
 
-def load_function(log_df, id_spec, file_spec, **kwargs):
+def osiris_open_fits(log_df, id_spec, file_spec, **kwargs):
 
     # Open fits file
     ext = 0
-    with fits.open(file_spec) as hdul:
+    file_address = Path(kwargs['data_folder'])/file_spec
+    with fits.open(file_address) as hdul:
         data, hdr = hdul[ext].data, hdul[ext].header
 
     w_min, dw, n_pix = hdr['CRVAL1'], hdr['CD1_1'], hdr['NAXIS1']
@@ -28,8 +29,23 @@ id_list = ['GP121903_A', 'GP121903_B']
 log_list = ['../sample_data/example3_linelog.txt', '../sample_data/example3_linelog.txt']
 obs_list = ['gp121903_osiris.fits', 'gp121903_osiris.fits']
 
-sample = lime.Sample.from_file_list(id_list, log_list, obs_list)
+sample = lime.Sample.from_file_list(id_list, log_list, obs_list, load_function=osiris_open_fits, norm_flux=1e-17,
+                                    data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
 print(sample.log)
+
+sub_sample = sample['GP121903_A']
+sub_sampleB = sample['GP121903_B']
+
+idcs = (sample.ids.isin(['GP121903_B'])) & sample.log.particle.isin(['O3', 'S2'])
+sub_sampleC = sample[idcs]
+
+# spec = sample.get_observation('GP121903_A')
+# spec.plot.spectrum()
+
+sample.plot.spectra()
+sub_sampleC.plot.spectra()
+
+# spec = sample.load_function(sample.log, 'GP121903_A', 'gp121903_osiris.fits', data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
 
 # from astropy.io import fits
 # from astropy.wcs import WCS
