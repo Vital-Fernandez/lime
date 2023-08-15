@@ -17,7 +17,6 @@ import configparser
 import logging
 import numpy as np
 import pandas as pd
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 from . import Error, __version__
 from sys import exit, stdout, version_info
@@ -34,6 +33,8 @@ from .tables import table_fluxes
 try:
     import openpyxl
     openpyxl_check = True
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
 except ImportError:
     openpyxl_check = False
 
@@ -517,14 +518,14 @@ def results_to_log(line, log, norm_flux):
                 if param_value is not None:
                     param_value = param_value * norm_flux
 
+            # Just string for particle
+            if j == 7:
+                param_value = param_value.label
+
             # Converting None entries to str (9 = profile_label)
             if j == 9:
                 if param_value is None:
                     param_value = 'None'
-
-            # Just string for particle
-            if j == 7:
-                param_value = param_value.label
 
             log.at[comp, param] = param_value
 

@@ -46,10 +46,12 @@ FWHM_g                    0                1          1           1    <f8      
 FWZI                      0                1          0           1    <f8               $FWZI$         wave
 v_med                     0                1          0           1    <f8            $v_{med}$         vel
 v_50                      0                1          0           1    <f8             $v_{50}$         vel
+v_1                       0                1          0           1    <f8              $v_{1}$         vel
 v_5                       0                1          0           1    <f8              $v_{5}$         vel
 v_10                      0                1          0           1    <f8             $v_{10}$         vel
 v_90                      0                1          0           1    <f8             $v_{90}$         vel
 v_95                      0                1          0           1    <f8             $v_{95}$         vel
+v_99                      0                1          0           1    <f8             $v_{99}$         vel
 chisqr                    0                1          0           1    <f8           $\chi^{2}$         none
 redchi                    0                1          0           1    <f8     $\chi_{\nu}^{2}$         none
 aic                       0                1          0           1    <f8                  AIC         none

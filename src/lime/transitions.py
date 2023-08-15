@@ -467,6 +467,7 @@ class Line:
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
         self.v_90, self.v_95 = None, None
+        self.v_1, self.v_99 = None, None
         self.chisqr, self.redchi = None, None
         self.aic, self.bic = None, None
         self.pixelWidth = None

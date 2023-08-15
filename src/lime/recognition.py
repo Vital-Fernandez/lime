@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import joblib
 import logging
 
 from pathlib import Path
@@ -11,6 +10,13 @@ from inspect import signature
 from .io import LiMe_Error, check_file_dataframe
 from .transitions import label_decomposition
 import astropy.units as au
+
+try:
+    import joblib
+    joblib_check = True
+except ImportError:
+    joblib_check = False
+
 
 _logger = logging.getLogger('LiMe')
 
@@ -215,8 +221,11 @@ class LineFinder:
 
         # Check via machine learning algorithm
         if ml_detection is not None:
-            self.ml_model = joblib.load(MACHINE_PATH)
-            ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
+            if joblib_check:
+                self.ml_model = joblib.load(MACHINE_PATH)
+                ml_mask = self.ml_line_detection(cont_flux) if ml_detection else None
+            else:
+                raise ImportError(f'Need to install joblib library to use machine learning detection')
         else:
             ml_mask = None
 
@@ -225,7 +234,7 @@ class LineFinder:
         idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
-        bands = check_file_dataframe(bands, pd.DataFrame)
+        bands = lime.io.check_file_dataframe(bands, pd.DataFrame)
         if bands is not None:
 
             # Match peaks with theoretical lines
