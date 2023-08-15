@@ -234,7 +234,7 @@ class LineFinder:
         idcs_peaks = self.peak_detection(detec_min, cont_flux, plot_results=plot_peak_calc, ml_mask=ml_mask)
 
         # Compare against the theoretical values
-        bands = lime.io.check_file_dataframe(bands, pd.DataFrame)
+        bands = check_file_dataframe(bands, pd.DataFrame)
         if bands is not None:
 
             # Match peaks with theoretical lines
