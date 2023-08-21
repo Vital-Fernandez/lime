@@ -44,6 +44,8 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
+    # TODO read wavelength from table/description "." in configuration log
+
     # Check if imported kinematics come from blended component
     if line.profile_label is not np.nan:
         childs_list = line.profile_label.split('+')
@@ -243,6 +245,7 @@ class SpecTreatment(LineFitting):
         :type temp: bool, optional
 
         """
+
 
         # Make a copy of the fitting configuartion
         fit_conf = {} if fit_conf is None else fit_conf.copy()
