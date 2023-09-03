@@ -17,7 +17,6 @@ import configparser
 import logging
 import numpy as np
 import pandas as pd
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 from . import Error, __version__
 from sys import exit, stdout, version_info
@@ -34,6 +33,8 @@ from .tables import table_fluxes
 try:
     import openpyxl
     openpyxl_check = True
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
 except ImportError:
     openpyxl_check = False
 
@@ -232,7 +233,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     return
 
 
-def load_log(file_address, page: str = 'LINELOG', sample_levels: list = ['id', 'line']):
+def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
@@ -251,8 +252,8 @@ def load_log(file_address, page: str = 'LINELOG', sample_levels: list = ['id', '
     :param page: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "_LINELOG".
     :type page: str, optional
 
-    :param sample_levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
-    :type sample_levels: list, optional
+    :param levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
+    :type levels: list, optional
 
     :return: lines log table
     :rtype: pandas.DataFrame
@@ -307,8 +308,8 @@ def load_log(file_address, page: str = 'LINELOG', sample_levels: list = ['id', '
         exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
 
     # Restore levels if multi-index
-    if log.columns.isin(sample_levels).sum() == len(sample_levels):
-        log.set_index(sample_levels, inplace=True)
+    if log.columns.isin(levels).sum() == len(levels):
+        log.set_index(levels, inplace=True)
 
     return log
 
@@ -517,14 +518,14 @@ def results_to_log(line, log, norm_flux):
                 if param_value is not None:
                     param_value = param_value * norm_flux
 
+            # Just string for particle
+            if j == 7:
+                param_value = param_value.label
+
             # Converting None entries to str (9 = profile_label)
             if j == 9:
                 if param_value is None:
                     param_value = 'None'
-
-            # Just string for particle
-            if j == 7:
-                param_value = param_value.label
 
             log.at[comp, param] = param_value
 
@@ -542,7 +543,7 @@ def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_level
     elif isinstance(df_variable, (str, Path)):
         input_path = Path(df_variable)
         if input_path.is_file():
-            output = load_log(df_variable, page=ext, sample_levels=sample_levels)
+            output = load_log(df_variable, page=ext, levels=sample_levels)
         else:
             output = None
 

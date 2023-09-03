@@ -1276,11 +1276,14 @@ class SpectrumFigures(Plotter):
 
         return in_fig
 
-    def velocity_profile(self,  line=None, band=None, y_scale='auto', plt_cfg={}, ax_cfg={}, in_fig=None,
-                         output_address=None):
+    def velocity_profile(self,  line=None, band=None, y_scale='linear', plt_cfg={}, ax_cfg={}, in_fig=None,
+                         output_address=None, maximize=False):
 
         # Establish the line and band to user for the analysis
         line, band = check_line_for_bandplot(line, band, self._spec, _PARENT_BANDS)
+
+        # Display check for the user figures
+        display_check = True if in_fig is None else False
 
         # Adjust the default theme
         ax_cfg.setdefault('xlabel',  'Velocity (Km/s)')
@@ -1325,7 +1328,7 @@ class SpectrumFigures(Plotter):
             self._ax.step(vel_plot, flux_plot, label=line.latex_label, where='mid', color=self._color_dict['fg'])
 
             # Velocity percentiles
-            target_percen = ['v_5', 'v_10', 'v_50', 'v_90', 'v_95']
+            target_percen = ['v_1', 'v_5', 'v_10', 'v_50', 'v_90', 'v_95', 'v_99']
             for i_percentil, percentil in enumerate(target_percen):
 
                 vel_per = line.__getattribute__(percentil)
@@ -1339,11 +1342,11 @@ class SpectrumFigures(Plotter):
             # Velocity edges
             label_v_i, label_v_f = r'$v_{{0}}$', r'$v_{{100}}$'
             self._ax.axvline(x=v_i, alpha=0.5, color=self._color_dict['fg'], linestyle='dotted')
-            self._ax.text(v_i, 0.50, label_v_i, ha='center', va='center', rotation='vertical',
+            self._ax.text(v_i, 0.80, label_v_i, ha='center', va='center', rotation='vertical',
                           backgroundcolor=self._color_dict['bg'], transform=trans, alpha=0.5)
 
             self._ax.axvline(x=v_f, alpha=0.5, color=self._color_dict['fg'], linestyle='dotted')
-            self._ax.text(v_f, 0.50, label_v_f, ha='center', va='center', rotation='vertical',
+            self._ax.text(v_f, 0.80, label_v_f, ha='center', va='center', rotation='vertical',
                           backgroundcolor=self._color_dict['bg'], transform=trans, alpha=0.5)
 
             # Plot the line profile
@@ -1363,8 +1366,8 @@ class SpectrumFigures(Plotter):
 
             # Plot FWHM bands
             label_arrow = r'$FWZI={:0.1f}\,Km/s$'.format(line.FWZI)
-            p2 = patches.FancyArrowPatch((vel_plot[idx_i], cont_plot[idx_i]),
-                                         (vel_plot[idx_f], cont_plot[idx_f]),
+            p2 = patches.FancyArrowPatch((v_i, 0),
+                                         (v_f, 0),
                                          label=label_arrow,
                                          arrowstyle='<->',
                                          color='tab:red',
@@ -1387,7 +1390,7 @@ class SpectrumFigures(Plotter):
             self._ax.legend()
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', fig_obj=None)
+            save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
 
         return
 
@@ -1673,9 +1676,12 @@ class SampleFigures(Plotter):
 
             legend_check = True
             plt_cfg.setdefault('figure.figsize', (10, 6))
-            PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._sample.norm_flux,
-                                                      units_wave=self._sample.units_wave,
-                                                      units_flux=self._sample.units_flux)
+
+            norm_flux = self._sample.load_params.get('norm_flux')
+            units_wave = self._sample.load_params.get('units_wave')
+            units_flux = self._sample.load_params.get('units_flux')
+            PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux,
+                                                      units_wave=units_wave, units_flux=units_flux)
 
             # Get the spectra list to plot
             if obj_idcs is None:
@@ -1701,8 +1707,9 @@ class SampleFigures(Plotter):
                     for sample_idx in obj_idcs:
 
                         spec_label, spec_file = sample_idx[0], sample_idx[1]
-                        legend_label = ', '.join(sample_idx)
-                        spec = self._sample.get_observation(spec_label, spec_file)
+                        legend_label = ", ".join(map(str, sample_idx))
+                        # spec = self._sample.get_observation(spec_label, spec_file)
+                        spec = self._sample.load_function(self._sample.log, sample_idx, **self._sample.load_params)
 
                         # Reference _frame for the plot
                         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,

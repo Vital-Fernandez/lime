@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from astropy.io import fits
+from time import time
 
 from . import Error
 from .model import LineFitting, signal_to_noise_rola
@@ -43,6 +44,8 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 
 
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
+
+    # TODO read wavelength from table/description "." in configuration log
 
     # Check if imported kinematics come from blended component
     if line.profile_label is not np.nan:
@@ -244,6 +247,7 @@ class SpecTreatment(LineFitting):
 
         """
 
+
         # Make a copy of the fitting configuartion
         fit_conf = {} if fit_conf is None else fit_conf.copy()
 
@@ -428,6 +432,7 @@ class SpecTreatment(LineFitting):
 
                     if plot_fit:
                         self._spec.plot.bands()
+                print()
 
             else:
                 msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
@@ -495,7 +500,7 @@ class CubeTreatment(LineFitting):
     def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
                      temp=10000.0, default_conf_prefix='default', line_detection=False, progress_output='bar',
-                     plot_fit=False, header=None, n_save=100):
+                     plot_fit=False, header=None, n_save=1000):
 
         """
 
@@ -641,8 +646,9 @@ class CubeTreatment(LineFitting):
 
             # Loop through the spaxels
             n_spaxels = idcs_spaxels.shape[0]
-            pbar = ProgressBar(progress_output, f'{n_spaxels} spaxels')
-            print(f'\n\nSpatial mask {i + 1}/{n_masks}) {mask_name} ({n_spaxels} spaxels)')
+            n_lines, start_time = 0, time()
+            pbar = ProgressBar(progress_output, f'mask')
+            print(f'\nSpatial mask {i + 1}/{n_masks}) {mask_name} ({n_spaxels} spaxels)')
             for j in np.arange(n_spaxels):
 
                 idx_j, idx_i = idcs_spaxels[j]
@@ -663,6 +669,9 @@ class CubeTreatment(LineFitting):
                                  line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
                                  temp=temp, progress_output=None, plot_fit=None, id_conf_prefix=None,
                                  default_conf_prefix=None)
+
+                # Count the number of measurements
+                n_lines += spaxel.log.index.size
 
                 # Create page header with the default data
                 hdr_i = fits.Header()
@@ -696,6 +705,11 @@ class CubeTreatment(LineFitting):
 
             # Save the log at each new mask
             hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
+
+            # Computation time and message
+            end_time = time()
+            elapsed_time = end_time - start_time
+            print(f'\n{n_lines} lines measured in {elapsed_time/60:0.2f} minutes.')
 
         return
 

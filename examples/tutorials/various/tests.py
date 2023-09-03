@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Load the lines log as a dataframe
 ceers_log_file = Path(f'/home/usuario/PycharmProjects/lime_online/data/tables/fluxes_log.txt')
-log_df = lime.load_log(ceers_log_file, sample_levels=['sample', 'id', 'line'])
+log_df = lime.load_log(ceers_log_file, levels=['sample', 'id', 'line'])
 
 # Rename gauss_flux_err to match the new lime format
 log_df.rename(columns={'gauss_err': 'gauss_flux_err'}, inplace=True)

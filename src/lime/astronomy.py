@@ -1128,8 +1128,7 @@ class Observation:
 
 class Sample(UserDict):
 
-    def __init__(self, sample_log, norm_flux=None, units_wave='A', units_flux='Flam', load_function=None,
-                 sample_levels=["id", "file", "line"], **kwargs):
+    def __init__(self, sample_log, load_function=None, levels=["id", "file", "line"], **kwargs):
 
         '''
         First entry of mutli index is the object name
@@ -1142,26 +1141,19 @@ class Sample(UserDict):
         self.label_list = None
         self.objects = None
         self.group_list = None
-        self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=sample_levels)
+        self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=levels)
         self.load_function = load_function if load_function is not None else None
         self.load_params = kwargs
-
-        # homogenize properties
-        self.norm_flux = norm_flux
-        self.units_wave = units_wave
-        self.units_flux = units_flux
 
         # Functionality objects
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
 
-        property()
-
         return
 
     @classmethod
-    def from_file_list(cls, id_list, log_list=None, file_list=None, page_list=None, norm_flux=None, units_wave='A',
-                       units_flux='Flam', load_function=None, sample_levels=['id', 'line'], **kwargs):
+    def from_file_list(cls, id_list, log_list=None, file_list=None, page_list=None, load_function=None,
+                       sample_levels=['id', 'line'], **kwargs):
 
         # Confirm all the files have the same address
         for key, value in {'log_list': log_list, 'file_list': file_list, 'page_list':page_list}.items():
@@ -1191,7 +1183,7 @@ class Sample(UserDict):
 
         sample_log = pd.concat(df_list)
 
-        return cls(sample_log, norm_flux, units_wave, units_flux, load_function, **kwargs)
+        return cls(sample_log, load_function, **kwargs)
 
     def __getitem__(self, id_key):
 
@@ -1212,8 +1204,7 @@ class Sample(UserDict):
                 raise KeyError(id_key)
 
             # Crop sample
-            output = Sample(self.log.loc[idcs], self.norm_flux, self.units_wave, self.units_flux,
-                            self.load_function, **self.load_params)
+            output = Sample(self.log.loc[idcs], self.load_function, **self.load_params)
 
         return output
 
@@ -1253,9 +1244,28 @@ class Sample(UserDict):
 
         return output
 
+    def get_spectrum(self, idx):
+
+        if isinstance(idx, pd.Series):
+            idx_true = self.log.loc[idx].index
+
+            if idx_true.size > 1:
+                raise LiMe_Error(f'Input sample spectrum extraction has more than one existing entry')
+
+            idx_in = self.log.loc[idx_true].index.values[0]
+
+        else:
+            idx_in = idx
+
+        return self.load_function(self.log, idx_in, **self.load_params)
+
     @property
     def index(self):
         return self.log.index
+
+    @property
+    def loc(self):
+        return self.log.loc
 
     @property
     def ids(self):
@@ -1271,7 +1281,7 @@ class Sample(UserDict):
 
     @property
     def size(self):
-        return self.log.index.get_level_values('id').size
+        return self.log.index.size
 
     def load_log(self, log_var, ext='LINELOG', sample_levels=['id', 'line']):
 
@@ -1312,8 +1322,7 @@ class Sample(UserDict):
 
         return
 
-    def extract_fluxes(self, flux_type='mixture', sample_level='line', column_names=['line_flux', 'line_flux_err'],
-                       column_positions=[1, 2]):
+    def extract_fluxes(self, flux_type='mixture', sample_level='line', column_names='line_flux', column_positions=1):
 
         return extract_fluxes(self.log, flux_type, sample_level, column_names, column_positions)
 

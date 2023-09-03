@@ -467,6 +467,7 @@ class Line:
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
         self.v_90, self.v_95 = None, None
+        self.v_1, self.v_99 = None, None
         self.chisqr, self.redchi = None, None
         self.aic, self.bic = None, None
         self.pixelWidth = None
@@ -652,7 +653,8 @@ class Line:
         if isinstance(bands_df, DataFrame):
             if 'latex_label' in bands_df.columns:
                 if np.sum(bands_df.index.isin(self.list_comps)) == len(self.list_comps):
-                    latex_exists = True
+                    if not np.all(pd.isnull(bands_df.loc[self.list_comps, 'latex_label'])):
+                        latex_exists = True
 
         # Merged
         if self.merged_check:

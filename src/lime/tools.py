@@ -75,7 +75,6 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
     # Get indeces of blended lines
     if not isinstance(log.index, pd.MultiIndex):
         idcs_blended = (log['profile_label'].notnull()) & (~log.index.str.endswith('_m'))
-
     else:
         if sample_level not in log.index.names:
             raise LiMe_Error(f'Input log does not have a index level with column "{sample_level}"')
@@ -98,8 +97,12 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
     output_fluxes = [obsFlux, obsErr]
     if column_name is not None:
         column_positions = 0 if column_positions is None else column_positions
-        log.insert(loc=column_positions, column=f'{column_name}', value=output_fluxes[0])
-        log.insert(loc=column_positions + 1, column=f'{column_name}_err', value=output_fluxes[1])
+        if column_name in log.columns:
+            log.loc[f'{column_name}'] = output_fluxes[0]
+            log.loc[f'{column_name}_err'] = output_fluxes[1]
+        else:
+            log.insert(loc=column_positions, column=f'{column_name}', value=output_fluxes[0])
+            log.insert(loc=column_positions + 1, column=f'{column_name}_err', value=output_fluxes[1])
         function_return = None
     else:
         function_return = output_fluxes
@@ -628,7 +631,7 @@ class ProgressBar:
 
         j = (i + 1) / i_max
         stdout.write('\r')
-        message = f'[{"=" * int(n_bar * j):{n_bar}s}] {int(100 * j)}% of {self.count_type}'
+        message = f'[{"=" * int(n_bar * j):{n_bar}s}] {int(100 * j)}% of {self.count_type} ({post_text})'
         stdout.write(message)
         stdout.flush()
 

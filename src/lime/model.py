@@ -17,7 +17,7 @@ k_GaussArea = np.sqrt(2 * np.pi)
 
 k_FWHM = 2 * np.sqrt(2 * np.log(2))
 
-TARGET_PERCENTILES = np.array([2, 5, 10, 50, 90, 95, 98])
+TARGET_PERCENTILES = np.array([0, 1, 5, 10, 50, 90, 95, 99, 100])
 
 # Atomic mass constant
 amu = 1.66053906660e-27 # Kg
@@ -334,8 +334,8 @@ class LineFitting:
         idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, line._p_type)
         idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, line._p_type)
 
-        line.w_i = emis_wave[idx_0] if not np.ma.isMaskedArray(emis_wave[idx_0]) else None
-        line.w_f = emis_wave[idx_f] if not np.ma.isMaskedArray(emis_wave[idx_f]) else None
+        # line.w_i = emis_wave[idx_0] if not np.ma.isMaskedArray(emis_wave[idx_0]) else None
+        # line.w_f = emis_wave[idx_f] if not np.ma.isMaskedArray(emis_wave[idx_f]) else None
 
         # Velocity calculations
         velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
@@ -387,18 +387,21 @@ class LineFitting:
             if 'emi' in profile_comp:
                 min_lim = 0
                 max_lim = (line.peak_flux - line.cont) + line.std_cont if line._narrow_check else line.peak_flux * 1.5
+                peak_0 = line.peak_flux - line.cont
             elif 'abs' in profile_comp:
-                min_lim = (line.peak_flux - line.cont) - line.std_cont if line._narrow_check else line.peak_flux / 1.5
+                through = np.min(y)
+                min_lim = through - line.cont
                 max_lim = 0
+                peak_0 = through * 0.5 - line.cont
             elif 'mix' in profile_comp:
                 min_lim, max_lim = -np.inf, np.inf
+                peak_0 = line.peak_flux - line.cont
             else:
                 min_lim, max_lim = -np.inf, np.inf
                 _logger.warning(f'No profile component "{line.profile_comp}" provided for line {comp}')
+                peak_0 = line.peak_flux - line.cont
 
-            peak_0 = line.peak_flux - line.cont
             AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
-
             self.define_param(idx, line.list_comps, fit_model, 'amp', peak_0, AMP_PAR, user_conf)
             self.define_param(idx, line.list_comps, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
             self.define_param(idx, line.list_comps, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
@@ -598,9 +601,6 @@ class LineFitting:
         # In case the vel_array has length zero:
         if vel_array.size > 2:
 
-            # Full width zero intensity
-            line.FWZI = vel_array[-1] - vel_array[0]
-
             # Only compute the velocity percentiles for line bands with more than 15 pixels
             valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
 
@@ -635,9 +635,18 @@ class LineFitting:
                     else:
                         line.v_med = np.median(vel_array),
 
-                    line.v_50 = velocPercent[3]
-                    line.v_5, line.v_10 = velocPercent[1], velocPercent[2]
-                    line.v_90, line.v_95 = velocPercent[4], velocPercent[5]
+                    line.w_i = (velocPercent[0] * line.peak_wave / c_KMpS) + line.peak_wave
+                    line.v_1 = velocPercent[1]
+                    line.v_5 = velocPercent[2],
+                    line.v_10 = velocPercent[3]
+                    line.v_50 = velocPercent[4]
+                    line.v_90 = velocPercent[5]
+                    line.v_95 = velocPercent[6]
+                    line.v_99 = velocPercent[7]
+                    line.w_f = (velocPercent[8] * line.peak_wave / c_KMpS) + line.peak_wave
+
+                    # Full width zero intensity
+                    line.FWZI = velocPercent[8] - velocPercent[0]
 
                     W_80 = line.v_90 - line.v_10
                     W_90 = line.v_95 - line.v_5
