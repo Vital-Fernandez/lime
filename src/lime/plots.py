@@ -1676,9 +1676,12 @@ class SampleFigures(Plotter):
 
             legend_check = True
             plt_cfg.setdefault('figure.figsize', (10, 6))
-            PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=self._sample.norm_flux,
-                                                      units_wave=self._sample.units_wave,
-                                                      units_flux=self._sample.units_flux)
+
+            norm_flux = self._sample.load_params.get('norm_flux')
+            units_wave = self._sample.load_params.get('units_wave')
+            units_flux = self._sample.load_params.get('units_flux')
+            PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux,
+                                                      units_wave=units_wave, units_flux=units_flux)
 
             # Get the spectra list to plot
             if obj_idcs is None:
@@ -1704,8 +1707,9 @@ class SampleFigures(Plotter):
                     for sample_idx in obj_idcs:
 
                         spec_label, spec_file = sample_idx[0], sample_idx[1]
-                        legend_label = ', '.join(sample_idx)
-                        spec = self._sample.get_observation(spec_label, spec_file)
+                        legend_label = ", ".join(map(str, sample_idx))
+                        # spec = self._sample.get_observation(spec_label, spec_file)
+                        spec = self._sample.load_function(self._sample.log, sample_idx, **self._sample.load_params)
 
                         # Reference _frame for the plot
                         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,

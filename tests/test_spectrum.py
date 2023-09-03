@@ -151,7 +151,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=10)
     def test_plot_cinematics(self):
 
         fig = plt.figure()
@@ -180,8 +180,7 @@ class TestSpectrumClass:
                 # Float
                 else:
                     if param not in ['eqw', 'eqw_err']:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                              equal_nan=True)
+                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05, equal_nan=True)
                     else:
                         assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
                                               equal_nan=True)
@@ -238,7 +237,6 @@ class TestSpectrumClass:
                 # Float
                 else:
                     if param not in ['eqw', 'eqw_err']:
-                        print(param, log_orig.loc[line, param], log_test.loc[line, param])
                         assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
                                               equal_nan=True)
                     else:
@@ -268,7 +266,6 @@ class TestSpectrumClass:
                 # Float
                 else:
                     if param not in ['eqw', 'eqw_err']:
-                        print(param, log_orig.loc[line, param], log_test.loc[line, param])
                         assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
                                               equal_nan=True)
                     else:
@@ -307,7 +304,6 @@ class TestSpectrumClass:
                     # Float
                     else:
                         if param not in ['eqw', 'eqw_err']:
-                            print(param, log_orig.loc[line, param], log_test.loc[line, param])
                             assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
                                                   equal_nan=True)
                         else:

@@ -387,18 +387,21 @@ class LineFitting:
             if 'emi' in profile_comp:
                 min_lim = 0
                 max_lim = (line.peak_flux - line.cont) + line.std_cont if line._narrow_check else line.peak_flux * 1.5
+                peak_0 = line.peak_flux - line.cont
             elif 'abs' in profile_comp:
-                min_lim = (line.peak_flux - line.cont) - line.std_cont if line._narrow_check else line.peak_flux / 1.5
+                through = np.min(y)
+                min_lim = through - line.cont
                 max_lim = 0
+                peak_0 = through * 0.5 - line.cont
             elif 'mix' in profile_comp:
                 min_lim, max_lim = -np.inf, np.inf
+                peak_0 = line.peak_flux - line.cont
             else:
                 min_lim, max_lim = -np.inf, np.inf
                 _logger.warning(f'No profile component "{line.profile_comp}" provided for line {comp}')
+                peak_0 = line.peak_flux - line.cont
 
-            peak_0 = line.peak_flux - line.cont
             AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
-
             self.define_param(idx, line.list_comps, fit_model, 'amp', peak_0, AMP_PAR, user_conf)
             self.define_param(idx, line.list_comps, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
             self.define_param(idx, line.list_comps, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
