@@ -10,7 +10,6 @@ python:
     - method: pip
       path: .
     - requirements: docs/requirements.txt
-  system_packages: true
 
 formats:
   - pdf
