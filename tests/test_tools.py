@@ -2,7 +2,10 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum
+from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum, logs_into_fits
+from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
+from astropy.io import fits
+
 
 # Data for the tests
 file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
@@ -250,5 +253,57 @@ def test_refraction_index_air_vacuum():
 
     array1 = refraction_index_air_vacuum(wave_array)
     assert np.allclose(array1[:3], np.array([1.00030083, 1.00030082, 1.00030081]))
+
+    return
+
+
+def test_logs_into_fits():
+
+    # Load existing log
+    log_orig = lime.load_log(lines_log_address)
+
+    # New text file
+    baseline_folder = lines_log_address.parent
+    lime.save_log(log_orig, baseline_folder/f'log_1.txt')
+    lime.save_log(log_orig, baseline_folder/f'log_2.fits', page='LOG2')
+    lime.save_log(log_orig, baseline_folder/f'log_2.fits', page='LOG3')
+
+    file_list = [baseline_folder/f'log_1.txt', baseline_folder/f'log_2.fits']
+    output_file = baseline_folder/'joined_log.fits'
+
+    logs_into_fits(file_list, output_file, delete_after_join=True)
+
+    # Check new and deteled files
+    assert output_file.is_file()
+    assert not file_list[0].is_file()
+    assert not file_list[1].is_file()
+
+    name_pages = ['LOG_1', 'LOG2', 'LOG3']
+
+    for i, name in enumerate(name_pages):
+        log_test = hdu_to_log_df(output_file, name)
+
+        if log_test is not None:
+            for line in log_test.index:
+                for param in log_test.columns:
+
+                    # String
+                    if _LOG_EXPORT_DICT[param].startswith('<U'):
+                        if log_orig.loc[line, param] is np.nan:
+                            assert log_orig.loc[line, param] is log_test.loc[line, param]
+                        else:
+                            assert log_orig.loc[line, param] == log_test.loc[line, param]
+
+                    # Float
+                    else:
+                        param_value = log_test.loc[line, param]
+                        param_exp_value = log_orig.loc[line, param]
+
+                        if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                            param_exp_err = log_orig.loc[line, f'{param}_err']
+                            assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
+                        else:
+                            assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+
 
     return

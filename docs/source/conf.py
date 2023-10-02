@@ -43,7 +43,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '0.9.85'
+release = '0.9.90'
 
 # -- General configuration ---------------------------------------------------
 

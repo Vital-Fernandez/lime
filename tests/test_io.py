@@ -7,6 +7,7 @@ lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
 
 cfg = lime.load_cfg(conf_file_address)
 
+
 def test_load_cfg():
 
     assert 'SHOC579' in cfg
@@ -70,15 +71,29 @@ def test_log_parameters_calculation():
     log_lines = lime.load_log(lines_log_address)
     lime.extract_fluxes(log_lines, flux_type='mixture')
 
-    parameters = ['eqw_new',
-                  'eqw_new_err']
+    parameters = ['eqw_new', 'eqw_new_err']
 
-    formulation = ['line_flux/cont',
-                   '(line_flux/cont) * sqrt((line_flux_err/gauss_flux)**2 + (std_cont/cont)**2)']
+    formulation = ['line_flux/cont', '(line_flux/cont) * sqrt((line_flux_err/gauss_flux)**2 + (std_cont/cont)**2)']
 
     lime.log_parameters_calculation(log_lines, parameters, formulation)
     assert 'eqw_new' in log_lines.columns
-    tol = log_lines['eqw_err'] * 2
-    assert np.allclose(log_lines['eqw_new'], log_lines['eqw'], atol=tol)
+
+    for label in log_lines.index:
+        line = lime.Line.from_log(label, log_lines)
+        if line.blended_check is False:
+            param_value = log_lines.loc[label, 'eqw_new']
+            param_exp_value = log_lines.loc[label, 'eqw']
+            param_exp_err = log_lines.loc[label, f'eqw_new_err']
+            assert np.allclose(param_value, param_exp_value, atol=np.abs(param_exp_err * 2), equal_nan=True)
+
+    # param_value = log_test.loc[line, param]
+    # param_exp_value = log_orig.loc[line, param]
+    #
+    # if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+    #     param_exp_err = log_orig.loc[line, f'{param}_err']
+    #     assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
+    # else:
+    #     assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+
 
     return

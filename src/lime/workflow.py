@@ -7,7 +7,7 @@ from time import time
 
 from . import Error
 from .model import LineFitting, signal_to_noise_rola
-from .tools import define_masks, ProgressBar
+from .tools import define_masks, ProgressBar, logs_into_fits
 from .transitions import Line
 from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error
 from lmfit.models import PolynomialModel
@@ -117,6 +117,7 @@ def check_spectrum_bands(line, wave_rest_array):
         valid_check = False
 
     return valid_check
+
 
 def check_cube_bands(input_bands, mask_list, fit_cfg):
 
@@ -416,7 +417,8 @@ class SpecTreatment(LineFitting):
             # _logger.info(f'The line {self.label} has the "{modularity_label}" suffix but the transition components '
             #              f'have not been specified') # TODO move these warnings just for the fittings (not the creation)
 
-
+            if progress_output is not None:
+                print(f'\nLine fitting progress:')
             pbar = ProgressBar(progress_output, f'{n_lines} lines')
             if n_lines > 0:
                 for i in np.arange(n_lines):
@@ -425,14 +427,13 @@ class SpecTreatment(LineFitting):
                     line = label_list[i]
 
                     # Progress message
-                    pbar.output_message(i, n_lines, pre_text="", post_text=line)
+                    pbar.output_message(i, n_lines, pre_text="", post_text=f'({line})')
 
                     # Fit the lines
                     self.bands(line, bands_matrix[i], input_conf, min_method, profile, cont_from_bands, temp)
 
                     if plot_fit:
                         self._spec.plot.bands()
-                print()
 
             else:
                 msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
@@ -500,7 +501,7 @@ class CubeTreatment(LineFitting):
     def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
                      temp=10000.0, default_conf_prefix='default', line_detection=False, progress_output='bar',
-                     plot_fit=False, header=None, n_save=1000):
+                     plot_fit=False, header=None, delete_after_join=True):
 
         """
 
@@ -586,8 +587,9 @@ class CubeTreatment(LineFitting):
         :param header: Dictionary for parameter ".fits" file headers.
         :type header: dict, optional
 
-        :param n_save: Spectra number after which saving the measurements log. The default value is 100. 
-        :type n_save: int, optional
+        :param delete_after_join: Delete individual logs from each spatial mask after they have been joined into a single
+                                  file. The default value is True.
+        :type delete_after_join: int, optional
 
         """
         if bands is not None:
@@ -606,8 +608,12 @@ class CubeTreatment(LineFitting):
 
         # Check if the output log folder exists
         output_address = Path(output_address)
-        if not output_address.parent.is_dir():
+        address_dir = output_address.parent
+        if not address_dir.is_dir():
             raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
+
+        address_stem = output_address.stem
+        # address_stem.with_suffix(f'_{"MASK1"}.fits')
 
         # Determine the spaxels to treat at each mask
         spax_counter, total_spaxels, spaxels_dict = 0, 0, {}
@@ -618,15 +624,17 @@ class CubeTreatment(LineFitting):
             total_spaxels += len(idcs_spaxels)
             spaxels_dict[idx_mask] = idcs_spaxels
 
-        # HDU_container
-        hdul_log = fits.HDUList([fits.PrimaryHDU()])
-
         # Header data
         hdr_coords = extract_wcs_header(self._cube.wcs, drop_axis='spectral') if self._cube.wcs is not None else None
 
         # Loop through the masks
         n_masks = len(mask_list)
+        mask_log_files_list = [address_dir/f'{address_stem}_MASK-{mask_name}.fits' for mask_name in mask_list]
+
         for i in np.arange(n_masks):
+
+            # HDU_container
+            hdul_log = fits.HDUList([fits.PrimaryHDU()])
 
             # Mask progress indexing
             mask_name = mask_list[i]
@@ -647,8 +655,9 @@ class CubeTreatment(LineFitting):
             # Loop through the spaxels
             n_spaxels = idcs_spaxels.shape[0]
             n_lines, start_time = 0, time()
-            pbar = ProgressBar(progress_output, f'mask')
+
             print(f'\nSpatial mask {i + 1}/{n_masks}) {mask_name} ({n_spaxels} spaxels)')
+            pbar = ProgressBar(progress_output, f'mask')
             for j in np.arange(n_spaxels):
 
                 idx_j, idx_i = idcs_spaxels[j]
@@ -659,7 +668,7 @@ class CubeTreatment(LineFitting):
                 spaxel_conf = mask_conf if spaxel_conf is None else {**mask_conf, **spaxel_conf}
 
                 # Spaxel progress message
-                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'Coord. {idx_j}-{idx_i}')
+                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'(spaxel coordinate. {idx_j}-{idx_i})')
 
                 # Get spaxel data
                 spaxel = self._cube.get_spectrum(idx_j, idx_i, spaxel_label)
@@ -692,24 +701,22 @@ class CubeTreatment(LineFitting):
                 if linesHDU is not None:
                     hdul_log.append(linesHDU)
 
-                    # Save the data every 100 spaxels
-                    if spax_counter < n_save:
-                        spax_counter += 1
-                    else:
-                        spax_counter = 0
-                        hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
-
                 # Plot the fittings if requested:
                 if plot_fit:
                     spaxel.plot.spectrum(include_fits=True, rest_frame=True)
 
             # Save the log at each new mask
-            hdul_log.writeto(output_address, overwrite=True, output_verify='fix')
+            hdul_log.writeto(mask_log_files_list[i], overwrite=True, output_verify='ignore')
+            hdul_log.close()
 
             # Computation time and message
             end_time = time()
             elapsed_time = end_time - start_time
             print(f'\n{n_lines} lines measured in {elapsed_time/60:0.2f} minutes.')
+
+        output_comb_file = f'{address_dir/address_stem}.fits'
+        print(f'\nJoining mask files ({",".join(mask_list)}) -> {output_comb_file}')
+        logs_into_fits(mask_log_files_list, output_comb_file, delete_after_join)
 
         return
 

@@ -319,7 +319,6 @@ class PdfMaker:
         if row_format == 'auto':
             output_row = list(map(partial(format_for_table, rounddig=rounddig), input_row))
         else:
-            print('BICHO')
             output_row = input_row
 
         # TODO clean this theming to default values

@@ -8,9 +8,11 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .io import LiMe_Error
+from .io import LiMe_Error, load_log, log_to_HDU
 from sys import stdout
 from astropy import units as au
+from astropy.io import fits
+from pathlib import Path
 
 _logger = logging.getLogger('LiMe')
 
@@ -253,7 +255,7 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='gauss_flu
 
 
 # Get Weighted redshift from lines
-def redshift_calculation(input_log, line_list=None, weight_parameter=None, sample_levels=['id', 'line'], obj_label='spec_0'):
+def redshift_calculation(input_log, line_list=None, weight_parameter=None, levels=['id', 'line'], obj_label='spec_0'):
 
     #TODO accept LiME objects as imput log
 
@@ -269,14 +271,14 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
     sample_check = isinstance(input_log.index, pd.MultiIndex)
 
     if sample_check:
-        id_list = input_log.index.droplevel(sample_levels[-1]).unique()
+        id_list = input_log.index.droplevel(levels[-1]).unique()
     else:
         id_list = np.array([obj_label])
 
     # Container for redshifts
     z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'lines', 'weight'])
     if sample_check:
-        z_df.rename_axis(index=sample_levels[:-1], inplace=True)
+        z_df.rename_axis(index=levels[:-1], inplace=True)
 
     # Loop through the ids
     for idx in id_list:
@@ -285,7 +287,7 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, sampl
         if not sample_check:
             df_slice = input_log
         else:
-            df_slice = input_log.xs(idx, level=sample_levels[0])
+            df_slice = input_log.xs(idx, level=levels[0])
 
         # Get the lines requested
         if line_list is not None:
@@ -607,6 +609,112 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
         return idcsLineRegion, idcsContLeft, idcsContRight
 
 
+def logs_into_fits(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):
+
+    """
+    This functions combines multiple log files into single *.fits* file. The user can request to the delete the individual
+    logs after the individual logs have been combined.
+
+    If the case of individual *.fits* the function loop through the individual HDU and add them to the output file. Currently,
+    this is not available to other multi-page files (such as .xlsx or .asdf)
+
+    :param log_file_list: Input list of log files.
+    :type log_file_list: list
+
+    :param output_address: String or path for the output combined log file.
+    :type output_address: str, Path, optional
+
+    :param delete_after_join: Delete individual files after joining them. The default value is False
+    :type output_address: bool, optional
+
+    :param levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
+    :type levels: list, optional
+
+    :return:
+
+    """
+
+    # Confirm is a path
+    output_address = Path(output_address)
+
+    # Create new HDU for the combined file with a new PrimaryHDU
+    hdulist = fits.HDUList([fits.PrimaryHDU()])
+
+    # Progress bar
+    n_log = len(log_file_list)
+    pbar = ProgressBar('bar', f'log files combined')
+
+    # Iterate through the file paths, open each FITS file, and append the non-primary HDUs to hdulist
+    missing_files = []
+    for i, log_path in enumerate(log_file_list):
+
+        log_path = Path(log_path)
+        pbar.output_message(i, n_log, pre_text="", post_text=None)
+
+        if log_path.is_file():
+
+            ext = log_path.suffix
+
+            # Fits file
+            if ext == '.fits':
+                with fits.open(log_path) as hdul:
+                    for j, hdu in enumerate(hdul):
+                        if j == 0:
+                            if not isinstance(hdu, fits.PrimaryHDU):
+                                hdu_i = fits.BinTableHDU(data=hdu.data, header=hdu.header, name=hdu.name,
+                                                         character_as_bytes=False)
+                            else:
+                                hdu_i = None
+
+                        else:
+                            hdu_i = fits.BinTableHDU(data=hdu.data, header=hdu.header, name=hdu.name,
+                                                      character_as_bytes=False)
+                        # Append
+                        if hdu_i is not None:
+                            hdulist.append(hdu_i)
+
+            # Remaining types
+            else:
+                df_i = load_log(log_path, levels=levels)
+                name_i = log_path.stem
+                hdu_i = log_to_HDU(df_i, ext_name=name_i)
+
+                # Append
+                if hdu_i is not None:
+                    hdulist.append(hdu_i)
+
+            # Append to the list
+            # with fits.open(log_path) as hdulist_i:
+            #
+            #     for i, hdu in enumerate(hdulist_i):
+            #         if i == 0:
+            #             if not isinstance(hdu, fits.PrimaryHDU):
+            #                 hdulist.append(fits.TableHDU(data=hdu.data, header=hdu.header, name=hdu.name))
+            #         else:
+            #             hdulist.append(fits.TableHDU(data=hdu.data, header=hdu.header, name=hdu.name))
+
+        else:
+            missing_files.append(log_path)
+
+    # Save to a combined file
+    hdulist.writeto(output_address, overwrite=True, output_verify='ignore')
+    hdulist.close()
+
+    # Warn of missing files
+    if len(missing_files) > 0:
+        _logger.info(f"Warning these files were missing: {missing_files}")
+
+    # Delete individual files if requested
+    if delete_after_join:
+        if len(missing_files) == 0:
+            for log_path in log_file_list:
+                log_path.unlink()
+        else:
+            _logger.info("The individual masks won't be deleted")
+
+    return
+
+
 class ProgressBar:
 
     def __init__(self, message_type=None, count_type=""):
@@ -627,11 +735,11 @@ class ProgressBar:
 
     def progress_bar(self, i, i_max, pre_text, post_text, n_bar=10):
 
-        # TODO this might be a bit slower for IFU coords, get input coords as kwargs
+        post_text = "" if post_text is None else post_text
 
         j = (i + 1) / i_max
         stdout.write('\r')
-        message = f'[{"=" * int(n_bar * j):{n_bar}s}] {int(100 * j)}% of {self.count_type} ({post_text})'
+        message = f'[{"=" * int(n_bar * j):{n_bar}s}] {int(100 * j)}% of {self.count_type} {post_text}'
         stdout.write(message)
         stdout.flush()
 

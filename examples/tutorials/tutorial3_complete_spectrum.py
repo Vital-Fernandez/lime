@@ -1,7 +1,6 @@
 import numpy as np
 from astropy.io import fits
 import lime
-import timeit
 
 
 def import_osiris_fits(file_address, ext=0):
@@ -46,7 +45,7 @@ obj_bands_file = '../sample_data/gp121903_bands.txt'
 lime.save_log(match_bands, obj_bands_file)
 
 # Measure the emission lines
-gp_spec.fit.frame(obj_bands_file, obs_cfg, progress_output=None, id_conf_prefix='gp121903')
+gp_spec.fit.frame(obj_bands_file, obs_cfg, id_conf_prefix='gp121903')
 
 # Display the fits on the spectrum
 gp_spec.plot.spectrum(include_fits=True)

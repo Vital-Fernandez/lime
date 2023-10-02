@@ -10,8 +10,8 @@ from astropy.io import fits
 from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
     determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
-from .tools import blended_label_from_log
-from .transitions import label_decomposition
+from .tools import blended_label_from_log, define_masks
+from .transitions import label_decomposition, Line
 from astropy.table import Table
 
 
@@ -557,6 +557,7 @@ class RedshiftInspection:
         self._ax = None
         self._AXES_CONF = None
         self._spec_label = None
+        self._legend_handle = None
 
         # Input data
         self._obj_idcs = None
@@ -574,8 +575,8 @@ class RedshiftInspection:
         self._sample_object = None
 
     def redshift(self, obj_idcs, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
-                 none_value=np.nan, unknown_value=0.0,  maximize=False, title_label=None, output_address=None,
-                 plt_cfg={}, ax_cfg={}, in_fig=None):
+                 none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
+                 output_address=None, plt_cfg={}, ax_cfg={}, in_fig=None):
 
         # Assign the attributes
         self._obj_idcs = obj_idcs if isinstance(obj_idcs, pd.MultiIndex) else self._sample.loc[obj_idcs].index
@@ -583,6 +584,8 @@ class RedshiftInspection:
         self._none_value = none_value
         self._unknown_value = unknown_value
         self._spec_label = "" if title_label is None else title_label
+        self._legend_handle = legend_handle
+        self._user_point = None
 
         # Output Log params
         self._log_address = output_file_log
@@ -673,7 +676,6 @@ class RedshiftInspection:
         redshift_pred = self._sample.loc[self._obj_idcs, self._column_log].to_numpy()
         redshift_pred = None if np.all(pd.isnull(redshift_pred)) else np.nanmean(redshift_pred)
 
-
         # Store the figure limits
         xlim, ylim = self._ax.get_xlim(), self._ax.get_ylim()
 
@@ -700,17 +702,16 @@ class RedshiftInspection:
     def _plot_spectrum_ZI(self, ax):
 
         # Loop through the objects
-        for obj_idx in self._obj_idcs:
+        for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum
             spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
-            spec_label = ", ".join(map(str, obj_idx))
 
             # Plot on the observed frame with reshift = 0
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
 
             # Plot the spectrum
-            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=spec_label, where='mid')
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid')
 
             # Plot the masked pixels
             _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
@@ -830,6 +831,27 @@ class RedshiftInspection:
 
         return
 
+    def _label_generator(self, idx_sample):
+
+        if self._legend_handle == 'levels':
+
+            spec_label =", ".join(map(str, idx_sample))
+
+        else:
+
+            if self._legend_handle in self._sample.index.names:
+                idx_item = list(self._sample.index.names).index(self._legend_handle)
+                spec_label = idx_sample[idx_item]
+
+            elif self._legend_handle in self._sample.log.columns:
+                spec_label = self._sample.log.loc[idx_sample, self._legend_handle]
+
+            else:
+                raise LiMe_Error(f'The input handle "{self._legend_handle}" is not found on the sample log columns')
+
+
+        return spec_label
+
 
 class CubeInspection:
 
@@ -881,7 +903,7 @@ class CubeInspection:
         This will also mark the spaxel with a red cross.
 
         If the user provides a ``masks_file`` the plot window will include a dot mask selector. Activating one mask will
-        overplotted on the image band. A double left click on the image band will add/remove a spaxel to the current
+        overplotted on the image band. A middle button click on the image band will add/remove a spaxel to the current
         pixel selected masks. If the spaxel was part of another mask it will be removed from the previous mask region.
 
         If the user provides a ``lines_log_file`` .fits file, the fitted profiles will be included on its corresponding
@@ -1020,7 +1042,7 @@ class CubeInspection:
                                           self._cube.norm_flux)
 
         # User configuration overwrite default figure format
-        local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
+        local_cfg = {'figure.figsize': (16, 8), 'axes.titlesize': 12, 'legend.fontsize': 12, 'axes.labelsize': 12,
                      'xtick.labelsize': 10, 'ytick.labelsize': 10}
         self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
 
@@ -1153,7 +1175,8 @@ class CubeInspection:
                 self.reset_zoom()
                 self._fig.canvas.draw()
 
-            if event.dblclick:
+            # if event.dblclick:
+            if event.button == 2:
                 if len(self.masks_dict) > 0:
 
                     # Save clicked coordinates for next plot
@@ -1229,6 +1252,193 @@ class CubeInspection:
         return
 
 
+class MaskInspection:
+
+    def __init__(self):
+
+        self._SN_level = None
+
+
+        return
+
+    def spatial_mask(self, line, bands=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
+             fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
+             fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, in_fig=None, wcs=None, maximize=False):
+
+        # --------------- Compute the cumilative signal to noise ---------------------------
+        # TODO finish this one
+        line_bg = Line(line, bands)
+
+        # Get the band indexes
+        idcsEmis, idcsCont = define_masks(self._cube.wave, line_bg.mask * (1 + self._cube.redshift), line_bg.pixel_mask)
+        signal_slice = self._cube.flux[idcsEmis, :, :]
+
+        # Compute the Signal to noise in the complete image
+        n_pixels = np.sum(idcsCont)
+        cont_slice = self._cube.flux[idcsCont, :, :]
+        Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
+        std_image = np.nanstd(cont_slice, axis=0)
+        param_image = (np.sqrt(2 * n_pixels * np.pi) / 6) * (Amp_image / std_image)
+
+        # Set nan entries == 0
+        param_image[np.isnan(param_image)] = 0
+
+        # Get the coordinates of all cells using np.argwhere()
+        coordinates = np.argwhere(param_image)
+
+        # Sort the coordinates based on the values in descending order
+        sorted_coordinates = coordinates[np.argsort(param_image[coordinates[:, 0], coordinates[:, 1]])[::-1]]
+
+        # Extract cell values based on sorted coordinates and create a 1-dimensional array
+        self.sorted_values = param_image[sorted_coordinates[:, 0], sorted_coordinates[:, 1]]
+
+        # Calculate the cumulative sum of the sorted values
+        self.cumulative_sum = np.nancumsum(self.sorted_values)
+
+        # --------------- Compute the cummulative signal to noise ---------------------------
+
+        # Prepare the background image data
+        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, bands,
+                                                                                      min_pctl_bg, bg_norm, contours_check=False)
+
+        # Colors
+        self.bg_color, self.fg_color, self.mask_color, self.mask_alpha = bg_cmap, fg_cmap, masks_cmap, masks_alpha
+
+        # Image mesh grid
+        frame_size = self._cube.flux.shape
+        y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
+        self.grid_mesh = np.meshgrid(x, y)
+
+
+        self.mask_ext = 'CUM_SN'
+
+
+        # State the plot labelling
+        default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, None, self.masks_dict)
+        ax_cfg_spec = parse_labels_format(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux)
+
+        # User configuration overwrite default figure format
+        local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
+                     'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
+
+        # Container for both axes format
+        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
+
+        # Create the figure
+        with rc_context(self.fig_conf):
+
+            # Figure structure
+            self._fig = plt.figure() if in_fig is None else in_fig
+            gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[1, 2], height_ratios=[1])
+
+            # Create subgrid for buttons if mask file provided
+            if len(self.masks_dict) > 0:
+                gs_image = gridspec.GridSpecFromSubplotSpec(nrows=2, ncols=1, subplot_spec=gs[0], height_ratios=[0.8, 0.2])
+            else:
+                gs_image = gs
+
+            # Image axes Astronomical coordinates if provided
+            if wcs is None:
+                self._ax0 = self._fig.add_subplot(gs_image[0])
+            else:
+                slices = ('x', 'y', 1) if wcs.naxis == 3 else ('x', 'y')
+                self._ax0 = self._fig.add_subplot(gs_image[0], projection=wcs, slices=slices)
+
+            # Spectrum plot
+            self._ax1 = self._fig.add_subplot(gs[1])
+
+            # Buttons axis if provided
+            if len(self.masks_dict) > 0:
+                self._ax2 = self._fig.add_subplot(gs_image[1])
+                radio = RadioButtons(self._ax2, ['Save'])
+
+                for r in radio.labels:
+                    r.set_fontsize(10)
+
+                for circle in radio.circles:
+                    circle.set_width(0.04)
+
+            # Plot the data
+            self.data_plots()
+
+            # Connect the widgets
+            self._fig.canvas.mpl_connect('button_press_event', self.on_click)
+            self._fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+            if len(self.masks_dict) > 0:
+                radio.on_clicked(self.mask_selection)
+
+            # Display the figure
+            save_close_fig_swicth(maximise=maximize, bbox_inches='tight', plot_check=True if in_fig is None else False)
+
+
+        # # Create a plot
+        # plt.plot(range(1, len(cumulative_sum) + 1), cumulative_sum, marker='o', linestyle='-')
+        #
+        # # Add labels and title
+        # plt.xlabel('Number of Cells (in descending order)')
+        # plt.ylabel('Cumulative Sum of Cell Values')
+        # plt.title('Cumulative Sum of Sorted Matrix Cell Values')
+        #
+        # # Show the plot
+        # plt.grid()
+        # plt.show()
+
+        return
+
+    def data_plots(self):
+
+        # Delete previous marker
+        if self.marker is not None:
+            self.marker.remove()
+            self.marker = None
+
+        # Background image
+        self.im, _, self.marker = image_plot(self._ax0, self.bg_image, self.fg_image, self.fg_levels, self.fg_mesh,
+                                        self.bg_scale, self.fg_scale, self.bg_color, self.fg_color, self.key_coords)
+
+        # Spatial masks
+        # spatial_mask_plot(self._ax0, self.masks_dict, self.mask_color, self.mask_alpha, self._cube.units_flux,
+        #                   mask_list=[self.mask_ext])
+
+        # Voxel spectrum
+        # if self.key_coords is not None:
+        #     idx_j, idx_i = self.key_coords
+        #     flux_voxel = self._cube.flux[:, idx_j, idx_i]
+        #     log = None
+        #
+        #     # Check if lines have been measured
+        #     if self.hdul_linelog is not None:
+        #         ext_name = f'{idx_j}-{idx_i}{self.ext_log}'
+        #
+        #         # Better sorry than permission. Faster?
+        #         try:
+        #             log = Table.read(self.hdul_linelog[ext_name]).to_pandas()
+        #             log.set_index('index', inplace=True)
+        #
+        #             # Change 'nan' to np.nan
+        #             idcs_nan_str = log['profile_label'] == 'nan'
+        #             log.loc[idcs_nan_str, 'profile_label'] = np.nan
+        #
+        #         except KeyError:
+        #             _logger.info(f'Extension {ext_name} not found in the input file')
+        #
+        #     # Plot spectrum
+        #     spec_plot(self._ax1, self._cube.wave, flux_voxel, self._cube.redshift, self._cube.norm_flux,
+        #               rest_frame=self.rest_frame, log=log, units_wave=self._cube.units_wave,
+        #               units_flux=self._cube.units_flux, color_dict=self._color_dict)
+        #
+        #     if self.log_scale:
+        #         self._ax.set_yscale('log')
+
+        # Update the axis
+        # self.axes_conf['spectrum']['title'] = f'Spaxel {idx_j} - {idx_i}'
+        self._ax0.update(self.axes_conf['image'])
+        self._ax1.update(self.axes_conf['spectrum'])
+
+        return
+
+
 class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
 
     def __init__(self, spectrum):
@@ -1247,13 +1457,14 @@ class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
         return
 
 
-class CubeCheck(Plotter, CubeInspection):
+class CubeCheck(Plotter, CubeInspection, MaskInspection):
 
     def __init__(self, cube):
 
         # Instantiate the dependencies
         Plotter.__init__(self)
         CubeInspection.__init__(self)
+        MaskInspection.__init__(self)
 
         # Lime cube object with the scientific data
         self._cube = cube

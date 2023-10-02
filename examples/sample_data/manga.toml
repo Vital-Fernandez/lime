@@ -37,10 +37,8 @@ O2_3726A_kinem = "O2_3729A"
 H1_3712A_kinem = "H1_3734A"
 
 H1_4861A_k-1_sigma = "expr:>2.0*H1_4861A_sigma"
-H1_4861A_k-1_amp = "expr:<10.0*H1_4861A_amp"
 
 O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
-O3_4959A_k-1_amp = "expr:<10.0*O3_4959A_amp"
 
 O3_5007A_k-1_kinem = "O3_4959A_k-1"
 O3_5007A_k-1_amp = "expr:<10.0*O3_5007A_amp"

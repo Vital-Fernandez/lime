@@ -1,10 +1,8 @@
 from pathlib import Path
 from mpdaf.obj import Cube
 from astropy.wcs import WCS
-from astropy.io import fits
 import numpy as np
 import lime
-import time
 
 
 def read_muse_cube(file_address):
@@ -24,7 +22,7 @@ def read_muse_cube(file_address):
 # Inputs
 cfg_file = 'muse.toml'
 mask_file = 'CGCG007_masks.fits'
-cube_file = 'CGCG007.fits'
+cube_file = 'D:\AstroData\MUSE - Amorin\CGCG007.fits'
 
 # Outputs
 log_file = 'log_CGCG007.fits'
@@ -42,7 +40,10 @@ mask_pixel_cube = np.isnan(flux_cube)
 wcs = WCS(hdr)
 
 # Create MUSE
-cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs, pixel_mask=mask_pixel_cube)
+cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=norm_flux,
+                    wcs=wcs, pixel_mask=mask_pixel_cube)
+# cgcg007.plot.cube('H1_6563A', masks_file=mask_file)
+
 # cgcg007.check.cube('H1_4861A', masks_file=mask_file, rest_frame=True)
 
 # spax = cgcg007.get_spectrum(149, 162)
@@ -52,4 +53,4 @@ cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=n
 # spax.plot.bands()
 # spax.plot.spectrum(include_fits=True)
 
-cgcg007.fit.spatial_mask(mask_file, line_detection=True, output_address=log_file, fit_conf=cfg, min_method='least_squares')
+cgcg007.fit.spatial_mask(mask_file, line_detection=True, output_address=log_file, fit_conf=cfg)

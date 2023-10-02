@@ -56,6 +56,7 @@ def review_sample_levels(log, id_name, file_name, id_level="id", file_level="fil
 
     return log
 
+
 def check_inputs(wave, flux, err_flux, lime_object):
 
     for i, items in enumerate(locals().items()):
@@ -86,23 +87,31 @@ def check_inputs(wave, flux, err_flux, lime_object):
     return
 
 
-def check_units_norm_redshift(units_wave, units_flux, norm_flux, redshift):
+def check_units(units_wave, units_flux):
 
-    # Checks SMACS_v2.0 units
+    # Checks units
     for arg in ['units_wave', 'units_flux']:
         arg_value = locals()[arg]
         if arg_value not in UNITS_LATEX_DICT:
             _logger.warning(f'Input {arg} = {arg_value} is not recognized.\nPlease try to convert it to the accepted'
                             f'units: {list(UNITS_LATEX_DICT.keys())}')
 
-    # Check if spectrum redshift and flux normalization flux are provided
-    for arg in ['norm_flux', 'redshift']:
-        arg_value = locals()[arg]
-        if arg_value is None:
-            _logger.debug(f'No value provided for the {arg}')
+    return units_wave, units_flux
 
 
-    return
+def check_redshift_norm(redshift, norm_flux, flux_array, norm_factor=100):
+
+    if redshift is None:
+        _logger.warning(f'No redshift provided for the spectrum')
+        redshift = 0
+
+    if redshift < 0:
+        _logger.warning(f'Input spectrum redshift has a negative value: z = {redshift}')
+
+    if norm_flux is None:
+        norm_flux = np.nanmedian(flux_array[flux_array > 0]) / norm_factor
+
+    return redshift, norm_flux
 
 
 def check_spectrum_axes(lime_object):
@@ -402,7 +411,7 @@ class Spectrum(LineFinder):
 
     """
 
-    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
+    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, review_inputs=True):
 
         # Load parent classes
@@ -473,17 +482,16 @@ class Spectrum(LineFinder):
 
         # Class attributes
         self.label = label
-        self.norm_flux = norm_flux
-        self.redshift = redshift
         self.inst_FWHM = inst_FWHM
-        self.units_wave = units_wave
-        self.units_flux = units_flux
 
         # Review the inputs
         check_inputs(input_wave, input_flux, input_err, self)
 
         # Checks units
-        check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
+        self.units_wave, self.units_flux = check_units(units_wave, units_flux)
+
+        # Check redshift and normalization
+        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux)
 
         # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
@@ -773,12 +781,8 @@ class Cube:
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.norm_flux = norm_flux
-        self.redshift = redshift
         self.log = None
         self.inst_FWHM = inst_FWHM
-        self.units_wave = units_wave
-        self.units_flux = units_flux
         self._masked_inputs = False
         self.wcs = wcs
 
@@ -789,8 +793,11 @@ class Cube:
         self.plot = CubeFigures(self)
         self.check = CubeCheck(self)
 
-        # Checks spectrum units
-        check_units_norm_redshift(self.units_wave, self.units_flux, self.norm_flux, self.redshift)
+        # Check redshift and normalization
+        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux)
+
+        # Checks units
+        self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
         # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
@@ -872,7 +879,7 @@ class Cube:
         signal_slice = self.flux[idcsEmis, :, :]
 
         # If not mask parameter provided we use the flux percentiles
-        if param is None:
+        if param == 'flux':
             default_title = 'Flux percentiles masks'
             param = self.units_flux
             param_image = signal_slice.sum(axis=0)
@@ -883,13 +890,16 @@ class Cube:
             param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
 
         # S/N line
-        else:
+        elif param == 'SN_line':
             default_title = 'Emission line S/N percentile masks'
             n_pixels = np.sum(idcsCont)
             cont_slice = self.flux[idcsCont, :, :]
             Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
             std_image = np.nanstd(cont_slice, axis=0)
             param_image = (np.sqrt(2 * n_pixels * np.pi) / 6) * (Amp_image / std_image)
+
+        else:
+            raise LiMe_Error(f'Parameter {param} is not recognized please use: "flux", "SN_line" or "SN_cont"')
 
         # Percentiles vector for the target parameter
         param_array = np.nanpercentile(param_image, inver_percentiles)
@@ -1048,7 +1058,7 @@ class Cube:
                 ext_label = f'{spaxel_label}{log_ext_suffix}'
 
                 # Spaxel progress message
-                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'Coord. {spaxel_label}')
+                pbar.output_message(j, n_spaxels, pre_text="", post_text=f'(coordinate {spaxel_label})')
 
                 # Recover the spectrum
                 spec_flux = self.flux[:, idx_j, idx_i] * self.norm_flux

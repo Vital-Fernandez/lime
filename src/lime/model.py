@@ -633,11 +633,11 @@ class LineFitting:
                     if np.ma.isMaskedArray(vel_array):
                         line.v_med = np.ma.median(vel_array)
                     else:
-                        line.v_med = np.median(vel_array),
+                        line.v_med = np.median(vel_array)
 
                     line.w_i = (velocPercent[0] * line.peak_wave / c_KMpS) + line.peak_wave
                     line.v_1 = velocPercent[1]
-                    line.v_5 = velocPercent[2],
+                    line.v_5 = velocPercent[2]
                     line.v_10 = velocPercent[3]
                     line.v_50 = velocPercent[4]
                     line.v_90 = velocPercent[5]

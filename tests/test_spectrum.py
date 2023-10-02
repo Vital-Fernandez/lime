@@ -179,11 +179,20 @@ class TestSpectrumClass:
 
                 # Float
                 else:
-                    if param not in ['eqw', 'eqw_err']:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05, equal_nan=True)
+
+                    param_value = log_test.loc[line, param]
+                    param_exp_value = log_orig.loc[line, param]
+
+                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                        param_exp_err = log_orig.loc[line, f'{param}_err']
+                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
                     else:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                              equal_nan=True)
+                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+
+                        # if param not in ['eqw', 'eqw_err']:
+                    #     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05, equal_nan=True)
+                    # else:
+                    #     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15, equal_nan=True)
 
         return
 
@@ -207,12 +216,14 @@ class TestSpectrumClass:
 
                 # Float
                 else:
-                    if param not in ['eqw', 'eqw_err']:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                              equal_nan=True)
+                    param_value = log_test.loc[line, param]
+                    param_exp_value = log_orig.loc[line, param]
+
+                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                        param_exp_err = log_orig.loc[line, f'{param}_err']
+                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
                     else:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                              equal_nan=True)
+                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
 
         return
 
@@ -236,13 +247,14 @@ class TestSpectrumClass:
 
                 # Float
                 else:
-                    if param not in ['eqw', 'eqw_err']:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                              equal_nan=True)
-                    else:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                              equal_nan=True)
+                    param_value = log_test.loc[line, param]
+                    param_exp_value = log_orig.loc[line, param]
 
+                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                        param_exp_err = log_orig.loc[line, f'{param}_err']
+                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
+                    else:
+                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
         return
 
     def test_measurements_xlsx_file(self):
@@ -265,12 +277,14 @@ class TestSpectrumClass:
 
                 # Float
                 else:
-                    if param not in ['eqw', 'eqw_err']:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                              equal_nan=True)
+                    param_value = log_test.loc[line, param]
+                    param_exp_value = log_orig.loc[line, param]
+
+                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                        param_exp_err = log_orig.loc[line, f'{param}_err']
+                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
                     else:
-                        assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                              equal_nan=True)
+                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
 
         return
 
@@ -303,12 +317,14 @@ class TestSpectrumClass:
 
                     # Float
                     else:
-                        if param not in ['eqw', 'eqw_err']:
-                            assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05,
-                                                  equal_nan=True)
+                        param_value = log_test.loc[line, param]
+                        param_exp_value = log_orig.loc[line, param]
+
+                        if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
+                            param_exp_err = log_orig.loc[line, f'{param}_err']
+                            assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
                         else:
-                            assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15,
-                                                  equal_nan=True)
+                            assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
 
         return
 

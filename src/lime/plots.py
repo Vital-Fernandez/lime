@@ -14,6 +14,7 @@ from .tools import define_masks, format_line_mask_option
 from .io import check_file_dataframe, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from .transitions import check_line_in_log, Line, label_decomposition
 
+
 _logger = logging.getLogger('LiMe')
 
 
@@ -27,7 +28,7 @@ if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
 
-PLOT_SIZE_FONT = {'figure.figsize': (10, 5),
+PLOT_SIZE_FONT = {'figure.figsize': (11, 6),
                   'axes.titlesize': 14,
                   'axes.labelsize': 14,
                   'legend.fontsize': 12,
@@ -323,7 +324,7 @@ def image_map_labels(input_labels, wcs, line_bg, line_fg, masks_dict):
         if line_fg is not None:
             title = f'{title} with {line_fg.latex_label[0]} contours'
         if len(masks_dict) > 0:
-            title += f'\n and spatial masks'
+            title += f'\n and spatial masks at foreground'
         output_labels['title'] = title
 
     # Define x axis
@@ -587,6 +588,29 @@ def parse_labels_format(input_labels, units_wave, units_flux, norm_flux):
     return output_labels
 
 
+def label_generator(idx_sample, log, legend_handle):
+
+    if legend_handle == 'levels':
+        spec_label = ", ".join(map(str, idx_sample))
+
+    elif legend_handle is None:
+        spec_label = None
+
+    else:
+
+        if legend_handle in log.index.names:
+            idx_item = list(log.index.names).index(legend_handle)
+            spec_label = idx_sample[idx_item]
+
+        elif legend_handle in log.columns:
+            spec_label = log.loc[idx_sample, legend_handle]
+
+        else:
+            raise LiMe_Error(f'The input handle "{legend_handle}" is not found on the sample log columns')
+
+    return spec_label
+
+
 class Plotter:
 
     def __init__(self):
@@ -622,7 +646,10 @@ class Plotter:
         # Adjust default theme
         PLOT_CONF, AXES_CONF = STANDARD_PLOT.copy(), STANDARD_AXES.copy()
 
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
+        if (norm_flux is None) or (norm_flux == 1):
+            norm_label = ''
+        else:
+            norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux))
 
         if (units_wave is not None) and ('xlabel' not in ax_cfg):
             AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
@@ -1208,8 +1235,9 @@ class SpectrumFigures(Plotter):
                 # Establish the limits for the line spectrum plot
                 mask = bands * (1 + self._spec.redshift)
                 idcsM = np.searchsorted(wave_plot, mask) # TODO remove this one
-                idcsEmis, idcsCont = define_masks(self._spec.wave, bands * (1 + self._spec.redshift),
-                                                  line_mask_entry=log.loc[line, 'pixel_mask'])
+
+                pixel_mask = 'no' if line not in log.index else log.loc[line, 'pixel_mask']
+                idcsEmis, idcsCont = define_masks(self._spec.wave, bands * (1 + self._spec.redshift), line_mask_entry=pixel_mask)
                 idcs_line = idcsEmis + idcsCont
 
                 # Plot the spectrum
@@ -1498,9 +1526,9 @@ class CubeFigures(Plotter):
         # Container for the matplotlib figures
         self._fig, self._ax = None, None
 
-        self.param_conv = {'SN_line': r'$\frac{S}{N}_{line}$',
-                           'SN_cont': r'$\frac{S}{N}_{cont}$',
-                           self._cube.units_flux: None}
+        # self.param_conv = {'SN_line': r'$\frac{S}{N}_{line}$',
+        #                    'SN_cont': r'$\frac{S}{N}_{cont}$',
+        #                    self._cube.units_flux: None}
 
         return
 
@@ -1619,7 +1647,7 @@ class CubeFigures(Plotter):
 
         # User figure format overwrite default format
         display_check = True if in_fig is None else False
-        local_cfg = {'figure.figsize': (5 if masks_file is None else 10, 5), 'axes.titlesize': 12, 'legend.fontsize': 10}
+        local_cfg = {'figure.figsize': (8 if masks_file is None else 15, 8), 'axes.titlesize': 14, 'legend.fontsize': 12}
         PLT_CONF = parse_figure_format(fig_cfg, local_cfg)
 
         # Create and fill the figure
@@ -1666,13 +1694,15 @@ class SampleFigures(Plotter):
 
         # Container for the matplotlib figures
         self._fig, self._ax = None, None
+        self._legend_handle = None
 
         return
 
     def spectra(self, obj_idcs=None, log_scale=False, output_address=None, rest_frame=False, include_fits=False,
-                in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}):
+                legend_handle='levels', in_fig=None, in_axis=None, plt_cfg={}, ax_cfg={}, maximize=False):
 
         if self._sample.load_function is not None:
+
 
             legend_check = True
             plt_cfg.setdefault('figure.figsize', (10, 6))
@@ -1680,6 +1710,7 @@ class SampleFigures(Plotter):
             norm_flux = self._sample.load_params.get('norm_flux')
             units_wave = self._sample.load_params.get('units_wave')
             units_flux = self._sample.load_params.get('units_flux')
+
             PLT_CONF, AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux,
                                                       units_wave=units_wave, units_flux=units_flux)
 
@@ -1706,9 +1737,7 @@ class SampleFigures(Plotter):
                     # Loop through the SMACS_v2.0 in the sample
                     for sample_idx in obj_idcs:
 
-                        spec_label, spec_file = sample_idx[0], sample_idx[1]
-                        legend_label = ", ".join(map(str, sample_idx))
-                        # spec = self._sample.get_observation(spec_label, spec_file)
+                        legend_label = label_generator(sample_idx, self._sample.log, legend_handle)
                         spec = self._sample.load_function(self._sample.log, sample_idx, **self._sample.load_params)
 
                         # Reference _frame for the plot
@@ -1754,7 +1783,7 @@ class SampleFigures(Plotter):
                         self._ax.legend()
 
                     # By default, plot on screen unless an output address is provided
-                    save_close_fig_swicth(output_address, 'tight', self._fig)
+                    save_close_fig_swicth(output_address, 'tight', self._fig, maximise=maximize)
 
             else:
                 _logger.info(f'There are not observations with the input obj_idx "{obj_idcs}" to plot')

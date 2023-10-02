@@ -18,29 +18,6 @@ line_plot_address = Path('baseline/Fe3_4658A_manga_spaxel.png')
 cube_plot_address = Path('baseline/cube_manga_plot.png')
 
 log = lime.load_log(lines_log_file)
-# z_df = lime.redshift_calculation(log)
-# z_df_eqw = lime.redshift_calculation(log, weight_parameter='eqw')
-# z_df_flux_gauss = lime.redshift_calculation(log, weight_parameter='gauss_flux')
-# z_df_strong = lime.redshift_calculation(log, line_list=['O3_5007A', 'H1_6563A'])
-# assert z_df['z_mean'][0] == 0.047526
-#
-# np.allclose(z_df['z_mean'])
-# assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-# assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-# assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-# assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
-#
-# assert z_df['weight'][0] is None
-# assert z_df_eqw['weight'][0] == 'eqw'
-# assert z_df_flux_gauss['weight'][0] == 'gauss_flux'
-# assert z_df_strong['weight'][0] is None
-# assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
-
-# # Frame fitting
-# spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35')
-# spax.plot.spectrum(output_address=spectrum_plot_address)
-# spax.save_log(lines_log_file)
-#
 
 # Configuration
 fit_cfg = lime.load_cfg(conf_file)
@@ -74,13 +51,11 @@ spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1])
 wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, spax.err_flux.data * norm_flux
 np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
-# Plot Spectrum
-spax.plot.spectrum(output_address=spectrum_plot_address)
-
 # Frame fitting
-spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35')
+spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35', progress_output=None)
 spax.plot.spectrum(output_address=spectrum_plot_address)
 spax.save_log(lines_log_file)
+spax.plot.spectrum(include_fits=True)
 
 # # Line fitting
 # spax.plot.bands('Fe3_4658A_p-g_emis', output_address=line_plot_address)

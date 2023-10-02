@@ -29,7 +29,6 @@ from astropy.table import Table
 
 from .tables import table_fluxes
 
-
 try:
     import openpyxl
     openpyxl_check = True
@@ -99,6 +98,18 @@ KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_
 # TODO replace this error with the one of .ini
 class LiMe_Error(Exception):
     """LiMe exception function"""
+
+
+def hdu_to_log_df(file_path, page_name):
+
+    log_df = Table.read(file_path, page_name, character_as_bytes=False).to_pandas()
+    log_df.set_index('index', inplace=True)
+
+    # Change 'nan' to np.nan
+    idcs_nan_str = log_df['profile_label'] == 'nan'
+    log_df.loc[idcs_nan_str, 'profile_label'] = np.nan
+
+    return log_df
 
 
 # Function to load SpecSyzer configuration file
@@ -271,12 +282,7 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
 
         # Fits file:
         if file_type == '.fits':
-            log = Table.read(log_path, page, character_as_bytes=False).to_pandas()
-            log.set_index('index', inplace=True)
-
-            # Change 'nan' to np.nan
-            idcs_nan_str = log['profile_label'] == 'nan'
-            log.loc[idcs_nan_str, 'profile_label'] = np.nan
+            log = hdu_to_log_df(log_path, page)
 
         # Excel table
         elif file_type in ['.xlsx' or '.xls']:
@@ -658,6 +664,7 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     return
 
+
 def extract_wcs_header(wcs, drop_axis=None):
 
     if wcs is not None:
@@ -896,6 +903,7 @@ def progress_bar(i, i_max, post_text, n_bar=10):
     stdout.flush()
 
     return
+
 
 def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, mask_file=None, mask_list='all',
                         image_shape=None, log_ext_suffix='_LINELOG', spaxel_fill_value=np.nan, output_file_prefix=None,
@@ -1174,3 +1182,7 @@ def check_file_array_mask(var, mask_list=None):
                     f' numpy array or a list/array of numpy arrays')
 
     return mask_dict
+
+
+
+

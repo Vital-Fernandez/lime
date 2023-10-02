@@ -79,7 +79,7 @@ Spatial mask 6/6) MASK_5 (3109 spaxels)
 12498 lines measured in 5.68 minutes.
 
 
-Test 3) Saving fits file log every 1000 spaxels + NFT coord display
+Test 3) Saving fits file log every 1000 spaxels + terminal coord display
 
 Spatial mask 1/6) MASK_0 (11 spaxels)
 [==========] 100% of mask (Coord. 169-170)

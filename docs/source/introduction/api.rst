@@ -41,6 +41,8 @@ Tools
 
 .. autofunction:: lime.Spectrum.line_detection
 
+.. autofunction:: lime.tools.logs_into_fits
+
 
 Astronomical objects
 --------------------

@@ -30,8 +30,8 @@ flux_dict_g = {}
 for curve, params in curve_dict.items():
         flux_dict_g[curve] = gaussian_model(wave_g, **params)
 
-
-fig, ax = plt.subplots(dpi=600)
+dpi = 200 #600
+fig, ax = plt.subplots(dpi=200)
 
 w3, w4 = np.searchsorted(wave, (-3.0, 11))
 w_cross1, w_cross2 = np.searchsorted(wave_g, (4.352, 3.942))
@@ -78,7 +78,7 @@ ax.axes.yaxis.set_visible(False)
 
 plt.tight_layout()
 doc_images_folder = Path('../../docs/source/_static/')
-plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)
-plt.savefig(doc_images_folder/'logo_white.png', bbox_inches='tight')
-print(f'Saving {doc_images_folder}')
-# plt.show()
+# plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)
+# plt.savefig(doc_images_folder/'logo_white.png', bbox_inches='tight')
+# print(f'Saving {doc_images_folder}')
+plt.show()
