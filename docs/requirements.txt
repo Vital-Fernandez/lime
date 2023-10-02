@@ -5,7 +5,7 @@ lmfit==1.2.2
 matplotlib==3.7.2
 mplcursors==0.5.2
 nbsphinx==0.9.2
-numpy==1.25.1
+numpy==1.24.4
 openpyxl==3.1.2
 pandas==2.0.3
 PyLaTeX==1.4.1
