@@ -190,6 +190,8 @@ class BandsInspection:
               z_log_address=None, object_label=None, z_column='redshift', fig_cfg={}, ax_cfg={}, in_fig=None,
               maximize=False):
 
+        # TODO the selection should be None
+
         """
 
         This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
@@ -253,6 +255,7 @@ class BandsInspection:
         """
 
         # TODO add a function just to switch the spectrum redshift
+        # TODO are the bands plotted well from the bases
 
         # Assign the attribute values
         self._y_scale = y_scale

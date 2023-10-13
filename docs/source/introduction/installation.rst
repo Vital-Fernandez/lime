@@ -27,7 +27,6 @@ The current version of :math:`\textsc{LiMe}` has these dependencies:
 
 The following dependencies are not compulsory but they provide more options for the library inputs/outputs:
 
-* Specutils_ (Functions to detect line peaks and troughs)
 * mplcursors_ (Interactive pop-ups in plots)
 * asdf_ (Saving the logs as *.asdf* files)
 * PyLatex_ (Saving the logs as *.pdf* files)
@@ -49,7 +48,6 @@ Any comments/problems/request can be added as an issue on the github_ page.
 .. _tomli: https://pypi.org/project/tomli/#installation
 .. _toml: https://toml.io/en/
 
-.. _Specutils: https://specutils.readthedocs.io/en/stable/installation.html
 .. _PyLatex: https://jeltef.github.io/PyLaTeX/current/
 .. _openpyxl: https://pypi.org/project/openpyxl/
 .. _mplcursors: https://mplcursors.readthedocs.io/en/stable/index.html

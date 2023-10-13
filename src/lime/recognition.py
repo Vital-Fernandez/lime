@@ -4,7 +4,6 @@ import logging
 
 from pathlib import Path
 from scipy import signal
-from sys import exit
 from lmfit.models import PolynomialModel
 from inspect import signature
 from .io import LiMe_Error, check_file_dataframe
@@ -26,17 +25,8 @@ MACHINE_PATH = Path(__file__).parent/'resources'/'LogitistRegression_v2_cost1_lo
 WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
 
 
-try:
-    from specutils import Spectrum1D, SpectralRegion
-    from specutils.manipulation import noise_region_uncertainty
-    from specutils.fitting import find_lines_derivative
-    specutils_check = True
-
-except ImportError:
-    specutils_check = False
-
-
 def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):
+
     """
     Algororithm to measure emision line width given its peak location
     :param idx_peak:
@@ -139,7 +129,10 @@ class LineFinder:
 
         return peak_fp
 
-    def ml_line_detection(self, continuum, box_width=11):
+    def ml_line_detection(self, continuum, box_width=11, model= None):
+
+        if model is None:
+            model = joblib.load(MACHINE_PATH)
 
         # Normalize the flux
         input_flux = self.flux if not np.ma.is_masked(self.flux) else self.flux.data
@@ -157,7 +150,7 @@ class LineFinder:
             if i + box_width <= spectrum_pixels:
                 y = input_flux[:, i:i + box_width]
                 if not np.any(np.isnan(y)):
-                    detection_mask[i:i + box_width] = detection_mask[i:i + box_width] | self.ml_model.predict(y)[0]
+                    detection_mask[i:i + box_width] = detection_mask[i:i + box_width] | model.predict(y)[0]
                     # print(f'y {i} ({np.sum(y)}): {self.ml_model.predict(y)[0]}')
 
         return detection_mask

@@ -372,8 +372,8 @@ class LineFitting:
         cont_vary = False if line._cont_from_adjacent else True
         SLOPE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=cont_vary, expr=None)
         INTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=cont_vary, expr=None)
-        self.define_param(0, line.list_comps, fit_model, 'slope', line.m_cont, SLOPE_PAR, user_conf)
-        self.define_param(0, line.list_comps, fit_model, 'intercept', line.n_cont, INTER_PAR, user_conf)
+        self.define_param(0, line, fit_model, 'slope', line.m_cont, SLOPE_PAR, user_conf)
+        self.define_param(0, line, fit_model, 'intercept', line.n_cont, INTER_PAR, user_conf)
 
         # Add one gaussian model per component
         for idx, comp in enumerate(line.list_comps):
@@ -402,10 +402,10 @@ class LineFitting:
                 peak_0 = line.peak_flux - line.cont
 
             AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
-            self.define_param(idx, line.list_comps, fit_model, 'amp', peak_0, AMP_PAR, user_conf)
-            self.define_param(idx, line.list_comps, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
-            self.define_param(idx, line.list_comps, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
-            self.define_param(idx, line.list_comps, fit_model, 'area', None, self._AREA_PAR, user_conf)
+            self.define_param(idx, line, fit_model, 'amp', peak_0, AMP_PAR, user_conf)
+            self.define_param(idx, line, fit_model, 'center', ref_wave[idx], self._CENTER_PAR, user_conf, z_obj)
+            self.define_param(idx, line, fit_model, 'sigma', 2*line.pixelWidth, self._SIG_PAR, user_conf)
+            self.define_param(idx, line, fit_model, 'area', None, self._AREA_PAR, user_conf)
 
         # Compute weights
         if err is None:
@@ -503,7 +503,9 @@ class LineFitting:
 
         return
 
-    def define_param(self, idx, comps, model_obj, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
+    def define_param(self, idx, line, model_obj, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
+
+        comps = line.list_comps
 
         # Line name i.e. H1_6563A_w1, H1_6563A_w1_amp
         line_label = comps[idx]
@@ -524,11 +526,16 @@ class LineFitting:
         if param_conf['expr'] is not None:
 
             # TODO this one could be faster
-            expr = param_conf['expr']
-            for i, comp in enumerate(comps):
-                for g_param in g_params:
-                    expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
-            param_conf['expr'] = expr
+            # Do not parse expressions for single components
+            if line.blended_check:
+                expr = param_conf['expr']
+                for i, comp in enumerate(comps):
+                    for g_param in g_params:
+                        expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
+                param_conf['expr'] = expr
+            else:
+                param_conf['expr'] = None
+                _logger.info('Excluding expression from single line')
 
         # Set initial value estimation from spectrum if not provided by the user
         if user_ref not in user_conf:

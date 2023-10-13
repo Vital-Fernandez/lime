@@ -255,7 +255,7 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='gauss_flu
 
 
 # Get Weighted redshift from lines
-def redshift_calculation(input_log, line_list=None, weight_parameter=None, levels=['id', 'line'], obj_label='spec_0'):
+def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_label='spec_0'):
 
     #TODO accept LiME objects as imput log
 
@@ -271,9 +271,11 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, level
     sample_check = isinstance(input_log.index, pd.MultiIndex)
 
     if sample_check:
+        levels = input_log.index.names
         id_list = input_log.index.droplevel(levels[-1]).unique()
     else:
         id_list = np.array([obj_label])
+        levels = None
 
     # Container for redshifts
     z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'lines', 'weight'])

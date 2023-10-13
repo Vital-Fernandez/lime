@@ -1203,9 +1203,11 @@ class Sample(UserDict):
         # Proceed to selection
         if valid_check:
 
-            # Check if Pandas indeces or scalar key
+            # Check if Pandas indeces, numpy boolean or scalar key
             if isinstance(id_key, pd.Index) or isinstance(id_key, pd.MultiIndex) or isinstance(id_key, pd.Series):
                 idcs = id_key
+            elif isinstance(id_key, (np.ndarray, np.bool_)):
+                idcs = self.log.index[id_key]
             else:
                 idcs = self.log.index.get_level_values('id').isin([id_key])
 

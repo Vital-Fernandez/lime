@@ -34,6 +34,6 @@ setup(
     package_dir={'': 'src'},
     package_data={'': ['config.cfg', 'resources/*']},
     include_package_data=True,
-    install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'specutils', 'pylatex', 'openpyxl',
+    install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'pylatex', 'openpyxl',
                       'joblib'],
     )

@@ -42,10 +42,9 @@ wcs = WCS(hdr)
 # Create MUSE
 cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=norm_flux,
                     wcs=wcs, pixel_mask=mask_pixel_cube)
+
 # cgcg007.plot.cube('H1_6563A', masks_file=mask_file)
-
-# cgcg007.check.cube('H1_4861A', masks_file=mask_file, rest_frame=True)
-
+cgcg007.check.cube('H1_6563A', rest_frame=True)
 # spax = cgcg007.get_spectrum(149, 162)
 # spax.fit.frame('CGCG007_MASK_1_bands.txt', cfg, default_conf_prefix="MASK_1", progress_output='counter',
 #                min_method='least_squares', line_detection=True)
@@ -53,4 +52,4 @@ cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=n
 # spax.plot.bands()
 # spax.plot.spectrum(include_fits=True)
 
-cgcg007.fit.spatial_mask(mask_file, line_detection=True, output_address=log_file, fit_conf=cfg)
+# cgcg007.fit.spatial_mask(mask_file, line_detection=True, output_address=log_file, fit_conf=cfg)

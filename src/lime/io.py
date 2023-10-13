@@ -304,7 +304,7 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
             log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
-            log = pd.read_csv(log_path, sep=';', delim_whitespace=False, header=0, index_col=0)
+            log = pd.read_csv(log_path, sep=',', delim_whitespace=False, header=0, index_col=0)
 
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
@@ -389,7 +389,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
         elif file_type == '.csv':
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
-                string_DF = lines_log.to_csv(sep=';', na_rep='NaN')
+                string_DF = lines_log.to_csv(sep=',', na_rep='NaN')
                 output_file.write(string_DF.encode('UTF-8'))
 
         # Pdf fluxes table # TODO error while saving all parameters
