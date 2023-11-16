@@ -128,7 +128,7 @@ class TestCubeClass:
 
         return
 
-    @pytest.mark.mpl_image_compare(baseline_dir='./baseline')
+    @pytest.mark.mpl_image_compare(baseline_dir='baseline')
     def test_plot_cube(self):
 
         fig = plt.figure()
@@ -136,7 +136,7 @@ class TestCubeClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare(baseline_dir='./baseline')
+    @pytest.mark.mpl_image_compare(baseline_dir='baseline')
     def test_plot_cube_mask(self):
 
         fig = plt.figure()
@@ -144,7 +144,7 @@ class TestCubeClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare(baseline_dir='./baseline')
+    @pytest.mark.mpl_image_compare(baseline_dir='baseline')
     def test_check_cube(self):
 
         fig = plt.figure()
