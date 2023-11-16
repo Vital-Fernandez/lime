@@ -54,7 +54,24 @@ gp_spec.plot.spectrum(include_fits=True)
 gp_spec.plot.grid(rest_frame=True)
 
 # Save the data
-gp_spec.save_log('../sample_data/example3_linelog.txt')
-gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
-gp_spec.save_log('../sample_data/example3_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_flux_err'])
-lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
+# gp_spec.save_log('../sample_data/example3_linelog.txt')
+# gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
+# gp_spec.save_log('../sample_data/example3_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_flux_err'])
+# lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
+#
+#
+# gp_spec.log[['intg_flux_err', 'gauss_flux_err']]
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+data = gp_spec.log['intg_flux_err']/gp_spec.log['gauss_flux_err'] - 1
+
+# Plotting a histogram from the Pandas Series
+plt.figure(figsize=(8, 6))  # Adjust the figure size if needed
+plt.hist(data, color='skyblue', edgecolor='black')  # Adjust the number of bins as required
+plt.title('Histogram of a Pandas Series')
+plt.xlabel('Values')
+plt.ylabel('Frequency')
+plt.grid(axis='y', alpha=0.5)
+plt.show()

@@ -9,7 +9,7 @@ H1_3889A_m = "H1_3889A+He1_3889A"
 Ar4_4711A_m = "Ar4_4711A+He1_4713A"
 
 [MASK_0_line_fitting]
-bands = "./data_tests/manga_line_bands.txt"
+bands = "./baseline/manga_line_bands.txt"
 
 line_detection.cont_fit_degree = [3, 7, 7, 7]
 line_detection.cont_int_thres = [5, 3, 2, 2]
@@ -53,7 +53,7 @@ S3_9530A_b = "S3_9530A+H1_9548A"
 O2_3726A_kinem = "O2_3729A"
 H1_3712A_kinem = "H1_3734A"
 
-Fe3_4658A_b = "Fe3_4658A_p-g-emis+Fe3_4658A_p-g-abs"
+Fe3_4658A_b = "Fe3_4658A_p-g-emi+Fe3_4658A_p-g-abs"
 Fe3_4658A_p-g-abs_center = "value:4650"
 
 H1_4861A_k-1_sigma = "expr:>2.0*H1_4861A_sigma"

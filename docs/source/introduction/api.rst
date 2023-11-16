@@ -43,6 +43,8 @@ Tools
 
 .. autofunction:: lime.tools.logs_into_fits
 
+.. autofunction:: lime.unit_conversion
+
 
 Astronomical objects
 --------------------

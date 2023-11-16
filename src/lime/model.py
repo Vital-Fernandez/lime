@@ -398,7 +398,7 @@ class LineFitting:
                 peak_0 = line.peak_flux - line.cont
             else:
                 min_lim, max_lim = -np.inf, np.inf
-                _logger.warning(f'No profile component "{line.profile_comp}" provided for line {comp}')
+                _logger.warning(f'No profile component LOCO {profile_comp} for "{line.profile_comp}" provided for line {comp}')
                 peak_0 = line.peak_flux - line.cont
 
             AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)

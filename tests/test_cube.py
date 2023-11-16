@@ -7,13 +7,21 @@ from astropy.wcs import WCS
 from astropy.io import fits
 import pytest
 
-file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
-conf_file_address = Path(__file__).parent/'data_tests'/'manga.toml'
-bands_file_address = Path(__file__).parent/'data_tests'/f'manga_line_bands.txt'
-lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
-cube_address = Path(__file__).parent/'data_tests'/'manga-8626-12704-LOGCUBE.fits.gz'
-spatial_mask_address = Path(__file__).parent/'data_tests'/'SHOC579_mask.fits'
-spatial_log_address = Path(__file__).parent/'data_tests'/'SHOC579_log.fits'
+
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+
+file_address = baseline_folder/'manga_spaxel.txt'
+conf_file_address = baseline_folder/'manga.toml'
+bands_file_address = baseline_folder/f'manga_line_bands.txt'
+lines_log_address = baseline_folder/'manga_lines_log.txt'
+spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
+cube_log_address = baseline_folder/'SHOC579_log.fits'
+
+# cube_address = Path(__file__).parent/'outputs'/'manga-8626-12704-LOGCUBE.fits.gz'
+cube_address = Path(__file__).parent.parent/'examples/sample_data/manga-8626-12704-LOGCUBE.fits.gz'
+spatial_log_address = Path(__file__).parent/'outputs'/'SHOC579_log.fits'
+
 
 redshift = 0.0475
 norm_flux = 1e-17
@@ -146,7 +154,7 @@ class TestCubeClass:
 
     def test_save_paramter_maps(self):
 
-        ouput_folder = Path(__file__).parent/'data_tests'
+        ouput_folder = Path(__file__).parent/'outputs'
 
         # Export the measurements log as maps:
         param_list = ['intg_flux', 'intg_flux_err', 'v_r', 'v_r_err']

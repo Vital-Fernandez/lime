@@ -48,6 +48,11 @@ def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check
     return i
 
 
+def detection_function(x_ratio, a=5, b=0.5, c=0.5):
+
+    return a + b/np.square(x_ratio) + c * np.square(x_ratio)
+
+
 class LineFinder:
 
     def __init__(self, machine_model_path=MACHINE_PATH):

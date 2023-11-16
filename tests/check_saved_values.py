@@ -10,7 +10,7 @@ spectrum_plot_address = 'spectrum_manga_spaxel.png'
 line_plot_address = 'Fe3_4658A_manga_spaxel.png'
 line_bands_file = f'manga_line_bands.txt'
 lines_log_file = f'manga_lines_log.txt'
-cfg_file = 'manga.toml'
+cfg_file = 'baseline/manga.toml'
 
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
 pixel_mask = np.isnan(err_array)

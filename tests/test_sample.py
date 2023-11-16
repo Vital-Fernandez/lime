@@ -3,11 +3,14 @@ import pandas as pd
 import lime
 from pathlib import Path
 
-data_folder = Path(__file__).parent/'data_tests'
-lines_log_address = data_folder/'manga_lines_log.txt'
+
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+lines_log_address = baseline_folder / 'manga_lines_log.txt'
 
 # Data for the tests
 lines_log = lime.load_log(lines_log_address)
+
 
 class TestSampleClass:
 
@@ -16,16 +19,16 @@ class TestSampleClass:
         sample1 = lime.Sample.from_file_list(id_list=['spec1', 'spec2'],
                                              log_list=[lines_log_address, lines_log_address],
                                              file_list=['spec1.fits', 'spec2.fits'])
-        sample1.save_log(data_folder/f'sample1_3indeces.txt')
+        sample1.save_log(outputs_folder / f'sample1_3indeces.txt')
 
         assert list(sample1.log.index.names) == ['id', 'file', 'line']
 
         sample2 = lime.Sample.from_file_list(id_list=['spec1', 'spec2'], log_list=[lines_log_address, lines_log_address])
-        sample2.save_log(data_folder/f'sample1_2indeces.txt')
+        sample2.save_log(outputs_folder / f'sample1_2indeces.txt')
         assert list(sample2.log.index.names) == ['id', 'line']
 
-        sample3 = lime.Sample(data_folder/f'sample1_3indeces.txt')
-        sample4 = lime.Sample(data_folder /f'sample1_2indeces.txt', levels=['id', 'line'])
+        sample3 = lime.Sample(outputs_folder / f'sample1_3indeces.txt')
+        sample4 = lime.Sample(outputs_folder / f'sample1_2indeces.txt', levels=['id', 'line'])
 
         assert list(sample3.log.index.names) == ['id', 'file', 'line']
         assert list(sample4.log.index.names) == ['id', 'line']

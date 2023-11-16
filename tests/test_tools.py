@@ -6,10 +6,12 @@ from lime.tools import int_to_roman, format_line_mask_option, refraction_index_a
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
 from astropy.io import fits
 
-
 # Data for the tests
-file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
-lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+
+file_address = baseline_folder/'manga_spaxel.txt'
+lines_log_address = baseline_folder/'manga_lines_log.txt'
 lines_log = lime.load_log(lines_log_address)
 redshift = 0.0475
 norm_flux = 1e-17
@@ -263,13 +265,12 @@ def test_logs_into_fits():
     log_orig = lime.load_log(lines_log_address)
 
     # New text file
-    baseline_folder = lines_log_address.parent
-    lime.save_log(log_orig, baseline_folder/f'log_1.txt')
-    lime.save_log(log_orig, baseline_folder/f'log_2.fits', page='LOG2')
-    lime.save_log(log_orig, baseline_folder/f'log_2.fits', page='LOG3')
+    lime.save_log(log_orig, outputs_folder/f'log_1.txt')
+    lime.save_log(log_orig, outputs_folder/f'log_2.fits', page='LOG2')
+    lime.save_log(log_orig, outputs_folder/f'log_2.fits', page='LOG3')
 
-    file_list = [baseline_folder/f'log_1.txt', baseline_folder/f'log_2.fits']
-    output_file = baseline_folder/'joined_log.fits'
+    file_list = [outputs_folder/f'log_1.txt', outputs_folder/f'log_2.fits']
+    output_file = outputs_folder/'joined_log.fits'
 
     logs_into_fits(file_list, output_file, delete_after_join=True)
 

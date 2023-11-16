@@ -405,6 +405,7 @@ class SpecTreatment(LineFitting):
             # if self.mask is not None:
             #
             #     if np.any(np.isnan(self.mask)): # TODO Add this to the fitting section
+                                                    # TODO sorted arrays for increasing wavelength and decreasing frequency
             #         _logger.warning(f'The line {label} band contains nan entries: {self.mask}')
             #
             #     if not all(diff(self.mask) >= 0):
@@ -715,7 +716,7 @@ class CubeTreatment(LineFitting):
             print(f'\n{n_lines} lines measured in {elapsed_time/60:0.2f} minutes.')
 
         output_comb_file = f'{address_dir/address_stem}.fits'
-        print(f'\nJoining mask files ({",".join(mask_list)}) -> {output_comb_file}')
+        print(f'\nJoining spatial log files ({",".join(mask_list)}) -> {output_comb_file}')
         logs_into_fits(mask_log_files_list, output_comb_file, delete_after_join)
 
         return

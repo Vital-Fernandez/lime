@@ -2,8 +2,11 @@ from pathlib import Path
 import numpy as np
 import lime
 
-conf_file_address = Path(__file__).parent/'data_tests'/'manga.toml'
-lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+
+conf_file_address = baseline_folder/'manga.toml'
+lines_log_address = baseline_folder/'manga_lines_log.txt'
 
 cfg = lime.load_cfg(conf_file_address)
 
@@ -29,7 +32,7 @@ def test_load_cfg():
 
 def test_save_cfg():
 
-    save_file_address = Path(__file__).parent/'data_tests'/'new_manga.toml'
+    save_file_address = outputs_folder/'new_manga.toml'
     copy_cfg = cfg.copy()
     copy_cfg['new_line_fitting'] = {'O3_5007A_kinem': "O3_4959A",
                                     'O3_5007A_k-1_kinem': "O3_4959A_k-1",
@@ -85,15 +88,5 @@ def test_log_parameters_calculation():
             param_exp_value = log_lines.loc[label, 'eqw']
             param_exp_err = log_lines.loc[label, f'eqw_new_err']
             assert np.allclose(param_value, param_exp_value, atol=np.abs(param_exp_err * 2), equal_nan=True)
-
-    # param_value = log_test.loc[line, param]
-    # param_exp_value = log_orig.loc[line, param]
-    #
-    # if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-    #     param_exp_err = log_orig.loc[line, f'{param}_err']
-    #     assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-    # else:
-    #     assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
-
 
     return

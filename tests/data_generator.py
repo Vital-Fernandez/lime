@@ -4,20 +4,19 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
 
+baseline_folder = Path(__file__).parent / 'baseline'
+
 # Inputs
 cube_file = Path('../examples/sample_data/manga-8626-12704-LOGCUBE.fits.gz')
-conf_file = Path('data_tests/manga.toml')
+conf_file = baseline_folder/'manga.toml'
+line_bands_file = baseline_folder/'manga_line_bands.txt'
+spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
 
 # Outputs
-file_address = Path('data_tests/manga_spaxel.txt')
-line_bands_file = Path(f'data_tests/manga_line_bands.txt')
-lines_log_file = Path(f'data_tests/manga_lines_log.txt')
-
-spectrum_plot_address = Path('baseline/manga_spectrum_spaxel.png')
-line_plot_address = Path('baseline/Fe3_4658A_manga_spaxel.png')
-cube_plot_address = Path('baseline/cube_manga_plot.png')
-
-log = lime.load_log(lines_log_file)
+file_address = baseline_folder/'manga_spaxel.txt'
+lines_log_file = baseline_folder/'manga_lines_log.txt'
+cube_log = baseline_folder/'manga_lines_log.txt'
+cube_log_address = baseline_folder/'SHOC579_log.fits'
 
 # Configuration
 fit_cfg = lime.load_cfg(conf_file)
@@ -44,7 +43,6 @@ wcs = WCS(hdr)
 # ---------------- Cube
 shoc579 = lime.Cube(wave, flux_cube, err_cube, redshift=redshift, norm_flux=norm_flux, wcs=wcs,
                     pixel_mask=np.isnan(err_cube))
-shoc579.plot.cube('H1_6563A', output_address=cube_plot_address)
 
 # ---------------- Spectrum
 spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1])
@@ -53,30 +51,12 @@ np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35', progress_output=None)
-spax.plot.spectrum(output_address=spectrum_plot_address)
 spax.save_log(lines_log_file)
-spax.plot.spectrum(include_fits=True)
 
-# # Line fitting
-# spax.plot.bands('Fe3_4658A_p-g_emis', output_address=line_plot_address)
+# Plots
+# spax.plot.spectrum(include_fits=True)
+# shoc579.plot.cube('H1_6563A')
 
-
-#
-# # Save iron line plot
-# spax.plot.bands('Fe3_4658A_p-g_emis', output_address=line_plot_address)
-#
-# # Sample with 3 (repeated) observations
-# log_dict = {}
-# for i in range(3):
-#     log_dict[f'obj_{i}'] = spax.log.copy()
-#
-# obs = lime.Sample()
-# obs.add_log_list(list(log_dict.keys()), list(log_dict.values()))
-
-# spax.fit.bands('O3_4959A_b', line_bands_file, fit_conf=fit_cfg['38-35_line_fitting'])
-# spax.fit.bands('O3_5007A_b', line_bands_file, fit_conf=fit_cfg['38-35_line_fitting'])
-# spax.fit.bands('Fe3_4658A_b', line_bands_file, fit_conf=fit_cfg['38-35_line_fitting'])
-# spax.fit.report()
-# spax.plot.bands(rest_frame=True)
-
-# S3_9530A_b
+# Cube fitting
+shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True,
+                         mask_list=['MASK_0'])

@@ -8,9 +8,9 @@ from lime.recognition import MACHINE_PATH
 from lime.plots import STANDARD_PLOT
 
 # Outputs
-file_address = '../../../tests/data_tests/manga_spaxel.txt'
-line_bands_file = '../../../tests/data_tests/manga_line_bands.txt'
-cfg_file = '../../../tests/data_tests/manga.toml'
+file_address = '../../../tests/outputs/manga_spaxel.txt'
+line_bands_file = '../../../tests/baseline/manga_line_bands.txt'
+cfg_file = '../../../tests/baseline/manga.toml'
 
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
 pixel_mask = np.isnan(err_array)

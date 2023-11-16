@@ -1144,6 +1144,8 @@ class Sample(UserDict):
         First entry of mutli index is the object name
         '''
 
+        # TODO error if file log not present
+
         # Initiate the user dictionary with a dictionary of observations if provided
         super().__init__()
 

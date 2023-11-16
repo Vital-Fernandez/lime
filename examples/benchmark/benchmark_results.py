@@ -27,23 +27,24 @@ def plot_lines_minutes(df):
     print(f'{np.round(2000000 / (20*60*60), 0)} lines per second')
     print(f'{np.round(41022 / (20*60*60), 0)} spaxels per second')
 
+    STANDARD_PLOT['figure.figsize'] = (8, 7)
     STANDARD_PLOT['axes.titlesize'] = 25
-    STANDARD_PLOT['axes.labelsize'] = 22
-    STANDARD_PLOT['xtick.labelsize'] = 18
-    STANDARD_PLOT['ytick.labelsize'] = 18
+    STANDARD_PLOT['axes.labelsize'] = 25
+    STANDARD_PLOT['xtick.labelsize'] = 20
+    STANDARD_PLOT['ytick.labelsize'] = 20
+    STANDARD_PLOT['font.family'] = 'Times New Roman'
+    STANDARD_PLOT['mathtext.fontset'] = 'cm'
 
     with rc_context(STANDARD_PLOT):
 
         color_lines = 'tab:blue'
         color_voxels = 'tab:orange'
-        fig = plt.figure(figsize=(10, 10))
+        fig = plt.figure()
         ax1 = fig.add_subplot()
         ax2 = ax1.twinx()
 
         ax1.plot(np.cumsum(minutes_array), np.cumsum(lines_array), color=color_lines)
         ax2.plot(np.cumsum(minutes_array), np.cumsum(spaxels), color=color_voxels)
-
-        c_range = np.arange(min.size)
 
         ax1.scatter(np.cumsum(minutes_array), np.cumsum(lines_array), c=color_lines)
         ax2.scatter(np.cumsum(minutes_array), np.cumsum(spaxels), c=color_voxels)
@@ -51,13 +52,13 @@ def plot_lines_minutes(df):
         ax1.set_ylabel('Number of lines', color=color_lines)
         ax1.tick_params(axis='y', labelcolor=color_lines)
 
-        ax2.set_ylabel('Number of Spaxels', color=color_voxels)
+        ax2.set_ylabel('Number of spaxels', color=color_voxels)
         ax2.tick_params(axis='y', labelcolor=color_voxels)
 
-        ax1.update({'title': r'$LiMe$ benchmarks', 'xlabel': 'Time (minutes)'})
-
-        plt.show()
-        # plt.savefig('../../docs/source/_static/benchmarks.png', bbox_inches='tight', transparent=True)
+        ax1.update({'xlabel': 'Time (minutes)'})
+        plt.tight_layout()
+        # plt.show()
+        plt.savefig('benchmarks.png', bbox_inches='tight')
     # 
     return
 
@@ -65,22 +66,12 @@ def plot_lines_minutes(df):
 spaxels_array = np.array([11, 91, 382, 2108, 2073, 3109])
 lines_array = np.array([459, 3418, 3431, 17390, 9579, 12498])
 minutes_array = np.array([0.08, 0.65, 0.76, 4.26, 3.67, 5.84])
+
+
 data = {'Spaxels': spaxels_array, 'Lines': lines_array, 'Minutes': minutes_array}
 df_test3 = pd.DataFrame(data)
 
 plot_lines_minutes(df_test3)
-
-# # Display the DataFrame
-# print(df)
-# In this example, we first import Pandas and NumPy. Then, we create three NumPy arrays (array1, array2, and array3). We create a dictionary data where the keys are the column names, and the values are the NumPy arrays. Finally, we use the pd.DataFrame constructor to create a DataFrame from the dictionary.
-#
-# You can customize the column names by changing the keys in the data dictionary or by setting the columns parameter when creating the DataFrame. For example:
-#
-# python
-# Copy code
-# df = pd.DataFrame(data, columns=['CustomName1', 'CustomName2', 'CustomName3'])
-# This will create a DataFrame with custom column names.
-#
 
 
 

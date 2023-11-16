@@ -8,11 +8,12 @@ from lime.io import _LOG_EXPORT_DICT
 from os import remove
 
 # Data for the tests
-baseline_folder = Path(__file__).parent/'data_tests'
-file_address = Path(__file__).parent/'data_tests'/'manga_spaxel.txt'
-conf_file_address = Path(__file__).parent/'data_tests'/'manga.toml'
-bands_file_address = Path(__file__).parent/'data_tests'/f'manga_line_bands.txt'
-lines_log_address = Path(__file__).parent/'data_tests'/'manga_lines_log.txt'
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+file_address = baseline_folder/'manga_spaxel.txt'
+conf_file_address = baseline_folder/'manga.toml'
+bands_file_address = baseline_folder/f'manga_line_bands.txt'
+lines_log_address = baseline_folder/'manga_lines_log.txt'
 
 redshift = 0.0475
 norm_flux = 1e-17
@@ -85,7 +86,7 @@ class TestSpectrumClass:
 
         return
 
-    @pytest.mark.line_detection_plot
+    @pytest.mark.mpl_image_compare(tolerance=3)
     def test_line_detection_plot(self):
 
         match_bands = spec.line_detection(bands_file_address, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 1.5])
@@ -139,7 +140,7 @@ class TestSpectrumClass:
     def test_plot_line(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g_emis', in_fig=fig)
+        spec.plot.bands('Fe3_4658A_p-g-emi', in_fig=fig)
 
         return fig
 
@@ -151,7 +152,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=10)
+    @pytest.mark.mpl_image_compare(tolerance=5)
     def test_plot_cinematics(self):
 
         fig = plt.figure()
@@ -162,10 +163,10 @@ class TestSpectrumClass:
     def test_measurements_txt_file(self):
 
         extension = 'txt'
-        spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -199,10 +200,10 @@ class TestSpectrumClass:
     def test_measurements_fits_file(self):
 
         extension = 'fits'
-        spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -230,10 +231,10 @@ class TestSpectrumClass:
     def test_measurements_csv_file(self):
 
         extension = 'csv'
-        spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -260,10 +261,10 @@ class TestSpectrumClass:
     def test_measurements_xlsx_file(self):
 
         extension = 'xlsx'
-        spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
 
         log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
         for line in spec.log.index:
             for param in spec.log.columns:
@@ -290,7 +291,7 @@ class TestSpectrumClass:
 
     def test_extra_pages_xlsx(self):
 
-        file_xlsx = baseline_folder/'test_lines_log_multi_page.xlsx'
+        file_xlsx = outputs_folder / 'test_lines_log_multi_page.xlsx'
 
         if file_xlsx.is_file():
             try:
@@ -302,7 +303,7 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
 
         for page in ['LINELOG', 'LINESLOG2', 'LINELOG']:
-            spec.save_log(baseline_folder/file_xlsx, page=page)
+            spec.save_log(outputs_folder / file_xlsx, page=page)
             log_test = lime.load_log(file_xlsx)
 
             for line in spec.log.index:
@@ -331,10 +332,10 @@ class TestSpectrumClass:
     # def test_measurements_asdf_file(self):
     #
     #     extension = 'asdf'
-    #     spec.save_log(baseline_folder/f'test_lines_log.{extension}')
+    #     spec.save_log(outputs_folder/f'test_lines_log.{extension}')
     #
     #     log_orig = lime.load_log(lines_log_address)
-    #     log_test = lime.load_log(baseline_folder/f'test_lines_log.{extension}')
+    #     log_test = lime.load_log(outputs_folder/f'test_lines_log.{extension}')
     #
     #     for line in spec.log.index:
     #         for param in spec.log.columns:
@@ -365,7 +366,7 @@ class TestSpectrumClass:
 
         spec0.load_log(lines_log_address)
 
-        new_log_spectrum = baseline_folder/ 'manga_lines_log_from_spectrum.txt'
+        new_log_spectrum = outputs_folder / 'manga_lines_log_from_spectrum.txt'
         spec0.save_log(new_log_spectrum)
 
         assert new_log_spectrum.is_file()
