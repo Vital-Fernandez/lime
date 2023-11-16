@@ -5,4 +5,4 @@ version = "0.9.92"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 mpl-baseline-path = 'tests/baseline'
-mpl-results-path = 'tests/baseline'
+mpl-results-path = 'tests/outputs'
