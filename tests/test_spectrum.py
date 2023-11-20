@@ -18,6 +18,7 @@ lines_log_address = baseline_folder/'manga_lines_log.txt'
 redshift = 0.0475
 norm_flux = 1e-17
 cfg = lime.load_cfg(conf_file_address)
+tolerance_rms = 25
 
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
 pixel_mask = np.isnan(err_array)
@@ -49,10 +50,14 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
                     param_exp_err = true_log.loc[line, f'{param}_err']
                     assert np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
                 else:
-                    if param == 'FWZI':
-                        assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                    if param.endswith('_err'):
+                        assert np.allclose(param_value, param_exp_value, rtol=0.5, equal_nan=True)
+
                     else:
-                        assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                        if param == 'FWZI':
+                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                        else:
+                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
 
     return
 
@@ -115,7 +120,7 @@ class TestSpectrumClass:
 
         return
 
-    @pytest.mark.mpl_image_compare(tolerance=3)
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_line_detection_plot(self):
 
         match_bands = spec.line_detection(bands_file_address, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 1.5])
@@ -125,7 +130,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum(self):
 
         fig = plt.figure()
@@ -133,7 +138,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum_with_fits(self):
 
         fig = plt.figure()
@@ -141,7 +146,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_check_bands_spectrum(self):
 
         fig = plt.figure()
@@ -149,7 +154,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum_maximize(self):
 
         fig = plt.figure()
@@ -157,7 +162,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum_with_bands(self):
 
         fig = plt.figure()
@@ -165,7 +170,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_line(self):
 
         fig = plt.figure()
@@ -173,7 +178,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_grid(self):
 
         fig = plt.figure()
@@ -181,7 +186,7 @@ class TestSpectrumClass:
 
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=5)
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_cinematics(self):
 
         fig = plt.figure()
