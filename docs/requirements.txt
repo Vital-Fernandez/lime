@@ -17,3 +17,4 @@ toml==0.10.2
 tomli >= 2.0.0 ; python_version < "3.11"
 ipykernel
 nbsphinx
+sphinx-rtd-theme==1.0.0

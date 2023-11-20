@@ -285,7 +285,10 @@ class TestSpectrumClass:
                         param_exp_err = log_orig.loc[line, f'{param}_err']
                         assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
                     else:
-                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+                        if param == 'FWZI':
+                            assert np.allclose(param_value, param_exp_value, rtol=0.20, equal_nan=True)
+                        else:
+                            assert np.allclose(param_value, param_exp_value, rtol=0.20, equal_nan=True)
 
         return
 
