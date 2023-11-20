@@ -22,7 +22,7 @@ cube_log_address = baseline_folder/'SHOC579_log.fits'
 cube_address = Path(__file__).parent.parent/'examples/sample_data/manga-8626-12704-LOGCUBE.fits.gz'
 spatial_log_address = Path(__file__).parent/'outputs'/'SHOC579_log.fits'
 
-
+RMS_tolerance = 25
 redshift = 0.0475
 norm_flux = 1e-17
 spaxel_label = '38-35'
@@ -57,7 +57,6 @@ wcs = WCS(hdr)
 
 # Define a LiMe cube object
 cube = lime.Cube(wave, flux_cube, redshift=redshift, norm_flux=norm_flux, wcs=wcs)
-# shoc579.plot.cube(6563, line_fg=4363)
 
 
 class TestCubeClass:

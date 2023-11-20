@@ -28,6 +28,35 @@ spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_
 spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
 
 
+def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
+
+    for line in input_spec.log.index:
+        for param in input_spec.log.columns:
+
+            # String
+            if _LOG_EXPORT_DICT[param].startswith('<U'):
+                if true_log.loc[line, param] is np.nan:
+                    assert true_log.loc[line, param] is test_log.loc[line, param]
+                else:
+                    assert true_log.loc[line, param] == test_log.loc[line, param]
+
+            # Float
+            else:
+                param_exp_value = true_log.loc[line, param]
+                param_value = test_log.loc[line, param]
+
+                if ('_err' not in param) and (f'{param}_err' in true_log.columns):
+                    param_exp_err = true_log.loc[line, f'{param}_err']
+                    assert np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                else:
+                    if param == 'FWZI':
+                        assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                    else:
+                        assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+
+    return
+
+
 class TestSpectrumClass:
 
     def test_read_spectrum(self):
@@ -168,32 +197,7 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
         log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
-        for line in spec.log.index:
-            for param in spec.log.columns:
-
-                # String
-                if _LOG_EXPORT_DICT[param].startswith('<U'):
-                    if log_orig.loc[line, param] is np.nan:
-                        assert log_orig.loc[line, param] is log_test.loc[line, param]
-                    else:
-                        assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                # Float
-                else:
-
-                    param_value = log_test.loc[line, param]
-                    param_exp_value = log_orig.loc[line, param]
-
-                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-                        param_exp_err = log_orig.loc[line, f'{param}_err']
-                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-                    else:
-                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
-
-                        # if param not in ['eqw', 'eqw_err']:
-                    #     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.05, equal_nan=True)
-                    # else:
-                    #     assert np.allclose(log_orig.loc[line, param], log_test.loc[line, param], rtol=0.15, equal_nan=True)
+        measurement_tolerance_test(spec, log_orig, log_test)
 
         return
 
@@ -205,26 +209,7 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
         log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
-        for line in spec.log.index:
-            for param in spec.log.columns:
-
-                # String
-                if _LOG_EXPORT_DICT[param].startswith('<U'):
-                    if log_orig.loc[line, param] is np.nan:
-                        assert log_orig.loc[line, param] is log_test.loc[line, param]
-                    else:
-                        assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                # Float
-                else:
-                    param_value = log_test.loc[line, param]
-                    param_exp_value = log_orig.loc[line, param]
-
-                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-                        param_exp_err = log_orig.loc[line, f'{param}_err']
-                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-                    else:
-                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+        measurement_tolerance_test(spec, log_orig, log_test)
 
         return
 
@@ -236,26 +221,8 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
         log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
-        for line in spec.log.index:
-            for param in spec.log.columns:
+        measurement_tolerance_test(spec, log_orig, log_test)
 
-                # String
-                if _LOG_EXPORT_DICT[param].startswith('<U'):
-                    if log_orig.loc[line, param] is np.nan:
-                        assert log_orig.loc[line, param] is log_test.loc[line, param]
-                    else:
-                        assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                # Float
-                else:
-                    param_value = log_test.loc[line, param]
-                    param_exp_value = log_orig.loc[line, param]
-
-                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-                        param_exp_err = log_orig.loc[line, f'{param}_err']
-                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-                    else:
-                        assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
         return
 
     def test_measurements_xlsx_file(self):
@@ -266,29 +233,7 @@ class TestSpectrumClass:
         log_orig = lime.load_log(lines_log_address)
         log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
 
-        for line in spec.log.index:
-            for param in spec.log.columns:
-
-                # String
-                if _LOG_EXPORT_DICT[param].startswith('<U'):
-                    if log_orig.loc[line, param] is np.nan:
-                        assert log_orig.loc[line, param] is log_test.loc[line, param]
-                    else:
-                        assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                # Float
-                else:
-                    param_value = log_test.loc[line, param]
-                    param_exp_value = log_orig.loc[line, param]
-
-                    if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-                        param_exp_err = log_orig.loc[line, f'{param}_err']
-                        assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-                    else:
-                        if param == 'FWZI':
-                            assert np.allclose(param_value, param_exp_value, rtol=0.20, equal_nan=True)
-                        else:
-                            assert np.allclose(param_value, param_exp_value, rtol=0.20, equal_nan=True)
+        measurement_tolerance_test(spec, log_orig, log_test)
 
         return
 
@@ -309,26 +254,7 @@ class TestSpectrumClass:
             spec.save_log(outputs_folder / file_xlsx, page=page)
             log_test = lime.load_log(file_xlsx)
 
-            for line in spec.log.index:
-                for param in spec.log.columns:
-
-                    # String
-                    if _LOG_EXPORT_DICT[param].startswith('<U'):
-                        if log_orig.loc[line, param] is np.nan:
-                            assert log_orig.loc[line, param] is log_test.loc[line, param]
-                        else:
-                            assert log_orig.loc[line, param] == log_test.loc[line, param]
-
-                    # Float
-                    else:
-                        param_value = log_test.loc[line, param]
-                        param_exp_value = log_orig.loc[line, param]
-
-                        if ('_err' not in param) and (f'{param}_err' in log_orig.columns):
-                            param_exp_err = log_orig.loc[line, f'{param}_err']
-                            assert np.allclose(param_value, param_exp_value, atol=param_exp_err * 2, equal_nan=True)
-                        else:
-                            assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
+            measurement_tolerance_test(spec, log_orig, log_test)
 
         return
 
