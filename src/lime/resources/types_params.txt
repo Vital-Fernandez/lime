@@ -8,7 +8,7 @@ eqw                       0                1          1           1    <f8      
 eqw_err                   0                1          1           1    <f8          $Eqw_{err}$         wave
 particle                  0                1          1           1   <U50             Particle         str
 latex_label               0                1          1           1  <U100           Transition         str
-profile_label             0                1          0           1  <U120           Components         str
+group_label               0                1          0           1  <U120           Components         str
 pixel_mask                0                1          0           1  <U100     $Masked\,Pixels$         str
 w1                        0                0          0           1    <f8              $w_{1}$         wave
 w2                        0                0          0           1    <f8              $w_{2}$         wave

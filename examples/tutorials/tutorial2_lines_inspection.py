@@ -18,7 +18,7 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # State the data files
-obsFitsFile = '../sample_data/gp121903_osiris.fits'
+obsFitsFile = '../sample_data/spectra/gp121903_osiris.fits'
 instrMaskFile = '../sample_data/osiris_bands.txt'
 
 # Load the spectrum

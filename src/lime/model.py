@@ -70,24 +70,15 @@ def gaussian_model(x, amp, center, sigma):
     return amp * np.exp(-0.5 * (((x-center)/sigma) * ((x-center)/sigma)))
 
 
-def gauss_func(ind_params, a, mu, sigma):
-    """
-    Gaussian function
+def lorentz_model(x, amp, center, sigma):
+    "1-d lorentzian profile : lorentz(x, amp, cen, sigma)"
 
-    This function returns the gaussian curve as the user speciefies and array of x values, the continuum level and
-    the parameters of the gaussian curve
+    return amp / ( 1 + (((x-center)/sigma) * ((x-center)/sigma)) )
 
-    :param ind_params: 2D array (x, z) where x is the array of abscissa values and z is the continuum level
-    :param float a: Amplitude of the gaussian
-    :param float mu: Center value of the gaussian
-    :param float sigma: Sigma of the gaussian
-    :return: Gaussian curve y array of values
-    :rtype: np.ndarray
-    """
 
-    x, z = ind_params
-    return a * np.exp(-((x - mu) * (x - mu)) / (2 * (sigma * sigma))) + z
-
+def linear_model(x, slope, intercept):
+    """a line"""
+    return slope * x + intercept
 
 def gaussian_profiles_computation(line_list, log, z_corr, res_factor=100, interval=('w3', 'w4'), x_array=None):
 
@@ -177,11 +168,6 @@ def linear_continuum_computation(line_list, log, z_corr, res_factor=100, interva
         return cont_array
 
 
-def linear_model(x, slope, intercept):
-    """a line"""
-    return slope * x + intercept
-
-
 def is_digit(x):
     try:
         float(x)
@@ -229,6 +215,23 @@ def review_fitting(line, fit_output):
     return
 
 
+def g_FWHM(sigma_line):
+
+    return k_FWHM * sigma_line
+
+
+def l_FWHM(sigma_line):
+
+    return np.pi * sigma_line
+
+
+PROFILE_DICT = {'g': gaussian_model, 'l': lorentz_model}
+
+AREA_DICT = {'g': gaussian_model, 'l': lorentz_model}
+
+FWHM_DICT = {'g': g_FWHM, 'l': l_FWHM}
+
+
 class LineFitting:
 
     """Class to measure emission line fluxes and fit them as gaussian curves"""
@@ -259,7 +262,8 @@ class LineFitting:
 
         return
 
-    def integrated_properties(self, line, emis_wave, emis_flux, emis_err, cont_wave, cont_flux, cont_err, n_steps=1000):
+    def integrated_properties(self, line, emis_wave, emis_flux, emis_err, cont_wave, cont_flux, cont_err, emission_check,
+                              n_steps=1000):
 
         # Gradient and interception of linear continuum using adjacent regions
         if line._cont_from_adjacent:
@@ -283,7 +287,7 @@ class LineFitting:
         lineLinearCont = emis_wave * line.m_cont + line.n_cont
 
         # Peak or through index
-        peakIdx = np.argmax(emis_flux) if line._p_type else np.argmin(emis_flux)
+        peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
 
         # Assign values
         line.n_pixels = emis_wave.size
@@ -294,10 +298,10 @@ class LineFitting:
         line.std_cont = np.std(cont_flux - continuaFit) if cont_err is None else np.mean(cont_err)
 
         # Warning if continuum above or below line peak/through
-        if line._p_type and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+        if emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
             _logger.warning(f'Line {line.label} introduced as an emission but the line peak is below the continuum level')
 
-        if not line._p_type and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
+        if emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
             _logger.warning(f'Line {line.label} introduced as an absorption but the line peak is below the continuum level')
 
         # Establish the pixel sigma error
@@ -314,7 +318,7 @@ class LineFitting:
 
         # Compute the integrated singal to noise # TODO is this an issue for absorptions
         amp_ref = line.peak_flux - line.cont
-        if line._p_type:
+        if emission_check:
             if amp_ref < 0:
                 amp_ref = line.peak_flux
 
@@ -331,15 +335,12 @@ class LineFitting:
             line._narrow_check = False
 
         # Line width to the pixel below the continuum (or mask size if not happening)
-        idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, line._p_type)
-        idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, line._p_type)
-
-        # line.w_i = emis_wave[idx_0] if not np.ma.isMaskedArray(emis_wave[idx_0]) else None
-        # line.w_f = emis_wave[idx_f] if not np.ma.isMaskedArray(emis_wave[idx_f]) else None
+        idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, lineLinearCont, emission_check)
+        idx_f = compute_FWHM0(peakIdx, emis_flux, 1, lineLinearCont, emission_check)
 
         # Velocity calculations
         velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
-        self.velocity_profile_calc(line, velocArray, emis_flux[idx_0:idx_f], lineLinearCont[idx_0:idx_f])
+        self.velocity_profile_calc(line, velocArray, emis_flux[idx_0:idx_f], lineLinearCont[idx_0:idx_f], emission_check)
 
         # Pixel velocity # TODO we are not using this one
         line.pixel_vel = c_KMpS * line.pixelWidth/line.peak_wave
@@ -379,7 +380,7 @@ class LineFitting:
         for idx, comp in enumerate(line.list_comps):
 
             # Gaussian comp
-            fit_model += Model(gaussian_model, prefix=f'line{idx}_')
+            fit_model += Model(PROFILE_DICT[line._p_shape[idx]], prefix=f'line{idx}_')
 
             # Amplitude configuration
             profile_comp = line.profile_comp[idx].split('-')
@@ -393,9 +394,6 @@ class LineFitting:
                 min_lim = through - line.cont
                 max_lim = 0
                 peak_0 = through * 0.5 - line.cont
-            elif 'mix' in profile_comp:
-                min_lim, max_lim = -np.inf, np.inf
-                peak_0 = line.peak_flux - line.cont
             else:
                 min_lim, max_lim = -np.inf, np.inf
                 _logger.warning(f'No profile component LOCO {profile_comp} for "{line.profile_comp}" provided for line {comp}')
@@ -581,7 +579,13 @@ class LineFitting:
         if '_area' in param_ref:
             if (param_conf['expr'] is None) and (param_conf['value'] == param_value):
                 param_conf['value'] = None
-                param_conf['expr'] = f'line{idx}_amp*2.5066282746*line{idx}_sigma'
+                if line._p_shape[idx] == 'g':
+                    param_conf['expr'] = f'line{idx}_amp*2.5066282746*line{idx}_sigma'
+                elif line._p_shape[idx] == 'l':
+                    param_conf['expr'] = f'3.14159265*line{idx}_amp*line{idx}_sigma'
+                else:
+                    raise LiMe_Error(f'Profile type "{line._p_shape[idx]}" for line {line} is not recognized')
+
 
         # Additional preparation for center parameter: Multiply value, min, max by redshift
         if '_center' in param_ref:
@@ -603,7 +607,7 @@ class LineFitting:
 
         return
 
-    def velocity_profile_calc(self, line, vel_array, line_flux, cont_flux, min_array_dim=15):
+    def velocity_profile_calc(self, line, vel_array, line_flux, cont_flux, emission_check, min_array_dim=15):
 
         # In case the vel_array has length zero:
         if vel_array.size > 2:
@@ -616,7 +620,7 @@ class LineFitting:
                 peakIdx = np.argmax(line_flux)
                 percentFluxArray = np.cumsum(line_flux-cont_flux) * line.pixelWidth / line.intg_flux * 100
 
-                if line._p_type:
+                if emission_check:
                     blue_range = line_flux[:peakIdx] > line.peak_flux/2
                     red_range = line_flux[peakIdx:] < line.peak_flux/2
                 else:

@@ -7,7 +7,7 @@ from astropy.wcs import WCS
 baseline_folder = Path(__file__).parent / 'baseline'
 
 # Inputs
-cube_file = Path('../examples/sample_data/manga-8626-12704-LOGCUBE.fits.gz')
+cube_file = Path('../examples/sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz')
 conf_file = baseline_folder/'manga.toml'
 line_bands_file = baseline_folder/'manga_line_bands.txt'
 spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
@@ -54,8 +54,8 @@ spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35', progress_output
 spax.save_log(lines_log_file)
 
 # Plots
-# spax.plot.spectrum(include_fits=True)
-# shoc579.plot.cube('H1_6563A')
+spax.plot.spectrum(include_fits=True)
+shoc579.plot.cube('H1_6563A')
 
 # Cube fitting
 shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True,

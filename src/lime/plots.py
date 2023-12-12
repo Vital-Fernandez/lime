@@ -481,14 +481,14 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
 
         # Check if blended or single/merged
         idcs_comp = None
-        if (not line.endswith('_m')) and (log.loc[line, 'profile_label'] is not np.nan) and (len(line_list) > 1):
-            profile_comps = log.loc[line, 'profile_label']
+        if (not line.endswith('_m')) and (log.loc[line, 'group_label'] != 'none') and (len(line_list) > 1):
+            profile_comps = log.loc[line, 'group_label']
             if profile_comps is not None:
                 profile_comps = profile_comps.split('+')
                 idx_line = profile_comps.index(line)
                 n_comps = len(profile_comps)
                 if profile_comps.index(line) == 0:
-                    idcs_comp = (log['profile_label'] == log.loc[line, 'profile_label']).values
+                    idcs_comp = (log['group_label'] == log.loc[line, 'group_label']).values
             else: # TODO remove if profile_comps not "no"
                 idx_line = 0
                 n_comps = 1
@@ -1873,3 +1873,5 @@ class SampleFigures(Plotter):
             _logger.info(f'There is no data on the sample panel for the input observation selection')
 
         return
+
+

@@ -36,9 +36,10 @@ class Error(Exception):
     """LiMe exception function"""
 
 
-from .astronomy import Spectrum, Sample, Cube, line_bands
+from .observations import Spectrum, Sample, Cube, line_bands
 from .io import *
 from .tools import *
 from .transitions import Line, label_decomposition
+from .read_fits import OpenFits
 
 

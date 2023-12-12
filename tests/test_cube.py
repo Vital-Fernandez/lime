@@ -19,7 +19,7 @@ spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
 cube_log_address = baseline_folder/'SHOC579_log.fits'
 
 # cube_address = Path(__file__).parent/'outputs'/'manga-8626-12704-LOGCUBE.fits.gz'
-cube_address = Path(__file__).parent.parent/'examples/sample_data/manga-8626-12704-LOGCUBE.fits.gz'
+cube_address = Path(__file__).parent.parent/'examples/sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz'
 spatial_log_address = Path(__file__).parent/'outputs'/'SHOC579_log.fits'
 
 RMS_tolerance = 25

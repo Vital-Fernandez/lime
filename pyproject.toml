@@ -1,10 +1,10 @@
 [project]
 name = "lime-stable"
-version = "0.9.93"
+version = "0.9.95"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 mpl-baseline-path = 'tests/baseline'
 mpl-results-path = 'tests/outputs'
-#mpl-results-always = false
-mpl-default-tolerance = 25 #2
+mpl-results-always = false
+#mpl-default-tolerance = 25 #2

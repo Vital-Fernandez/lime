@@ -15,7 +15,7 @@ def progress_bar(count, block_size, total_size):
 
 # MANGA cube web link and save file location
 cube_url = 'https://data.sdss.org/sas/dr17/manga/spectro/redux/v3_1_1/8626/stack/manga-8626-12704-LOGCUBE.fits.gz'
-cube_address = Path('../sample_data/manga-8626-12704-LOGCUBE.fits.gz')
+cube_address = Path('../sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz')
 
 # Download the cube file if not available (this may take some time)
 if cube_address.is_file() is not True:
