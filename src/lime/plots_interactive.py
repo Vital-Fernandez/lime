@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt, gridspec, rc_context
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 
-from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
+from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE, hdu_to_log_df
 from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
     determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
 from .tools import blended_label_from_log, define_masks
@@ -1132,12 +1132,7 @@ class CubeInspection:
 
                 # Better sorry than permission. Faster?
                 try:
-                    log = Table.read(self.hdul_linelog[ext_name]).to_pandas()
-                    log.set_index('index', inplace=True)
-
-                    # Change 'nan' to np.nan
-                    idcs_nan_str = log['profile_label'] == 'nan'
-                    log.loc[idcs_nan_str, 'profile_label'] = np.nan
+                    log = pd.DataFrame.from_records(data=self.hdul_linelog[ext_name].data, index='index')
 
                 except KeyError:
                     _logger.info(f'Extension {ext_name} not found in the input file')
@@ -1420,8 +1415,8 @@ class MaskInspection:
         #             log.set_index('index', inplace=True)
         #
         #             # Change 'nan' to np.nan
-        #             idcs_nan_str = log['profile_label'] == 'nan'
-        #             log.loc[idcs_nan_str, 'profile_label'] = np.nan
+        #             idcs_nan_str = log['group_label'] == 'nan'
+        #             log.loc[idcs_nan_str, 'group_label'] = np.nan
         #
         #         except KeyError:
         #             _logger.info(f'Extension {ext_name} not found in the input file')

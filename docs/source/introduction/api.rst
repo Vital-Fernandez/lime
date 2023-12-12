@@ -20,8 +20,8 @@ imported directly from :math:`\textsc{LiMe}` or both (as in the case of ``.load_
 
 In the following sections we describe these functions and their attributes.
 
-Tools
------
+Inputs/outputs
+--------------
 
 .. autofunction:: lime.load_cfg
 
@@ -34,6 +34,11 @@ Tools
 .. autofunction:: lime.load_log
 
 .. autofunction:: lime.save_log
+
+.. autofunction:: lime.OpenFits.sdss
+
+Tools
+-----
 
 .. autofunction:: lime.line_bands
 
@@ -51,7 +56,12 @@ Astronomical objects
 
 .. autoclass:: lime.Spectrum
 
+.. autofunction:: lime.Spectrum.from_file
+
 .. autoclass:: lime.Cube
+
+.. autofunction:: lime.Cube.from_file
+
 
 Line fitting
 ------------

@@ -6,7 +6,7 @@ from astropy.wcs import WCS
 
 # State the data location
 cfg_file = '../sample_data/manga.toml'
-cube_file = Path('../sample_data/manga-8626-12704-LOGCUBE.fits.gz')
+cube_file = Path('../sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz')
 bands_file_0 = Path('../sample_data/SHOC579_MASK0_bands.txt')
 spatial_mask_file = Path('../sample_data/SHOC579_mask.fits')
 output_lines_log_file = Path('../sample_data/SHOC579_log.fits')

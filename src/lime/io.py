@@ -102,14 +102,25 @@ class LiMe_Error(Exception):
 
 def hdu_to_log_df(file_path, page_name):
 
-    log_df = Table.read(file_path, page_name, character_as_bytes=False).to_pandas()
-    log_df.set_index('index', inplace=True)
+    with fits.open(file_path) as hdul:
+        hdu_log = hdul[page_name].data
 
-    # Change 'nan' to np.nan
-    idcs_nan_str = log_df['profile_label'] == 'nan'
-    log_df.loc[idcs_nan_str, 'profile_label'] = np.nan
+    df_log = pd.DataFrame.from_records(data=hdu_log, index='index')
+    #
+    # # Change 'nan' to np.nan
+    # if 'group_label' in df_log:
+    #     idcs_nan_str = df_log['group_label'] == 'nan'
+    #     df_log.loc[idcs_nan_str, 'group_label'] = np.nan
 
-    return log_df
+    # log_df = Table.read(file_path, page_name, character_as_bytes=False).to_pandas()
+    # log_df.set_index('index', inplace=True)
+    #
+    # # Change 'nan' to np.nan
+    # if 'group_label' in log_df:
+    #     idcs_nan_str = log_df['group_label'] == 'nan'
+    #     log_df.loc[idcs_nan_str, 'group_label'] = np.nan
+
+    return df_log
 
 
 # Function to load SpecSyzer configuration file
@@ -295,9 +306,9 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
                 log = pd.DataFrame.from_records(log_RA, columns=log_RA.dtype.names)
                 log.set_index('index', inplace=True)
 
-                # Change 'nan' to np.nan
-                idcs_nan_str = log['profile_label'] == 'nan'
-                log.loc[idcs_nan_str, 'profile_label'] = np.nan
+                # # Change 'nan' to np.nan
+                # idcs_nan_str = log['group_label'] == 'none'
+                # log.loc[idcs_nan_str, 'group_label'] = None
 
         # Text file
         elif file_type == '.txt':
@@ -320,7 +331,8 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
     return log
 
 
-def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=None, store_version=True):
+def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=None, column_dtypes=None,
+             safe_version=True):
 
     """
 
@@ -333,7 +345,9 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
     The user can specify the ``parameters`` to be saved in the output file.
 
-    For ".fits" files the user can provide a dictionary to add to the ``fits_header``.
+    For ".fits" files the user can provide a dictionary to add to the ``fits_header``. The user can provide a ``column_dtypes``
+    string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
+    same columns as the file names.
 
     :param dataframe: Lines log dataframe.
     :type dataframe: pandas.DataFrame
@@ -350,8 +364,13 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
     :param header: Dictionary for ".fits" and ".asdf" file headers.
     :type header: dict, optional
 
-    :param store_version: Save LiMe version as footnote or page header on the output log. The default value is True.
-    :type store_version: bool, optional
+    :param column_dtypes: Conversion variable for the `records array <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html>`.
+                          for the output fits file. If a string or type, the data type to store all columns. If a dictionary, a mapping of column
+                          names and indices (zero-indexed) to specific data types.
+    :type column_dtypes: str, dict, optional
+
+    :param safe_version: Save LiMe version as footnote or page header on the output log. The default value is True.
+    :type safe_version: bool, optional
 
     """
 
@@ -383,7 +402,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_string()
-                string_DF = string_DF if store_version is False else string_DF + f'\n#LiMe_{__version__}'
+                string_DF = string_DF if safe_version is False else string_DF + f'\n#LiMe_{__version__}'
                 output_file.write(string_DF.encode('UTF-8'))
 
         elif file_type == '.csv':
@@ -394,18 +413,18 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
         # Pdf fluxes table # TODO error while saving all parameters
         elif file_type == '.pdf':
-            table_fluxes(lines_log, log_path.parent/log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
-                         lines_notation=log.latex_label.values, store_version=store_version)
+            table_fluxes(lines_log, log_path.parent / log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+                         lines_notation=log.latex_label.values, store_version=safe_version)
 
         # Log in a fits format
         elif file_type == '.fits':
             if isinstance(lines_log, pd.DataFrame):
 
-                if store_version:
+                if safe_version:
                     header = {} if header is None else header
                     header['LiMe'] = __version__
 
-                lineLogHDU = log_to_HDU(lines_log, ext_name=page, header_dict=header)
+                lineLogHDU = log_to_HDU(lines_log, ext_name=page, column_dtypes=column_dtypes, header_dict=header)
 
                 if log_path.is_file(): # TODO this strategy is slow for many inputs
                     try:
@@ -428,7 +447,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     with pd.ExcelWriter(log_path) as writer:
                         lines_log.to_excel(writer, sheet_name=page)
 
-                        if store_version:
+                        if safe_version:
                             df_empty = pd.DataFrame()
                             df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}', index=False)
 
@@ -460,7 +479,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     # #     lines_log.to_excel(writer, sheet_name=page, index=True)
                     #     # dataframe.to_excel(writer, sheet_name=page, index=True)
                     #
-                    #     # if store_version:
+                    #     # if safe_version:
                     #     #     df_empty = pd.DataFrame()
                     #     #     df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
                     #
@@ -528,10 +547,10 @@ def results_to_log(line, log, norm_flux):
             if j == 7:
                 param_value = param_value.label
 
-            # Converting None entries to str (9 = profile_label)
+            # Converting None entries to str (9 = group_label)
             if j == 9:
                 if param_value is None:
-                    param_value = 'None'
+                    param_value = 'none'
 
             log.at[comp, param] = param_value
 
@@ -693,19 +712,18 @@ def extract_wcs_header(wcs, drop_axis=None):
     return hdr_coords
 
 
-def log_to_HDU(log, ext_name=None, column_types={}, header_dict={}):
+def log_to_HDU(log, ext_name=None, column_dtypes=None, header_dict=None):
 
     # For non empty logs
     if not log.empty:
 
-        if len(column_types) == 0:
-            params_dtype = _LOG_TYPES_DICT
-        else:
-            params_dtype = _LOG_TYPES_DICT.copy()
-            user_dtype = column_types.copy()
-            params_dtype.update(user_dtype)
+        if column_dtypes is None:
+            column_dtypes = _LOG_TYPES_DICT
 
-        linesSA = log.to_records(index=True, column_dtypes=params_dtype, index_dtypes='<U50')
+        if header_dict is None:
+            header_dict = {}
+
+        linesSA = log.to_records(index=True, column_dtypes=column_dtypes, index_dtypes='<U50')
         linesCol = fits.ColDefs(linesSA)
 
         hdr = fits.Header(header_dict) if isinstance(header_dict, dict) else header_dict

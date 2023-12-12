@@ -7,6 +7,8 @@ from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
 from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
 
+_DEFAULT_PROFILE = 'g-emi'
+
 _logger = logging.getLogger('LiMe')
 
 _COMPs_KEYS = {'k': 'kinem',
@@ -175,9 +177,9 @@ def check_line_in_log(input_label, log=None, tol=1):
         if log is not None:
 
             # Check the wavelength from the wave_obs column
-            if ('wave_obs' in log.columns) and ('units_wave' in log.columns):
+            if ('wave_obs' in log.columns) and ('units_wave' in log.columns): # TODO is this reading?
                 ref_waves = log.wave_obs.values
-                # units_wave = log.units_wave.values[0] # TODO add units to dataframe
+                # units_wave = log.units_wave.values[0]
 
             # Get it from the indexes
             else:
@@ -269,6 +271,9 @@ def label_composition(line_list, ref_df=None, default_profile=None):
     profile_comp = [None] * n_comps
     transition_comp = [None] * n_comps
 
+    # If there isn't an input profile use LiMe default
+    default_profile = _DEFAULT_PROFILE if default_profile is None else default_profile
+
     # Loop through the components and get the components
     for i, line in enumerate(line_list):
 
@@ -295,10 +300,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         # Profile component
         profile_comp[i] = comp_conf.get('p', None)
         if profile_comp[i] is None:
-            if default_profile is not None:
-                profile_comp[i] = default_profile
-            else:
-                profile_comp[i] = 'g-emi'
+            profile_comp[i] = default_profile
 
         # Transition component
         trans = comp_conf.get('t', None)
@@ -434,15 +436,18 @@ class Line:
         self.label = label
         self.mask = None
         self.latex_label = None,
-        self.profile_label, self.list_comps = np.nan, None
+        self.group_label, self.list_comps = None, None
 
         self.particle = None
         self.wavelength, self.units_wave = None, None
         self.blended_check, self.merged_check = False, False
 
         self.kinem = None
-        self.profile_comp = None
+        self.profile_comp = profile
         self.transition_comp = None
+
+        self._p_type = None
+        self._p_shape = None
 
         # Measurements attributes
         self.intg_flux, self.intg_flux_err = None, None
@@ -473,7 +478,6 @@ class Line:
         self.pixelWidth = None
 
         # Extra checks
-        self._p_type = profile
         self._cont_from_adjacent = cont_from_bands
         self._decimal_wave = False
         self._narrow_check = False
@@ -510,8 +514,17 @@ class Line:
 
         # Review the components of the line
         ref_bands_df = band if isinstance(band, DataFrame) else None
-        items = label_composition(self.list_comps, ref_df=ref_bands_df, default_profile=self._p_type)
+        items = label_composition(self.list_comps, ref_df=ref_bands_df, default_profile=self.profile_comp)
         self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = items
+
+        # Quick elements for the line profile
+        self._p_type, self._p_shape = [], []
+        for prof_comp in self.profile_comp:
+            _p_shape, _p_type = prof_comp.split('-')
+            _p_type = True if _p_type == 'emi' else False
+            self._p_shape.append(_p_shape)
+            self._p_type.append(_p_type)
+        self._p_type, self._p_shape = np.array(self._p_type), np.array(self._p_shape)
 
         # Provide a bands from the log if possible
         if isinstance(band, DataFrame):
@@ -556,9 +569,9 @@ class Line:
             if label in log.index:
 
                 # Recover "simple" attributes
-                for param in _LOG_EXPORT:
+                for i, param in enumerate(_LOG_EXPORT):
 
-                    param_value = log.loc[label, param]
+                    param_value = log.at[label, param]
 
                     # Normalize
                     if _LOG_COLUMNS[param][0]:
@@ -568,33 +581,31 @@ class Line:
 
                 # Recover "complex" attributes
                 for param in ['particle', 'wavelength', 'latex_label']:
-                    inline.__setattr__(param, log.loc[label, param])
+                    inline.__setattr__(param, log.at[label, param])
 
                 # Band
-                inline.mask = log.loc[label, 'w1':'w6'].values
+                inline.mask = np.array([log.at[label, 'w1'], log.at[label, 'w2'], log.at[label, 'w3'],
+                                        log.at[label, 'w4'], log.at[label, 'w5'], log.at[label, 'w6']])
 
-                # Checks:
-                if inline.profile_label is not np.nan:
-                    inline.blended_check, inline.merged_check = False, False
-
-                    # Merged line
-                    if inline.label.endswith('_m'):
+                # Modularity
+                if inline.group_label == 'none':        # Single line
+                    inline.group_label = None
+                else:
+                    if inline.label.endswith('_m'):     # Merged line
                         inline.merged_check = True
-                        _, inline.units_wave = check_units_from_wave(label[:-1].split('_')[1])
-
-                    # Blended line
                     else:
-                        inline.blended_check = True
-                        _, inline.units_wave = check_units_from_wave(label.split('_')[1])
+                        inline.blended_check = True     # Blended line
 
                 # Units transition
+                if inline.merged_check:
+                    ref_line_units = label[:-1].split('_')[1]
                 else:
-                    _, inline.units_wave = check_units_from_wave(label.split('_')[1])
+                    ref_line_units = label.split('_')[1]
+                _, inline.units_wave = check_units_from_wave(ref_line_units)
 
                 # List comps
                 if inline.blended_check:
-                    inline.list_comps = array(inline.profile_label.split('+'))
-
+                    inline.list_comps = array(inline.group_label.split('+'))
                 else:
                     inline.list_comps = array([inline.label])
 
@@ -603,6 +614,18 @@ class Line:
 
         else:
             _logger.warning(f'No lines log introduced for the line {inline.label}')
+
+        # Assign profile if it does not exist
+        inline.profile_comp = [_DEFAULT_PROFILE] * len(inline.list_comps) if inline.profile_comp is None else inline.profile_comp
+
+        # Quick elements for the line profile # TODO read this from column?
+        inline._p_type, inline._p_shape = [], []
+        for prof_comp in inline.profile_comp:
+            _p_shape, _p_type = prof_comp.split('-')
+            _p_type = True if _p_type == 'emi' else False
+            inline._p_shape.append(_p_shape)
+            inline._p_type.append(_p_type)
+        inline._p_type, inline._p_shape = np.array(inline._p_type), np.array(inline._p_shape)
 
         return inline
 
@@ -625,15 +648,16 @@ class Line:
         if self.merged_check or self.blended_check:
 
             # Check for profile label
-            self.profile_label = np.nan if fit_conf is np.nan else fit_conf.get(self.label, np.nan)
+            # TODO check this fit_conf is nan
+            self.group_label = None if fit_conf is None else fit_conf.get(self.label, None)
 
             # Reset and warned the line has a suffix but there are no components provided
-            if self.profile_label is np.nan:
+            if self.group_label is None:
                 self.merged_check, self.blended_check = False, False
 
         # List of components only for blended
-        if (self.merged_check or self.blended_check) and (self.profile_label is not np.nan):
-            self.list_comps = self.profile_label.split('+') if self.blended_check else [self.label]
+        if (self.merged_check or self.blended_check) and (self.group_label is not None):
+            self.list_comps = self.group_label.split('+') if self.blended_check else [self.label]
 
             # Check if there are repeated elements
             if len(self.list_comps) > 1:
@@ -661,7 +685,7 @@ class Line:
             if latex_exists:
                 latex_list = list(bands_df.loc[self.list_comps, 'latex_label'].to_numpy())
             else:
-                latex_list = list(latex_from_label(self.profile_label.split('+')))
+                latex_list = list(latex_from_label(self.group_label.split('+')))
             self.latex_label = array('+'.join(latex_list), ndmin=1)
 
         # Blended and single

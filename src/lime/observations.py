@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import pandas as pd
+import requests
 from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
@@ -13,6 +14,8 @@ from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from .io import _LOG_EXPORT_RECARR, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
     check_file_array_mask, load_log
+
+from .read_fits import check_fits_instructions, OpenFits
 from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
@@ -57,7 +60,7 @@ def review_sample_levels(log, id_name, file_name, id_level="id", file_level="fil
     return log
 
 
-def check_inputs(wave, flux, err_flux, lime_object):
+def check_inputs_arrays(wave, flux, err_flux, lime_object):
 
     for i, items in enumerate(locals().items()):
 
@@ -411,6 +414,9 @@ class Spectrum(LineFinder):
 
     """
 
+    # File manager for a Cube created from an observation file
+    _fitsMgr = None
+
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, review_inputs=True):
 
@@ -477,6 +483,67 @@ class Spectrum(LineFinder):
 
         return spec
 
+    @classmethod
+    def from_file(cls, file_address, instrument, **kwargs):
+
+        """
+
+        This method creates a lime.Spectrum object from an observational (.fits) file. The user needs to introduce the
+        file address location and the name of the instrument of survey.
+
+        Currently, this method supports NIRSPEC, ISIS, OSIRIS, SDSS and DESI as input instrument sources. This method will
+        lower case the input instrument or survey name.
+
+        This method should is aware of the instrument observations units and normalization but the user should introduce
+        LiMe.Spectrum arguments (such as the observation redshift).
+
+        :param file_address: Input file location address.
+        :type file_address: Path, string
+
+        :param instrument: Input file instrument or survey name
+        :type instrument: str
+
+        :param kwargs: lime.Spectrum arguments.
+
+        :return: lime.Spectrum
+
+        """
+
+        # Create file manager object to administrate the file source and observation properties
+        cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
+
+        # Load the scientific data from the file
+        cls._fitsMgr.load_spectra(**kwargs)
+
+        # Create the LiMe object
+        return cls(**cls._fitsMgr.obs_args)
+
+    @classmethod
+    def from_survey(cls, target_id, survey, program=None, **kwargs):
+
+        # Recover the function to open the fits file
+        fits_reader, url_locator = check_fits_instructions(None, survey, True, cls.__name__)
+
+        # Get file
+        url_address, url_params = url_locator(target_id, program=program)
+        _logger.info(f'Target object ({target_id}) url located')
+
+        if len(url_address) > 1:
+            url_address = url_address[0]
+            url_params = {'redshift': url_params['redshift'][0]}
+
+        # Read the fits data
+        wave_array, flux_array, err_array, header_list, params_dict = fits_reader(url_address, target_id)
+        params_dict.update(url_params)
+        _logger.info(f'Target object ({target_id}) spectrum downloaded')
+
+        # Construct attributes for LiMe object
+        spectrum_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}
+        spectrum_args.update(url_params)
+        spectrum_args.update(kwargs)
+
+        return cls(**spectrum_args)
+
     def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM, units_wave,
                         units_flux, pixel_mask, label):
 
@@ -485,7 +552,7 @@ class Spectrum(LineFinder):
         self.inst_FWHM = inst_FWHM
 
         # Review the inputs
-        check_inputs(input_wave, input_flux, input_err, self)
+        check_inputs_arrays(input_wave, input_flux, input_err, self)
 
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
@@ -603,7 +670,9 @@ class Spectrum(LineFinder):
 
         return
 
-    def save_log(self, file_address, page='LINELOG', param_list='all', header=None, store_version=True):
+    def save_log(self, file_address, page='LINELOG', param_list='all', header=None, column_dtypes=None,
+                 safe_version=True):
+
 
         """
 
@@ -616,7 +685,10 @@ class Spectrum(LineFinder):
 
         The user can specify the ``parameters`` to be saved in the output file.
 
-        For ".fits" files the user can provide a dictionary to add to the ``fits_header``.
+        For ".fits" files the user can provide a dictionary to add to the ``fits_header``. The user can provide a ``column_dtypes``
+        string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
+        same columns as the file names.
+
 
         :param file_address: Output log address.
         :type file_address: str, Path
@@ -630,13 +702,18 @@ class Spectrum(LineFinder):
         :param header: Dictionary for ".fits" and ".asdf" files.
         :type header: dict, optional
 
-        :param store_version: Save LiMe version as footnote or page header on the output log. The default value is True.
-        :type store_version: bool, optional
+        :param column_dtypes: Conversion variable for the `records array <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html>`.
+                          for the output fits file. If a string or type, the data type to store all columns. If a dictionary, a mapping of column
+                          names and indices (zero-indexed) to specific data types.
+        :type column_dtypes: str, dict, optional
+
+        :param safe_version: Save LiMe version as footnote or page header on the output log. The default value is True.
+        :type safe_version: bool, optional
 
         """
 
         # Save the file
-        save_log(self.log, file_address, page, param_list, header, store_version)
+        save_log(self.log, file_address, page, param_list, header, safe_version=safe_version)
 
         return
 
@@ -769,11 +846,14 @@ class Cube:
 
     """
 
+    # File manager for a Cube created from an observation file
+    _fitsMgr = None
+
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
                  inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, wcs=None):
 
         # Review the inputs
-        check_inputs(input_wave, input_flux, input_err, self)
+        check_inputs_arrays(input_wave, input_flux, input_err, self)
 
         # Class attributes
         self.obj_name = id_label
@@ -812,6 +892,41 @@ class Cube:
         check_spectrum_axes(self)
 
         return
+
+    @classmethod
+    def from_file(cls, file_address, instrument, **kwargs):
+
+        """
+
+        This method creates a lime.Cube object from an observational (.fits) file.  The user needs to introduce the
+        file address location and the name of the instrument of survey.
+
+        Currently, this method supports MANGA and MUSE input instrument sources. This method will lower case the input
+        instrument or survey name.
+
+        This method procures the instrument observations units, normalization and wcs but the user should introduce the
+        LiMe.Spectrum arguments (such as the observation redshift).
+
+        :param file_address: Input file location address.
+        :type file_address: Path, string
+
+        :param instrument: Input file instrument or survey name
+        :type instrument: str
+
+        :param kwargs: lime.Cube arguments.
+
+        :return: lime.Cube
+
+        """
+
+        # Create file manager object to administrate the file source and observation properties
+        cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
+
+        # Load the scientific data from the file
+        cls._fitsMgr.load_spectra(**kwargs)
+
+        # Create the LiMe object
+        return cls(**cls._fitsMgr.obs_args)
 
     def spatial_masking(self, line, bands=None, param='flux', contour_pctls=(90, 95, 99), output_address=None,
                         mask_label_prefix=None, header=None):
@@ -1083,57 +1198,6 @@ class Cube:
         hdul.close()
 
         return
-
-
-class Observation:
-
-    def __init__(self, ID, redshift=None, norm_flux=None, units_wave=None, units_flux=None, inst_FWHM=None, wcs=None,
-                 log=None, file_adress=None, var_type=None):
-
-        self.ID = ID
-        self.redshift = redshift
-        self.norm_flux = norm_flux
-        self.units_wave = units_wave
-        self.units_flux = units_flux
-        self.inst_FWHM = inst_FWHM
-        self.wcs = wcs
-
-        self.log = log
-        self.file_address = file_adress
-        self.var_type = var_type
-
-        self.spec = None
-        self.cube = None
-
-        return
-
-    @classmethod
-    def from_lime_obj(cls, ID, lime_obj):
-
-        obs = cls(ID)
-
-        # Recover attributes from the LiMe object
-        for attr in ('redshift', 'norm_flux', 'units_wave', 'units_flux', 'inst_FWHM', 'wcs'):
-            if hasattr(lime_obj, attr):
-                obs.__setattr__(attr, lime_obj.__getattribute__(attr))
-
-        # Store the spectra
-        if isinstance(lime_obj, Spectrum):
-            obs.spec = lime_obj
-        elif isinstance(lime_obj, Cube):
-            obs.cube = lime_obj
-        else:
-            pass
-
-        return obs
-
-    def __str__(self):
-
-        return self.ID
-
-    def __repr__(self):
-
-        return self.ID
 
 
 class Sample(UserDict):

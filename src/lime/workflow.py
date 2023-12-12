@@ -48,8 +48,8 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
     # TODO read wavelength from table/description "." in configuration log
 
     # Check if imported kinematics come from blended component
-    if line.profile_label is not np.nan:
-        childs_list = line.profile_label.split('+')
+    if line.group_label is not None:
+        childs_list = line.group_label.split('+')
     else:
         childs_list = np.array(line.label, ndmin=1)
 
@@ -273,8 +273,11 @@ class SpecTreatment(LineFitting):
             # Check the bands size
             review_bands(self.line, emisWave, contWave) # TODO put this one in fit frame
 
+            # Default line type is in emission unless all are absorption
+            emission_check = False if np.all(~self.line._p_type) else True
+
             # Non-parametric measurements
-            self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr)
+            self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr, emission_check)
 
             # Import kinematics if requested
             import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, fit_conf)

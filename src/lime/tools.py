@@ -76,12 +76,12 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
 
     # Get indeces of blended lines
     if not isinstance(log.index, pd.MultiIndex):
-        idcs_blended = (log['profile_label'].notnull()) & (~log.index.str.endswith('_m'))
+        idcs_blended = (log['group_label'] != 'none') & (~log.index.str.endswith('_m'))
     else:
         if sample_level not in log.index.names:
             raise LiMe_Error(f'Input log does not have a index level with column "{sample_level}"')
 
-        idcs_blended = (log['profile_label'].notnull()) & (~log.index.get_level_values('line').str.endswith('_m'))
+        idcs_blended = (log['group_label'] != 'none') & (~log.index.get_level_values('line').str.endswith('_m'))
 
     # Mixture model: Integrated fluxes for all lines except blended
     if flux_type == 'mixture' and np.any(idcs_blended):
@@ -437,25 +437,25 @@ def blended_label_from_log(line, log):
 
     # Default values: single line
     blended_check = False
-    profile_label = np.nan
+    group_label = None
 
     if line in log.index:
 
-        if 'profile_label' in log.columns:
+        if 'group_label' in log.columns:
 
-            if log.loc[line, 'profile_label'] is np.nan:
-                profile_label = np.nan
+            if log.loc[line, 'group_label'] == 'none':
+                group_label = None
             elif line.endswith('_m'):
-                profile_label = log.loc[line, 'profile_label']
+                group_label = log.loc[line, 'group_label']
             else:
                 blended_check = True
-                profile_label = log.loc[line, 'profile_label']
+                group_label = log.loc[line, 'group_label']
     else:
         # TODO this causes and error if we forget the '_b' componentes in the configuration file need to check input cfg
         _logger.warning(f'The line {line} was not found on the input log. If you are specifying the components of a '
                         f'blended line in the fitting configuration, make sure you are not missing the "_b" subscript')
 
-    return blended_check, profile_label
+    return blended_check, group_label
 
 
 def latex_science_float(f, dec=2):
