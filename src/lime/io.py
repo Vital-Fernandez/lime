@@ -557,7 +557,7 @@ def results_to_log(line, log, norm_flux):
     return
 
 
-def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_levels=('id', 'line'), copy_input=True):
+def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_levels=['id', 'line'], copy_input=True):
 
     if isinstance(df_variable, variable_type):
         if copy_input:

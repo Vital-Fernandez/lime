@@ -6,7 +6,6 @@ from astropy.io import fits
 from astropy.wcs import WCS
 import logging
 
-import lime
 from .io import LiMe_Error
 from urllib.parse import urlparse
 
@@ -43,6 +42,9 @@ CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': 
                               'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
 
                     'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
+                              'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
+
+                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
                               'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None}
                     }
 
@@ -93,7 +95,9 @@ def desi_bands_reconstruction(bands_dict, desi_bands=DESI_SPECTRA_BANDS):
     return wave, flux, err_flux
 
 
-def check_fits_source(fits_source, lime_object=None):
+def check_fits_source(fits_source, lime_object=None, load_function=None):
+
+    spectrum_type = True
 
     # Lower case the source
     if fits_source is not None:
@@ -106,47 +110,83 @@ def check_fits_source(fits_source, lime_object=None):
 
             if (lime_object == 'Spectrum') and (fits_source in SPECTRUM_FITS_PARAMS.keys()):
                 valid_check = True
+
             elif (lime_object == 'Cube') and (fits_source in CUBE_FITS_PARAMS.keys()):
                 valid_check = True
+                spectrum_type = False
+
+            elif (lime_object == 'Sample') and (fits_source in list(SPECTRUM_FITS_PARAMS.keys()) + list(CUBE_FITS_PARAMS.keys())):
+                valid_check = True
+
+                if fits_source in list(CUBE_FITS_PARAMS.keys()):
+                    spectrum_type = False
+
             else:
-                if lime_object not in ['Spectrum', 'Cube']:
+                if lime_object not in ['Spectrum', 'Cube', 'Sample']:
                     raise LiMe_Error(f'Input {lime_object} is not recognized. Please use a LiMe spectrum or Cube')
 
             if valid_check is False:
-
-                if (lime_object not in CUBE_FITS_PARAMS.keys()) and (lime_object in SPECTRUM_FITS_PARAMS.keys()):
+                if fits_source not in list(SPECTRUM_FITS_PARAMS.keys()) + list(CUBE_FITS_PARAMS.keys()):
                     raise LiMe_Error(f'Input "{fits_source}" is not recognized. LiMe currently only recognizes: '
-                                     f'{list(CUBE_FITS_PARAMS.keys())} and {list(CUBE_FITS_PARAMS.keys())}')
+                                     f'{list(SPECTRUM_FITS_PARAMS.keys())} and {list(CUBE_FITS_PARAMS.keys())}')
 
     else:
-        raise LiMe_Error(f'Please introduce fits file instrument or survey source')
 
-    return fits_source
+        if load_function is None:
+            raise LiMe_Error(f'Please introduce fits file instrument or a load function to import the fits file as a '
+                             f'LiMe observation')
+
+    return fits_source, spectrum_type
 
 
-def check_fits_location(fits_address, fits_source):
+def check_fits_location(fits_address, lime_object=None):
 
-    # Physical file:
-    fits_path = Path(fits_address)
-    if fits_path.is_file():
-        output = fits_path, False
+    # Input address
+    if fits_address is not None:
 
-    # Online file
-    else:
+        # Special case for sample files reading
+        if lime_object == 'Sample':
+            if fits_address is not None:
+                fits_folder = Path(fits_address)
+                if not fits_folder.is_dir():
+                    raise LiMe_Error(f'LiMe could not find root folder ({fits_address}) for the Sample creation')
+                else:
+                    output = fits_folder, False
+            else:
+                output = None, False
 
-        # Check valid address
-        fits_url = urlparse(fits_address)
-        if all([fits_url.scheme, fits_url.netloc]):
-            url_validator(fits_address)
-            output = fits_address, True
-
+        # File address or url
         else:
-            raise LiMe_Error(f'LiMe could not find a file at "{fits_address}".\nIf you are specifying a physical file '
-                             f'please check the file location.\nIf you are introducing a url please include the complete'
-                             f' address')
+
+            # Physical file:
+            fits_path = Path(fits_address)
+
+            if fits_path.is_file():
+                output = fits_path, False
+
+            # Online file
+            else:
+
+                # Check valid address
+                fits_url = urlparse(fits_address)
+                if all([fits_url.scheme, fits_url.netloc]):
+                    url_validator(fits_address)
+                    output = fits_address, True
+                else:
+                    raise LiMe_Error(f'LiMe could not find a file at "{fits_address}".\nIf you are specifying a physical '
+                                     f'file please check the file location.\nIf you are introducing a url please include the'
+                                     f' complete address')
+
+    # Null address
+    else:
+        output = Path(""), False
 
     return output
 
+
+def check_load_function():
+
+    return
 
 def url_validator(url):
 
@@ -173,14 +213,19 @@ def url_validator(url):
 
 def check_fits_instructions(fits_source, online_provider=False):
 
-    fits_manager = OpenFits if online_provider is False else OpenFitsSurvey
+    if fits_source is not None:
 
-    # Check LiMe can handle source type
-    if hasattr(fits_manager, fits_source):
-        fits_reader = getattr(fits_manager, fits_source)
+        fits_manager = OpenFits if online_provider is False else OpenFitsSurvey
+
+        # Check LiMe can handle source type
+        if hasattr(fits_manager, fits_source):
+            fits_reader = getattr(fits_manager, fits_source)
+        else:
+            source_type = 'instrument' if online_provider is False else 'survey'
+            raise LiMe_Error(f'Input {source_type} "{fits_source}" is not recognized. LiMe observation cannot be created.')
+
     else:
-        source_type = 'instrument' if online_provider is False else 'survey'
-        raise LiMe_Error(f'Input {source_type} "{fits_source}" is not recognized. LiMe observation cannot be created.')
+        fits_reader = None
 
     # # Check for url location for surveys function
     # if online_provider:
@@ -247,35 +292,59 @@ def load_fits(fits_address, data_ext_list=None, hdr_ext_list=None, url_check=Fal
 
 class OpenFits:
 
-    def __init__(self, file_address, file_source, lime_object=None):
+    def __init__(self, file_address, file_source=None, load_function=None, lime_object=None):
 
         self.source = None
-        self.fits_reader = None
         self.obs_args = None
         self.online_check = False
+        self.fits_reader = None
+        self.spectrum_check = None
+        self.file_address = None
 
         # Check the fits source
-        self.source = check_fits_source(file_source, lime_object)
+        self.source, self.spectrum_check = check_fits_source(file_source, lime_object, load_function)
 
         # Check file or url
-        self.file_address, self.online_check = check_fits_location(file_address, self.source)
+        self.file_address, self.online_check = check_fits_location(file_address, lime_object)
 
         # Recover the function to open the fits file
         self.fits_reader = check_fits_instructions(self.source, self.online_check)
 
         return
 
-    def load_spectra(self, **kwargs):
+    def parse_data_from_file(self, file_address):
 
         # Read the fits data
-        wave_array, flux_array, err_array, header_list, obs_params_dict = self.fits_reader(self.file_address)
+        wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(file_address)
 
         # Construct attributes for LiMe object
-        self.obs_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}
-        self.obs_args.update(obs_params_dict)
-        self.obs_args.update(kwargs)
+        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array, **fits_params}
 
-        return
+        return fits_args
+
+    # def load_function(self, log_df, id_spec, root_address, **kwargs):
+    #
+    #     # Run the load function
+    #     load_function_output = self.load_function(log_df, id_spec, root_address)
+    #
+    #     # Proceed to create LiMe object if necessary
+    #     if isinstance(load_function_output, dict):
+    #         obs_args = {**load_function_output, **kwargs}
+    #         obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+    #     else:
+    #         obs = load_function_output
+    #
+    #     return obs
+
+    def default_file_parser(self, log_df, id_spec, root_address, **kwargs):
+
+        # Get address of observation
+        file_spec = root_address/id_spec[log_df.index.names.index('file')]
+
+        # Get observation data
+        fits_args = self.fits_reader(file_spec)
+
+        return fits_args
 
     @staticmethod
     def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1)):
@@ -529,6 +598,51 @@ class OpenFits:
         fits_params = {**CUBE_FITS_PARAMS['muse'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
+
+    @staticmethod
+    def megara(fits_address, data_ext_list=0, hdr_ext_list=(0, 1)):
+
+        """
+
+        This method returns the spectrum array data and headers from a MUSE observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Cube. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        w_min, dw, pixels = header_list[0]['CRVAL3'], header_list[0]['CDELT3'], header_list[0]['NAXIS3']
+        w_max = w_min + dw * pixels
+        wave_array = np.linspace(w_min, w_max, pixels, endpoint=False)
+
+        flux_cube = data_list[0]
+        err_cube = None
+        pixel_mask_cube = None
+
+        wcs = WCS(header_list[1])
+
+        # Fits properties
+        fits_params = {**CUBE_FITS_PARAMS['megara'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
+
+        return wave_array, flux_cube, err_cube, header_list, fits_params
+
 
 
 class OpenFitsSurvey:

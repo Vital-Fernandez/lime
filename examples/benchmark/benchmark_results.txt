@@ -104,3 +104,30 @@ Spatial mask 5/6) MASK_4 (2073 spaxels)
 Spatial mask 6/6) MASK_5 (3109 spaxels)
 [==========] 100% of mask (Coord. 228-169)
 12498 lines measured in 5.84 minutes.
+
+
+Test 4) Pre-release version
+
+Spatial mask 1/6) MASK_0 (11 spaxels)
+[==========] 100% of mask (spaxel coordinate. 169-170)
+459 lines measured in 0.08 minutes.
+
+Spatial mask 2/6) MASK_1 (90 spaxels)
+[==========] 100% of mask (spaxel coordinate. 173-168)
+3381 lines measured in 0.62 minutes.
+
+Spatial mask 3/6) MASK_2 (383 spaxels)
+[==========] 100% of mask (spaxel coordinate. 208-186)
+3440 lines measured in 0.71 minutes.
+
+Spatial mask 4/6) MASK_3 (2108 spaxels)
+[==========] 100% of mask (spaxel coordinate. 213-191)
+17390 lines measured in 3.78 minutes.
+
+Spatial mask 5/6) MASK_4 (2073 spaxels)
+[==========] 100% of mask (spaxel coordinate. 215-192)
+9579 lines measured in 2.69 minutes.
+
+Spatial mask 6/6) MASK_5 (3109 spaxels)
+[==========] 100% of mask (spaxel coordinate. 228-169)
+12498 lines measured in 3.89 minutes.

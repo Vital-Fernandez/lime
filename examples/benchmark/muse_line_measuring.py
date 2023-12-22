@@ -22,7 +22,7 @@ def read_muse_cube(file_address):
 # Inputs
 cfg_file = 'muse.toml'
 mask_file = 'CGCG007_masks.fits'
-cube_file = 'D:\AstroData\MUSE - Amorin\CGCG007.fits'
+cube_file = '../benchmark/CGCG007.fits'
 
 # Outputs
 log_file = 'log_CGCG007.fits'

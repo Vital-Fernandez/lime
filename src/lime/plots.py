@@ -1738,7 +1738,8 @@ class SampleFigures(Plotter):
                     for sample_idx in obj_idcs:
 
                         legend_label = label_generator(sample_idx, self._sample.log, legend_handle)
-                        spec = self._sample.load_function(self._sample.log, sample_idx, **self._sample.load_params)
+                        spec = self._sample.load_function(self._sample.log, sample_idx, self._sample.file_address,
+                                                          **self._sample.load_params)
 
                         # Reference _frame for the plot
                         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,

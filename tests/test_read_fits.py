@@ -5,7 +5,7 @@ from pathlib import Path
 from matplotlib import pyplot as plt
 
 # Plot tolerance
-tolerance_rms = 25
+tolerance_rms = 3
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'

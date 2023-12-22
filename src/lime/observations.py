@@ -15,7 +15,7 @@ from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from .io import _LOG_EXPORT_RECARR, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
     check_file_array_mask, load_log
 
-from .read_fits import check_fits_instructions, OpenFits
+from .read_fits import check_fits_instructions, OpenFits, SPECTRUM_FITS_PARAMS
 from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
 from . import Error
@@ -140,6 +140,48 @@ def check_spectrum_axes(lime_object):
     #         _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
     #                         f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
     #                         f'Try changing the flux normalization')
+
+    return
+
+
+def check_sample_input_files(log_list, file_list, page_list, id_list):
+
+    # Confirm all the files have the same address
+    for key, value in {'log_list': log_list, 'file_list': file_list, 'page_list': page_list}.items():
+        if value is not None:
+            if not (len(id_list) == len(value)):
+                raise LiMe_Error(f'The length of the {key} must be the same of the input "id_list".')
+
+    if log_list is None and file_list is None:
+        raise LiMe_Error(f'To define a sample, the user must provide alongside an "id_list" a "log_list" and/or a '
+                         f'"file_list".')
+
+    return
+
+
+def check_sample_file_parser(source, fits_reader, load_function, default_load_function):
+
+    # Assign input load function
+    if load_function is not None:
+        output = None, load_function
+
+    # Assign the
+    elif (source is not None) and (fits_reader is not None):
+        output = fits_reader, None
+
+    # No load function nor instrument
+    else:
+        raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
+                         f'supported by LiMe')
+
+    return output
+
+
+def check_sample_levels(levels, necessary_levels=("id", "file")):
+
+    for comp_level in necessary_levels:
+        if comp_level not in levels:
+            _logger.warning(f'Input log levels do not include a "{comp_level}". This can cause issues with LiMe functions')
 
     return
 
@@ -356,7 +398,7 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
 class Spectrum(LineFinder):
 
     """
-    This class creates an astronomical cube for an integral field spectrograph observation.
+    This class creates an astronomical cube variable for an integral field spectrograph observation.
 
     The user needs to provide wavelength and flux arrays. Additionally, the user can include a flux uncertainty
     array. This uncertainty must be in the same units as the flux. The cube should include its ``redshift``.
@@ -513,10 +555,13 @@ class Spectrum(LineFinder):
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        cls._fitsMgr.load_spectra(**kwargs)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address)
+
+        # Update the parameters file parameters with the user parameters
+        obs_args = {**fits_args, **kwargs}
 
         # Create the LiMe object
-        return cls(**cls._fitsMgr.obs_args)
+        return cls(**obs_args)
 
     @classmethod
     def from_survey(cls, target_id, survey, program=None, **kwargs):
@@ -923,10 +968,13 @@ class Cube:
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        cls._fitsMgr.load_spectra(**kwargs)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address)
+
+        # Update the parameters file parameters with the user parameters
+        obs_args = {**fits_args, **kwargs}
 
         # Create the LiMe object
-        return cls(**cls._fitsMgr.obs_args)
+        return cls(**obs_args)
 
     def spatial_masking(self, line, bands=None, param='flux', contour_pctls=(90, 95, 99), output_address=None,
                         mask_label_prefix=None, header=None):
@@ -1200,46 +1248,98 @@ class Cube:
         return
 
 
-class Sample(UserDict):
+class Sample(UserDict, OpenFits):
 
-    def __init__(self, sample_log, load_function=None, levels=["id", "file", "line"], **kwargs):
+    """
 
-        '''
-        First entry of mutli index is the object name
-        '''
+    This class creates a dictionary-like variable to store LiMe observations, by the fault it is assumed that these are
+    ``Spectrum`` objects.
 
-        # TODO error if file log not present
+    The sample is indexed via the input ``log`` attribute, a pandas dataframe, whose levels must are declared via
+    the ``levels`` attribute. By default, three levels are assumed: an "id" column and a "file" column specifying the object
+    ID and observation file address respectively. The "line" level refers to the label measurements in the corresponding
+    The user can specify more levels via the ``levels```attribute. However, it is recommened to keep this structure: "id"
+    and "file" levels first and the "line" column last.
+
+    To create the LiMe observation variables (``Spectrum`` or ``Cube``) the user needs to specify a ``load_function``.
+    This is a python method which declares how the observational files are read and parsed and returns a LiMe object.
+    This ``load_function`` must have 4 attributes: ``log_df``, ``obs_idx``, ``root_address`` and ``**kwargs``.
+
+    The first and second variable represent the sample ``log`` and a single pandas multi-index entry for the requested
+    observation.
+
+    The ``root_address`` specifies the root file location for the targeted observation file. This root address is combined
+    with the log index level ``file`` cell value. If a ``root_address`` is not specified, it is assumed that the ``file``
+    log column contains the absolute file address.
+
+    The ``**kwargs`` argument specifies keyword arguments used in the creation of the ``Spectrum`` or ``Cube`` objects
+    such as the ```redshift`` or ``norm_flux`` for example.
+
+    The user may also specify the instrument used for the observation. In this case LiMe will use the inbuilt functions
+    to read the supported instruments. This, however, may not contain all the necessary information to create the LiMe
+    variable (such as the redshift). In this case, the user can include a load_function which returns a dictionary with
+    observation attributes not found on the .fits file.
+
+    :param sample_log: multi-index dataframe with the observations properties belonging to the ``Sample``.
+    :type sample_log: pd.Dataframe.
+
+    :param instrument: instrument name responsible for the sample observations.
+    :type instrument: string, optional.
+
+    :param levels: levels for the sample log dataframe. By default, these levels are "id", "file", "line".
+    :type levels: list
+
+    :param load_function: python method with the instructions to convert the observation file into a LiMe observation.
+    :type load_function: python method
+
+    :param root_folder: Root address for the observations' location. This address is combined with the "file" log column value.
+    :type root_folder: string, optional.
+
+    :param kwargs: Additional keyword arguments for the creation of the LiMe observation variables.
+
+    """
+
+    def __init__(self, sample_log, levels=('id', 'file', 'line'), load_function=None, instrument=None, root_folder=None,
+                 **kwargs):
 
         # Initiate the user dictionary with a dictionary of observations if provided
         super().__init__()
 
-        # Object indexing
+        # Load parent classes
+        OpenFits.__init__(self, root_folder, instrument, load_function, 'Sample')
+
+        # Function attributes
         self.label_list = None
         self.objects = None
         self.group_list = None
-        self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=levels)
-        self.load_function = load_function if load_function is not None else None
+        self.levels = list(levels)
+
+        # Check the levels on combined labels target log
+        check_sample_levels(self.levels)
+
+        self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
+        self._load_function = load_function
         self.load_params = kwargs
 
         # Functionality objects
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
 
+        # Check if there is not a log
+        if self.log is None:
+            _logger.warning(f'Sample was created with a null log')
+
         return
 
     @classmethod
-    def from_file_list(cls, id_list, log_list=None, file_list=None, page_list=None, load_function=None,
-                       sample_levels=['id', 'line'], **kwargs):
+    def from_file(cls, id_list, log_list=None, file_list=None, page_list=None, levels=('id', 'file',
+                  "line"), load_function=None, instrument=None, root_folder=None, **kwargs):
 
-        # Confirm all the files have the same address
-        for key, value in {'log_list': log_list, 'file_list': file_list, 'page_list':page_list}.items():
-            if value is not None:
-                if not (len(id_list) == len(value)):
-                    raise LiMe_Error(f'The length of the {key} must be the same of the input "id_list".')
+        # Confirm matching length of entries
+        check_sample_input_files(log_list, file_list, page_list, id_list)
 
-        if log_list is None and file_list is None:
-            raise LiMe_Error(f'To define a sample, the user must provide alongside an "id_list" a "log_list" and/or a '
-                             f'"file_list".')
+        # Check the levels on combined labels target log
+        check_sample_levels(levels)
 
         # Loop through observations and combine the log
         df_list = []
@@ -1251,15 +1351,46 @@ class Sample(UserDict):
 
             # Load the log and check the levels
             if log_list is not None:
-                log_i = load_log(log_list[i], page_name, sample_levels)
+                log_i = load_log(log_list[i], page_name, levels)
                 df_list.append(review_sample_levels(log_i, id_spec, file_spec))
             else:
-                log_i = pd.DataFrame(columns=['id', 'file'], data=(id_spec, file_spec))
-                log_i.set_index(['id', 'file'], inplace=True)
+                log_i = pd.DataFrame(columns=["id", "file"], data=(id_spec, file_spec))
+                log_i.set_index(["id", "file"], inplace=True)
 
         sample_log = pd.concat(df_list)
 
-        return cls(sample_log, load_function, **kwargs)
+        return cls(sample_log, levels, load_function, instrument, root_folder, **kwargs)
+
+    def load_function(self, log_df, obs_idx, root_address, **kwargs):
+
+        # Use loading function
+        if self._load_function is not None:
+            load_function_output = self._load_function(log_df, obs_idx, root_address, **kwargs)
+        else:
+            load_function_output = {}
+
+        # Proceed to create the LiMe object if necessary
+        if isinstance(load_function_output, dict):
+
+            # Get address of observation
+            file_spec = root_address / obs_idx[log_df.index.names.index('file')]
+
+            # User provides a data parser
+            if self.fits_reader is not None:
+                spec_data = self.fits_reader(file_spec)
+                fits_args = {'input_wave': spec_data[0], 'input_flux': spec_data[1], 'input_err': spec_data[2],
+                             **spec_data[4]}
+            else:
+                fits_args = {}
+
+            # Create observation
+            obs_args = {**fits_args, **load_function_output}
+            obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+
+        else:
+            obs = load_function_output
+
+        return obs
 
     def __getitem__(self, id_key):
 
@@ -1282,7 +1413,8 @@ class Sample(UserDict):
                 raise KeyError(id_key)
 
             # Crop sample
-            output = Sample(self.log.loc[idcs], self.load_function, **self.load_params)
+            output = Sample(self.log.loc[idcs], self.levels, self.load_function, self.source, self.file_address,
+                            **self.load_params)
 
         return output
 
@@ -1335,7 +1467,7 @@ class Sample(UserDict):
         else:
             idx_in = idx
 
-        return self.load_function(self.log, idx_in, **self.load_params)
+        return self.load_function(self.log, idx_in, self.file_address, **self.load_params)
 
     @property
     def index(self):
@@ -1433,4 +1565,72 @@ class Sample(UserDict):
             check = True
 
         return check
+
+
+class ObsManager(OpenFits):
+
+    def __init__(self, file_address, file_source, lime_object, load_function=None, **kwargs):
+
+        # Initialize the .fits reading class
+        OpenFits.__init__(self, file_address, file_source, lime_object, load_function)
+
+        # Define attribute
+        self.spectrum_check = False
+        self.load_function = None
+        self.user_params = None
+
+        # Store the user arguments for the spectra
+        self.user_params = kwargs
+
+        # State the type of spectra
+        if file_source is None:
+            self.spectrum_check = True
+        else:
+            self.spectrum_check = True if self.source in list(SPECTRUM_FITS_PARAMS.keys()) else False
+
+        # Assign input load function
+        if load_function is not None:
+            self.load_function = load_function
+
+        # Assign the
+        elif (file_source is not None) and (self.fits_reader is not None):
+            self.load_function = self.default_file_parser
+
+        # No load function nor instrument
+        else:
+            raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
+                             f'supported by LiMe')
+
+        return
+
+    def load_function(self, file_spec, log_df=None, id_spec=None, **kwargs):
+
+        default_args = self.fits_reader(file_spec) if self.fits_reader is not None else {}
+        user_args = self.user_params if self.user_params is not None else {}
+
+        # Recover the user params
+        user_args = user_args if user_args is not None else self.user_params
+
+        # Update with the default arguments
+        default_args = {**default_args, **user_args}
+
+        # Run the load function
+        load_function_output = self.load_function(file_spec, log_df, id_spec, **default_args)
+
+        # Proceed to create LiMe object if necessary
+        if isinstance(load_function_output, dict):
+            obs_args = {**default_args, **load_function_output}
+            obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+        else:
+            obs = load_function_output
+
+        return obs
+
+    def default_file_parser(self, log_df=None, id_spec=None, **kwargs):
+
+        file_spec = self.id_spec[log_df.index.names.index('file')]
+
+        fits_args = self.fits_reader(file_spec)
+
+        return fits_args
 

@@ -5,11 +5,11 @@ from pathlib import Path
 from astropy.io import fits
 
 
-def osiris_open_fits(log_df, id_spec, file_spec, **kwargs):
+def osiris_open_fits(log_df, obs_idx, root_address, **kwargs):
 
     # Open fits file
     ext = 0
-    file_address = Path(kwargs['data_folder'])/file_spec
+    file_address = root_address / obs_idx[log_df.index.names.index('file')]
     with fits.open(file_address) as hdul:
         data, hdr = hdul[ext].data, hdul[ext].header
 
@@ -17,33 +17,50 @@ def osiris_open_fits(log_df, id_spec, file_spec, **kwargs):
     w_max = w_min + dw * n_pix
     wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
-    log_obj = log_df.xs(id_spec, level='id')
+    log_obj = log_df.xs(obs_idx, level='id')
     redshift = np.nanmean(log_obj.z_line.to_numpy())
-    norm_flux = 1e-17
+    norm_flux = kwargs['norm_flux']
 
     spec = lime.Spectrum(wavelength, data, redshift=redshift, norm_flux=norm_flux)
 
     return spec
 
+
+def osiris_compliment(log_df, obs_idx, file_spec, **kwargs):
+
+    log_obj = log_df.xs(obs_idx, level='id')
+    redshift = np.nanmean(log_obj.z_line.to_numpy())
+    norm_flux = 1e-17
+
+    return {'redshift': redshift, 'norm_flux': norm_flux}
+
 id_list = ['GP121903_A', 'GP121903_B']
 log_list = ['../sample_data/example3_linelog.txt', '../sample_data/example3_linelog.txt']
-obs_list = ['gp121903_osiris.fits', 'gp121903_osiris.fits']
+obs_list = ['/home/usuario/PycharmProjects/lime/examples/sample_data/spectra/gp121903_osiris.fits',
+            '/home/usuario/PycharmProjects/lime/examples/sample_data/spectra/gp121903_osiris.fits']
+root_folder = None# '/home/usuario/PycharmProjects/lime/examples/sample_data/spectra'
+output_log = '/home/usuario/PycharmProjects/lime/examples/sample_data/sample_log.txt'
 
-sample = lime.Sample.from_file_list(id_list, log_list, obs_list, load_function=osiris_open_fits, norm_flux=1e-17,
-                                    data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
-print(sample.log)
+# sample = lime.Sample.from_file(id_list, log_list, obs_list, root_folder=root_folder, instrument='Osiris',
+#                                data_folder=root_folder, norm_flux = 1e-17)
+# print(sample.log)
 
-sub_sample = sample['GP121903_A']
-sub_sampleB = sample['GP121903_B']
+sample = lime.Sample.from_file(id_list, log_list, obs_list, root_folder=root_folder, instrument='Osiris',
+                               load_function=osiris_compliment)
+sample.save_log(output_log)
+#
+# sub_sample = sample['GP121903_A']
+# sub_sampleB = sample['GP121903_B']
+#
+# idcs = (sample.ids.isin(['GP121903_B'])) & sample.log.particle.isin(['O3', 'S2'])
+# sub_sampleC = sample[idcs]
+#
+# sample.plot.spectra(rest_frame=True)
+# sub_sampleC.plot.spectra(rest_frame=True)
 
-idcs = (sample.ids.isin(['GP121903_B'])) & sample.log.particle.isin(['O3', 'S2'])
-sub_sampleC = sample[idcs]
+sampleB = lime.Sample(output_log, load_function=osiris_open_fits, root_folder=root_folder, norm_flux=1e-17)
+sampleB.plot.spectra(rest_frame=True)
 
-# spec = sample.get_observation('GP121903_A')
-# spec.plot.spectrum()
-
-sample.plot.spectra()
-sub_sampleC.plot.spectra()
 
 # spec = sample.load_function(sample.log, 'GP121903_A', 'gp121903_osiris.fits', data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
 
