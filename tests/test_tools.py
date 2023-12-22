@@ -28,7 +28,7 @@ for i in range(3):
 
 obj_list = [f'obj_{i}' for i in range(3)]
 log_list = [lines_log_address] * 3
-obs = lime.Sample.from_file_list(obj_list, log_list)
+obs = lime.Sample.from_file(obj_list, log_list, instrument='isis')
 
 
 def test_int_to_roman():

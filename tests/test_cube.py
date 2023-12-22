@@ -22,7 +22,7 @@ cube_log_address = baseline_folder/'SHOC579_log.fits'
 cube_address = Path(__file__).parent.parent/'examples/sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz'
 spatial_log_address = Path(__file__).parent/'outputs'/'SHOC579_log.fits'
 
-RMS_tolerance = 25
+RMS_tolerance = 3
 redshift = 0.0475
 norm_flux = 1e-17
 spaxel_label = '38-35'

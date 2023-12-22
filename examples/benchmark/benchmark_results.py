@@ -32,7 +32,7 @@ def plot_lines_minutes(df):
     STANDARD_PLOT['axes.labelsize'] = 25
     STANDARD_PLOT['xtick.labelsize'] = 20
     STANDARD_PLOT['ytick.labelsize'] = 20
-    STANDARD_PLOT['font.family'] = 'Times New Roman'
+    # STANDARD_PLOT['font.family'] = 'Times New Roman'
     STANDARD_PLOT['mathtext.fontset'] = 'cm'
 
     with rc_context(STANDARD_PLOT):
@@ -57,15 +57,15 @@ def plot_lines_minutes(df):
 
         ax1.update({'xlabel': 'Time (minutes)'})
         plt.tight_layout()
-        # plt.show()
-        plt.savefig('benchmarks.png', bbox_inches='tight')
+        plt.show()
+        # plt.savefig('benchmarks.png', bbox_inches='tight')
     # 
     return
 
 # Test 3) Saving fits file log every 1000 spaxels + terminal coord display
-spaxels_array = np.array([11, 91, 382, 2108, 2073, 3109])
-lines_array = np.array([459, 3418, 3431, 17390, 9579, 12498])
-minutes_array = np.array([0.08, 0.65, 0.76, 4.26, 3.67, 5.84])
+spaxels_array = np.array([11, 90, 383, 2108, 2073, 3109])
+lines_array = np.array([459, 3381, 3440, 17390, 9579, 12498])
+minutes_array = np.array([0.08, 0.62, 0.71, 3.78, 2.69, 3.89])
 
 
 data = {'Spaxels': spaxels_array, 'Lines': lines_array, 'Minutes': minutes_array}

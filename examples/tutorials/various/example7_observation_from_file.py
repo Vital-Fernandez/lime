@@ -30,9 +30,31 @@ obs_cfg = lime.load_cfg(cfgFile)
 z_obj = obs_cfg['sample_data']['z_array'][2]
 norm_flux = obs_cfg['sample_data']['norm_flux']
 #
-gp_spec = lime.Spectrum.from_file(obsFitsFile, 'Osiris', redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
-lime.OpenFits
+# gp_spec = lime.Spectrum.from_file(obsFitsFile, 'Osiris', redshift=z_obj, norm_flux=norm_flux)
+# gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
+#
+# manga_cube = '../../sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz'
+# shoc579 = lime.Cube.from_file(manga_cube, instrument='Manga', redshift=0.0475)
+# shoc579.plot.cube('H1_6563A')
+
+megara_cube = '../../sample_data/spectra/NGC5471_datacube_LR-R_900_scale03_drp_nosky.fits'
+# data = fits.getdata(megara_cube, ext=0)
+# data1 = fits.getdata(megara_cube, ext=1)
+# data2 = fits.getdata(megara_cube, ext=2)
+#
+# hdr = fits.getheader(megara_cube, ext=0)
+# hdr1 = fits.getheader(megara_cube, ext=1)
+# hdr2 = fits.getheader(megara_cube, ext=2)
+
+ngc5471 = lime.Cube.from_file(megara_cube, instrument='megara', redshift=0.00091)
+ngc5471.check.cube('H1_6563A')
+
+
+
+# muse_cube = 'D:\AstroData\MUSE - Amorin\CGCG007.fits'
+# cgcg007 = lime.Cube.from_file(muse_cube, instrument='Muse', redshift=0.004691)
+# cgcg007.check.cube('H1_6563A')
+
 
 # # specprod_dir = '.'
 # # fits_path = f'{specprod_dir}/coadd-sv1-other-27256.fits'
@@ -57,9 +79,7 @@ lime.OpenFits
 #
 # # print(fits.getheader(manga_cube, extname='PRIMARY'))
 #
-# muse_cube = 'D:\AstroData\MUSE - Amorin\CGCG007.fits'
-# cgcg007 = lime.Cube.from_file(muse_cube, instrument='Muse', redshift=0.004691)
-# cgcg007.check.cube('H1_6563A')
+
 
 
 
