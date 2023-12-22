@@ -18,7 +18,7 @@ lines_log_address = baseline_folder/'manga_lines_log.txt'
 redshift = 0.0475
 norm_flux = 1e-17
 cfg = lime.load_cfg(conf_file_address)
-tolerance_rms = 3
+tolerance_rms = 4
 
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
 pixel_mask = np.isnan(err_array)
