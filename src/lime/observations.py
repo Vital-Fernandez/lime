@@ -1144,6 +1144,110 @@ class Cube:
 
         return output_func
 
+    def unit_conversion(self, units_wave=None, units_flux=None, norm_flux=None):
+
+        # TODO you need to make this acommon function
+
+        """
+
+        This function converts spectrum wavelength array, the flux array or both arrays units.
+
+        The user can also provide a flux normalization for the spectrum flux array.
+
+        The wavelength units available are A (angstroms), um, nm, Hz, cm, mm
+
+        The flux units available are Flam (erg s^-1 cm^-2 Å^-1), Fnu (erg s^-1 cm^-2 Hz^-1), Jy, mJy, nJy
+
+        :param units_wave: Wavelength array units
+        :type units_wave: str, optional
+
+        :param units_flux: Flux array units
+        :type units_flux: str, optional
+
+        :param norm_flux: Flux normalization
+        :type norm_flux: float, optional
+
+        """
+
+        # Dispersion axes conversion
+        if units_wave is not None:
+
+            # Remove the masks for the conversion
+            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
+
+            # Convert the data
+            if units_wave in DISPERSION_UNITS:
+                output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
+            else:
+                _logger.warning(f'- Dispersion units {units_wave} not recognized for conversion. '
+                                f'Please use {DISPERSION_UNITS} to convert from {self.units_wave}')
+
+            # Reflect the new units
+            if np.ma.is_masked(self.wave):
+                self.wave = np.ma.masked_array(output_wave, self.wave.mask)
+                self.wave_rest = np.ma.masked_array(output_wave/(1+self.redshift), self.wave.mask)
+            else:
+                self.wave = output_wave
+                self.wave_rest = output_wave/(1+self.redshift)
+            self.units_wave = units_wave
+
+        # Flux axis conversion
+        if units_flux is not None:
+
+            # Remove the masks for the conversion
+            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
+            input_flux = self.flux.data if np.ma.is_masked(self.flux) else self.flux
+            input_err = self.err_flux.data if np.ma.is_masked(self.err_flux) else self.err_flux
+
+            if units_flux in FLUX_DENSITY_UNITS: # TODO this is slow
+                flux_shape = input_flux.shape
+                y_range, x_range = np.arange(flux_shape[1]), np.arange(flux_shape[2])
+                if len(flux_shape) == 3:
+                    output_flux = np.empty(flux_shape)
+                    for j in y_range:
+                        for i in x_range:
+                            output_flux[:, j, i] = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
+                                                  flux_array=input_flux[:, j, i], dispersion_units=self.units_wave)
+                else:
+                    output_flux = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
+                                                  flux_array=input_flux, dispersion_units=self.units_wave)
+
+                if input_err is not None:
+                    output_err = unit_conversion(self.units_flux, units_flux, wave_array=input_wave,
+                                                 flux_array=input_err, dispersion_units=self.units_wave)
+
+            else:
+                _logger.warning(f'- Dispersion units {units_flux} not recognized for conversion. '
+                                f'Please use {FLUX_DENSITY_UNITS} to convert from {self.units_flux}')
+
+            # Reflect the new units
+            if np.ma.is_masked(self.flux):
+                self.flux = np.ma.masked_array(output_flux, self.flux.mask)
+            else:
+                self.flux = output_flux
+            if input_err is not None:
+                self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.is_masked(self.err_flux) else output_err
+            self.units_flux = units_flux
+
+        # Switch the normalization
+        if norm_flux is not None:
+            # TODO isMaskedArray checks individually?
+            mask_check = np.ma.is_masked(self.flux)
+
+            # Remove old
+            if mask_check:
+                new_flux = self.flux.data * self.norm_flux / norm_flux
+                new_err = None if self.err_flux is None else self.err_flux.data * self.norm_flux / norm_flux
+
+                self.flux = np.ma.masked_array(new_flux, self.flux.mask)
+                self.err_flux = None if self.err_flux is None else np.ma.masked_array(new_err, self.err_flux.mask)
+            else:
+                self.flux = self.flux * self.norm_flux / norm_flux
+                self.err_flux = None if self.err_flux is None else self.err_flux * self.norm_flux / norm_flux
+            self.norm_flux = norm_flux
+
+        return
+
     def get_spectrum(self, idx_j, idx_i, label=None):
 
         """
