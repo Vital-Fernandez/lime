@@ -45,7 +45,7 @@ CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': 
                               'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
 
                     'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                              'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None}
+                               'units_flux': 'Jy', 'pixel_mask': None, 'id_label': None}
                     }
 
 
