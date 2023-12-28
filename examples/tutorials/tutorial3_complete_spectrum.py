@@ -14,7 +14,8 @@ norm_flux = obs_cfg['sample_data']['norm_flux']
 
 # Declare LiMe spectrum
 gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
-gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
+# gp_spec.fit.continuum(degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 1.5], plot_steps=True)
+# gp_spec.plot.spectrum(label='GP121903', rest_frame=True)
 
 # Find lines
 match_bands = gp_spec.line_detection(lineBandsFile, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 1.5])

@@ -1150,7 +1150,7 @@ class Cube:
 
         """
 
-        This function converts spectrum wavelength array, the flux array or both arrays units.
+        This function converts cube wavelength array and/or the flux array units.
 
         The user can also provide a flux normalization for the spectrum flux array.
 
@@ -1359,22 +1359,22 @@ class Sample(UserDict, OpenFits):
     This class creates a dictionary-like variable to store LiMe observations, by the fault it is assumed that these are
     ``Spectrum`` objects.
 
-    The sample is indexed via the input ``log`` attribute, a pandas dataframe, whose levels must are declared via
-    the ``levels`` attribute. By default, three levels are assumed: an "id" column and a "file" column specifying the object
+    The sample is indexed via the input ``log`` parameter, a pandas dataframe, whose levels must be declared via
+    the ``levels`` parameter. By default, three levels are assumed: an "id" column and a "file" column specifying the object
     ID and observation file address respectively. The "line" level refers to the label measurements in the corresponding
-    The user can specify more levels via the ``levels```attribute. However, it is recommened to keep this structure: "id"
+    The user can specify more levels via the ``levels`` parameter. However, it is recommended to keep this structure: "id"
     and "file" levels first and the "line" column last.
 
     To create the LiMe observation variables (``Spectrum`` or ``Cube``) the user needs to specify a ``load_function``.
     This is a python method which declares how the observational files are read and parsed and returns a LiMe object.
-    This ``load_function`` must have 4 attributes: ``log_df``, ``obs_idx``, ``root_address`` and ``**kwargs``.
+    This ``load_function`` must have 4 parameters: ``log_df``, ``obs_idx``, ``folder_obs`` and ``**kwargs``.
 
     The first and second variable represent the sample ``log`` and a single pandas multi-index entry for the requested
-    observation.
+    observation. The ``folder_obs`` and ``**kwargs`` are provided at the ``Sample`` creation:
 
-    The ``root_address`` specifies the root file location for the targeted observation file. This root address is combined
-    with the log index level ``file`` cell value. If a ``root_address`` is not specified, it is assumed that the ``file``
-    log column contains the absolute file address.
+    The ``folder_obs`` parameter specifies the root file location for the targeted observation file. This root address
+    is combined with the corresponding log level ``file`` value. If a ``folder_obs`` is not specified, it is assumed that
+    the ``file`` log column contains the absolute file address.
 
     The ``**kwargs`` argument specifies keyword arguments used in the creation of the ``Spectrum`` or ``Cube`` objects
     such as the ```redshift`` or ``norm_flux`` for example.
@@ -1382,13 +1382,10 @@ class Sample(UserDict, OpenFits):
     The user may also specify the instrument used for the observation. In this case LiMe will use the inbuilt functions
     to read the supported instruments. This, however, may not contain all the necessary information to create the LiMe
     variable (such as the redshift). In this case, the user can include a load_function which returns a dictionary with
-    observation attributes not found on the .fits file.
+    observation parameters not found on the ".fits" file.
 
-    :param sample_log: multi-index dataframe with the observations properties belonging to the ``Sample``.
-    :type sample_log: pd.Dataframe.
-
-    :param instrument: instrument name responsible for the sample observations.
-    :type instrument: string, optional.
+    :param sample_log: multi-index dataframe with the parameter properties belonging to the ``Sample``.
+    :type sample_log: pd.Dataframe
 
     :param levels: levels for the sample log dataframe. By default, these levels are "id", "file", "line".
     :type levels: list
@@ -1396,21 +1393,24 @@ class Sample(UserDict, OpenFits):
     :param load_function: python method with the instructions to convert the observation file into a LiMe observation.
     :type load_function: python method
 
-    :param root_folder: Root address for the observations' location. This address is combined with the "file" log column value.
-    :type root_folder: string, optional.
+    :param instrument: instrument name responsible for the sample observations.
+    :type instrument: string, optional.
+
+    :param folder_obs: Root address for the observations' location. This address is combined with the "file" log column value.
+    :type folder_obs: string, optional.
 
     :param kwargs: Additional keyword arguments for the creation of the LiMe observation variables.
 
     """
 
-    def __init__(self, sample_log, levels=('id', 'file', 'line'), load_function=None, instrument=None, root_folder=None,
+    def __init__(self, sample_log, levels=('id', 'file', 'line'), load_function=None, instrument=None, folder_obs=None,
                  **kwargs):
 
         # Initiate the user dictionary with a dictionary of observations if provided
         super().__init__()
 
         # Load parent classes
-        OpenFits.__init__(self, root_folder, instrument, load_function, 'Sample')
+        OpenFits.__init__(self, folder_obs, instrument, load_function, 'Sample')
 
         # Function attributes
         self.label_list = None
@@ -1436,8 +1436,65 @@ class Sample(UserDict, OpenFits):
         return
 
     @classmethod
-    def from_file(cls, id_list, log_list=None, file_list=None, page_list=None, levels=('id', 'file',
-                  "line"), load_function=None, instrument=None, root_folder=None, **kwargs):
+    def from_file(cls, id_list, log_list=None, file_list=None, page_list=None, levels=('id', 'file', "line"),
+                  load_function=None, instrument=None, folder_obs=None, **kwargs):
+
+        """
+        This class creates a dictionary-like variable to store LiMe observations taking a list of observations IDs, line
+        logs and a list of files.
+
+        The sample is indexed via the input ``log`` parameter, a pandas dataframe, whose levels must are declared via
+        the ``levels`` parameter. By default, three levels are assumed: an "id" column and a "file" column specifying the object
+        ID and observation file address respectively. The "line" level refers to the label measurements in the corresponding
+        The user can specify more levels via the ``levels`` parameter. However, it is recommended to keep this structure: "id"
+        and "file" levels first and the "line" column last.
+
+        The sample log levels are created from the input values for the ``id_list``, ``log_list`` and ``file_list`` while
+        the individual logs from each observation are combined where the line labels in the "line" level. If the input logs
+        are ".fits" files the user must specify extension name or number via the ``page_list`` parameter.
+
+        To create the LiMe observation variables (``Spectrum`` or ``Cube``) the user needs to specify a ``load_function``.
+        This is a python method which declares how the observational files are read and parsed and returns a LiMe object.
+        This ``load_function`` must have four parameters: ``log_df``, ``obs_idx``, ``folder_obs`` and ``**kwargs``.
+
+        The first and second variable represent the sample ``log`` and a single pandas multi-index entry for the requested
+        observation. The ``folder_obs`` and ``**kwargs`` are provided at the ``Sample`` creation:
+
+        The ``folder_obs`` parameter specifies the root file location for the targeted observation file. This root address
+        is combined with the corresponding log level ``file`` value. If a ``folder_obs`` is not specified, it is assumed
+        that the ``file`` log column contains the absolute file address. This is
+
+        The ``**kwargs`` argument specifies keyword arguments used in the creation of the ``Spectrum`` or ``Cube`` objects
+        such as the ```redshift`` or ``norm_flux`` for example.
+
+        :param id_list: List of observation names
+        :type id_list: list
+
+        :param log_list: List of observation log data frames or files or pandas data frames
+        :type log_list: list
+
+        :param file_list: List of observation files.
+        :type file_list: list
+
+        :param page_list: List of extension files or names for the observation ".fits" files
+        :type page_list: list
+
+        :param levels: levels for the sample log dataframe. By default, these levels are "id", "file", "line".
+        :type levels: list
+
+        :param load_function: python method with the instructions to convert the observation file into a LiMe observation.
+        :type load_function: python method
+
+        :param instrument: instrument name responsible for the sample observations.
+        :type instrument: string, optional.
+
+        :param folder_obs: Root address for the observations' location. This address is combined with the "file" log
+                            column value.
+        :type folder_obs: string, optional.
+
+        :param kwargs: Additional keyword arguments for the creation of the LiMe observation variables.
+
+        """
 
         # Confirm matching length of entries
         check_sample_input_files(log_list, file_list, page_list, id_list)
@@ -1463,7 +1520,7 @@ class Sample(UserDict, OpenFits):
 
         sample_log = pd.concat(df_list)
 
-        return cls(sample_log, levels, load_function, instrument, root_folder, **kwargs)
+        return cls(sample_log, levels, load_function, instrument, folder_obs, **kwargs)
 
     def load_function(self, log_df, obs_idx, root_address, **kwargs):
 
@@ -1522,39 +1579,35 @@ class Sample(UserDict, OpenFits):
 
         return output
 
-    def get_observation(self, *args, default_none=False):
+    def get_observation(self, input_index, default_none=False):
 
         output = None
         valid_check = self._review_df_indexes()
 
         if valid_check:
 
-            # Case only ID, try to find the object spectrum
-            if len(args) == 1:
-                idcs = self.log.index.get_level_values('id').isin(args)
+            # Case only ID string
+            if isinstance(input_index, str):
+                idcs = self.log.index.get_level_values('id').isin(np.atleast_1d(input_index))
 
                 # Not entry found
                 if np.all(idcs is False):
-                    raise KeyError(args[0])
+                    raise KeyError(input_index)
 
                 # Check for logs without lines
-                files = self.log.loc[idcs].index.get_level_values('file').unique()
-
-                if files.size > 1:
-                    raise LiMe_Error(f'More than one observation meets the input criteria:\n{idcs}')
-
-                spec_label, spec_file = args[0], files[0]
-
-            elif len(args) == 2:
-                spec_label = args[0]
-                spec_file = args[1]
-
+                if 'line' not in self.log.index.names:
+                    obj_idcs = self.log.loc[idcs].index.unique()
+                else:
+                    obj_idcs = self.log.loc[idcs].iloc[0].name
             else:
-                spec_label = args[0]
-                spec_file = args[1]
+                obj_idcs = input_index
+
+            # # Not entry found
+            # if len(obj_idcs) > 1:
+            #     raise LiMe_Error(f'Multiple observations match the input id: {obj_idcs}')
 
             # Load the LiMe object
-            output = self.load_function(self.log, spec_label, spec_file, **self.load_params)
+            output = self.load_function(self.log, obj_idcs, self.file_address, **self.load_params)
 
         return output
 

@@ -74,3 +74,4 @@ These are some of the features currently available:
    tutorials/n_tutorial4_IFU_masking.ipynb
    tutorials/n_tutorial5_IFU_fitting.ipynb
    tutorials/n_tutorial6_IFU_results.ipynb
+   tutorials/n_tutorial7_Sample_creation.ipynb

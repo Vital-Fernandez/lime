@@ -7,8 +7,8 @@ print(lime.__version__)
 megara_cube_address = '../../sample_data/spectra/NGC5471_datacube_LR-R_900_scale03_drp_nosky.fits'
 
 # Create LiMe cube
-ngc5471 = lime.Cube.from_file(megara_cube_address, instrument='megara', redshift=0.00091, norm_flux=1)
-ngc5471.unit_conversion(units_flux='Flam')
+ngc5471 = lime.Cube.from_file(megara_cube_address, instrument='megara', redshift=0.00091)
+ngc5471.unit_conversion(units_flux='Flam', norm_flux=1e-18)
 
 # Interactive plot (right click change spaxel)
 ngc5471.check.cube('H1_6563A')

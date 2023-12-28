@@ -58,20 +58,28 @@ Astronomical objects
 
 .. autofunction:: lime.Spectrum.from_file
 
+.. autofunction:: lime.Spectrum.unit_conversion
+
 .. autoclass:: lime.Cube
 
 .. autofunction:: lime.Cube.from_file
 
+.. autofunction:: lime.Cube.unit_conversion
 
-Line fitting
-------------
+.. autoclass:: lime.Sample
+
+.. autofunction:: lime.Sample.from_file
+
+Fitting
+-------
 
 .. autofunction:: lime.workflow.SpecTreatment.bands
 
 .. autofunction:: lime.workflow.SpecTreatment.frame
 
-.. autofunction:: lime.workflow.CubeTreatment.spatial_mask
+.. autofunction:: lime.workflow.SpecTreatment.continuum
 
+.. autofunction:: lime.workflow.CubeTreatment.spatial_mask
 
 Plotting
 --------
