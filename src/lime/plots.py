@@ -1473,7 +1473,8 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def _continuum_iteration(self, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor, plot_title=''):
+    def _continuum_iteration(self, wave, flux, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor,
+                             plot_title=''):
 
         PLOT_CONF = STANDARD_PLOT.copy()
         AXES_CONF = STANDARD_AXES.copy()
@@ -1483,8 +1484,7 @@ class SpectrumFigures(Plotter):
         AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self._spec.units_wave]})$'
         AXES_CONF['title'] = plot_title
 
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                    self._spec.redshift, False)
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, self._spec.redshift, False)
 
         with rc_context(PLOT_CONF):
 
@@ -1703,7 +1703,6 @@ class SampleFigures(Plotter):
 
         if self._sample.load_function is not None:
 
-
             legend_check = True
             plt_cfg.setdefault('figure.figsize', (10, 6))
 
@@ -1720,7 +1719,7 @@ class SampleFigures(Plotter):
             else:
                 sub_sample = self._sample[obj_idcs]
 
-            # Check for logs without lines
+            # Check for logs without lines # TODO we need common method for just providing the first entry
             if 'line' in sub_sample.index.names:
                 obj_idcs = sub_sample.log.droplevel('line').index.unique()
             else:

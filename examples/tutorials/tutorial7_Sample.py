@@ -1,32 +1,42 @@
 import numpy as np
-import pandas as pd
 import lime
-from pathlib import Path
 from astropy.io import fits
 
 
-def osiris_open_fits(log_df, obs_idx, root_address, **kwargs):
+# Example load function for osiris spectra file
+def osiris_load_function(log_df, obs_idx, folder_obs, **kwargs):
 
     # Open fits file
     ext = 0
-    file_address = root_address / obs_idx[log_df.index.names.index('file')]
+    file_address = f'{folder_obs}/{obs_idx[log_df.index.names.index("file")]}'
     with fits.open(file_address) as hdul:
         data, hdr = hdul[ext].data, hdul[ext].header
 
+    # Reconstruct the wavelength array
     w_min, dw, n_pix = hdr['CRVAL1'], hdr['CD1_1'], hdr['NAXIS1']
     w_max = w_min + dw * n_pix
     wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
 
-    log_obj = log_df.xs(obs_idx, level='id')
+    # Compute the redshift from the mean line centroid redshift
+    log_obj = log_df.xs(obs_idx[0], level='id', drop_level=False)
     redshift = np.nanmean(log_obj.z_line.to_numpy())
+
+    # Multiplicative factor to distinguish the spectra on the plots
+    ids = log_df.index.get_level_values('id').unique()
+    id_idx = np.where(ids == obs_idx[0])[0][0]
+    flux = data + np.nanmean(data) * 1.10 * id_idx
+
+    # Recover the normalization from the sample input parameters
     norm_flux = kwargs['norm_flux']
 
-    spec = lime.Spectrum(wavelength, data, redshift=redshift, norm_flux=norm_flux)
+    # Create the spectrum object with its line measurements
+    spec = lime.Spectrum(wavelength, flux, redshift=redshift, norm_flux=norm_flux)
 
     return spec
 
 
-def osiris_compliment(log_df, obs_idx, file_spec, **kwargs):
+# 2nd example load_function
+def osiris_compliment(log_df, obs_idx, root_address, **kwargs):
 
     log_obj = log_df.xs(obs_idx, level='id')
     redshift = np.nanmean(log_obj.z_line.to_numpy())
@@ -34,147 +44,32 @@ def osiris_compliment(log_df, obs_idx, file_spec, **kwargs):
 
     return {'redshift': redshift, 'norm_flux': norm_flux}
 
-id_list = ['GP121903_A', 'GP121903_B']
-log_list = ['../sample_data/example3_linelog.txt', '../sample_data/example3_linelog.txt']
-obs_list = ['/home/usuario/PycharmProjects/lime/examples/sample_data/spectra/gp121903_osiris.fits',
-            '/home/usuario/PycharmProjects/lime/examples/sample_data/spectra/gp121903_osiris.fits']
-root_folder = None# '/home/usuario/PycharmProjects/lime/examples/sample_data/spectra'
-output_log = '/home/usuario/PycharmProjects/lime/examples/sample_data/sample_log.txt'
 
-# sample = lime.Sample.from_file(id_list, log_list, obs_list, root_folder=root_folder, instrument='Osiris',
-#                                data_folder=root_folder, norm_flux = 1e-17)
-# print(sample.log)
+# Declaring the name of the observations
+id_list = ['GP121903_A', 'GP121903_B', 'GP121903_C']
 
-sample = lime.Sample.from_file(id_list, log_list, obs_list, root_folder=root_folder, instrument='Osiris',
-                               load_function=osiris_compliment)
-sample.save_log(output_log)
-#
-# sub_sample = sample['GP121903_A']
-# sub_sampleB = sample['GP121903_B']
-#
-# idcs = (sample.ids.isin(['GP121903_B'])) & sample.log.particle.isin(['O3', 'S2'])
-# sub_sampleC = sample[idcs]
-#
-# sample.plot.spectra(rest_frame=True)
-# sub_sampleC.plot.spectra(rest_frame=True)
+# Declaring the observations root folder and the individual .fits files
+folder_obs = f'../sample_data'
+obs_list = ['spectra/gp121903_osiris.fits'] * 3
 
-sampleB = lime.Sample(output_log, load_function=osiris_open_fits, root_folder=root_folder, norm_flux=1e-17)
-sampleB.plot.spectra(rest_frame=True)
+# We declare the line measurements logs
+log_list = [f'{folder_obs}/example3_linelog.txt'] * 3
 
+# We create the sample using the list of objects and files
+sample1 = lime.Sample.from_file(id_list, log_list, obs_list, folder_obs=folder_obs, load_function=osiris_load_function,
+                                norm_flux=1e-17)
 
-# spec = sample.load_function(sample.log, 'GP121903_A', 'gp121903_osiris.fits', data_folder='/home/usuario/PycharmProjects/lime/examples/sample_data')
+# Get an individual observations:
+specA = sample1.get_observation('GP121903_A')
 
-# from astropy.io import fits
-# from astropy.wcs import WCS
-# import pandas as pd
-# pd.set_option('display.max_columns', 8)
-#
-# log_address = Path(f'/home/usuario/Documents/fluxes_log.txt')
-#
-# log = lime.load_log(log_address, sample_levels=['sample', 'id', 'line'])
-#
-# lime.extract_fluxes(log, column_names=['line_flux', 'line_flux_err'], column_positions=[0, 1])
-#
-# lime.normalize_fluxes(log, column_name='line_flux_rel', norm_list='H1_4862A', column_normalization_name='Norm_line',
-#                       sample_levels=['sample', 'id', 'line'])
-#
-# print(log)
-# lime.save_log(log, f'que_locura.txt')
+# Review the measurements:
+specA.plot.spectrum(include_fits=True)
 
-# import pandas as pd
-#
-# # Create individual pandas DataFrame.
-# df1 = pd.DataFrame({'Col0': ['Gut', 'Gut', 'Gut', 'Gut'], 'Col1': [1, 2, 3, 4], 'Col2': [99, 98, 95, 90]}, index=['A', 'B', 'C', 'D'])
-# df2 = pd.DataFrame({'Col0': ['Gut', 'Gut'], 'Col1': [1, 2], 'Col2': [99, 98]}, index=['A', 'B'])
-# df3 = pd.DataFrame({'Col0': ['Fer', 'Fer'], 'Col1': [3, 4], 'Col2': [95, 90]}, index=['C', 'D'])
-# df4 = pd.DataFrame({'Col0': ['Fer', 'Fer'], 'Col1': [3, 4], 'Col2': [95, 90]}, index=['B', 'C'])
-#
-# # Combine into one multi-index dataframe
-# df_dict = dict(obj1=df1, obj2=df2, obj3=df3, obj4=df4)
-#
-# # Assign multi-index labels
-# mDF = pd.concat(list(df_dict.values()), keys=list(df_dict.keys()))
-# mDF.set_index(['Col0'], append=True, inplace=True)
-# mDF.rename_axis(index=["ID", "property", 'family'], inplace=True)
-#
-# print(mDF, '\n')
-#
-# bools = mDF.index.get_level_values('property').isin(['A','B'])
-# grouper = mDF.index.get_level_values('ID')
-# # there should be a minimum of two (`A`, `B`)
-# bools2 = pd.Series(bools).groupby(grouper).transform('sum').ge(2).array
-# df_slice = mDF.loc[bools2]
-#
-# print(bools.sum())
-# print(bools2.sum())
-# print(mDF.loc[bools2].loc['obj1'])
-# print(mDF.loc[bools2].loc['obj2'])
-# print(mDF.loc[bools2].loc['obj3'])
+# We can save the combiened sample log, so it can construct the Sample variable in the future.
+sample_log_address = f'{folder_obs}/sample_log.txt'
+sample1.save_log(sample_log_address)
 
+# Just with the combined log and the load function
+sample2 = lime.Sample(sample_log_address, load_function=osiris_load_function, folder_obs=folder_obs, norm_flux=1e-17)
+sample2.plot.spectra(rest_frame=True)
 
-# import pandas as pd
-#
-# # Create individual pandas DataFrame.
-# df1 = pd.DataFrame({'Col1': [1, 2, 3, 4], 'Col2': [99, 98, 95, 90]}, index=['A', 'B', 'C', 'D'])
-# df2 = pd.DataFrame({'Col1': [1, 2], 'Col2': [99, 98]}, index=['A', 'B'])
-# df3 = pd.DataFrame({'Col1': [3, 4], 'Col2': [95, 90]}, index=['C', 'D'])
-# df4 = pd.DataFrame({'Col1': [3, 4], 'Col2': [95, 90]}, index=['B', 'C'])
-#
-# # Combine into one multi-index dataframe
-# df_dict = dict(obj1=df1, obj2=df2, obj3=df3, obj4=df4)
-#
-# # Assign multi-index labels
-# mDF = pd.concat(list(df_dict.values()), keys=list(df_dict.keys()))
-# mDF.rename_axis(index=["ID", "property"], inplace=True)
-# print(mDF, '\n')
-#
-# bools = mDF.index.get_level_values('property').isin(['A','B'])
-# grouper = mDF.index.get_level_values('ID')
-# # there should be a minimum of two (`A`, `B`)
-# bools = pd.Series(bools).groupby(grouper).transform('sum').ge(2).array
-# print(mDF.loc[bools])
-
-
-# log_address = Path('../sample_data/example3_linelog.txt')
-#
-# log = lime.load_log(log_address)
-#
-# lime.extract_fluxes(log, column_names=['line_flux', 'line_flux_err'], column_positions=[0, 1])
-#
-# lime.relative_fluxes(log, column_name='line_flux_rel', norm_list='H1_4861A')
-#
-# lime.relative_fluxes(log, line_list=['H1_6563A', 'O3_5007A'], column_name='line_flux2_rel', norm_list=['H1_4861A', 'O3_4959A'],
-#                      column_normalization_name=None)
-#
-# lime.relative_fluxes(log, line_list=['H1_6563A/H1_4861A', 'O3_5007A/O3_4959A'], column_name='line_flux3_rel', column_normalization_name=None)
-#
-# print(log)
-
-# # State the data location
-# cfg_file = '../sample_data/manga.toml'
-# cube_file = Path('../sample_data/manga-8626-12704-LOGCUBE.fits.gz')
-# spatial_mask_file = Path('../sample_data/SHOC579_mask.fits')
-# output_sample_file = Path('../sample_data/SHOC579_masked_spectra.fits')
-#
-# # Load the configuration file:
-# obs_cfg = lime.load_cfg(cfg_file)
-#
-# # Observation properties
-# z_obj = obs_cfg['SHOC579']['redshift']
-# norm_flux = obs_cfg['SHOC579']['norm_flux']
-#
-# # Open the MANGA cube fits file
-# with fits.open(cube_file) as hdul:
-#     wave = hdul['WAVE'].data
-#     flux_cube = hdul['FLUX'].data * norm_flux
-#     hdr = hdul['FLUX'].header
-#
-# # World coordinate system from the observation
-# wcs = WCS(hdr)
-#
-# # Define a LiMe cube object
-# shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs)
-#
-# shoc579.export_spaxels(output_sample_file, spatial_mask_file)
-#
-# print(fits.info(output_sample_file))

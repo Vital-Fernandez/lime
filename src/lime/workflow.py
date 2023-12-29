@@ -248,7 +248,6 @@ class SpecTreatment(LineFitting):
 
         """
 
-
         # Make a copy of the fitting configuartion
         fit_conf = {} if fit_conf is None else fit_conf.copy()
 
@@ -448,7 +447,35 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def continuum(self, degree_list=[3, 7, 7, 7], threshold_list=[5, 3, 2, 2], plot_steps=True):
+    def continuum(self, degree_list, threshold_list, smooth_length=None, plot_steps=True):
+
+        """
+
+        This function fits the spectrum continuum in an iterative process. The user specifies two parameters: the ``degree_list``
+        for the fitted polynomial and the ``threshold_list``` for the multiplicative standard deviation factor. At each
+        interation points beyond this flux threshold are excluded from the continuum current fittings. Consequently,
+        the user should aim towards more constrictive parameter values at each iteration.
+
+        The user can specify a window length over which the spectrum will be smoothed before fitting the continuum using
+        the ``smooth_length`` parameter.
+
+        The user can visually inspect the fitting output graphically setting the parameter ``plot_steps=True``.
+
+        :param degree_list: Integer list with the degree of the continuum polynomial
+        :type degree_list: list
+
+        :param threshold_list: Float list for the multiplicative continuum standard deviation flux factor
+        :type threshold_list: list
+
+        :param smooth_length: Size of the smoothing window to convolve the spectrum. The default value is None.
+        :type smooth_length: integer, optional
+
+        :param plot_steps: Set to "True" to plot the fitted continuum at each iteration.
+        :type plot_steps: bool, optional
+
+        :return:
+
+        """
 
         # Check for a masked array
         if np.ma.is_masked(self._spec.flux):
@@ -457,6 +484,12 @@ class SpecTreatment(LineFitting):
         else:
             mask_cont = np.ones(self._spec.flux.size).astype(bool)
             input_wave, input_flux = self._spec.wave, self._spec.flux
+
+        # Smooth the spectrum
+        if smooth_length is not None:
+            # Compute the Gaussian kernel
+            smoothing_window = np.ones(smooth_length) / smooth_length
+            input_flux = np.convolve(input_flux, smoothing_window, mode='same')
 
         # Loop through the fitting degree
         for i, degree in enumerate(degree_list):
@@ -483,7 +516,8 @@ class SpecTreatment(LineFitting):
             if plot_steps:
                 title = f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'
                 continuum_full = poly3Out.eval(x=self._spec.wave.data)
-                self._spec.plot._continuum_iteration(continuum_full, mask_cont, low_lim, high_lim, threshold_list[i], title)
+                self._spec.plot._continuum_iteration(self._spec.wave, input_flux, continuum_full, mask_cont, low_lim,
+                                                     high_lim, threshold_list[i], title)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont_std = np.std((self._spec.flux - self._spec.cont)[mask_cont])

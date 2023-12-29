@@ -18,3 +18,4 @@ if process.returncode == 0:
 else:
     print("Error in starting Jupyter Notebook")
     print(stderr.decode())
+
