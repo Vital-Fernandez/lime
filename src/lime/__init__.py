@@ -41,5 +41,5 @@ from .io import *
 from .tools import *
 from .transitions import Line, label_decomposition
 from .read_fits import OpenFits
-
+from .recognition import detection_function
 

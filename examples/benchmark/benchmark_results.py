@@ -30,8 +30,8 @@ def plot_lines_minutes(df):
     STANDARD_PLOT['figure.figsize'] = (8, 7)
     STANDARD_PLOT['axes.titlesize'] = 25
     STANDARD_PLOT['axes.labelsize'] = 25
-    STANDARD_PLOT['xtick.labelsize'] = 20
-    STANDARD_PLOT['ytick.labelsize'] = 20
+    STANDARD_PLOT['xtick.labelsize'] = 15
+    STANDARD_PLOT['ytick.labelsize'] = 15
     # STANDARD_PLOT['font.family'] = 'Times New Roman'
     STANDARD_PLOT['mathtext.fontset'] = 'cm'
 
@@ -57,8 +57,8 @@ def plot_lines_minutes(df):
 
         ax1.update({'xlabel': 'Time (minutes)'})
         plt.tight_layout()
-        plt.show()
-        # plt.savefig('benchmarks.png', bbox_inches='tight')
+        # plt.show()
+        plt.savefig('benchmarks.png', bbox_inches='tight')
     # 
     return
 
@@ -73,7 +73,7 @@ df_test3 = pd.DataFrame(data)
 
 plot_lines_minutes(df_test3)
 
-
+96 lines perscond
 
 
 
