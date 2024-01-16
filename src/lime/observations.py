@@ -526,7 +526,7 @@ class Spectrum(LineFinder):
         return spec
 
     @classmethod
-    def from_file(cls, file_address, instrument, **kwargs):
+    def from_file(cls, file_address, instrument, mask_flux_entries=None, **kwargs):
 
         """
 
@@ -536,6 +536,9 @@ class Spectrum(LineFinder):
         Currently, this method supports NIRSPEC, ISIS, OSIRIS, SDSS and DESI as input instrument sources. This method will
         lower case the input instrument or survey name.
 
+        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
+        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
+
         This method should is aware of the instrument observations units and normalization but the user should introduce
         LiMe.Spectrum arguments (such as the observation redshift).
 
@@ -544,6 +547,9 @@ class Spectrum(LineFinder):
 
         :param instrument: Input file instrument or survey name
         :type instrument: str
+
+        :param mask_flux_entries: List of pixel values to mask from flux array
+        :type mask_flux_entries: list
 
         :param kwargs: lime.Spectrum arguments.
 
@@ -555,7 +561,7 @@ class Spectrum(LineFinder):
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, mask_flux_entries)
 
         # Update the parameters file parameters with the user parameters
         obs_args = {**fits_args, **kwargs}
@@ -939,7 +945,7 @@ class Cube:
         return
 
     @classmethod
-    def from_file(cls, file_address, instrument, **kwargs):
+    def from_file(cls, file_address, instrument, mask_flux_entries=None, **kwargs):
 
         """
 
@@ -949,6 +955,9 @@ class Cube:
         Currently, this method supports MANGA and MUSE input instrument sources. This method will lower case the input
         instrument or survey name.
 
+        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
+        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
+
         This method procures the instrument observations units, normalization and wcs but the user should introduce the
         LiMe.Spectrum arguments (such as the observation redshift).
 
@@ -957,6 +966,9 @@ class Cube:
 
         :param instrument: Input file instrument or survey name
         :type instrument: str
+
+        :param mask_flux_entries: List of pixel values to mask from flux array
+        :type mask_flux_entries: list
 
         :param kwargs: lime.Cube arguments.
 
@@ -968,7 +980,7 @@ class Cube:
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, mask_flux_entries)
 
         # Update the parameters file parameters with the user parameters
         obs_args = {**fits_args, **kwargs}
