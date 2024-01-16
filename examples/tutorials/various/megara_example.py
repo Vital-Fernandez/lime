@@ -1,6 +1,6 @@
 import lime
 
-# Check version >= 0.9.96
+# Check version >= 0.9.97
 print(lime.__version__)
 
 # File location

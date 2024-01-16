@@ -312,13 +312,27 @@ class OpenFits:
 
         return
 
-    def parse_data_from_file(self, file_address):
+    def parse_data_from_file(self, file_address, pixel_mask=None):
 
         # Read the fits data
         wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(file_address)
 
+        # Mask requested entries
+        if pixel_mask is not None:
+            pixel_mask = np.atleast_1d(pixel_mask)
+            mask_array = np.zeros(flux_array.shape).astype(bool)
+            for entry in pixel_mask:
+                if entry == 'negative':
+                    idcs = flux_array < 0
+                else:
+                    idcs = (flux_array == entry)
+                mask_array[idcs] = True
+        else:
+            mask_array = None
+
         # Construct attributes for LiMe object
-        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array, **fits_params}
+        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array, 'pixel_mask': mask_array}
+        fits_args.update(fits_params)
 
         return fits_args
 
@@ -347,7 +361,7 @@ class OpenFits:
         return fits_args
 
     @staticmethod
-    def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1)):
+    def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), pixel_mask=None):
 
         """
 
@@ -376,14 +390,16 @@ class OpenFits:
 
         # Re-construct spectrum arrays
         wave_array, flux_array, err_array = data_list[0]['WAVELENGTH'], data_list[0]['FLUX'], data_list[0]['FLUX_ERROR']
+        pixel_mask = np.isnan(flux_array)
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['nirspec']
+        params_dict['pixel_mask'] = pixel_mask
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def isis(fits_address, data_ext_list=0, hdr_ext_list=0):
+    def isis(fits_address, data_ext_list=0, hdr_ext_list=0, pixel_mask=None):
 
         """
 
@@ -428,7 +444,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def osiris(fits_address, data_ext_list=0, hdr_ext_list=0):
+    def osiris(fits_address, data_ext_list=0, hdr_ext_list=0, pixel_mask=None):
 
         """
 
@@ -473,7 +489,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=0):
+    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=0, pixel_mask=None):
 
         """
 
@@ -511,7 +527,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def manga(fits_address, data_ext_list=('WAVE', 'FLUX', 'IVAR'), hdr_ext_list=('FLUX')):
+    def manga(fits_address, data_ext_list=('WAVE', 'FLUX', 'IVAR'), hdr_ext_list=('FLUX'), pixel_mask=None):
 
         """
 
@@ -555,7 +571,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def muse(fits_address, data_ext_list=(1, 2), hdr_ext_list=1):
+    def muse(fits_address, data_ext_list=(1, 2), hdr_ext_list=1, pixel_mask=None):
 
         """
 
@@ -600,7 +616,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def megara(fits_address, data_ext_list=0, hdr_ext_list=(0, 1)):
+    def megara(fits_address, data_ext_list=0, hdr_ext_list=(0, 1), pixel_mask=None):
 
         """
 
