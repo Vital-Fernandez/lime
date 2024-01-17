@@ -570,6 +570,7 @@ def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_level
         if input_path.is_file():
             output = load_log(df_variable, page=ext, levels=sample_levels)
         else:
+            _logger.warning(f'Lines bands file not found at {df_variable}')
             output = None
 
     else:

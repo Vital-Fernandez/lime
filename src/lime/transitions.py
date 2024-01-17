@@ -498,9 +498,6 @@ class Line:
         # Check line in log
         self.label = check_line_in_log(label, band)
 
-        # Copy the input configuration dictionary
-        fit_conf = {} if fit_conf is None else fit_conf
-
         # Get label components
         comps_list = self.label.split('_')
         n_comps = len(comps_list)
@@ -541,11 +538,16 @@ class Line:
             else:
                 self.mask = None
 
+        # No band
+        elif band is None:
+            self.mask = None
+
+        # Convert input to numpy array
         else:
-            self.mask = np.array(band)
+            self.mask = np.atleast_1d(band)
 
         # Check if there are masked pixels in the line
-        self.pixel_mask = fit_conf.get(f'{self.label}_mask', 'no')
+        self.pixel_mask = 'no' if fit_conf is None else fit_conf.get(f'{self.label}_mask', 'no')
 
         # Check if the wavelength has decimal transition
         self._decimal_wave = True if '.' in self.label else False
@@ -654,6 +656,11 @@ class Line:
             # Reset and warned the line has a suffix but there are no components provided
             if self.group_label is None:
                 self.merged_check, self.blended_check = False, False
+
+                # Warning incase there is an input configuration but the line is not there
+                if fit_conf is not None:
+                    _logger.warning(f'The {self.label} line has a "_{modularity_label}" suffix but not components were '
+                                    f'specified on the configuration:\n{fit_conf}')
 
         # List of components only for blended
         if (self.merged_check or self.blended_check) and (self.group_label is not None):

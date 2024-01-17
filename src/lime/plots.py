@@ -1465,7 +1465,7 @@ class SpectrumFigures(Plotter):
             _logger.warning(f'Nan or inf entries in axis limit for {self.bands}')
 
         # Residual plot labeling
-        axis.legend(loc='upper left')
+        axis.legend(loc='center right')
         axis.set_ylabel(label_residual, fontsize=22)
 
         # Spectrum mask
