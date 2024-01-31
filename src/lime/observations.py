@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 import pandas as pd
-import requests
 from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
@@ -533,14 +532,14 @@ class Spectrum(LineFinder):
         This method creates a lime.Spectrum object from an observational (.fits) file. The user needs to introduce the
         file address location and the name of the instrument of survey.
 
-        Currently, this method supports NIRSPEC, ISIS, OSIRIS, SDSS and DESI as input instrument sources. This method will
+        Currently, this method supports NIRSPEC, ISIS, OSIRIS and SDSS as input instrument sources. This method will
         lower case the input instrument or survey name.
 
         The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
         user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
 
-        This method should is aware of the instrument observations units and normalization but the user should introduce
-        LiMe.Spectrum arguments (such as the observation redshift).
+        This method provides the instrument observational units and normalization but the user should introduce
+        the additional LiMe.Spectrum arguments (such as the observation redshift).
 
         :param file_address: Input file location address.
         :type file_address: Path, string
@@ -570,30 +569,45 @@ class Spectrum(LineFinder):
         return cls(**obs_args)
 
     @classmethod
-    def from_survey(cls, target_id, survey, program=None, **kwargs):
+    def from_survey(cls, target_id, survey, mask_flux_entries=None, **kwargs):
 
-        # Recover the function to open the fits file
-        fits_reader, url_locator = check_fits_instructions(None, survey, True, cls.__name__)
+        """
 
-        # Get file
-        url_address, url_params = url_locator(target_id, program=program)
-        _logger.info(f'Target object ({target_id}) url located')
+        This method creates a lime.Spectrum object from a survey observational (.fits) file. The user needs to provide an
+        object ID alongside the calague organization labels to identify the file.
 
-        if len(url_address) > 1:
-            url_address = url_address[0]
-            url_params = {'redshift': url_params['redshift'][0]}
+        Currently, this method supports the DESI survey. This method will lower case the input survey name.
 
-        # Read the fits data
-        wave_array, flux_array, err_array, header_list, params_dict = fits_reader(url_address, target_id)
-        params_dict.update(url_params)
-        _logger.info(f'Target object ({target_id}) spectrum downloaded')
+        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
+        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
 
-        # Construct attributes for LiMe object
-        spectrum_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}
-        spectrum_args.update(url_params)
-        spectrum_args.update(kwargs)
+        This method provides the arguments necesary to create the LiMe.Spectrum object. However, the user should provide
+        the indexation values to locate the file on the survey. For example, for the DESI survey these would be the
+        catalogue (i.e. healpix), program (i.e. dark) and release (fuji).
 
-        return cls(**spectrum_args)
+        :param file_address: Input object ID label.
+        :type file_address: str
+
+        :param survey: Input object survey name
+        :type survey: str
+
+        :param mask_flux_entries: List of pixel values to mask from flux array
+        :type mask_flux_entries: list
+
+        :param kwargs: Survey indexation arguments for the object
+
+        :return: lime.Spectrum
+
+        """
+
+        # Create file manager object to administrate the file source and observation properties
+        cls._fitsMgr = OpenFits(target_id, survey, cls.__name__)
+
+        # Load the scientific data from the file
+        fits_args = cls._fitsMgr.parse_data_from_url(cls._fitsMgr.file_address, mask_flux_entries, **kwargs)
+
+        # Create the LiMe object
+        return cls(**fits_args)
 
     def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM, units_wave,
                         units_flux, pixel_mask, label):

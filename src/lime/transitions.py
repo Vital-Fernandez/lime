@@ -291,8 +291,14 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         # Wavelength properties
         wavelength[i], units_wave[i] = check_units_from_wave(line_items[1])
 
-        # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'}
+        # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'} # TODO better do that with optional_comps
         comp_conf = {optC[0]: optC[2:] for optC in line_items[2:]}
+
+        # Check there are no accepted optional components
+        for opt_key in comp_conf.keys():
+            if opt_key != 'm' and opt_key != 'b':
+                if opt_key not in ['k', 'p', 't']:
+                    _logger.warning(f'Optional component "{opt_key}" is not recognised. Please use "_k-", "_p-", "_t-".')
 
         # Kinematic component
         kinem[i] = int(comp_conf.get('k', 0))
@@ -382,6 +388,63 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     return output
 
 
+def label_profiling(profile_comp, default_type='emi'):
+
+    _p_type_list, _p_shape_list = [], []
+    for prof_comp in profile_comp:
+        _line_p_items = prof_comp.split('-')
+
+        # Type of profile
+        _p_shape = _line_p_items[0]
+
+        # In case the user does not provide emi or abs
+        _p_type = 'emi' if len(_line_p_items) == 1 else _line_p_items[1]
+
+        # Emission or absorption
+        _p_type = True if _p_type == default_type else False
+
+        # Append to list
+        _p_shape_list.append(_p_shape)
+        _p_type_list.append(_p_type)
+
+    _p_shape_list, _p_type_list = np.array(_p_shape_list), np.array(_p_type_list)
+
+    return _p_shape_list, _p_type_list
+
+
+def label_mask_assigning(line_label, input_band, blend_check, merged_check, core_comp):
+
+    # TODO what about a "core" label
+
+    if isinstance(input_band, DataFrame):
+
+        # Query for the input label # TODO put a try with .at and the other in the except
+        if line_label in input_band.index:
+            mask = input_band.loc[line_label, 'w1':'w6'].to_numpy().astype(float)
+
+        # Remove blended/merged suffix to check
+        elif (blend_check or merged_check) and (line_label[:-2] in input_band.index):
+            mask = input_band.loc[line_label[:-2], 'w1':'w6'].to_numpy().astype(float)
+
+        # Case where we introduce a line with a different profile (H1_4861A_l)
+        elif core_comp in input_band.index:
+            mask = input_band.loc[core_comp, 'w1':'w6'].to_numpy().astype(float)
+
+        # Could not find the mask
+        else:
+            mask = None
+
+    # No band
+    elif input_band is None:
+        mask = None
+
+    # Convert input to numpy array
+    else:
+        mask = np.atleast_1d(input_band)
+
+    return mask
+
+
 class Particle:
 
     def __init__(self, label: str = None, symbol: str = None, ionization: int = str):
@@ -453,11 +516,14 @@ class Line:
         self.intg_flux, self.intg_flux_err = None, None
         self.peak_wave, self.peak_flux = None, None
         self.eqw, self.eqw_err = None, None
-        self.gauss_flux, self.gauss_flux_err = None, None
-        self.cont, self.std_cont =None, None
+        self.profile_flux, self.profile_flux_err = None, None
+        self.cont, self.cont_err = None, None
         self.m_cont, self.n_cont = None, None
-        self.amp, self.center, self.sigma = None, None, None
-        self.amp_err, self.center_err, self.sigma_err = None, None, None
+        self.amp, self.center, self.sigma, self.gamma = None, None, None, None
+        self.amp_err, self.center_err, self.sigma_err, self.gamma_err = None, None, None, None
+        self.alpha, self.beta = None, None
+        self.alpha_err, self.beta_err = None, None
+        self.frac, self.frac_err = None, None
         self.z_line = z_line
         self.v_r, self.v_r_err = None, None
         self.pixel_vel = None
@@ -467,7 +533,7 @@ class Line:
         self.observations, self.comments = 'no', 'no'
         self.pixel_mask = 'no'
         self.n_pixels = None
-        self.FWHM_intg, self.FWHM_g, self.FWZI = None, None, None
+        self.FWHM_i, self.FWHM_p, self.FWZI = None, None, None
         self.w_i, self.w_f = None, None
         self.v_med, self.v_50 = None, None
         self.v_5, self.v_10 = None, None
@@ -507,7 +573,7 @@ class Line:
 
         # Check the modularity      (only 2 comps)    (case b-6)
         modularity_comp = comps_list[-1] if (comps_list[-1] == 'b') or (comps_list[-1] == 'm') else None
-        self._modularity_component(modularity_comp, fit_conf)
+        self._modularity_component(modularity_comp, fit_conf, band)
 
         # Review the components of the line
         ref_bands_df = band if isinstance(band, DataFrame) else None
@@ -515,36 +581,11 @@ class Line:
         self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = items
 
         # Quick elements for the line profile
-        self._p_type, self._p_shape = [], []
-        for prof_comp in self.profile_comp:
-            _p_shape, _p_type = prof_comp.split('-')
-            _p_type = True if _p_type == 'emi' else False
-            self._p_shape.append(_p_shape)
-            self._p_type.append(_p_type)
-        self._p_type, self._p_shape = np.array(self._p_type), np.array(self._p_shape)
+        self._p_shape, self._p_type = label_profiling(self.profile_comp)
 
         # Provide a bands from the log if possible
-        if isinstance(band, DataFrame):
-
-            # Query for the input label
-            if self.label in band.index:
-                self.mask = band.loc[self.label, 'w1':'w6'].to_numpy().astype(float)
-
-            # Remove blended/merged suffix to check
-            elif (self.blended_check or self.merged_check) and (self.label[:-2] in band.index):
-                self.mask = band.loc[self.label[:-2], 'w1':'w6'].to_numpy().astype(float)
-
-            # Could not find the mask
-            else:
-                self.mask = None
-
-        # No band
-        elif band is None:
-            self.mask = None
-
-        # Convert input to numpy array
-        else:
-            self.mask = np.atleast_1d(band)
+        core_comp = f'{comps_list[0]}_{comps_list[1]}'
+        self.mask = label_mask_assigning(self.label, band, self.blended_check, self.merged_check, core_comp)
 
         # Check if there are masked pixels in the line
         self.pixel_mask = 'no' if fit_conf is None else fit_conf.get(f'{self.label}_mask', 'no')
@@ -560,78 +601,29 @@ class Line:
     @classmethod
     def from_log(cls, label, log=None, norm_flux=1):
 
-        # Recover the label just in case
-        label = check_line_in_log(label, log)
-
         # Create the line object
-        inline = cls(label, interpret=False)
+        inline = cls(label, band=log)
 
-        if log is not None:
+        # TODO loop through the log columns and match with line
+        if label in log.index:
 
-            if label in log.index:
+            # Recover "simple" attributes
+            for i, param in enumerate(_LOG_EXPORT):
 
-                # Recover "simple" attributes
-                for i, param in enumerate(_LOG_EXPORT):
+                param_value = log.at[label, param]
 
-                    param_value = log.at[label, param]
+                # Normalize
+                if _LOG_COLUMNS[param][0]:
+                    param_value = param_value / norm_flux
 
-                    # Normalize
-                    if _LOG_COLUMNS[param][0]:
-                        param_value = param_value / norm_flux
-
-                    inline.__setattr__(param, param_value)
-
-                # Recover "complex" attributes
-                for param in ['particle', 'wavelength', 'latex_label']:
-                    inline.__setattr__(param, log.at[label, param])
-
-                # Band
-                inline.mask = np.array([log.at[label, 'w1'], log.at[label, 'w2'], log.at[label, 'w3'],
-                                        log.at[label, 'w4'], log.at[label, 'w5'], log.at[label, 'w6']])
-
-                # Modularity
-                if inline.group_label == 'none':        # Single line
-                    inline.group_label = None
-                else:
-                    if inline.label.endswith('_m'):     # Merged line
-                        inline.merged_check = True
-                    else:
-                        inline.blended_check = True     # Blended line
-
-                # Units transition
-                if inline.merged_check:
-                    ref_line_units = label[:-1].split('_')[1]
-                else:
-                    ref_line_units = label.split('_')[1]
-                _, inline.units_wave = check_units_from_wave(ref_line_units)
-
-                # List comps
-                if inline.blended_check:
-                    inline.list_comps = array(inline.group_label.split('+'))
-                else:
-                    inline.list_comps = array([inline.label])
-
-            else:
-                _logger.warning(f'Input line {inline.label} not found in log')
+                inline.__setattr__(param, param_value)
 
         else:
-            _logger.warning(f'No lines log introduced for the line {inline.label}')
-
-        # Assign profile if it does not exist
-        inline.profile_comp = [_DEFAULT_PROFILE] * len(inline.list_comps) if inline.profile_comp is None else inline.profile_comp
-
-        # Quick elements for the line profile # TODO read this from column?
-        inline._p_type, inline._p_shape = [], []
-        for prof_comp in inline.profile_comp:
-            _p_shape, _p_type = prof_comp.split('-')
-            _p_type = True if _p_type == 'emi' else False
-            inline._p_shape.append(_p_shape)
-            inline._p_type.append(_p_type)
-        inline._p_type, inline._p_shape = np.array(inline._p_type), np.array(inline._p_shape)
+            _logger.warning(f'Input line {inline.label} not found in log')
 
         return inline
 
-    def _modularity_component(self, modularity_label, fit_conf=None):
+    def _modularity_component(self, modularity_label, fit_conf=None, bands_log=None):
 
         # Not a single line
         if modularity_label is not None:
@@ -646,12 +638,32 @@ class Line:
                 raise LiMe_Error(f'The modularity component {modularity_label} in the input line "{self.label}" is not'
                                  f' recognized')
 
+        # Restore the group label from the log if provided
+        group_label = None
+        if bands_log is not None:
+            if isinstance(bands_log, pd.DataFrame):
+                try:
+                    group_label = bands_log.at[self.label, 'group_label']
+                except KeyError:
+                    group_label = None
+
+                # Check if we have a blended or merged line
+                if group_label is not None:
+                    if group_label != 'none':
+                        if self.merged_check is False:
+                            self.blended_check = True
+                    else:
+                        group_label = None
+
         # Recover the profile components
         if self.merged_check or self.blended_check:
 
             # Check for profile label
             # TODO check this fit_conf is nan
-            self.group_label = None if fit_conf is None else fit_conf.get(self.label, None)
+            if group_label is None:
+                self.group_label = None if fit_conf is None else fit_conf.get(self.label, None)
+            else:
+                self.group_label = group_label
 
             # Reset and warned the line has a suffix but there are no components provided
             if self.group_label is None:

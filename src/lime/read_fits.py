@@ -1,5 +1,4 @@
 from pathlib import Path
-import requests
 
 import numpy as np
 from astropy.io import fits
@@ -139,13 +138,17 @@ def check_fits_source(fits_source, lime_object=None, load_function=None):
     return fits_source, spectrum_type
 
 
-def check_fits_location(fits_address, lime_object=None):
+def check_fits_location(fits_address, lime_object=None, source=None):
 
     # Input address
     if fits_address is not None:
 
+        # Case of surveys
+        if source in ['desi']:
+            output = fits_address, source
+
         # Special case for sample files reading
-        if lime_object == 'Sample':
+        elif lime_object == 'Sample':
             if fits_address is not None:
                 fits_folder = Path(fits_address)
                 if not fits_folder.is_dir():
@@ -215,7 +218,7 @@ def check_fits_instructions(fits_source, online_provider=False):
 
     if fits_source is not None:
 
-        fits_manager = OpenFits if online_provider is False else OpenFitsSurvey
+        fits_manager = OpenFits
 
         # Check LiMe can handle source type
         if hasattr(fits_manager, fits_source):
@@ -305,7 +308,7 @@ class OpenFits:
         self.source, self.spectrum_check = check_fits_source(file_source, lime_object, load_function)
 
         # Check file or url
-        self.file_address, self.online_check = check_fits_location(file_address, lime_object)
+        self.file_address, self.online_check = check_fits_location(file_address, lime_object, self.source)
 
         # Recover the function to open the fits file
         self.fits_reader = check_fits_instructions(self.source, self.online_check)
@@ -336,19 +339,29 @@ class OpenFits:
 
         return fits_args
 
-    # def load_function(self, log_df, id_spec, root_address, **kwargs):
-    #
-    #     # Run the load function
-    #     load_function_output = self.load_function(log_df, id_spec, root_address)
-    #
-    #     # Proceed to create LiMe object if necessary
-    #     if isinstance(load_function_output, dict):
-    #         obs_args = {**load_function_output, **kwargs}
-    #         obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-    #     else:
-    #         obs = load_function_output
-    #
-    #     return obs
+    def parse_data_from_url(self, id_label, pixel_mask=None, **kwargs):
+
+        # Read the fits data
+        wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(id_label,  **kwargs)
+
+        # Mask requested entries
+        if pixel_mask is not None:
+            pixel_mask = np.atleast_1d(pixel_mask)
+            mask_array = np.zeros(flux_array.shape).astype(bool)
+            for entry in pixel_mask:
+                if entry == 'negative':
+                    idcs = flux_array < 0
+                else:
+                    idcs = (flux_array == entry)
+                mask_array[idcs] = True
+        else:
+            mask_array = None
+
+        # Construct attributes for LiMe object
+        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array, 'pixel_mask': mask_array,
+                     **fits_params}
+
+        return fits_args
 
     def default_file_parser(self, log_df, id_spec, root_address, **kwargs):
 
@@ -659,50 +672,18 @@ class OpenFits:
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
-
-
-class OpenFitsSurvey:
-
     @staticmethod
-    def url(fits_address, data_ext_list, hdr_ext_list=None):
+    def desi(target_id, root_url='https://data.desi.lbl.gov/public/edr/spectro/redux', **kwargs):
 
-        return
+        # Get the observation program
+        release = kwargs.get('release')
+        program = kwargs.get('program')
+        catalogue = kwargs.get('catalogue')
 
-    @staticmethod
-    def desi(fits_address, data_ext_list, hdr_ext_list=None):
-
-        # Reshape into an array if necessary
-        data_ext_list, hdr_ext_list = np.atleast_1d(data_ext_list), np.atleast_1d(hdr_ext_list)
-
-        # Read the url data
-        spectra_dict = {}
-
-        with fits.open(fits_address, use_fsspec=True) as hdulist:
-
-            file_idtargets = hdulist["FIBERMAP"].data['TARGETID']
-            obj_idrows = np.where(np.isin(file_idtargets, data_ext_list))[0]
-
-            for i, id_obj in enumerate(obj_idrows):
-                spectra_dict = {}
-                for band in ('B', 'R', 'Z'):
-                    spectra_dict[band] = {'wave': hdulist[f'{band}_WAVELENGTH'].section[:],
-                                          'flux': hdulist[f'{band}_FLUX'].section[obj_idrows[i], :],
-                                          'ivar': hdulist[f'{band}_IVAR'].section[obj_idrows[i], :]}
-
-        # Re-construct spectrum arrays
-        wave, flux, err_flux = desi_bands_reconstruction(spectra_dict)
-
-        # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['desi'].copy()
-
-        return wave, flux, err_flux, None, params_dict
-
-
-class UrlFitsSurvey:
-
-    @staticmethod
-    def desi(target_id, program, release='fuji', root_url='https://data.desi.lbl.gov/public/edr/spectro/redux',
-             catalogue='healpix'):
+        # Check the user specified the
+        for (param, param_value) in zip(['release', 'program', 'catalogue'], [release, program, catalogue]):
+            if param_value is None:
+                raise LiMe_Error(f'To create Spectrum from DESI observation you need to specify the "{param}" argument')
 
         # Select the catalogue type
         if catalogue == 'healpix':
@@ -737,4 +718,79 @@ class UrlFitsSurvey:
         # Additional data from the url site
         params_dict = {'redshift': redshift}
 
-        return url_list, params_dict
+        # Check the objects found
+        if len(url_list) == 0:
+            raise LiMe_Error(f'No observations for Object ID {target_id} were found for the input {program} (program), '
+                             f'{catalogue} (catalogue), {release} (release)')
+        elif len(url_list) > 1:
+            url = url_list[0]
+            _logger.warning(f' Multiple observations for Object ID {target_id} found for the input {program} (program),'
+                             f' {catalogue} (catalogue), {release} (release)\nUsing the first observation.')
+        else:
+            url = url_list[0]
+
+        # Reshape into an array if necessary
+        # data_ext_list, hdr_ext_list = np.atleast_1d(data_ext_list), np.atleast_1d(hdr_ext_list)
+
+        # Read the url data
+        spectra_dict = {}
+
+        #
+        with fits.open(url, use_fsspec=True) as hdulist:
+
+            file_idtargets = hdulist["FIBERMAP"].data['TARGETID']
+            obj_idrows = np.where(np.isin(file_idtargets, target_id))[0]
+
+            for i, id_obj in enumerate(obj_idrows):
+                spectra_dict = {}
+                for band in ('B', 'R', 'Z'):
+                    spectra_dict[band] = {'wave': hdulist[f'{band}_WAVELENGTH'].section[:],
+                                          'flux': hdulist[f'{band}_FLUX'].section[obj_idrows[i], :],
+                                          'ivar': hdulist[f'{band}_IVAR'].section[obj_idrows[i], :]}
+
+        # Re-construct spectrum arrays
+        wave, flux, err_flux = desi_bands_reconstruction(spectra_dict)
+
+        # Spectrum properties
+        params_dict = {'redshift': redshift, **SPECTRUM_FITS_PARAMS['desi']}
+
+        return wave, flux, err_flux, None, params_dict
+
+# class OpenFitsSurvey:
+#
+#     @staticmethod
+#     def url(fits_address, data_ext_list, hdr_ext_list=None):
+#
+#         return
+#
+#     @staticmethod
+#     def desi(fits_address, data_ext_list, hdr_ext_list=None):
+#
+#         # Reshape into an array if necessary
+#         data_ext_list, hdr_ext_list = np.atleast_1d(data_ext_list), np.atleast_1d(hdr_ext_list)
+#
+#         # Read the url data
+#         spectra_dict = {}
+#
+#         with fits.open(fits_address, use_fsspec=True) as hdulist:
+#
+#             file_idtargets = hdulist["FIBERMAP"].data['TARGETID']
+#             obj_idrows = np.where(np.isin(file_idtargets, data_ext_list))[0]
+#
+#             for i, id_obj in enumerate(obj_idrows):
+#                 spectra_dict = {}
+#                 for band in ('B', 'R', 'Z'):
+#                     spectra_dict[band] = {'wave': hdulist[f'{band}_WAVELENGTH'].section[:],
+#                                           'flux': hdulist[f'{band}_FLUX'].section[obj_idrows[i], :],
+#                                           'ivar': hdulist[f'{band}_IVAR'].section[obj_idrows[i], :]}
+#
+#         # Re-construct spectrum arrays
+#         wave, flux, err_flux = desi_bands_reconstruction(spectra_dict)
+#
+#         # Spectrum properties
+#         params_dict = SPECTRUM_FITS_PARAMS['desi'].copy()
+#
+#         return wave, flux, err_flux, None, params_dict
+
+
+

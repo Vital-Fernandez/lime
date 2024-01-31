@@ -37,8 +37,7 @@ def test_save_cfg():
     copy_cfg['new_line_fitting'] = {'O3_5007A_kinem': "O3_4959A",
                                     'O3_5007A_k-1_kinem': "O3_4959A_k-1",
                                     'He1_5016A_center': "min:5014,max:5018",
-                                    'He1_5016A_sigma': "min:1.0,max:2.0"
-                                    }
+                                    'He1_5016A_sigma': "min:1.0,max:2.0"}
 
     lime.save_cfg(copy_cfg, save_file_address)
 
@@ -72,11 +71,11 @@ def test_save_cfg():
 def test_log_parameters_calculation():
 
     log_lines = lime.load_log(lines_log_address)
-    lime.extract_fluxes(log_lines, flux_type='mixture')
+    lime.extract_fluxes(log_lines, flux_type='profile')
 
     parameters = ['eqw_new', 'eqw_new_err']
 
-    formulation = ['line_flux/cont', '(line_flux/cont) * sqrt((line_flux_err/gauss_flux)**2 + (std_cont/cont)**2)']
+    formulation = ['line_flux/cont', '(line_flux/cont) * sqrt((line_flux_err/line_flux)**2 + (cont_err/cont)**2)']
 
     lime.log_parameters_calculation(log_lines, parameters, formulation)
     assert 'eqw_new' in log_lines.columns
@@ -84,8 +83,8 @@ def test_log_parameters_calculation():
     for label in log_lines.index:
         line = lime.Line.from_log(label, log_lines)
         if line.blended_check is False:
-            param_value = log_lines.loc[label, 'eqw_new']
             param_exp_value = log_lines.loc[label, 'eqw']
+            param_value = log_lines.loc[label, 'eqw_new']
             param_exp_err = log_lines.loc[label, f'eqw_new_err']
             assert np.allclose(param_value, param_exp_value, atol=np.abs(param_exp_err * 2), equal_nan=True)
 

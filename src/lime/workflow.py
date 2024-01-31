@@ -291,7 +291,7 @@ class SpecTreatment(LineFitting):
                                  self._spec.inst_FWHM)
 
             # Recalculate the SNR with the gaussian parameters
-            err_cont = self.line.std_cont if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
+            err_cont = self.line.cont_err if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
             self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
 
             # Save the line parameters to the dataframe
@@ -403,27 +403,14 @@ class SpecTreatment(LineFitting):
             bands_matrix = bands.loc[:, 'w1':'w6'].to_numpy()
             n_lines = label_list.size
 
-            # # Check the mask values
-            # if self.mask is not None:
-            #
-            #     if np.any(np.isnan(self.mask)): # TODO Add this to the fitting section
-                                                    # TODO sorted arrays for increasing wavelength and decreasing frequency
-            #         _logger.warning(f'The line {label} band contains nan entries: {self.mask}')
-            #
-            #     if not all(diff(self.mask) >= 0):
-            #         _logger.info(f'The line {label} band wavelengths are not sorted: {self.mask}')
-            #
-            #     if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
-            #         _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths:'
-            #                         f' w3 = {self.mask[2]};  w4 = {self.mask[3]}')
-
-            # _logger.info(f'The line {self.label} has the "{modularity_label}" suffix but the transition components '
-            #              f'have not been specified') # TODO move these warnings just for the fittings (not the creation)
-
-            if progress_output is not None:
-                print(f'\nLine fitting progress:')
-            pbar = ProgressBar(progress_output, f'{n_lines} lines')
+            # Loop through the lines
             if n_lines > 0:
+
+                # On screen progress bar
+                if progress_output is not None:
+                    print(f'\nLine fitting progress:')
+                pbar = ProgressBar(progress_output, f'{n_lines} lines')
+
                 for i in np.arange(n_lines):
 
                     # Current line
@@ -447,7 +434,7 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def continuum(self, degree_list, threshold_list, smooth_length=None, plot_steps=True):
+    def continuum(self, degree_list, threshold_list, smooth_length=None, plot_steps=False):
 
         """
 

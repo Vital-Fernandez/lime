@@ -121,9 +121,9 @@ class TestCubeClass:
 
         # Test 3 lines # TODO review these fluxes
         assert np.sum(spax_log.index.isin(['O3_5007A', 'O3_5007A_k-1', 'He1_5016A'])) == 3
-        assert np.isclose(spax_log.loc['O3_5007A', 'gauss_flux'], orig_log.loc['O3_5007A', 'gauss_flux'])
-        assert np.isclose(spax_log.loc['O3_5007A_k-1', 'gauss_flux'], orig_log.loc['O3_5007A_k-1', 'gauss_flux'])
-        assert np.isclose(spax_log.loc['He1_5016A', 'gauss_flux'], orig_log.loc['He1_5016A', 'gauss_flux'])
+        assert np.isclose(spax_log.loc['O3_5007A', 'profile_flux'], orig_log.loc['O3_5007A', 'profile_flux'])
+        assert np.isclose(spax_log.loc['O3_5007A_k-1', 'profile_flux'], orig_log.loc['O3_5007A_k-1', 'profile_flux'])
+        assert np.isclose(spax_log.loc['He1_5016A', 'profile_flux'], orig_log.loc['He1_5016A', 'profile_flux'])
 
         return
 
@@ -162,7 +162,7 @@ class TestCubeClass:
         lime.save_parameter_maps(spatial_log_address, ouput_folder, param_list, lines_list,
                                  mask_file=spatial_mask_address, output_file_prefix='SHOC579_', wcs=wcs)
 
-        param_list = ['gauss_flux', 'gauss_flux_err']
+        param_list = ['profile_flux', 'profile_flux_err']
         lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A']
         lime.save_parameter_maps(spatial_log_address, ouput_folder, param_list, lines_list,
                                  mask_file=spatial_mask_address, wcs=wcs)
@@ -184,7 +184,7 @@ class TestCubeClass:
         idx_j, idx_x = [int(item) for item in spaxel_label.split('-')]
 
         assert np.isclose(orig_log.loc['O3_5007A', 'intg_flux'], int_flux_map[idx_j, idx_x])
-        assert np.isclose(orig_log.loc['O3_5007A', 'gauss_flux'], gauss_flux_map[idx_j, idx_x])
+        assert np.isclose(orig_log.loc['O3_5007A', 'profile_flux'], gauss_flux_map[idx_j, idx_x])
 
         return
 

@@ -56,6 +56,11 @@ PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
 COORD_KEYS = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
               'CTYPE1', 'CTYPE2']
 
+def mult_err_propagation(nominal_array, err_array, result):
+
+    err_result = result * np.sqrt(np.sum(np.power(err_array/nominal_array, 2)))
+
+    return err_result
 
 # Number conversion to Roman style
 def int_to_roman(num):
@@ -71,8 +76,8 @@ def int_to_roman(num):
 # Favoured method to get line fluxes according to resolution
 def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='line_flux', column_positions=None):
 
-    if flux_type not in ('mixture', 'intg', 'gauss'):
-        raise LiMe_Error(f'Flux type "{flux_type}" is not recognized please one of "intg", "gauss", or "mixture" ')
+    if flux_type not in ('mixture', 'intg', 'profile'):
+        raise LiMe_Error(f'Flux type "{flux_type}" is not recognized please one of "intg", "profile", or "mixture" ')
 
     # Get indeces of blended lines
     if not isinstance(log.index, pd.MultiIndex):
@@ -87,8 +92,8 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
     if flux_type == 'mixture' and np.any(idcs_blended):
         obsFlux = log['intg_flux'].to_numpy(copy=True)
         obsErr = log['intg_flux_err'].to_numpy(copy=True)
-        obsFlux[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_flux'].to_numpy(copy=True)
-        obsErr[idcs_blended.values] = log.loc[idcs_blended.values, 'gauss_flux_err'].to_numpy(copy=True)
+        obsFlux[idcs_blended.values] = log.loc[idcs_blended.values, 'profile_flux'].to_numpy(copy=True)
+        obsErr[idcs_blended.values] = log.loc[idcs_blended.values, 'profile_flux_err'].to_numpy(copy=True)
 
     # Use the one requested by the user
     else:
@@ -172,7 +177,7 @@ def check_lines_normalization(input_lines, norm_line, log):
 
 
 # Compute the fluxes
-def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='gauss_flux', column_name='line_flux',
+def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_flux', column_name='line_flux',
                      column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line']):
 
     '''

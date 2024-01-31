@@ -55,8 +55,7 @@ spax.save_log(lines_log_file)
 
 # Plots
 spax.plot.spectrum(include_fits=True)
-shoc579.plot.cube('H1_6563A')
+# shoc579.plot.cube('H1_6563A')
 
 # Cube fitting
-shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True,
-                         mask_list=['MASK_0'])
+# shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True, mask_list=['MASK_0'])

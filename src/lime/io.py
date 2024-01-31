@@ -77,6 +77,10 @@ _LOG_EXPORT_TYPES = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.to_nump
 _LOG_EXPORT_DICT = dict(zip(_LOG_EXPORT, _LOG_EXPORT_TYPES))
 _LOG_EXPORT_RECARR = np.dtype(list(_LOG_EXPORT_DICT.items()))
 
+# Attributes from the profile fittings
+_ATTRIBUTES_PROFILE = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Profile_attributes.to_numpy().astype(bool)].index.to_numpy()
+_RANGE_PROFILE_FIT = np.arange(_ATTRIBUTES_PROFILE.size)
+
 # Attributes with measurements for log
 _ATTRIBUTES_FIT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Fit_attributes.to_numpy().astype(bool)].index.to_numpy()
 _RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
@@ -84,16 +88,6 @@ _RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
 # Dictionary with the parameter dtypes
 _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.to_numpy(),
                            _PARAMS_CONF_TABLE.dtype.to_numpy()))
-
-# Numpy recarray dtype for the pandas dataframe creation
-
-GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
-
-FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
-FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lambda)_error', 'I(lambda)', 'I(lambda)_error']
-
-KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}{s}\right)$', r'$\sigma_{int}\left(\nicefrac{km}{s}\right)$', r'Flux $(\nicefrac{erg}{cm^{-2} s^{-1} \AA^{-1})}$']
-KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
 
 # TODO replace this error with the one of .ini
 class LiMe_Error(Exception):
@@ -397,6 +391,8 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
             lines_log = log
             param_dtypes = list(_LOG_TYPES_DICT.values())
 
+        # Clear empty rows
+
         # Default txt log with the complete information
         if file_type == '.txt':
             with open(log_path, 'wb') as output_file:
@@ -468,23 +464,6 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     # Save the data
                     wb.save(log_path)
 
-                    # Add new sheet
-
-                    # df_old = load_log(log_path)
-                    # # with pd.ExcelWriter(log_path, engine='openpyxl') as writer:
-                    # #
-                    # #     book = openpyxl.load_workbook(log_path)
-                    # #     writer.book = book
-                    # #     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    # #     lines_log.to_excel(writer, sheet_name=page, index=True)
-                    #     # dataframe.to_excel(writer, sheet_name=page, index=True)
-                    #
-                    #     # if safe_version:
-                    #     #     df_empty = pd.DataFrame()
-                    #     #     df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
-                    #
-                    #     # book.close()
-
             else:
                 _logger.critical(f'openpyxl is not installed. Lines log {file_address} could not be saved')
 
@@ -532,10 +511,10 @@ def results_to_log(line, log, norm_flux):
         for j in _RANGE_ATTRIBUTES_FIT:
 
             param = _ATTRIBUTES_FIT[j]
+            param_value = line.__getattribute__(param)
 
             # Get component parameter
-            param_value = line.__getattribute__(param)
-            if _LOG_COLUMNS[param][2] and (param_value is not None):
+            if _LOG_COLUMNS[param][3] and (param_value is not None):
                 param_value = param_value[i]
 
             # De-normalize
