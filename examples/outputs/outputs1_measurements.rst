@@ -74,13 +74,13 @@ assumption on the emission line profile shape.
 
 * **cont** (``.cont``, ``float``): This variable is the flux of the linear continuum at the ``.peak_wave``.
 
-* **std_cont**  (``.std_cont``, ``float``): This variable is standard deviation of the adjacent continua flux. It is
+* **cont_err**  (``.cont_err``, ``float``): This variable is standard deviation of the adjacent continua flux. It is
   calculated from the observed continuum minus the linear model for both continua masks.
 
 * **intg_flux** (``.intg_flux``, ``float``): This variable contains measurement of the integrated flux.
   This value is calculated via a Monte Carlo algorithm:
 
-  * If the pixel error spectrum is not provided by the user, the algorithm uses the line ``.std_cont`` as a uniform
+  * If the pixel error spectrum is not provided by the user, the algorithm uses the line ``.cont_err`` as a uniform
     uncertainty for all the line pixels.
 
   * The pixel error is added stochastically to each pixel in the line region mask.
@@ -111,7 +111,7 @@ assumption on the emission line profile shape.
   from the input  user mask.
 
 * **eqw_err** (``.eqw``, ``float`` or ``np.array()``): This parameter is the uncertainty in the equivalent width. It is
-  calculated from a Monte Carlo propagation of the  ``.cont`` and its ``.std_cont`` and the uncertainty of the line flux.
+  calculated from a Monte Carlo propagation of the  ``.cont`` and its ``.cont_err`` and the uncertainty of the line flux.
 
 * **z_line** (``.z_line``, ``float``): This variable is the emission line redshift:
 
@@ -137,7 +137,7 @@ assumption on the emission line profile shape.
       \frac{S}{N}_{line}\approx\frac{\sqrt{2\pi}}{6}\frac{A_{line}}{\sigma_{cont}}\sqrt{N}\approx\frac{F_{line}}{\sigma_{cont}\cdot\sqrt{N}}
 
   where :math:`A_{line}` is the amplitude of the line, :math:`F_{line}` is the integrated flux of the line (``.intg_flux``)
-  :math:`\sigma_{cont}` is the continuum flux standard deviation (``.std_cont``) and :math:`N` is the number of pixels
+  :math:`\sigma_{cont}` is the continuum flux standard deviation (``.cont_err``) and :math:`N` is the number of pixels
   in the input line band. The later parameter approximates to :math:`N=6\sigma` in single lines, where :math:`\sigma`
   is the gaussian profile standard deviation.
 

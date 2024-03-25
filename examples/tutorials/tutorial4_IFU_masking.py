@@ -53,7 +53,7 @@ spatial_mask_SN_line = '../sample_data/SHOC579_mask.fits'
 spatial_mask_SN_cont = '../sample_data/SHOC579_mask_SN_cont.fits'
 
 shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_line)
-shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_cont)
+shoc579.spatial_masking('O3_4363A', param='SN_cont', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_cont)
 
 # We can visualize this mask using the .plot.cube function
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_cont)

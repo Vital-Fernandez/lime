@@ -45,7 +45,8 @@ shoc579 = lime.Cube(wave, flux_cube, err_cube, redshift=redshift, norm_flux=norm
                     pixel_mask=np.isnan(err_cube))
 
 # ---------------- Spectrum
-spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1])
+spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1], id_label='SHOC579-Manga38-35')
+spax.plot.spectrum(rest_frame=True)
 wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, spax.err_flux.data * norm_flux
 np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
@@ -55,8 +56,7 @@ spax.save_log(lines_log_file)
 
 # Plots
 spax.plot.spectrum(include_fits=True)
-shoc579.plot.cube('H1_6563A')
+# shoc579.plot.cube('H1_6563A')
 
 # Cube fitting
-shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True,
-                         mask_list=['MASK_0'])
+# shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True, mask_list=['MASK_0'])

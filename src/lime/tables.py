@@ -73,7 +73,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
     return formatted_entry
 
 
-def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None, store_version=True):
+def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf', lines_notation=None, **kwargs):
 
     # Check pylatex is installed else leave
     if pylatex_check:
@@ -111,9 +111,9 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         lastRow_check = True if lineLabel == obsLines[-1] else False
         pdf.addTableRow(row_raw, last_row=lastRow_check)
 
-    if store_version:
-        versioning = r'\textsc{{{}}} {}'.format(f'LiMe', __version__)
-        pdf.table.add_row([pylatex.NoEscape(r'\footnotesize{{{}}}'.format(versioning))],
+    for key, value in kwargs.items():
+        text_line = r'{}:{}'.format(key.replace('_', '\_'), value)
+        pdf.table.add_row([pylatex.NoEscape(r'\footnotesize{{{}}}'.format(text_line))],
                           escape=False, strict=False)
 
     # Save the pdf table

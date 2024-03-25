@@ -5,11 +5,10 @@ from pathlib import Path
 from astropy.io import fits
 from time import time
 
-from . import Error
 from .model import LineFitting, signal_to_noise_rola
 from .tools import define_masks, ProgressBar, logs_into_fits
 from .transitions import Line
-from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error
+from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error, check_fit_conf
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -119,6 +118,7 @@ def check_spectrum_bands(line, wave_rest_array):
     return valid_check
 
 
+
 def check_cube_bands(input_bands, mask_list, fit_cfg):
 
     if input_bands is None:
@@ -190,7 +190,7 @@ class SpecTreatment(LineFitting):
         self.line = None
 
     def bands(self, label, bands=None, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              temp=10000.0):
+              temp=10000.0, id_conf_prefix=None, default_conf_prefix='default'):
 
         """
 
@@ -246,13 +246,20 @@ class SpecTreatment(LineFitting):
         :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
         :type temp: bool, optional
 
+        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_conf_prefix: str, optional
+
+        :param id_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
+        :type id_conf_prefix: str, optional
+
         """
 
         # Make a copy of the fitting configuartion
-        fit_conf = {} if fit_conf is None else fit_conf.copy()
+        # fit_conf = {} if fit_conf is None else fit_conf.copy()
+        input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
 
         # Interpret the input line
-        self.line = Line(label, bands, fit_conf, profile, cont_from_bands)
+        self.line = Line(label, bands, input_conf, profile, cont_from_bands)
 
         # Check if the line location is provided
         bands_integrity = check_spectrum_bands(self.line, self._spec.wave_rest)
@@ -279,7 +286,7 @@ class SpecTreatment(LineFitting):
             self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr, emission_check)
 
             # Import kinematics if requested
-            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, fit_conf)
+            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.log, self._spec.units_wave, input_conf)
 
             # Combine bands
             idcsLine = idcsEmis + idcsCont
@@ -287,11 +294,11 @@ class SpecTreatment(LineFitting):
             emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
 
             # Gaussian fitting
-            self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, fit_conf, min_method, temp,
+            self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, input_conf, min_method, temp,
                                  self._spec.inst_FWHM)
 
             # Recalculate the SNR with the gaussian parameters
-            err_cont = self.line.std_cont if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
+            err_cont = self.line.cont_err if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
             self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
 
             # Save the line parameters to the dataframe
@@ -390,40 +397,28 @@ class SpecTreatment(LineFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            fit_conf = {} if fit_conf is None else fit_conf
-            input_conf = recover_level_conf(fit_conf, id_conf_prefix, default_conf_prefix)
+            # fit_conf = {} if fit_conf is None else fit_conf
+            # input_conf = recover_level_conf(fit_conf, id_conf_prefix, default_conf_prefix)
+            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
 
             # Line detection if requested
             if line_detection:
                 detect_conf = input_conf.get('line_detection', {})
                 bands = self._spec.line_detection(bands, **detect_conf)
 
-            # Loop through the lines
+            # Loop through the lines # TODO exclude kinematic components, use the core elements...
             label_list = bands.index.to_numpy()
             bands_matrix = bands.loc[:, 'w1':'w6'].to_numpy()
             n_lines = label_list.size
 
-            # # Check the mask values
-            # if self.mask is not None:
-            #
-            #     if np.any(np.isnan(self.mask)): # TODO Add this to the fitting section
-                                                    # TODO sorted arrays for increasing wavelength and decreasing frequency
-            #         _logger.warning(f'The line {label} band contains nan entries: {self.mask}')
-            #
-            #     if not all(diff(self.mask) >= 0):
-            #         _logger.info(f'The line {label} band wavelengths are not sorted: {self.mask}')
-            #
-            #     if not all(self.mask[2] < self.wavelength) and not all(self.wavelength < self.mask[3]):
-            #         _logger.warning(f'The line {label} transition at {self.wavelength} is outside the line band wavelengths:'
-            #                         f' w3 = {self.mask[2]};  w4 = {self.mask[3]}')
-
-            # _logger.info(f'The line {self.label} has the "{modularity_label}" suffix but the transition components '
-            #              f'have not been specified') # TODO move these warnings just for the fittings (not the creation)
-
-            if progress_output is not None:
-                print(f'\nLine fitting progress:')
-            pbar = ProgressBar(progress_output, f'{n_lines} lines')
+            # Loop through the lines
             if n_lines > 0:
+
+                # On screen progress bar
+                if progress_output is not None:
+                    print(f'\nLine fitting progress:')
+                pbar = ProgressBar(progress_output, f'{n_lines} lines')
+
                 for i in np.arange(n_lines):
 
                     # Current line
@@ -433,7 +428,8 @@ class SpecTreatment(LineFitting):
                     pbar.output_message(i, n_lines, pre_text="", post_text=f'({line})')
 
                     # Fit the lines
-                    self.bands(line, bands_matrix[i], input_conf, min_method, profile, cont_from_bands, temp)
+                    self.bands(line, bands_matrix[i], input_conf, min_method, profile, cont_from_bands, temp,
+                               id_conf_prefix=None, default_conf_prefix=None)
 
                     if plot_fit:
                         self._spec.plot.bands()
@@ -447,7 +443,7 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def continuum(self, degree_list, threshold_list, smooth_length=None, plot_steps=True):
+    def continuum(self, degree_list, threshold_list, smooth_length=None, plot_steps=False):
 
         """
 
@@ -539,7 +535,7 @@ class CubeTreatment(LineFitting):
     def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
                      temp=10000.0, default_conf_prefix='default', line_detection=False, progress_output='bar',
-                     plot_fit=False, header=None, delete_after_join=True):
+                     plot_fit=False, header=None, join_output_files=True):
 
         """
 
@@ -625,9 +621,10 @@ class CubeTreatment(LineFitting):
         :param header: Dictionary for parameter ".fits" file headers.
         :type header: dict, optional
 
-        :param delete_after_join: Delete individual logs from each spatial mask after they have been joined into a single
-                                  file. The default value is True.
-        :type delete_after_join: int, optional
+        :param join_output_files: In the case of multiple masks, join the individual output ".fits" files into a single
+                                  one. If set to False there will be one output file named per mask named after it. The
+                                  default value is True.
+        :type join_output_files: bool, optional
 
         """
         if bands is not None:
@@ -638,20 +635,19 @@ class CubeTreatment(LineFitting):
         mask_list = np.array(list(mask_maps.keys()))
         mask_data_list = list(mask_maps.values())
 
-        # Default fitting configuration
-        fit_conf = {} if fit_conf is None else fit_conf.copy()
+        # Check the mask configuration is included if there are no masks
+        input_masks = mask_list if bands is None else None
+        input_conf = check_fit_conf(fit_conf, default_key=None, group_key=None, group_list=input_masks)
 
         # Check we are not missing bands
-        check_cube_bands(bands, mask_list, fit_conf)
+        # check_cube_bands(bands, mask_list, fit_conf)
 
         # Check if the output log folder exists
         output_address = Path(output_address)
         address_dir = output_address.parent
         if not address_dir.is_dir():
             raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
-
         address_stem = output_address.stem
-        # address_stem.with_suffix(f'_{"MASK1"}.fits')
 
         # Determine the spaxels to treat at each mask
         spax_counter, total_spaxels, spaxels_dict = 0, 0, {}
@@ -680,7 +676,8 @@ class CubeTreatment(LineFitting):
             idcs_spaxels = spaxels_dict[i]
 
             # Recover the fitting configuration
-            mask_conf = recover_level_conf(fit_conf, default_conf_prefix, mask_name)
+            # mask_conf = recover_level_conf(fit_conf, default_conf_prefix, mask_name)
+            mask_conf = check_fit_conf(input_conf, default_conf_prefix, mask_name)
 
             # Load the mask log if provided
             if bands is None:
@@ -752,9 +749,16 @@ class CubeTreatment(LineFitting):
             elapsed_time = end_time - start_time
             print(f'\n{n_lines} lines measured in {elapsed_time/60:0.2f} minutes.')
 
-        output_comb_file = f'{address_dir/address_stem}.fits'
-        print(f'\nJoining spatial log files ({",".join(mask_list)}) -> {output_comb_file}')
-        logs_into_fits(mask_log_files_list, output_comb_file, delete_after_join)
+        if join_output_files:
+            output_comb_file = f'{address_dir/address_stem}.fits'
+
+            # In case of only one file just rename it
+            if len(mask_list) == 1:
+                mask_0_path = Path(mask_log_files_list[0])
+                mask_0_path.rename(Path(output_comb_file))
+            else:
+                print(f'\nJoining spatial log files ({",".join(mask_list)}) -> {output_comb_file}')
+                logs_into_fits(mask_log_files_list, output_comb_file, delete_after_join=join_output_files)
 
         return
 

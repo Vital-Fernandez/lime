@@ -39,7 +39,7 @@ spaxel.load_log(output_lines_log_file, page='38-35_LINELOG')
 spaxel.plot.grid()
 
 # Export the measurements log as maps:
-param_list = ['intg_flux', 'intg_flux_err', 'gauss_flux', 'gauss_flux_err', 'v_r', 'v_r_err']
+param_list = ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err', 'v_r', 'v_r_err']
 lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A', 'S3_6312A', 'S3_9069A', 'S3_9531A']
 lime.save_parameter_maps(output_lines_log_file, '../sample_data/', param_list, lines_list,
                          mask_file=spatial_mask_file, output_file_prefix='SHOC579_', wcs=wcs)
@@ -50,7 +50,7 @@ lines_ratio = {'H1': ['H1_6563A', 'H1_4861A'],
                'S3': ['S3_9531A', 'S3_9069A']}
 
 # State the parameter map file
-fits_file = f'../sample_data/SHOC579_gauss_flux.fits'
+fits_file = f'../sample_data/SHOC579_profile_flux.fits'
 
 # Loop through the line ratios
 for ion, lines in lines_ratio.items():

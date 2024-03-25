@@ -1,5 +1,4 @@
 __all__ = [
-    'load_fits',
     'save_cfg',
     'load_cfg',
     'load_log',
@@ -18,15 +17,13 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import Error, __version__
-from sys import exit, stdout, version_info
+from . import Error
+from sys import exit, stdout
 from pathlib import Path
 from distutils.util import strtobool
 from collections.abc import Sequence
 
 from astropy.io import fits
-from astropy.table import Table
-
 from .tables import table_fluxes
 
 try:
@@ -77,6 +74,10 @@ _LOG_EXPORT_TYPES = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Export_log.to_nump
 _LOG_EXPORT_DICT = dict(zip(_LOG_EXPORT, _LOG_EXPORT_TYPES))
 _LOG_EXPORT_RECARR = np.dtype(list(_LOG_EXPORT_DICT.items()))
 
+# Attributes from the profile fittings
+_ATTRIBUTES_PROFILE = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Profile_attributes.to_numpy().astype(bool)].index.to_numpy()
+_RANGE_PROFILE_FIT = np.arange(_ATTRIBUTES_PROFILE.size)
+
 # Attributes with measurements for log
 _ATTRIBUTES_FIT = _PARAMS_CONF_TABLE.loc[_PARAMS_CONF_TABLE.Fit_attributes.to_numpy().astype(bool)].index.to_numpy()
 _RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
@@ -84,16 +85,6 @@ _RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
 # Dictionary with the parameter dtypes
 _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.to_numpy(),
                            _PARAMS_CONF_TABLE.dtype.to_numpy()))
-
-# Numpy recarray dtype for the pandas dataframe creation
-
-GLOBAL_LOCAL_GROUPS = ['line_fitting', 'chemical_model'] # TODO not implemented
-
-FLUX_TEX_TABLE_HEADERS = [r'$Transition$', '$EW(\AA)$', '$F(\lambda)$', '$I(\lambda)$']
-FLUX_TXT_TABLE_HEADERS = [r'$Transition$', 'EW', 'EW_error', 'F(lambda)', 'F(lambda)_error', 'I(lambda)', 'I(lambda)_error']
-
-KIN_TEX_TABLE_HEADERS = [r'$Transition$', r'$Comp$', r'$v_{r}\left(\nicefrac{km}{s}\right)$', r'$\sigma_{int}\left(\nicefrac{km}{s}\right)$', r'Flux $(\nicefrac{erg}{cm^{-2} s^{-1} \AA^{-1})}$']
-KIN_TXT_TABLE_HEADERS = [r'$Transition$', r'$Comp$', 'v_r', 'v_r_error', 'sigma_int', 'sigma_int_error', 'flux', 'flux_error']
 
 # TODO replace this error with the one of .ini
 class LiMe_Error(Exception):
@@ -315,7 +306,7 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
             log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
-            log = pd.read_csv(log_path, sep=',', delim_whitespace=False, header=0, index_col=0)
+            log = pd.read_csv(log_path, sep=',', delim_whitespace=False, header=0, index_col=0, comment='#')
 
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
@@ -332,7 +323,7 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
 
 
 def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=None, column_dtypes=None,
-             safe_version=True):
+             safe_version=True, **kwargs):
 
     """
 
@@ -376,7 +367,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
     # Confirm file path exits
     log_path = Path(file_address)
-    assert log_path.parent.exists(), f'- ERROR: Output lines log folder not found: {log_path.parent}'
+    assert log_path.parent.exists(), LiMe_Error(f'- ERROR: Output lines log folder not found: {log_path.parent}')
     file_name, file_type = log_path.name, log_path.suffix
 
     if len(dataframe.index) > 0:
@@ -389,40 +380,55 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
         # Slice the log if the user provides a list of columns
         if parameters != 'all':
-            parameters_list = np.array(parameters, ndmin=1)
+            if isinstance(dataframe.index, pd.MultiIndex):
+                parameters_list = np.atleast_1d(list(dataframe.index.names) + list(parameters))
+            else:
+                parameters_list = np.atleast_1d(parameters)
+
             lines_log = log[parameters_list]
-            param_dtypes = [_LOG_EXPORT_RECARR[param] for param in parameters_list]
 
         else:
             lines_log = log
-            param_dtypes = list(_LOG_TYPES_DICT.values())
 
         # Default txt log with the complete information
         if file_type == '.txt':
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_string()
-                string_DF = string_DF if safe_version is False else string_DF + f'\n#LiMe_{__version__}'
+
+                # Add meta params
+                for key, value in kwargs.items():
+                    string_DF += f'\n#{key}:{value}'
+
                 output_file.write(string_DF.encode('UTF-8'))
 
+        # CSV
         elif file_type == '.csv':
             with open(log_path, 'wb') as output_file:
                 pd.set_option('multi_sparse', False)
                 string_DF = lines_log.to_csv(sep=',', na_rep='NaN')
+
+                # Add meta params
+                for key, value in kwargs.items():
+                    string_DF += f'\n#{key}:{value}'
+
                 output_file.write(string_DF.encode('UTF-8'))
 
         # Pdf fluxes table # TODO error while saving all parameters
         elif file_type == '.pdf':
             table_fluxes(lines_log, log_path.parent / log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
-                         lines_notation=log.latex_label.values, store_version=safe_version)
+                         lines_notation=log.latex_label.values, **kwargs)
 
         # Log in a fits format
         elif file_type == '.fits':
             if isinstance(lines_log, pd.DataFrame):
 
-                if safe_version:
-                    header = {} if header is None else header
-                    header['LiMe'] = __version__
+                # Initiate the header
+                header = {} if header is None else header
+
+                # Add the meta parameters
+                for key, value in kwargs.items():
+                    header[key] = value
 
                 lineLogHDU = log_to_HDU(lines_log, ext_name=page, column_dtypes=column_dtypes, header_dict=header)
 
@@ -447,9 +453,10 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     with pd.ExcelWriter(log_path) as writer:
                         lines_log.to_excel(writer, sheet_name=page)
 
-                        if safe_version:
-                            df_empty = pd.DataFrame()
-                            df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}', index=False)
+                        if len(kwargs) > 0:
+                            sheet_name = f'LiMe_{kwargs["LiMe"]}'
+                            df_empty = pd.DataFrame.from_dict(kwargs, orient='index', columns=['values'])
+                            df_empty.to_excel(writer, sheet_name=sheet_name, index=True)
 
                 # Updating existing file
                 else:
@@ -468,29 +475,12 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     # Save the data
                     wb.save(log_path)
 
-                    # Add new sheet
-
-                    # df_old = load_log(log_path)
-                    # # with pd.ExcelWriter(log_path, engine='openpyxl') as writer:
-                    # #
-                    # #     book = openpyxl.load_workbook(log_path)
-                    # #     writer.book = book
-                    # #     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    # #     lines_log.to_excel(writer, sheet_name=page, index=True)
-                    #     # dataframe.to_excel(writer, sheet_name=page, index=True)
-                    #
-                    #     # if safe_version:
-                    #     #     df_empty = pd.DataFrame()
-                    #     #     df_empty.to_excel(writer, sheet_name=f'LiMe_{__version__}')
-                    #
-                    #     # book.close()
-
             else:
                 _logger.critical(f'openpyxl is not installed. Lines log {file_address} could not be saved')
 
         # Advance Scientific Storage Format
         elif file_type == '.asdf':
-
+            # TODO review this one and add the metadata
             tree = {page: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
 
             # Create new file
@@ -532,10 +522,10 @@ def results_to_log(line, log, norm_flux):
         for j in _RANGE_ATTRIBUTES_FIT:
 
             param = _ATTRIBUTES_FIT[j]
+            param_value = line.__getattribute__(param)
 
             # Get component parameter
-            param_value = line.__getattribute__(param)
-            if _LOG_COLUMNS[param][2] and (param_value is not None):
+            if _LOG_COLUMNS[param][3] and (param_value is not None):
                 param_value = param_value[i]
 
             # De-normalize
@@ -579,33 +569,81 @@ def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_level
     return output
 
 
-def check_file_configuration(input_cfg, default_cfg_section=None, local_cfg_section=None, cfg_suffix='_model_fitting'):
+def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_suffix='_line_fitting'):
 
-    if isinstance(input_cfg, dict):
-        cfg_dict = input_cfg.copy()
+    # Check that there is an input configuration
+    if fit_conf is not None:
+
+        # Check if we have a file
+        if not isinstance(fit_conf, dict):
+            input_cfg = load_cfg(fit_conf, fit_cfg_suffix)
+        else:
+            input_cfg = fit_conf.copy()
+
+        # If requested, check that the group/mask configurations are there
+        if group_list is not None:
+
+            for mask_name in group_list:
+
+                mask_fit_cfg = input_cfg.get(f'{mask_name}_line_fitting')
+
+                missing_mask = False
+                if mask_fit_cfg is not None:
+                    if mask_fit_cfg.get('bands') is None:
+                        missing_mask = True
+                else:
+                    missing_mask = True
+
+                if missing_mask:
+                    error_message = 'No input "bands" provided. In this case you need to include the \n' \
+                                    f'you need to specify an "bands=log_file_address" entry the ' \
+                                    f'"[{mask_name}_file]" of your fitting configuration file'
+                    raise LiMe_Error(error_message)
+
+        # Recover the configuration expected for the object
+        default_cfg = input_cfg.get(f'{default_key}_line_fitting') if default_key is not None else None
+        mask_cfg = input_cfg.get(f'{group_key}_line_fitting') if group_key is not None else None
+
+        # Case there are not leveled entries
+        if (default_cfg is None) and (mask_cfg is None):
+            output_cfg = input_cfg
+
+        # Proceed to update the levels
+        else:
+
+            # Default configuration
+            output_cfg = {} if default_cfg is None else default_cfg
+            default_detect = output_cfg.get('line_detection')
+
+            # Mask conf
+            mask_conf = {} if mask_cfg is None else mask_cfg
+            mask_detect = mask_conf.get('line_detection')
+
+            # Update the levels
+            output_cfg = {**output_cfg, **mask_conf}
+
+            # If no line detection don't add it
+            if mask_detect is not None:
+                output_cfg['line_detection'] = mask_detect
+            elif default_detect is not None:
+                output_cfg['line_detection'] = default_detect
+            else:
+                pass
+
     else:
-        cfg_dict = load_cfg(input_cfg, fit_cfg_suffix=None)
+        output_cfg = {}
 
-    # Get default configuration and updated with local if necessary
-    if default_cfg_section is not None:
-        if f'{default_cfg_section}{cfg_suffix}' in cfg_dict:
-            output = {**cfg_dict[f'{default_cfg_section}{cfg_suffix}']}
-
-            if local_cfg_section is not None:
-                if f'{local_cfg_section}{cfg_suffix}' in cfg_dict:
-                    output = {**output, **cfg_dict[f'{local_cfg_section}{cfg_suffix}']}
-
-    else:
-        output = cfg_dict
-
-    return output
+    return output_cfg
 
 
 _parent_bands_file = Path(__file__).parent/'resources/parent_bands.txt'
 _PARENT_BANDS = load_log(_parent_bands_file)
 
-# Function to check if variable can be converte to float else leave as string
-def check_numeric_Value(s):
+
+def check_numeric_value(s):
+
+    # Function to check if variable can be converte to float else leave as string
+
     try:
         output = float(s)
         return output
@@ -617,10 +655,6 @@ def check_numeric_Value(s):
 def format_option_value(entry_value, key_label, section_label='', float_format=None, nan_format='nan'):
 
     output_variable = entry_value
-
-    # # None variable
-    # if (entry_value == 'None') or (entry_value is None):
-    #     output_variable = None
 
     # Dictionary blended lines
     if isinstance(entry_value, str):
@@ -646,7 +680,7 @@ def format_option_value(entry_value, key_label, section_label='', float_format=N
                     output_variable = entry_value
                 # Conversion for non-parameter class atributes (only str conversion possible)
                 else:
-                    output_variable = check_numeric_Value(entry_value)
+                    output_variable = check_numeric_value(entry_value)
         except:
             raise LiMe_Error(f'Failure to convert configuration entry: {key_label} = {entry_value} in section {section_label}')
 
@@ -736,137 +770,6 @@ def log_to_HDU(log, ext_name=None, column_dtypes=None, header_dict=None):
         linesHDU = None
 
     return linesHDU
-
-
-def load_fits(file_address, instrument, frame_idx=None):
-
-    if instrument == 'ISIS':
-
-        if frame_idx is None:
-            frame_idx = 0
-
-        # Open fits file
-        with fits.open(file_address) as hdul:
-            data, header = hdul[frame_idx].data, hdul[frame_idx].header
-
-        assert 'ISIS' in header['INSTRUME'], 'Input spectrum instrument '
-
-        # William Herschel Telescope ISIS instrument
-        w_min = header['CRVAL1']
-        dw = header['CD1_1']  # dw = 0.862936 INDEF (Wavelength interval per pixel)
-        pixels = header['NAXIS1']  # nw = 3801 number of output pixels
-        w_max = w_min + dw * pixels
-        wave = np.linspace(w_min, w_max, pixels, endpoint=False)
-
-        return wave, data, header
-
-    elif instrument == 'fits-cube':
-
-        # Open fits file
-        with fits.open(file_address) as hdul:
-            data, hdr = hdul[frame_idx].data, hdul[frame_idx].header
-
-
-        dw = hdr['CD3_3']
-        w_min = hdr['CRVAL3']
-        nPixels = hdr['NAXIS3']
-        w_max = w_min + dw * nPixels
-        wave = np.linspace(w_min, w_max, nPixels, endpoint=False)
-
-        print('CD3_3', dw)
-        print('CRVAL3', w_min)
-        print('NAXIS3', nPixels)
-        print('np.diff', np.diff(wave).mean(), np.std(np.diff(wave)))
-
-        return wave, data, hdr
-
-    elif instrument == 'OSIRIS':
-
-        # Default _frame index
-        if frame_idx is None:
-            frame_idx = 0
-
-        # Open fits file
-        with fits.open(file_address) as hdul:
-            data, header = hdul[frame_idx].data, hdul[frame_idx].header
-
-        # assert 'OSIRIS' in header['INSTRUME']
-
-        w_min = header['CRVAL1']
-        dw = header['CD1_1']  # dw (Wavelength interval per pixel)
-        pixels = header['NAXIS1']  # nw number of output pixels
-        w_max = w_min + dw * pixels
-        wave = np.linspace(w_min, w_max, pixels, endpoint=False)
-
-        return wave, data, header
-
-    elif instrument == 'SDSS':
-
-        # Open fits file
-        with fits.open(file_address) as hdul:
-            data, header_0, header_2, header_3 = hdul[1].data, hdul[0].header, hdul[2].data, hdul[3].data
-
-        assert 'SDSS 2.5-M' in header_0['TELESCOP']
-
-        wave = 10.0 ** data['loglam']
-        SDSS_z = float(header_2["z"][0] + 1)
-        wave_rest = wave / SDSS_z
-
-        flux_norm = data['flux']
-        flux = flux_norm / 1e17
-
-        headers = (header_0, header_2, header_3)
-
-        # return wavelength_array, flux, headers
-        return wave, data, headers
-
-    elif instrument == 'xshooter':
-
-        # Default _frame index
-        if frame_idx is None:
-            frame_idx = 1
-
-        # Following the steps at: https://archive.eso.org/cms/eso-data/help/1dspectra.html
-        with fits.open(file_address) as hdul:
-            data, header = hdul[frame_idx].data, hdul[frame_idx].header
-
-        w_min = header['CRVAL1']
-        dw = header['CDELT1']  # dw (Wavelength interval per pixel)
-        pixels = header['NAXIS1']  # nw number of output pixels
-        w_max = w_min + dw * pixels
-        wave = np.linspace(w_min, w_max, pixels, endpoint=False)
-
-        # wave = data[0][0]
-
-        return wave, data, header
-
-    elif instrument == 'MEGARA':
-
-        # Default _frame index
-        if frame_idx is None:
-            frame_idx = 1
-
-        # Following the steps at: https://archive.eso.org/cms/eso-data/help/1dspectra.html
-        with fits.open(file_address) as hdul:
-            data, header = hdul[frame_idx].data, hdul[frame_idx].header
-
-        w_min = header['CRVAL1']
-        dw = header['CDELT1']  # dw (Wavelength interval per pixel)
-        pixels = header['NAXIS1']  # nw number of output pixels
-        w_max = w_min + dw * pixels
-        wave = np.linspace(w_min, w_max, pixels, endpoint=False)
-
-        return wave, data, header
-
-    else:
-
-        print('-- WARNING: Instrument not recognize')
-
-        # Open fits file
-        with fits.open(file_address) as hdul:
-            data, header = hdul[frame_idx].data, hdul[frame_idx].header
-
-        return data, header
 
 
 def formatStringOutput(value, key, section_label=None, float_format=None, nan_format='nan'):

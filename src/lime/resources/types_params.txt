@@ -1,65 +1,75 @@
-               Norm_by_flux   Fit_attributes  Array_var  Export_log  dtype          latex_label         units
-wavelength                0                1          1           1    <f8        $\lambda_{i}$         wave
-intg_flux                 1                1          0           1    <f8           $F_{intg}$         inten
-intg_flux_err             1                1          0           1    <f8     $F_{err,\,intg}$         inten
-gauss_flux                1                1          1           1    <f8          $F_{gauss}$         inten
-gauss_flux_err            1                1          1           1    <f8    $F_{err,\,gauss}$         inten
-eqw                       0                1          1           1    <f8                $Eqw$         wave
-eqw_err                   0                1          1           1    <f8          $Eqw_{err}$         wave
-particle                  0                1          1           1   <U50             Particle         str
-latex_label               0                1          1           1  <U100           Transition         str
-group_label               0                1          0           1  <U120           Components         str
-pixel_mask                0                1          0           1  <U100     $Masked\,Pixels$         str
-w1                        0                0          0           1    <f8              $w_{1}$         wave
-w2                        0                0          0           1    <f8              $w_{2}$         wave
-w3                        0                0          0           1    <f8              $w_{3}$         wave
-w4                        0                0          0           1    <f8              $w_{4}$         wave
-w5                        0                0          0           1    <f8              $w_{5}$         wave
-w6                        0                0          0           1    <f8              $w_{6}$         wave
-w_i                       0                1          0           1    <f8              $w_{i}$         wave
-w_f                       0                1          0           1    <f8              $w_{f}$         wave
-peak_wave                 0                1          0           1    <f8     $\lambda_{peak}$         wave
-peak_flux                 1                1          0           1    <f8           $F_{peak}$         flux
-cont                      1                1          0           1    <f8           $F_{cont}$         flux
-std_cont                  1                1          0           1    <f8      $\sigma_{cont}$         flux
-m_cont                    1                1          0           1    <f8           $m_{cont}$         flux/wave
-n_cont                    1                1          0           1    <f8           $n_{cont}$         flux
-snr_line                  0                1          1           1    <f8 $\frac{S}{N}_{line}$         none
-snr_cont                  0                1          0           1    <f8 $\frac{S}{N}_{cont}$         none
-z_line                    0                1          1           1    <f8           $z_{line}$         none
-amp                       1                1          1           1    <f8              $A_{i}$         flux
-center                    0                1          1           1    <f8            $\mu_{i}$         wave
-sigma                     0                1          1           1    <f8         $\sigma_{i}$         wave
-amp_err                   1                1          1           1    <f8        $A_{i,\,err}$         flux
-center_err                0                1          1           1    <f8      $\mu_{i,\,err}$         wave
-sigma_err                 0                1          1           1    <f8   $\sigma_{i,\,err}$         wave
-v_r                       0                1          1           1    <f8              $v_{r}$         vel
-v_r_err                   0                1          1           1    <f8        $v_{r,\,err}$         vel
-sigma_vel                 0                1          1           1    <f8       $\sigma_{vel}$         vel
-sigma_vel_err             0                1          1           1    <f8 $\sigma_{vel,\,err}$         vel
-sigma_thermal             0                1          1           1    <f8        $\sigma_{th}$         vel
-sigma_instr               0                1          0           1    <f8     $\sigma_{instr}$         vel
-n_pixels                  0                1          0           1    <f8         $n_{pixels}$         none
-pixel_vel                 0                1          0           1    <f8        $pixel_{vel}$         vel
-FWHM_intg                 0                1          0           1    <f8        $FWHM_{intg}$         wave
-FWHM_g                    0                1          1           1    <f8       $FWHM_{gauss}$         wave
-FWZI                      0                1          0           1    <f8               $FWZI$         wave
-v_med                     0                1          0           1    <f8            $v_{med}$         vel
-v_50                      0                1          0           1    <f8             $v_{50}$         vel
-v_1                       0                1          0           1    <f8              $v_{1}$         vel
-v_5                       0                1          0           1    <f8              $v_{5}$         vel
-v_10                      0                1          0           1    <f8             $v_{10}$         vel
-v_90                      0                1          0           1    <f8             $v_{90}$         vel
-v_95                      0                1          0           1    <f8             $v_{95}$         vel
-v_99                      0                1          0           1    <f8             $v_{99}$         vel
-chisqr                    0                1          0           1    <f8           $\chi^{2}$         none
-redchi                    0                1          0           1    <f8     $\chi_{\nu}^{2}$         none
-aic                       0                1          0           1    <f8                  AIC         none
-bic                       0                1          0           1    <f8                  BIC         none
-observations              0                1          0           1   <U50         Observations         str
-comments                  0                1          0           1   <U50             Comments         str
-wave_vac                  0                0          1           0    <f8       \lambda_{vac}$         wave
-transition                0                0          1           0    <U5  Trnsition-component         str
-rel_int                   0                0          1           0    <f8          $Int_{rel}$         none
-
-
+                Norm_by_flux  Fit_attributes  Profile_attributes  Array_var  Export_log  dtype           latex_label      units
+wavelength                 0               1                   0          1           1    <f8         $\lambda_{i}$       wave
+intg_flux                  1               1                   0          0           1    <f8            $F_{intg}$      inten
+intg_flux_err              1               1                   0          0           1    <f8      $F_{err,\,intg}$      inten
+profile_flux               1               1                   1          1           1    <f8         $F_{profile}$      inten
+profile_flux_err           1               1                   1          1           1    <f8   $F_{err,\,profile}$      inten
+eqw                        0               1                   1          1           1    <f8                 $Eqw$       wave
+eqw_err                    0               1                   1          1           1    <f8           $Eqw_{err}$       wave
+particle                   0               1                   0          1           1   <U50              Particle        str
+latex_label                0               1                   0          1           1  <U100            Transition        str
+group_label                0               1                   0          0           1  <U120            Components        str
+pixel_mask                 0               1                   0          0           1  <U100      $Masked\,Pixels$        str
+w1                         0               0                   0          0           1    <f8               $w_{1}$       wave
+w2                         0               0                   0          0           1    <f8               $w_{2}$       wave
+w3                         0               0                   0          0           1    <f8               $w_{3}$       wave
+w4                         0               0                   0          0           1    <f8               $w_{4}$       wave
+w5                         0               0                   0          0           1    <f8               $w_{5}$       wave
+w6                         0               0                   0          0           1    <f8               $w_{6}$       wave
+w_i                        0               1                   0          0           1    <f8               $w_{i}$       wave
+w_f                        0               1                   0          0           1    <f8               $w_{f}$       wave
+peak_wave                  0               1                   0          0           1    <f8      $\lambda_{peak}$       wave
+peak_flux                  1               1                   0          0           1    <f8            $F_{peak}$       flux
+cont                       1               1                   0          0           1    <f8            $F_{cont}$       flux
+cont_err                   1               1                   0          0           1    <f8       $\sigma_{cont}$       flux
+m_cont                     1               1                   1          0           1    <f8            $m_{cont}$  flux/wave
+n_cont                     1               1                   1          0           1    <f8            $n_{cont}$       flux
+snr_line                   0               1                   0          1           1    <f8  $\frac{S}{N}_{line}$       none
+snr_cont                   0               1                   0          0           1    <f8  $\frac{S}{N}_{cont}$       none
+z_line                     0               1                   1          1           1    <f8            $z_{line}$       none
+amp                        1               1                   1          1           1    <f8               $A_{i}$       flux
+center                     0               1                   1          1           1    <f8             $\mu_{i}$       wave
+sigma                      0               1                   1          1           1    <f8          $\sigma_{i}$       wave
+gamma                      0               1                   1          1           1    <f8          $\gamma_{i}$       wave
+frac                       0               1                   1          1           1    <f8               $f_{i}$       none
+alpha                      0               1                   1          1           1    <f8          $\alpha_{i}$       none
+a                          0               1                   1          1           1    <f8               $a_{i}$       none
+b                          0               1                   1          1           1    <f8               $b_{i}$       wave
+c                          0               1                   1          1           1    <f8               $c_{i}$       wave
+amp_err                    1               1                   1          1           1    <f8         $A_{i,\,err}$       flux
+center_err                 0               1                   1          1           1    <f8       $\mu_{i,\,err}$       wave
+sigma_err                  0               1                   1          1           1    <f8    $\sigma_{i,\,err}$       wave
+gamma_err                  0               1                   1          1           1    <f8    $\gamma_{i,\,err}$       wave
+frac_err                   0               1                   1          1           1    <f8     $\beta_{i,\,err}$       none
+alpha_err                  0               1                   1          1           1    <f8    $\alpha_{i,\,err}$       none
+a_err                      0               1                   1          1           1    <f8         $a_{i,\,err}$       none
+b_err                      0               1                   1          1           1    <f8         $b_{i,\,err}$       wave
+c_err                      0               1                   1          1           1    <f8         $c_{i,\,err}$       wave
+v_r                        0               1                   1          1           1    <f8               $v_{r}$        vel
+v_r_err                    0               1                   1          1           1    <f8         $v_{r,\,err}$        vel
+sigma_vel                  0               1                   1          1           1    <f8        $\sigma_{vel}$        vel
+sigma_vel_err              0               1                   1          1           1    <f8  $\sigma_{vel,\,err}$        vel
+sigma_thermal              0               1                   1          1           1    <f8         $\sigma_{th}$        vel
+sigma_instr                0               1                   1          0           1    <f8      $\sigma_{instr}$        vel
+n_pixels                   0               1                   0          0           1    <f8          $n_{pixels}$       none
+pixel_vel                  0               1                   0          0           1    <f8         $pixel_{vel}$        vel
+FWHM_i                     0               1                   0          0           1    <f8         $FWHM_{intg}$       wave
+FWHM_p                     0               1                   1          1           1    <f8      $FWHM_{profile}$       wave
+FWZI                       0               1                   0          0           1    <f8                $FWZI$       wave
+v_med                      0               1                   0          0           1    <f8             $v_{med}$        vel
+v_50                       0               1                   0          0           1    <f8              $v_{50}$        vel
+v_1                        0               1                   0          0           1    <f8               $v_{1}$        vel
+v_5                        0               1                   0          0           1    <f8               $v_{5}$        vel
+v_10                       0               1                   0          0           1    <f8              $v_{10}$        vel
+v_90                       0               1                   0          0           1    <f8              $v_{90}$        vel
+v_95                       0               1                   0          0           1    <f8              $v_{95}$        vel
+v_99                       0               1                   0          0           1    <f8              $v_{99}$        vel
+chisqr                     0               1                   1          0           1    <f8            $\chi^{2}$       none
+redchi                     0               1                   1          0           1    <f8      $\chi_{\nu}^{2}$       none
+aic                        0               1                   1          0           1    <f8                   AIC       none
+bic                        0               1                   1          0           1    <f8                   BIC       none
+observations               0               1                   0          0           1   <U50          Observations        str
+comments                   0               1                   0          0           1   <U50              Comments        str
+wave_vac                   0               0                   0          1           0    <f8       $\lambda_{vac}$       wave
+transition                 0               0                   0          1           0    <U5  Transition-component        str
+rel_int                    0               0                   0          1           0    <f8           $Int_{rel}$       none

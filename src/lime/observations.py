@@ -1,13 +1,11 @@
 import logging
 import numpy as np
 import pandas as pd
-import requests
 from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from .tools import UNITS_LATEX_DICT, DISPERSION_UNITS, FLUX_DENSITY_UNITS, unit_conversion,\
-    define_masks, extract_fluxes, normalize_fluxes, ProgressBar
+from .tools import unit_conversion, define_masks, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au
 
 from .recognition import LineFinder
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -15,11 +13,12 @@ from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from .io import _LOG_EXPORT_RECARR, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
     check_file_array_mask, load_log
 
-from .read_fits import check_fits_instructions, OpenFits, SPECTRUM_FITS_PARAMS
+from .read_fits import OpenFits, SPECTRUM_FITS_PARAMS
 from .transitions import Line, latex_from_label, air_to_vacuum_function
 from .workflow import SpecTreatment, CubeTreatment
-from . import Error
+from . import Error, __version__
 
+# Log variable
 _logger = logging.getLogger('LiMe')
 
 try:
@@ -90,29 +89,21 @@ def check_inputs_arrays(wave, flux, err_flux, lime_object):
     return
 
 
-def check_units(units_wave, units_flux):
-
-    # Checks units
-    for arg in ['units_wave', 'units_flux']:
-        arg_value = locals()[arg]
-        if arg_value not in UNITS_LATEX_DICT:
-            _logger.warning(f'Input {arg} = {arg_value} is not recognized.\nPlease try to convert it to the accepted'
-                            f'units: {list(UNITS_LATEX_DICT.keys())}')
-
-    return units_wave, units_flux
-
-
-def check_redshift_norm(redshift, norm_flux, flux_array, norm_factor=100):
+def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=100):
 
     if redshift is None:
-        _logger.warning(f'No redshift provided for the spectrum')
+        _logger.info(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
         redshift = 0
 
     if redshift < 0:
         _logger.warning(f'Input spectrum redshift has a negative value: z = {redshift}')
 
     if norm_flux is None:
-        norm_flux = np.nanmedian(flux_array[flux_array > 0]) / norm_factor
+        if units_flux.scale == 1:
+            norm_flux = np.nanmean(flux_array) / norm_factor
+            _logger.info(f'Normalizing input flux by {norm_flux}')
+        else:
+            norm_flux = 1
 
     return redshift, norm_flux
 
@@ -460,7 +451,7 @@ class Spectrum(LineFinder):
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, review_inputs=True):
+                 inst_FWHM=np.nan, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -533,14 +524,14 @@ class Spectrum(LineFinder):
         This method creates a lime.Spectrum object from an observational (.fits) file. The user needs to introduce the
         file address location and the name of the instrument of survey.
 
-        Currently, this method supports NIRSPEC, ISIS, OSIRIS, SDSS and DESI as input instrument sources. This method will
+        Currently, this method supports NIRSPEC, ISIS, OSIRIS and SDSS as input instrument sources. This method will
         lower case the input instrument or survey name.
 
         The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
         user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
 
-        This method should is aware of the instrument observations units and normalization but the user should introduce
-        LiMe.Spectrum arguments (such as the observation redshift).
+        This method provides the instrument observational units and normalization but the user should introduce
+        the additional LiMe.Spectrum arguments (such as the observation redshift).
 
         :param file_address: Input file location address.
         :type file_address: Path, string
@@ -570,30 +561,45 @@ class Spectrum(LineFinder):
         return cls(**obs_args)
 
     @classmethod
-    def from_survey(cls, target_id, survey, program=None, **kwargs):
+    def from_survey(cls, target_id, survey, mask_flux_entries=None, **kwargs):
 
-        # Recover the function to open the fits file
-        fits_reader, url_locator = check_fits_instructions(None, survey, True, cls.__name__)
+        """
 
-        # Get file
-        url_address, url_params = url_locator(target_id, program=program)
-        _logger.info(f'Target object ({target_id}) url located')
+        This method creates a lime.Spectrum object from a survey observational (.fits) file. The user needs to provide an
+        object ID alongside the calague organization labels to identify the file.
 
-        if len(url_address) > 1:
-            url_address = url_address[0]
-            url_params = {'redshift': url_params['redshift'][0]}
+        Currently, this method supports the DESI survey. This method will lower case the input survey name.
 
-        # Read the fits data
-        wave_array, flux_array, err_array, header_list, params_dict = fits_reader(url_address, target_id)
-        params_dict.update(url_params)
-        _logger.info(f'Target object ({target_id}) spectrum downloaded')
+        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
+        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
 
-        # Construct attributes for LiMe object
-        spectrum_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}
-        spectrum_args.update(url_params)
-        spectrum_args.update(kwargs)
+        This method provides the arguments necesary to create the LiMe.Spectrum object. However, the user should provide
+        the indexation values to locate the file on the survey. For example, for the DESI survey these would be the
+        catalogue (i.e. healpix), program (i.e. dark) and release (fuji).
 
-        return cls(**spectrum_args)
+        :param file_address: Input object ID label.
+        :type file_address: str
+
+        :param survey: Input object survey name
+        :type survey: str
+
+        :param mask_flux_entries: List of pixel values to mask from flux array
+        :type mask_flux_entries: list
+
+        :param kwargs: Survey indexation arguments for the object
+
+        :return: lime.Spectrum
+
+        """
+
+        # Create file manager object to administrate the file source and observation properties
+        cls._fitsMgr = OpenFits(target_id, survey, cls.__name__)
+
+        # Load the scientific data from the file
+        fits_args = cls._fitsMgr.parse_data_from_url(cls._fitsMgr.file_address, mask_flux_entries, **kwargs)
+
+        # Create the LiMe object
+        return cls(**fits_args)
 
     def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM, units_wave,
                         units_flux, pixel_mask, label):
@@ -609,7 +615,7 @@ class Spectrum(LineFinder):
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
         # Check redshift and normalization
-        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux)
+        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux, self.units_flux)
 
         # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
@@ -628,7 +634,7 @@ class Spectrum(LineFinder):
 
         return
 
-    def unit_conversion(self, units_wave=None, units_flux=None, norm_flux=None):
+    def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None):
 
         """
 
@@ -636,87 +642,78 @@ class Spectrum(LineFinder):
 
         The user can also provide a flux normalization for the spectrum flux array.
 
-        The wavelength units available are A (angstroms), um, nm, Hz, cm, mm
+        The wavelength units available are AA (angstroms), um, nm, Hz, cm, mm
 
         The flux units available are Flam (erg s^-1 cm^-2 Å^-1), Fnu (erg s^-1 cm^-2 Hz^-1), Jy, mJy, nJy
 
-        :param units_wave: Wavelength array units
-        :type units_wave: str, optional
+        :param wave_units_out: Wavelength array units
+        :type wave_units_out: str, optional
 
-        :param units_flux: Flux array units
-        :type units_flux: str, optional
+        :param flux_units_out: Flux array units
+        :type flux_units_out: str, optional
 
         :param norm_flux: Flux normalization
         :type norm_flux: float, optional
 
         """
 
-        # Dispersion axes conversion
-        if units_wave is not None:
+        # Remove existing normalization
+        if (self.norm_flux != 1) and (self.norm_flux is not None):
 
-            # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
+            # Remove mask and normalization
+            input_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
+            flux_arr = self.flux.data * self.norm_flux if input_mask is None else self.flux * self.norm_flux
+            err_arr = self.err_flux.data * self.norm_flux if input_mask is None else self.err_flux * self.norm_flux
+
+            # Re-apply mask
+            self.flux = flux_arr if input_mask is None else np.ma.masked_array(flux_arr, self.flux.mask)
+            self.err_flux = err_arr if input_mask is None else np.ma.masked_array(err_arr, self.err_flux.mask)
+            self.norm_flux = None
+
+        # Convert the requested units to astropy unit object
+        wave_units_out = au.Unit(wave_units_out) if wave_units_out is not None else None
+        flux_units_out = au.Unit(flux_units_out) if flux_units_out is not None else None
+
+        # Dispersion axes conversion
+        if wave_units_out is not None:
 
             # Convert the data
-            if units_wave in DISPERSION_UNITS:
-                output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
-            else:
-                _logger.warning(f'- Dispersion units {units_wave} not recognized for conversion. '
-                                f'Please use {DISPERSION_UNITS} to convert from {self.units_wave}')
+            output_wave = unit_conversion(self.units_wave, wave_units_out, wave_array=self.wave)
 
-            # Reflect the new units
-            if np.ma.is_masked(self.wave):
-                self.wave = np.ma.masked_array(output_wave, self.wave.mask)
-                self.wave_rest = np.ma.masked_array(output_wave/(1+self.redshift), self.wave.mask)
-            else:
-                self.wave = output_wave
-                self.wave_rest = output_wave/(1+self.redshift)
-            self.units_wave = units_wave
+            # Assign the new values
+            self.wave = output_wave
+            self.wave_rest =  np.ma.masked_array(self.wave.data / (1+self.redshift), self.wave.mask)
+            self.units_wave = wave_units_out
 
         # Flux axis conversion
-        if units_flux is not None:
+        if flux_units_out is not None:
 
-            # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
-            input_flux = self.flux.data if np.ma.is_masked(self.flux) else self.flux
-            input_err = self.err_flux.data if np.ma.is_masked(self.err_flux) else self.err_flux
+            # Flux conversion
+            output_flux = unit_conversion(self.units_flux, flux_units_out, wave_array=self.wave,
+                                          flux_array=self.flux, dispersion_units=self.units_wave)
 
-            if units_flux in FLUX_DENSITY_UNITS:
-                output_flux = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
-                                              flux_array=input_flux, dispersion_units=self.units_wave)
+            # Flux uncertainty conversion
+            output_err = None if self.err_flux is None else unit_conversion(self.units_flux, flux_units_out,
+                                                                            wave_array=self.wave,
+                                                                            flux_array=self.err_flux,
+                                                                            dispersion_units=self.units_wave)
 
-                if input_err is not None:
-                    output_err = unit_conversion(self.units_flux, units_flux, wave_array=input_wave,
-                                                 flux_array=input_err, dispersion_units=self.units_wave)
-
-            else:
-                _logger.warning(f'- Dispersion units {units_flux} not recognized for conversion. '
-                                f'Please use {FLUX_DENSITY_UNITS} to convert from {self.units_flux}')
-
-            # Reflect the new units
-            if np.ma.is_masked(self.flux):
-                self.flux = np.ma.masked_array(output_flux, self.flux.mask)
-            else:
-                self.flux = output_flux
-            if input_err is not None:
-                self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.is_masked(self.err_flux) else output_err
-            self.units_flux = units_flux
+            # Assign new values
+            self.flux = output_flux
+            self.err_flux = None if self.err_flux is None else output_err
+            self.units_flux = flux_units_out
 
         # Switch the normalization
         if norm_flux is not None:
-            # TODO isMaskedArray checks individually?
-            mask_check = np.ma.is_masked(self.flux)
 
-            # Remove old
-            if mask_check:
-                new_flux = self.flux.data * self.norm_flux / norm_flux
-                new_err = None if self.err_flux is None else self.err_flux.data * self.norm_flux / norm_flux
+            # Remove mask and then apply normalization
+            input_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
+            flux_arr = self.flux.data / norm_flux if input_mask is None else self.flux / norm_flux
+            err_arr = self.err_flux.data / norm_flux if input_mask is None else self.err_flux / norm_flux
 
-                self.flux = np.ma.masked_array(new_flux, self.flux.mask)
-                self.err_flux = None if self.err_flux is None else np.ma.masked_array(new_err, self.err_flux.mask)
-            else:
-                self.flux = self.flux * self.norm_flux / norm_flux
-                self.err_flux = None if self.err_flux is None else self.err_flux * self.norm_flux / norm_flux
+            # Re-apply mask
+            self.flux = flux_arr if input_mask is None else np.ma.masked_array(flux_arr, self.flux.mask)
+            self.err_flux = err_arr if input_mask is None else np.ma.masked_array(err_arr, self.err_flux.mask)
             self.norm_flux = norm_flux
 
         return
@@ -763,8 +760,16 @@ class Spectrum(LineFinder):
 
         """
 
+        # Meta parameters from the observations
+        meta_params = {'LiMe':       __version__,
+                       'units_wave': self.units_wave.to_string(),
+                       'units_flux': self.units_flux.to_string(),
+                       'redshift':   self.redshift,
+                       'id':         self.label}
+
         # Save the file
-        save_log(self.log, file_address, page, param_list, header, safe_version=safe_version)
+        save_log(self.log, file_address, page, param_list, header, column_dtypes=column_dtypes,
+                 safe_version=safe_version, **meta_params)
 
         return
 
@@ -794,10 +799,10 @@ class Spectrum(LineFinder):
             # Get the first line in the log
             line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
 
-            # Confirm the lines in the log match the one of the spectrum
-            if line_0.units_wave != self.units_wave:
-                _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
-                                f' in {line_0.units_wave}')
+            # Confirm the lines in the log match the one of the spectrum # TODO fix the units
+            # if line_0.units_wave != self.units_wave:
+            #     _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
+            #                     f' in {line_0.units_wave}')
 
             # Confirm all the log lines have the same units
             same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), line_0.units_wave) != -1).size == line_list.size
@@ -900,8 +905,8 @@ class Cube:
     # File manager for a Cube created from an observation file
     _fitsMgr = None
 
-    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=0, norm_flux=1.0, crop_waves=None,
-                 inst_FWHM=np.nan, units_wave='A', units_flux='Flam', pixel_mask=None, id_label=None, wcs=None):
+    def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
+                 inst_FWHM=np.nan, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
         # Review the inputs
         check_inputs_arrays(input_wave, input_flux, input_err, self)
@@ -924,11 +929,11 @@ class Cube:
         self.plot = CubeFigures(self)
         self.check = CubeCheck(self)
 
-        # Check redshift and normalization
-        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux)
-
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
+
+        # Check redshift and normalization
+        self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux, self.units_flux)
 
         # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
@@ -1037,6 +1042,7 @@ class Cube:
         """
 
         # Check the function inputs
+        contour_pctls = np.atleast_1d(contour_pctls)
         if not np.all(np.diff(contour_pctls) > 0):
             raise Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
         inver_percentiles = np.flip(contour_pctls)
@@ -1053,20 +1059,20 @@ class Cube:
         idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_bg.pixel_mask)
         signal_slice = self.flux[idcsEmis, :, :]
 
+        # Get indeces all nan entries to exclude them from the analysis
+        idcs_all_nan = np.all(np.isnan(signal_slice.data), axis=0)
+
         # If not mask parameter provided we use the flux percentiles
         if param == 'flux':
-            default_title = 'Flux percentiles masks'
             param = self.units_flux
             param_image = signal_slice.sum(axis=0)
 
         # S/N cont
         elif param == 'SN_cont':
-            default_title = 'Continuum S/N percentile masks'
             param_image = np.nanmean(signal_slice, axis=0) / np.nanstd(signal_slice, axis=0)
 
         # S/N line
         elif param == 'SN_line':
-            default_title = 'Emission line S/N percentile masks'
             n_pixels = np.sum(idcsCont)
             cont_slice = self.flux[idcsCont, :, :]
             Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
@@ -1103,7 +1109,7 @@ class Cube:
                                                   param_image)
 
             if np.sum(maParamImage.mask) > 0:
-                mask_dict[f'mask_{i}'] = maParamImage.mask
+                mask_dict[f'mask_{i}'] = maParamImage.mask & ~idcs_all_nan
                 boundary_dict[f'mask_{i}'] = inver_percentiles[i]
                 param_level[f'mask_{i}'] = param_array[i]
 
@@ -1187,12 +1193,7 @@ class Cube:
             # Remove the masks for the conversion
             input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
 
-            # Convert the data
-            if units_wave in DISPERSION_UNITS:
-                output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
-            else:
-                _logger.warning(f'- Dispersion units {units_wave} not recognized for conversion. '
-                                f'Please use {DISPERSION_UNITS} to convert from {self.units_wave}')
+            output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
 
             # Reflect the new units
             if np.ma.is_masked(self.wave):
@@ -1211,26 +1212,22 @@ class Cube:
             input_flux = self.flux.data if np.ma.is_masked(self.flux) else self.flux
             input_err = self.err_flux.data if np.ma.is_masked(self.err_flux) else self.err_flux
 
-            if units_flux in FLUX_DENSITY_UNITS: # TODO this is slow
-                flux_shape = input_flux.shape
-                y_range, x_range = np.arange(flux_shape[1]), np.arange(flux_shape[2])
-                if len(flux_shape) == 3:
-                    output_flux = np.empty(flux_shape)
-                    for j in y_range:
-                        for i in x_range:
-                            output_flux[:, j, i] = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
-                                                  flux_array=input_flux[:, j, i], dispersion_units=self.units_wave)
-                else:
-                    output_flux = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
-                                                  flux_array=input_flux, dispersion_units=self.units_wave)
-
-                if input_err is not None:
-                    output_err = unit_conversion(self.units_flux, units_flux, wave_array=input_wave,
-                                                 flux_array=input_err, dispersion_units=self.units_wave)
-
+            # TODO this is slow
+            flux_shape = input_flux.shape
+            y_range, x_range = np.arange(flux_shape[1]), np.arange(flux_shape[2])
+            if len(flux_shape) == 3:
+                output_flux = np.empty(flux_shape)
+                for j in y_range:
+                    for i in x_range:
+                        output_flux[:, j, i] = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
+                                              flux_array=input_flux[:, j, i], dispersion_units=self.units_wave)
             else:
-                _logger.warning(f'- Dispersion units {units_flux} not recognized for conversion. '
-                                f'Please use {FLUX_DENSITY_UNITS} to convert from {self.units_flux}')
+                output_flux = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
+                                              flux_array=input_flux, dispersion_units=self.units_wave)
+
+            if input_err is not None:
+                output_err = unit_conversion(self.units_flux, units_flux, wave_array=input_wave,
+                                             flux_array=input_err, dispersion_units=self.units_wave)
 
             # Reflect the new units
             if np.ma.is_masked(self.flux):
@@ -1260,7 +1257,7 @@ class Cube:
 
         return
 
-    def get_spectrum(self, idx_j, idx_i, label=None):
+    def get_spectrum(self, idx_j, idx_i, id_label=None):
 
         """
 
@@ -1272,12 +1269,12 @@ class Cube:
         :param idx_i: x-axis array coordinate
         :type idx_i: int
 
-        :param label: Identity label for spectrum object
-        :type label: str, optional
+        :param id_label: Identity label for spectrum object
+        :type id_label: str, optional
 
         """
 
-        return Spectrum.from_cube(self, idx_j, idx_i, label)
+        return Spectrum.from_cube(self, idx_j, idx_i, id_label)
 
     def export_spaxels(self, output_address, mask_file, mask_list=None, log_ext_suffix='_LINELOG', progress_output='bar'):
 
@@ -1677,9 +1674,10 @@ class Sample(UserDict, OpenFits):
                 line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
 
                 # Confirm the lines in the log match the one of the spectrum
-                if line_0.units_wave != self.units_wave:
-                    _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the '
-                                    f' lines log in {line_0.units_wave}')
+                # TODO we need something more advance for the line_0 units
+                # if line_0.units_wave != self.units_wave:
+                    # _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the '
+                    #                 f' lines log in {line_0.units_wave}')
 
                 # Confirm all the log lines have the same units
                 same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), line_0.units_wave) != -1).size == line_list.size

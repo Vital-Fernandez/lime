@@ -33,7 +33,7 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
-gp_spec.plot.spectrum(label='GP121903')
+# gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
 gp_spec.fit.bands(line, band_edges)
@@ -49,7 +49,7 @@ fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
 
 # Second attempt including the fit configuration
 gp_spec.fit.bands(line, band_edges, fit_conf)
-gp_spec.plot.bands(line)
+gp_spec.plot.bands()
 
 # You can also save the fitting plot to a file
 gp_spec.plot.bands(output_address=f'../sample_data/{line}.png')
@@ -59,7 +59,7 @@ print(gp_spec.log)
 
 # It can be saved into different types of document using the function
 gp_spec.save_log('../sample_data/example1_linelog.txt')
-gp_spec.save_log('../sample_data/example1_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_flux_err'])
+gp_spec.save_log('../sample_data/example1_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
 gp_spec.save_log('../sample_data/example1_linelog.fits', page='GP121903')
 gp_spec.save_log('../sample_data/example1_linelog.xlsx', page='GP121903')
 gp_spec.save_log('../sample_data/example1_linelog.asdf', page='GP121903')

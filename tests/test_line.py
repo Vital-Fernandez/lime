@@ -157,7 +157,7 @@ class TestLineClass:
 
         assert line.label == 'C3_1909A_t-sem'
         assert line.group_label is None
-        assert line.mask is None
+        assert np.all(line.mask == np.array([1870., 1895., 1898.18782, 1912.243544, 1930., 1950.]))
 
         return
 

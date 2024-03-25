@@ -3,7 +3,6 @@ import lime
 from pathlib import Path
 import pytest
 from matplotlib import pyplot as plt
-from matplotlib.testing.compare import compare_images
 from lime.io import _LOG_EXPORT_DICT
 from os import remove
 

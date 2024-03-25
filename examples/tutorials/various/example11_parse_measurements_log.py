@@ -51,7 +51,7 @@ lime.save_log(gp_spec.log, './sample_data/example_3.txt')
 parameters = ['eqw_gaussian',
               'eqw_gaussian_err']
 
-formulation = ['gauss_flux/cont',
-               '(gauss_flux/cont) * sqrt((gauss_flux_err/gauss_flux)**2 + (std_cont/cont)**2)']
+formulation = ['profile_flux/cont',
+               '(profile_flux/cont) * sqrt((profile_flux_err/profile_flux)**2 + (std_cont/cont)**2)']
 
 lime.log_parameters_calculation('./sample_data/example_3.txt', parameters, formulation)

@@ -56,29 +56,29 @@ ngc5471.check.cube('H1_6563A')
 # cgcg007.check.cube('H1_6563A')
 
 
-# # specprod_dir = '.'
-# # fits_path = f'{specprod_dir}/coadd-sv1-other-27256.fits'
+# specprod_dir = '.'
+# fits_path = f'{specprod_dir}/coadd-sv1-other-27256.fits'
+
+# spectra_dict = open_desi_spectra(fits_path, obj_idtarget=special_ID, obj_idrows=None)
+# wave = spectra_dict[special_ID]['B']['wave']
+# flux = spectra_dict[special_ID]['B']['flux']
+# spec = lime.Spectrum(wave, flux)
+# spec.plot.spectrum()
+
+# fits_url = 'https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/healpix/sv1/other/272/27256/coadd-sv1-other-27256.fits'
+# spectra_dict = lime.OpenFitsSurvey.desi(fits_url, data_ext_list=special_ID)
+
+# special_ID = 39627835576420141
+# gp_spec = lime.Spectrum.from_survey(special_ID, 'desi', program='dark')
+# gp_spec.plot.spectrum()
+
+# manga_cube = '../../sample_data/manga-8626-12704-LOGCUBE.fits.gz'
 #
-# # spectra_dict = open_desi_spectra(fits_path, obj_idtarget=special_ID, obj_idrows=None)
-# # wave = spectra_dict[special_ID]['B']['wave']
-# # flux = spectra_dict[special_ID]['B']['flux']
-# # spec = lime.Spectrum(wave, flux)
-# # spec.plot.spectrum()
-#
-# # fits_url = 'https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/healpix/sv1/other/272/27256/coadd-sv1-other-27256.fits'
-# # spectra_dict = lime.OpenFitsSurvey.desi(fits_url, data_ext_list=special_ID)
-#
-# # special_ID = 39627835576420141
-# # gp_spec = lime.Spectrum.from_survey(special_ID, 'desi', program='dark')
-# # gp_spec.plot.spectrum()
-#
-# # manga_cube = '../../sample_data/manga-8626-12704-LOGCUBE.fits.gz'
-# #
-# # shoc579 = lime.Cube.from_file(manga_cube, instrument='Manga', redshift=0.0475)
-# # shoc579.plot.cube('H1_6563A')
-#
-# # print(fits.getheader(manga_cube, extname='PRIMARY'))
-#
+# shoc579 = lime.Cube.from_file(manga_cube, instrument='Manga', redshift=0.0475)
+# shoc579.plot.cube('H1_6563A')
+
+# print(fits.getheader(manga_cube, extname='PRIMARY'))
+
 
 
 
