@@ -35,8 +35,8 @@ gp_spec.plot.spectrum(include_fits=True)
 gp_spec.plot.grid(rest_frame=True)
 
 # Save the data
-# gp_spec.save_log('../sample_data/example3_linelog.txt')
-# gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
-# gp_spec.save_log('../sample_data/example3_linelog.pdf', param_list=['eqw', 'gauss_flux', 'gauss_flux_err'])
-# lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
-#
+gp_spec.save_log('../sample_data/example3_linelog.txt')
+gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
+gp_spec.save_log('../sample_data/example3_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
+lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
+

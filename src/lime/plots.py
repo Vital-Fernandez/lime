@@ -2,18 +2,15 @@ import logging
 import numpy as np
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
-from astropy.wcs import WCS
-from astropy.io import fits
 
 import pandas as pd
-from pathlib import Path
 
 from .model import c_KMpS, profiles_computation, linear_continuum_computation
-from .tools import blended_label_from_log, ASTRO_UNITS_KEYS, UNITS_LATEX_DICT, latex_science_float, PARAMETER_LATEX_DICT
-from .tools import define_masks, format_line_mask_option
+from .tools import blended_label_from_log, latex_science_float, PARAMETER_LATEX_DICT
+from .tools import define_masks, format_line_mask_option, au
 from .io import check_file_dataframe, save_log, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from .transitions import check_line_in_log, Line, label_decomposition
-
+from . import _setup_cfg
 
 _logger = logging.getLogger('LiMe')
 
@@ -34,8 +31,6 @@ PLOT_SIZE_FONT = {'figure.figsize': (11, 6),
                   'legend.fontsize': 12,
                   'xtick.labelsize': 12,
                   'ytick.labelsize': 12}
-
-# 'mathtext.fontset': 'cm'
 
 COLOR_DICT = {'bg': 'white', 'fg': 'black',
              'cont_band': '#8c564b', 'line_band': '#b5bd61',
@@ -75,7 +70,7 @@ def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux)
 
     legend_text = latex_label + '\n'
 
-    units_line_flux = ASTRO_UNITS_KEYS[units_wave] * ASTRO_UNITS_KEYS[units_flux]
+    units_line_flux = units_wave * units_flux
     line_flux_latex = f'{units_line_flux:latex}'
     normFlux_latex = f' $({latex_science_float(norm_flux)})$' if norm_flux != 1 else ''
 
@@ -385,7 +380,7 @@ def spatial_mask_plot(ax, masks_dict, mask_color, mask_alpha, units_flux, mask_l
 
             # Add units if using the flux
             if mask_param == units_flux:
-                units_text = r'{:latex}'.format(ASTRO_UNITS_KEYS[units_flux])
+                units_text = f'{units_flux:latex}'
                 legend_i += r'$\left({}\right)$'.format(units_text[1:-1])
 
             # Add percentile number
@@ -637,26 +632,6 @@ def parse_figure_format(input_conf, local_conf=None, default_conf=STANDARD_PLOT,
     return output_conf
 
 
-def parse_labels_format(input_labels, units_wave, units_flux, norm_flux):
-
-    # Check whether there are input labels
-    if input_labels is None:
-        output_labels = {}
-    else:
-        output_labels = input_labels.copy()
-
-    # X axis label
-    if output_labels.get('xlabel') is None:
-        output_labels['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
-
-    # Y axis label
-    if output_labels.get('ylabel') is None:
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
-        output_labels['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
-
-    return output_labels
-
-
 def label_generator(idx_sample, log, legend_handle):
 
     if legend_handle == 'levels':
@@ -678,6 +653,39 @@ def label_generator(idx_sample, log, legend_handle):
             raise LiMe_Error(f'The input handle "{legend_handle}" is not found on the sample log columns')
 
     return spec_label
+
+
+def axis_labeling(norm_flux, units_wave, units_flux, plot_type=None):
+
+    # TODO maybe make this a dictionary to get the default ax_cfg
+
+    # Wavelength axis units
+    x_label = units_wave.to_string('latex')
+    x_label = f'Wavelength ({x_label})'
+
+    # Flux axis units
+    norm_flux = units_flux.scale if norm_flux is None else norm_flux
+    norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(1 / norm_flux))
+    # norm_label = '' if norm_flux == 1 else r' $\,/\,{}$'.format(latex_science_float(norm_flux))
+
+    y_label = f"Flux {units_flux.to_string('latex')}"
+    y_label = y_label.replace('$\mathrm{', '$\left(')
+    y_label = y_label.replace('}$', norm_label)
+
+    return x_label, y_label
+
+
+class Themer:
+
+    def __init__(self, conf=None, theme_list=None):
+
+        # Use the default configuration if non is provided
+        conf = _setup_cfg if conf is None else conf
+
+        self.high_dpi_check = False
+        self.plt_themes = conf['matplotlib_cfg']
+
+        return
 
 
 class Plotter:
@@ -715,16 +723,8 @@ class Plotter:
         # Adjust default theme
         PLOT_CONF, AXES_CONF = STANDARD_PLOT.copy(), STANDARD_AXES.copy()
 
-        if (norm_flux is None) or (norm_flux == 1):
-            norm_label = ''
-        else:
-            norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux))
-
-        if (units_wave is not None) and ('xlabel' not in ax_cfg):
-            AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
-
-        if (units_flux is not None) and ('ylabel' not in ax_cfg):
-            AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
+        # Assign the default axis labels
+        AXES_CONF['xlabel'], AXES_CONF['ylabel'] = axis_labeling(norm_flux, units_wave, units_flux)
 
         # User configuration overrites user
         PLT_CONF = {**PLOT_CONF, **fig_cfg}
@@ -809,10 +809,9 @@ class Plotter:
         units_flux = self._spec.units_flux
         redshift = self._spec.redshift
 
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
-        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
-        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
-        AXES_CONF['title'] = plot_title
+        # Assign the default axis labels
+        xlabel, y_label = axis_labeling(norm_flux, units_wave, units_flux)
+        AXES_CONF['title'], AXES_CONF['xlabel'], AXES_CONF['ylabel'] = plot_title, xlabel, y_label
 
         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, redshift, False)
 
@@ -854,10 +853,9 @@ class Plotter:
         units_flux = self._spec.units_flux
         redshift = self._spec.redshift
 
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(norm_flux)) if norm_flux != 1.0 else ''
-        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[units_flux]})$' + norm_label
-        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[units_wave]})$'
-        AXES_CONF['title'] = plot_title
+        # Assign the default axis labels
+        xlabel, y_label = axis_labeling(norm_flux, units_wave, units_flux)
+        AXES_CONF['title'], AXES_CONF['xlabel'], AXES_CONF['ylabel'] = plot_title, xlabel, y_label
 
         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, redshift, 'observed')
 
@@ -905,7 +903,7 @@ class SpectrumFigures(Plotter):
         return
 
     def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
-                 include_fits=False, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
+                 include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
 
         """
 
@@ -967,6 +965,8 @@ class SpectrumFigures(Plotter):
         # Display check for the user figures
         display_check = True if in_fig is None else False
 
+
+
         # Set figure format with the user inputs overwriting the default conf
         legend_check = True if label is not None else False
         fig_cfg.setdefault('figure.figsize', (8, 5))
@@ -1025,8 +1025,6 @@ class SpectrumFigures(Plotter):
             # Plot the normalize continuum
             if include_cont and self._spec.cont is not None:
                 in_ax.plot(wave_plot/z_corr, self._spec.cont, label='Fitted continuum', linestyle='--')
-
-
 
             # Switch y_axis to logarithmic scale if requested
             if log_scale:
@@ -1829,7 +1827,7 @@ class SampleFigures(Plotter):
 
                             if line_list.size > 0:
 
-                                wave_array, gaussian_array = gaussian_profiles_computation(line_list, spec.log, (1 + spec.redshift))
+                                wave_array, gaussian_array = profiles_computation(line_list, spec.log, (1 + spec.redshift))
                                 wave_array, cont_array = linear_continuum_computation(line_list, spec.log, (1 + spec.redshift))
 
                                 # Single component lines
@@ -1946,3 +1944,4 @@ class SampleFigures(Plotter):
         return
 
 
+theme = Themer()

@@ -45,7 +45,8 @@ shoc579 = lime.Cube(wave, flux_cube, err_cube, redshift=redshift, norm_flux=norm
                     pixel_mask=np.isnan(err_cube))
 
 # ---------------- Spectrum
-spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1])
+spax = shoc579.get_spectrum(spaxel_coords[0], spaxel_coords[1], id_label='SHOC579-Manga38-35')
+spax.plot.spectrum(rest_frame=True)
 wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, spax.err_flux.data * norm_flux
 np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 

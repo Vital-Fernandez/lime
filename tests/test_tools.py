@@ -224,12 +224,12 @@ def test_redshift_calculation():
 
 def test_unit_conversion():
 
-    spec.unit_conversion(units_wave='nm', units_flux='Jy', norm_flux=1e-8)
+    spec.unit_conversion(wave_units_out='nm', flux_units_out='Jy', norm_flux=1e-8)
     assert np.allclose(spec.wave.data, wave_array/10, equal_nan=True)
     assert np.allclose(spec.flux.data[:3], np.array([457.8036672 , 493.54866591, 493.17681153]), equal_nan=True)
     assert spec.norm_flux == 1e-8
 
-    spec.unit_conversion(units_wave='A', units_flux='Flam', norm_flux=1)
+    spec.unit_conversion(wave_units_out='AA', flux_units_out='FLAM', norm_flux=1)
     assert np.allclose(spec.wave.data, wave_array, equal_nan=True)
     assert np.allclose(spec.flux.data, flux_array, equal_nan=True)
     assert spec.norm_flux == 1

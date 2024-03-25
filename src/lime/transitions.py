@@ -2,10 +2,28 @@ import logging
 
 import numpy as np
 import pandas as pd
-from numpy import array, abs, round, all, diff, char, searchsorted, unique, empty, arange, zeros
-from .tools import DISPERSION_UNITS, UNITS_LATEX_DICT
+from numpy import array, abs, all, diff, char, searchsorted, unique, empty, arange, zeros
 from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
+
+
+UNITS_LATEX_DICT = {'A': r'\AA',
+                    'um': r'\mu\!m',
+                    'nm': 'nm',
+                    'Hz': 'Hz',
+                    'cm': 'cm',
+                    'mm': 'mm',
+                    'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
+                    'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
+                    'Jy': 'Jy',
+                    'mJy': 'mJy',
+                    'nJy': 'nJy'}
+
+# TODO need a new mechanic to get the units
+DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
+
+# FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
+
 
 _DEFAULT_PROFILE = 'g-emi'
 
@@ -561,7 +579,7 @@ class Line:
             band = _PARENT_BANDS
         band = check_file_dataframe(band, DataFrame, copy_input=False)
 
-        # Check line in log
+        # Check line in log #TODO add mechanic to read from log default values if not None
         self.label = check_line_in_log(label, band)
 
         # Get label components

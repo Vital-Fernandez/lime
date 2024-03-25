@@ -8,11 +8,13 @@ from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 
 from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE, hdu_to_log_df
-from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format, parse_labels_format,\
-    determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, image_plot, spec_plot, spatial_mask_plot, _masks_plot
+from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format,\
+                    determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, \
+                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, axis_labeling
+
+
 from .tools import blended_label_from_log, define_masks
 from .transitions import label_decomposition, Line
-from astropy.table import Table
 
 
 _logger = logging.getLogger('LiMe')
@@ -50,10 +52,9 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
         active_lines = np.zeros(len(user_mask.index)).astype(bool)
 
     # Establish the lower and upper wavelength limits
-    if np.ma.isMaskedArray(wave_rest):
-        w_min, w_max = wave_rest.data[0], wave_rest.data[-1]
-    else:
-        w_min, w_max = wave_rest[0], wave_rest[-1]
+    wave_interval = wave_rest.data if np.ma.isMaskedArray(wave_rest) else wave_rest
+    wave_interval = wave_interval[~np.isnan(wave_interval)]
+    w_min, w_max = wave_interval[0], wave_interval[-1]
 
     idx_rows_cont = (user_mask.w2 > w_min) & (user_mask.w5 < w_max)
     idx_row_line = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
@@ -551,6 +552,284 @@ class BandsInspection:
         return
 
 
+class RedshiftInspectionSingle:
+
+    def __init__(self):
+
+        # Plot Attributes
+        self._fig = None
+        self._ax = None
+        self._AXES_CONF = None
+        self._spec_label = None
+        self._legend_handle = None
+
+        # Input data
+        self._obj_idcs = None
+        self._column_log = None
+        self._log_address = None
+        self._output_idcs = None
+        self._latex_array = None
+        self._waves_array = None
+
+        # User pointing
+        self._lineSelection = None
+        self._user_point = None
+        self._none_value = None
+        self._unknown_value = None
+        self._sample_object = None
+
+    def redshift(self, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
+                 none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
+                 output_address=None, plt_cfg={}, ax_cfg={}, in_fig=None):
+
+        # Assign the attributes
+        self._obj_idcs = None
+        self._output_idcs = None
+        self._column_log = redshift_column
+        self._none_value = none_value
+        self._unknown_value = unknown_value
+        self._spec_label = "" if title_label is None else title_label
+        self._legend_handle = legend_handle
+        self._user_point = None
+
+        # Read initial value for the redshift
+        redshift_pred = self._spec.redshift
+        redshift_pred = None if np.all(pd.isnull(redshift_pred)) else np.nanmean(redshift_pred)
+
+        # Create initial entry
+        self._compute_redshift(redshift_output=redshift_pred)
+
+        # Get the lines transitions and latex labels
+        reference_bands_df = check_file_dataframe(reference_lines, pd.DataFrame)
+        if reference_bands_df is None:
+            raise LiMe_Error(f'Reference line log could not be read ({reference_lines})')
+        else:
+            if isinstance(reference_bands_df, pd.DataFrame):
+                reference_lines = reference_bands_df.index.to_numpy()
+
+        # Sort by wavelength
+        _waves_array, _latex_array = label_decomposition(reference_lines, params_list=('wavelength', 'latex_label'))
+        idcs_sorted = np.argsort(_waves_array)
+        self._waves_array, self._latex_array = _waves_array[idcs_sorted], _latex_array[idcs_sorted]
+
+        # Set figure format with the user inputs overwriting the default conf
+        plt_cfg.setdefault('figure.figsize', (10, 6))
+        plt_cfg.setdefault('axes.labelsize', 12)
+        plt_cfg.setdefault('xtick.labelsize', 10)
+        plt_cfg.setdefault('ytick.labelsize', 10)
+
+        norm_flux = self._sample.load_params.get('norm_flux')
+        units_wave, units_flux = self._sample.load_params.get('units_wave'), self._sample.load_params.get('units_flux')
+        PLT_CONF, self._AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux, units_wave=units_wave,
+                                                        units_flux=units_flux)
+
+        # Create and fill the figure
+        with rc_context(PLT_CONF):
+
+            # Generate the figure object and figures
+            self._fig = plt.figure() if in_fig is None else in_fig
+            gs = gridspec.GridSpec(nrows=1, ncols=2, figure=self._fig, width_ratios=[2, 0.5], height_ratios=[1])
+            self._ax = self._fig.add_subplot(gs[0])
+            self._ax.set(**self._AXES_CONF)
+
+            # Line Selection axis
+            buttoms_ax = self._fig.add_subplot(gs[1])
+            buttons_list = [r'$None$'] + list(self._latex_array) + [r'$Unknown$']
+            radio = RadioButtons(buttoms_ax, buttons_list)
+            for circle in radio.circles:  # Make the buttons a bit rounder
+                circle.set_height(0.025)
+                circle.set_width(0.075)
+            for r in radio.labels:
+                r.set_fontsize(6)
+
+            # Plot the spectrum
+            self._launch_plots_ZI()
+
+            # Connect the widgets
+            radio.on_clicked(self._button_ZI)
+            self._fig.canvas.mpl_connect('button_press_event', self._on_click_ZI)
+
+            # Plot on screen unless an output address is provided
+            save_close_fig_swicth(output_address, 'tight', self._fig, maximise=maximize)
+
+        return
+
+    def _launch_plots_ZI(self):
+
+        # Get redshift from log
+        redshift_pred = self._sample.loc[self._obj_idcs, self._column_log].to_numpy()
+        redshift_pred = None if np.all(pd.isnull(redshift_pred)) else np.nanmean(redshift_pred)
+
+        # Store the figure limits
+        xlim, ylim = self._ax.get_xlim(), self._ax.get_ylim()
+
+        # Redraw the figure
+        self._ax.clear()
+        self._plot_spectrum_ZI(self._ax)
+        self._plot_line_labels_ZI(self._ax, self._user_point, redshift_pred)
+        self._ax.legend(loc=4)
+
+        title = f'{self._spec_label} z calculation'
+        if redshift_pred not in [None, self._none_value, self._unknown_value]:
+            title += f', redshift = {redshift_pred:0.3f}'
+        self._ax.set_title(title)
+
+        # Reset axis format
+        if (xlim[0] != 0) and (xlim[0] != 1): # First time
+            self._ax.set_xlim(xlim)
+            self._ax.set_ylim(ylim)
+        self._ax.set(**self._AXES_CONF)
+        self._fig.canvas.draw()
+
+        return
+
+    def _plot_spectrum_ZI(self, ax):
+
+        # Loop through the objects
+        for i, obj_idx in enumerate(self._obj_idcs):
+
+            # Load the spectrum
+            spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+
+            # Plot on the observed frame with reshift = 0
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
+
+            # Plot the spectrum
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid')
+
+            # Plot the masked pixels
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
+
+        return
+
+    def _plot_line_labels_ZI(self, ax, click_coord, redshift_pred):
+
+        if (redshift_pred != 0) and (not pd.isnull(redshift_pred)):
+            wave_min, wave_max = None, None
+            for obj_idx in self._obj_idcs:
+
+                # Load the spectrum
+                spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+
+                wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
+                wavelength = wavelength[~np.isnan(wavelength)]
+
+                if wave_min is None:
+                    wave_min = wavelength[0]
+                else:
+                    wave_min = wavelength[0] if wavelength[0] < wave_min else wave_min
+
+                if wave_max is None:
+                    wave_max = wavelength[-1]
+                else:
+                    wave_max = wavelength[-1] if wavelength[-1] > wave_max else wave_max
+
+            # Check the lines which fit in the plot region
+            idcs_in_range = np.logical_and(self._waves_array * (1 + redshift_pred) >= wave_min,
+                                           self._waves_array * (1 + redshift_pred) <= wave_max)
+
+            # Plot lines in region
+            linesRange = self._waves_array[idcs_in_range]
+            latexRange = self._latex_array[idcs_in_range]
+            for i, lineWave in enumerate(linesRange):
+                if latexRange[i] == self._lineSelection:
+                    color_line = 'tab:red'
+                else:
+                    color_line = self._color_dict['fg']
+
+                ax.axvline(x=lineWave * (1 + redshift_pred), color=color_line, linestyle='--', linewidth=0.5)
+
+                ax.annotate(latexRange[i], xy=(lineWave * (1 + redshift_pred), 0.85),
+                            horizontalalignment="center",
+                            rotation=90,
+                            backgroundcolor='w',
+                            size=6,
+                            xycoords='data', xytext=(lineWave * (1 + redshift_pred), 0.85), textcoords=("data",
+                                                                                                        "axes fraction"))
+
+        return
+
+    def _compute_redshift(self, redshift_output=None):
+
+        # Routine not to overwrite first measurement
+        if redshift_output is None:
+
+            # First time case: Both input but be provided
+            if self._lineSelection is not None:
+
+                # Default case nothing is selected:
+                if self._lineSelection == r'$None$':
+                    _redshift_pred = self._none_value
+
+                elif self._lineSelection == r'$Unknown$':
+                    _redshift_pred = self._unknown_value
+
+                # Wavelength selected
+                else:
+                    if self._user_point is not None:
+                        idx_line = self._latex_array == self._lineSelection
+                        ref_wave = self._waves_array[idx_line][0]
+                        _redshift_pred = self._user_point[0] / ref_wave - 1
+
+                    # Special cases None == NaN, Unknown == 0
+                    else:
+                        _redshift_pred = self._none_value
+            else:
+                _redshift_pred = self._none_value
+        else:
+            _redshift_pred = redshift_output
+
+        return
+
+    def _button_ZI(self, line_selection):
+
+        # Button selection
+        self._lineSelection = line_selection
+
+        # Compute the redshift
+        self._compute_redshift()
+
+        # Replot the figure
+        self._launch_plots_ZI()
+
+        return
+
+    def _on_click_ZI(self, event, tolerance=3):
+
+        if event.button == 2:
+
+            self._user_point = (event.xdata, 0.5)
+
+            # Compute the redshift
+            self._compute_redshift()
+
+            # Replot the figure
+            self._launch_plots_ZI()
+
+        return
+
+    def _label_generator(self, idx_sample):
+
+        if self._legend_handle == 'levels':
+
+            spec_label =", ".join(map(str, idx_sample))
+
+        else:
+
+            if self._legend_handle in self._sample.index.names:
+                idx_item = list(self._sample.index.names).index(self._legend_handle)
+                spec_label = idx_sample[idx_item]
+
+            elif self._legend_handle in self._sample.log.columns:
+                spec_label = self._sample.log.loc[idx_sample, self._legend_handle]
+
+            else:
+                raise LiMe_Error(f'The input handle "{self._legend_handle}" is not found on the sample log columns')
+
+
+        return spec_label
+
+
 class RedshiftInspection:
 
     def __init__(self):
@@ -1041,8 +1320,9 @@ class CubeInspection:
 
         # State the plot labelling
         default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, line_fg, self.masks_dict)
-        ax_cfg_spec = parse_labels_format(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux,
-                                          self._cube.norm_flux)
+        default_ax_cfg_spec = dict(zip(('xlabel', 'ylabel'), axis_labeling(self._cube.norm_flux, self._cube.units_wave,
+                                                                           self._cube.units_flux)))
+        default_ax_cfg_spec.update(ax_cfg_spec)
 
         # User configuration overwrite default figure format
         local_cfg = {'figure.figsize': (16, 8), 'axes.titlesize': 12, 'legend.fontsize': 12, 'axes.labelsize': 12,
@@ -1050,7 +1330,7 @@ class CubeInspection:
         self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
 
         # Container for both axes format
-        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
+        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': default_ax_cfg_spec}
 
         # Create the figure
         with rc_context(self.fig_conf):
@@ -1313,7 +1593,9 @@ class MaskInspection:
 
         # State the plot labelling
         default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, None, self.masks_dict)
-        ax_cfg_spec = parse_labels_format(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux)
+        default_ax_cfg_spec = dict(zip(('xlabel', 'ylabel'), axis_labeling(self._cube.norm_flux, self._cube.units_wave,
+                                                                           self._cube.units_flux)))
+        default_ax_cfg_spec.update(ax_cfg_spec)
 
         # User configuration overwrite default figure format
         local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
@@ -1443,7 +1725,7 @@ class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
 
         # Instantiate the dependencies
         Plotter.__init__(self)
-        RedshiftInspection.__init__(self)
+        RedshiftInspectionSingle.__init__(self)
         BandsInspection.__init__(self)
 
         # Lime spectrum object with the scientific data

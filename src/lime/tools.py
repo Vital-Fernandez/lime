@@ -1,5 +1,4 @@
-__all__ = ['COORD_KEYS',
-           'unit_conversion',
+__all__ = ['unit_conversion',
            'extract_fluxes',
            'normalize_fluxes',
            'redshift_calculation']
@@ -10,51 +9,47 @@ import pandas as pd
 
 from .io import LiMe_Error, load_log, log_to_HDU
 from sys import stdout
+
 from astropy import units as au
+from astropy.units.core import CompositeUnit, IrreducibleUnit, Unit
+
 from astropy.io import fits
 from pathlib import Path
 
 _logger = logging.getLogger('LiMe')
 
+# Arrays for roman numerals conversion
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
-ASTRO_UNITS_KEYS = {'A': au.AA,
-                    'um': au.um,
-                    'nm': au.nm,
-                    'Hz': au.Hz,
-                    'cm': au.cm,
-                    'mm': au.mm,
-                    'Flam': au.erg/au.s/au.cm**2/au.AA,
-                    'Fnu': au.erg/au.s/au.cm**2/au.Hz,
-                    'Jy': au.Jy,
-                    'mJy': au.mJy,
-                    'nJy': au.nJy}
+# Add astronomical units to default database # TODO check astropy default
+# au.add_enabled_aliases({'F_lam': au.erg/au.s/au.cm**2/au.AA, 'F_nu': au.erg/au.s/au.cm**2/au.Hz,
+#                         'f_E': au.photon/au.s/au.cm**2/au.keV, 'f_lam': au.photon/au.s/au.cm**2/au.AA})
 
-UNITS_LATEX_DICT = {'A': r'\AA',
-                    'um': r'\mu\!m',
-                    'nm': 'nm',
-                    'Hz': 'Hz',
-                    'cm': 'cm',
-                    'mm': 'mm',
-                    'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
-                    'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
-                    'Jy': 'Jy',
-                    'mJy': 'mJy',
-                    'nJy': 'nJy'}
+flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
+                    format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
+                            "generic": "FLAM", "console": "FLAM"})
 
-DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
+fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
+                    format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
+                            "generic": "FNU", "console": "FNU"})
 
-FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
+photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
+                        format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
+                        "generic": "PHOTLAM", "console": "PHOTLAM"})
+
+photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
+                        format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
+                        "generic": "PHOTNU", "console": "PHOTNU"})
+
+au.add_enabled_units([flam, fnu, photlam, photnu])
+
 
 PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'Fnu': r'$F_{\nu}$',
                         'SN_line': r'$\frac{S}{N}_{line}$',
                         'SN_cont': r'$\frac{S}{N}_{cont}$'}
 
-# Variables with the astronomical coordinate information for the creation of new .fits files
-COORD_KEYS = ['CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'CUNIT1', 'CUNIT2',
-              'CTYPE1', 'CTYPE2']
 
 def mult_err_propagation(nominal_array, err_array, result):
 
@@ -472,8 +467,7 @@ def latex_science_float(f, dec=2):
         return float_str
 
 
-def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, decimals=None,
-                    mask_check=False):
+def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, decimals=None):
 
     """
 
@@ -503,39 +497,30 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
     :param decimals: Number of decimals.
     :type decimals: int, optional
 
-    :param mask_check: Re-apply the numpy array mask to the output array. The default value is True.
-    :type mask_check: bool, optional
-
     """
 
-
     # Converting the wavelength array
-    if (in_units in DISPERSION_UNITS) and (out_units in DISPERSION_UNITS):
-        input_mask = wave_array.mask if mask_check else None
-        input_array = wave_array * ASTRO_UNITS_KEYS[in_units]
-        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units])
+    if flux_array is None:
+        input_mask = wave_array.mask if np.ma.isMaskedArray(wave_array) else None
+        input_array = wave_array * in_units if input_mask is None else wave_array.data * in_units
+        output_array = input_array.to(au.Unit(out_units))
+        output_array = output_array.value  # Remove the units
 
     # Converting the flux array
-    elif (in_units in FLUX_DENSITY_UNITS) and (out_units in FLUX_DENSITY_UNITS):
-        input_mask = flux_array.mask if mask_check else None
-        input_array = flux_array * ASTRO_UNITS_KEYS[in_units]
-        wave_unit_array = wave_array * ASTRO_UNITS_KEYS[dispersion_units]
-        output_array = input_array.to(ASTRO_UNITS_KEYS[out_units], au.spectral_density(wave_unit_array))
-
-    # Not recognized units
     else:
-        _logger.warning(f'Input units {in_units} could not be converted to {out_units}')
+        input_mask = flux_array.mask if np.ma.isMaskedArray(flux_array) else None
+        input_array = flux_array * in_units if input_mask is None else flux_array.data * in_units
+        w_array = wave_array.data * dispersion_units if np.ma.isMaskedArray(wave_array) else wave_array * dispersion_units
+        output_array = input_array.to(au.Unit(out_units), au.spectral_density(w_array))
+        output_array = output_array.value  # Remove the units
 
-    # Reapply the mask if necessary
-    if mask_check:
-        output_array = np.ma.masked_array(output_array.value, input_mask)
-    else:
-        output_array = output_array.value
+    # Reapply the mask
+    output_array = output_array if input_mask is None else np.ma.masked_array(output_array, input_mask)
 
-    if decimals is None:
-        return output_array
-    else:
-        return np.round(output_array, decimals)
+    # Round to decimal places
+    output_array = output_array if decimals is None else np.round(output_array, decimals)
+
+    return output_array
 
 
 def refraction_index_air_vacuum(wavelength_array, units='A'):
@@ -720,6 +705,16 @@ def logs_into_fits(log_file_list, output_address, delete_after_join=False, level
             _logger.info("The individual masks won't be deleted")
 
     return
+
+
+def check_units(units_wave, units_flux):
+
+    # Check if input are already astropy units
+    units_wave = au.Unit(units_wave) if not isinstance(units_wave, (IrreducibleUnit, CompositeUnit, Unit)) else units_wave
+    units_flux = au.Unit(units_flux) if not isinstance(units_flux, (IrreducibleUnit, CompositeUnit, Unit)) else units_flux
+
+    return units_wave, units_flux
+
 
 
 class ProgressBar:

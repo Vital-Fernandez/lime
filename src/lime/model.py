@@ -18,6 +18,8 @@ sqrt2 = np.sqrt(2)
 
 k_gFWHM = 2 * np.sqrt(2 * np.log(2))
 
+k_eFWHM = 2 * np.log(2)
+
 TARGET_PERCENTILES = np.array([0, 1, 5, 10, 50, 90, 95, 99, 100])
 
 # Atomic mass constant
@@ -45,6 +47,11 @@ _CENTER_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
 _SIG_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
 _FRAC_PAR = dict(value=None, min=0, max=1, vary=True, expr=None)
 _AREA_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
+_ALPHA_PAR = dict(value=None, min=np.inf, max=0, vary=True, expr=None)
+
+_A_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+_B_PAR = dict(value=None, min=0, max=np.inf, vary=True, expr=None)
+_C_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
 
 _AMP_ABS_PAR = dict(value=None, min=-np.inf, max=0, vary=True, expr=None)
 
@@ -81,8 +88,48 @@ def voigt_model(x, amp, center, sigma, gamma):
     return amp*np.real(wofz(z)) / max(tiny, (sigma*k_GaussArea))
 
 
+def exponential_model(x, amp, center, alpha):
+
+    return amp * np.exp(-alpha * np.abs(x - center))
+
+
 def pseudo_voigt_model(x, amp, center, sigma, frac):
     return frac * gaussian_model(x, amp, center, sigma) + (1 - frac) * lorentz_model(x, amp, center, sigma)
+
+
+def broken_powerlaw_model(x, a, b, c, alpha):
+
+    # alpha_in = np.where((x > (center - wbreak)) & (x < (center + wbreak)), 0, alpha)
+
+    # Compute symmetric power law
+    wave_shift_abs = np.abs(x - c)
+    y = a * np.power(wave_shift_abs, -alpha)
+
+    # Set broken region to zero
+    idcs_core = wave_shift_abs < b
+    y[idcs_core] = 0.0
+
+    return y
+
+
+def broken_powerlaw_model_ratio(x, a, b, c, alpha):
+
+    # alpha_in = np.where((x > (center - wbreak)) & (x < (center + wbreak)), 0, alpha)
+
+    # Compute symmetric power law
+    wave_shift_abs = np.abs(x - c)
+    y = a * np.power(wave_shift_abs, -alpha)
+
+    # Set broken region to zero
+    idcs_core = wave_shift_abs < b
+    y[idcs_core] = 0.0
+
+    return y
+
+
+def pseudo_power_model(x, amp, center, sigma, alpha, frac):
+
+    return frac * gaussian_model(x, amp, center, sigma) + (1 - frac) * broken_powerlaw_model(x, amp, sigma, center, alpha)
 
 
 def g_FWHM(line, idx):
@@ -105,7 +152,28 @@ def v_FWHM(line, idx):
     FWHM_gauss = g_FWHM(line, idx)
     FWHM_lorentz = l_FWHM(line, idx)
 
-    return 0.5346 * FWHM_lorentz + np.sqrt(0.2166 * FWHM_lorentz + FWHM_gauss)
+    return 0.5346 * FWHM_lorentz + np.sqrt(0.2166 * FWHM_lorentz * FWHM_lorentz + FWHM_gauss * FWHM_gauss)
+
+
+def p_FWHM(line, idx):
+
+    FWHM_power = np.nan
+
+    return FWHM_power
+
+
+def e_FWHM(line, idx):
+
+    alpha = line.alpha[idx]
+
+    return k_eFWHM / alpha
+
+
+def pp_FWHM(line, idx):
+
+    FWHM_gauss = g_FWHM(line, idx)
+
+    return FWHM_gauss
 
 
 def gaussian_area(line, idx, n_steps):
@@ -142,10 +210,39 @@ def pseudo_voigt_area(line, idx, n_steps):
     return frac * (2.5066282746 * amp * sigma) + (1 - frac) * (3.14159265 * amp * sigma)
 
 
-PROFILE_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'frac'])
-PROFILE_FUNCTIONS =  {'g': gaussian_model, 'l': lorentz_model, 'v': voigt_model, 'pv': pseudo_voigt_model}
-AREA_FUNCTIONS = {'g': gaussian_area, 'l': lorentz_area, 'v': voigt_area, 'pv': pseudo_voigt_area}
-FWHM_FUNCTIONS =  {'g': g_FWHM, 'l': l_FWHM, 'v': v_FWHM, 'pv': v_FWHM}
+def power_area(line, idx, n_steps):
+
+    return np.full(n_steps, np.nan)
+
+
+def exp_area(line, idx, n_steps):
+
+    amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
+    alpha = np.random.normal(line.alpha[idx], line.alpha[idx], n_steps)
+
+    return 2.5066282746 * amp * 1/alpha
+
+
+def pseudo_power_area(line, idx, n_steps):
+
+    amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
+    sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
+    frac = np.random.normal(line.frac[idx], line.frac_err[idx], n_steps)
+
+    return frac * (2.5066282746 * amp * sigma) + (1 - frac) * (3.14159265 * amp * sigma)
+
+
+PROFILE_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
+
+PROFILE_FUNCTIONS =  {'g': gaussian_model, 'l': lorentz_model, 'v': voigt_model,
+                      'pv': pseudo_voigt_model, 'pp': pseudo_power_model,
+                      'p': broken_powerlaw_model, 'e': exponential_model}
+
+AREA_FUNCTIONS = {'g': gaussian_area, 'l': lorentz_area, 'v': voigt_area,
+                  'pv': pseudo_voigt_area, 'pp': pseudo_power_area,
+                  'p': power_area, 'e': exp_area}
+
+FWHM_FUNCTIONS =  {'g': g_FWHM, 'l': l_FWHM, 'v': v_FWHM, 'pv': v_FWHM, 'pp': pp_FWHM, 'p': p_FWHM, 'e': e_FWHM}
 
 
 def signal_to_noise_rola(amp, std_cont, n_pixels):
@@ -195,8 +292,31 @@ def profiles_computation(line_list, log, z_corr, shape_list, x_array=None, inter
                 amp_array = log.loc[line_list, 'amp'].to_numpy()
                 center_array = log.loc[line_list, 'center'].to_numpy()
                 sigma_array = log.loc[line_list, 'sigma'].to_numpy()
-                gamma_array = log.loc[line_list, 'frac'].to_numpy()
-                gaussian_array[:, i] = profile_function(x_array, amp_array[i], center_array[i], sigma_array[i], gamma_array[i])[:, 0]
+                frac_array = log.loc[line_list, 'frac'].to_numpy()
+                gaussian_array[:, i] = profile_function(x_array, amp_array[i], center_array[i], sigma_array[i], frac_array[i])[:, 0]
+
+            elif shape_list[i] == "e":
+                amp_array = log.loc[line_list, 'amp'].to_numpy()
+                center_array = log.loc[line_list, 'center'].to_numpy()
+                alpha_array = log.loc[line_list, 'alpha'].to_numpy()
+                gaussian_array[:, i] = profile_function(x_array, amp_array[i], center_array[i], alpha_array[i])[:, 0]
+
+            elif shape_list[i] == "pp":
+                amp_array = log.loc[line_list, 'amp'].to_numpy()
+                center_array = log.loc[line_list, 'center'].to_numpy()
+                sigma_array = log.loc[line_list, 'sigma'].to_numpy()
+                frac_array = log.loc[line_list, 'frac'].to_numpy()
+                alpha_array = log.loc[line_list, 'alpha'].to_numpy()
+                gaussian_array[:, i] = profile_function(x_array, amp_array[i], center_array[i], sigma_array[i],
+                                                        alpha_array[i], frac_array[i])[:, 0]
+
+            elif shape_list[i] == "p":
+                a_array = log.loc[line_list, 'a'].to_numpy()
+                b_array = log.loc[line_list, 'b'].to_numpy()
+                c_array = log.loc[line_list, 'c'].to_numpy()
+                alpha_array = log.loc[line_list, 'alpha'].to_numpy()
+                gaussian_array[:, i] = profile_function(x_array, a_array[i], b_array[i], c_array[i], alpha_array[i])[:, 0]
+
             else:
                 raise LiMe_Error(f'Profile curve "{shape_list[i]}" for line {line_label} is not recognized. Please use '
                                  f'_p-g (gaussian), _p-l (Lorentz) or _p-v (Voigt)')
@@ -276,54 +396,6 @@ def is_digit(x):
     except ValueError:
         return False
 
-# def gaussian_profiles_computation(line_list, log, z_corr, res_factor=100, interval=('w3', 'w4'), x_array=None):
-#
-#     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
-#     # and starting at interval[0] values beyond interval[0] are masked
-#
-#     #TODO Resfactor should be a lime parameter
-#     if x_array is None:
-#
-#         amp_array = log.loc[line_list, 'amp'].to_numpy()
-#         center_array = log.loc[line_list, 'center'].to_numpy()
-#         sigma_array = log.loc[line_list, 'sigma'].to_numpy()
-#
-#         wmin_array = log.loc[line_list, interval[0]].to_numpy() * z_corr
-#         wmax_array = log.loc[line_list, interval[1]].to_numpy() * z_corr
-#         w_mean = np.max(wmax_array - wmin_array)
-#
-#         x_zero = np.linspace(0, w_mean, res_factor)
-#         x_array = np.add(np.c_[x_zero], wmin_array)
-#
-#         gaussian_array = gaussian_model(x_array, amp_array, center_array, sigma_array)
-#
-#         for i in range(x_array.shape[1]):
-#             idcs_nan = x_array[:, i] > wmax_array[i]
-#             x_array[idcs_nan, i] = np.nan
-#             gaussian_array[idcs_nan, i] = np.nan
-#
-#         return x_array, gaussian_array
-#
-#     # All lines are computed with the wavelength range provided by the user
-#     else:
-#
-#         # Profile container
-#         gaussian_array = np.zeros((len(x_array), len(line_list)))
-#
-#         # Compute the individual profiles
-#         for i, comp in enumerate(line_list):
-#             amp = log.loc[comp, 'amp']
-#             center = log.loc[comp, 'center']
-#             sigma = log.loc[comp, 'sigma']
-#
-#             # Gaussian components calculation
-#             gaussian_array[:, i] = gaussian_model(x_array, amp, center, sigma)
-#
-#         return gaussian_array
-
-
-# g_params = np.array(['amp', 'center', 'sigma', 'cont_slope', 'cont_intercept'])
-
 
 class ProfileModelCompiler:
 
@@ -371,19 +443,56 @@ class ProfileModelCompiler:
                 peak_0 = line.peak_flux * 0.5 - line.cont
 
             # Gaussian, lorentz and Voigt
-            AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
-            self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
-            self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR, user_conf, redshift)
-            self.define_param(idx, line, 'sigma', 2*line.pixelWidth, _SIG_PAR, user_conf)
-            # self.define_param(idx, line, 'area', None, _AREA_PAR, user_conf)
-
-            # Gamma param for Voigt
-            if line._p_shape[idx] == 'v':
-                self.define_param(idx, line, 'gamma', 2 * line.pixelWidth, _SIG_PAR, user_conf)
+            if (line._p_shape[idx] == 'g') or (line._p_shape[idx] == 'l'):
+                AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+                self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
+                self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR, user_conf, redshift)
+                self.define_param(idx, line, 'sigma', 2*line.pixelWidth, _SIG_PAR, user_conf)
 
             # Frac for Pseudo-Voigt
             if line._p_shape[idx] == 'pv':
+                AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+                self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
+                self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR, user_conf, redshift)
+                self.define_param(idx, line, 'sigma', 2*line.pixelWidth, _SIG_PAR, user_conf)
                 self.define_param(idx, line, 'frac', 0.5, _FRAC_PAR, user_conf)
+
+            # Exponential profile
+            if line._p_shape[idx] == 'e':
+                AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+                _CENTER_PAR_e = dict(value= self.ref_wave[idx], min=line.mask[0]*(1+redshift),
+                                     max=line.mask[5]*(1+redshift)
+                                   , vary=True, expr=None) # TODO clean this
+
+                print('TROLETO', _CENTER_PAR_e)
+                self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
+                self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR_e, user_conf, redshift)
+                self.define_param(idx, line, 'alpha', 1.0/line.pixelWidth, _ALPHA_PAR, user_conf)
+
+            # Gamma param for Voigt
+            if line._p_shape[idx] == 'v':
+                self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
+                self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR, user_conf, redshift)
+                self.define_param(idx, line, 'sigma', 2*line.pixelWidth, _SIG_PAR, user_conf)
+                self.define_param(idx, line, 'gamma', 2 * line.pixelWidth, _SIG_PAR, user_conf)
+
+            # Frac for Pseudo-Voigt
+            if line._p_shape[idx] == 'pp':
+                AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+                self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
+                self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR, user_conf, redshift)
+                self.define_param(idx, line, 'sigma', 2*line.pixelWidth, _SIG_PAR, user_conf)
+                self.define_param(idx, line, 'frac', 0.5, _FRAC_PAR, user_conf)
+                self.define_param(idx, line, 'alpha', 2, _ALPHA_PAR, user_conf)
+
+            if line._p_shape[idx] == 'p':
+                A_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+                AMP_PAR = dict(value=None, min=min_lim, max=max_lim, vary=True, expr=None)
+
+                self.define_param(idx, line, 'a', peak_0, A_PAR, user_conf)
+                self.define_param(idx, line, 'b', self.ref_wave[idx], _B_PAR, user_conf, redshift)
+                self.define_param(idx, line, 'c', 2 * line.pixelWidth, _C_PAR, user_conf)
+                self.define_param(idx, line, 'alpha', -2, _ALPHA_PAR, user_conf)
 
         return
 
@@ -472,15 +581,12 @@ class ProfileModelCompiler:
             # Check parameters error propagation
             self.review_err_propagation(line, i, comp_label)
 
-        # Centroid redshifts
-        if line.blended_check:
-            line.z_line = line.center/line.wavelength - 1
-        else:
-            line.z_line = line.peak_wave/line.wavelength - 1
+        # Centroid redshifts # TODO always use the centroid
+        line.z_line = line.center/line.wavelength - 1
 
         # Kinematics
         line.v_r = c_KMpS * (line.center - self.ref_wave) / self.ref_wave
-        line.v_r_err = c_KMpS * (line.center_err) / self.ref_wave
+        line.v_r_err = c_KMpS * line.center_err / self.ref_wave
         line.sigma_vel = c_KMpS * line.sigma / self.ref_wave
         line.sigma_vel_err = c_KMpS * line.sigma_err / self.ref_wave
 
@@ -647,21 +753,6 @@ class ProfileModelCompiler:
                 if param_conf['value'] is None:
                     param_conf['value'] = param_value
 
-        # Additional preparation for area parameter
-        if '_area' in param_ref:
-            if (param_conf['expr'] is None) and (param_conf['value'] == param_value):
-                param_conf['value'] = None
-                if line._p_shape[idx] == 'g':
-                    param_conf['expr'] = f'line{idx}_amp*2.5066282746*line{idx}_sigma'
-                elif line._p_shape[idx] == 'l':
-                    param_conf['expr'] = f'3.14159265*line{idx}_amp*line{idx}_sigma'
-                elif line._p_shape[idx] == 'v':
-                    param_conf['expr'] = f'3.14159265*line{idx}_amp*line{idx}_sigma'
-                elif line._p_shape[idx] == 'pv':
-                    param_conf['expr'] = f'line{idx}_frac*line{idx}_amp*2.5066282746*line{idx}_sigma+(1-line{idx}_frac)*3.14159265*line{idx}_amp*line{idx}_sigma'
-                else:
-                    raise LiMe_Error(f'Profile type "{line._p_shape[idx]}" for line {line} is not recognized')
-
         # Additional preparation for center parameter: Multiply value, min, max by redshift
         if '_center' in param_ref:
             if user_ref in user_conf:
@@ -716,12 +807,6 @@ class LineFitting:
 
     """Class to measure emission line fluxes and fit them as gaussian curves"""
 
-    # _minimize_method = 'leastsq'
-
-    # _atomic_mass_dict = ATOMIC_MASS
-
-    # Switch for emission and absorption lines
-
     def __init__(self):
 
         # self.fit_params = {}
@@ -740,7 +825,7 @@ class LineFitting:
             else:
                 input_wave, input_flux = cont_wave, cont_flux
 
-            # TODO include error pixel
+            # TODO include error pixel, there is not m_cont, m_cont_err
             line.m_cont, line.n_cont, r_value, p_value, std_err = stats.linregress(input_wave, input_flux)
 
         # Using line first and last point
@@ -764,6 +849,7 @@ class LineFitting:
         line.pixelWidth = np.diff(emis_wave).mean()
         line.cont = line.peak_wave * line.m_cont + line.n_cont
         line.cont_err = np.std(cont_flux - continuaFit) if cont_err is None else np.mean(cont_err)
+        # print('Pixel width', line.pixelWidth)
 
         # Warning if continuum above or below line peak/through
         if emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):

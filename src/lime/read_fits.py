@@ -24,26 +24,26 @@ SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'inst_F
                                 'units_wave': 'um', 'units_flux': 'mJy', 'pixel_mask': None, 'id_label': None},
 
                         'isis': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan,
-                                 'units_wave': 'um', 'units_flux': 'mJy', 'pixel_mask': None, 'id_label': None},
+                                 'units_wave': 'FLAM', 'units_flux': 'mJy', 'pixel_mask': None, 'id_label': None},
 
-                        'osiris': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                                   'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
+                        'osiris': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
+                                   'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None},
 
-                        'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                                 'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
+                        'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
+                                 'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None},
 
-                        'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                             'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None}
+                        'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
+                                 'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None}
 
                         }
 
-CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                              'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
+CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
+                              'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None},
 
-                    'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
-                              'units_flux': 'Flam', 'pixel_mask': None, 'id_label': None},
+                    'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
+                              'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None},
 
-                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'A',
+                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'AA',
                                'units_flux': 'Jy', 'pixel_mask': None, 'id_label': None}
                     }
 
@@ -675,24 +675,35 @@ class OpenFits:
     @staticmethod
     def desi(target_id, root_url='https://data.desi.lbl.gov/public/edr/spectro/redux', **kwargs):
 
-        # Get the observation program
+        # Get the reference catalogue file
         release = kwargs.get('release')
         program = kwargs.get('program')
         catalogue = kwargs.get('catalogue')
+        ref_fits = kwargs.get('ref_fits')
 
         # Check the user specified the
         for (param, param_value) in zip(['release', 'program', 'catalogue'], [release, program, catalogue]):
             if param_value is None:
                 raise LiMe_Error(f'To create Spectrum from DESI observation you need to specify the "{param}" argument')
 
-        # Select the catalogue type
-        if catalogue == 'healpix':
-            ref_fits = f'zall-pix-{release}.fits'
-        else:
-            ref_fits = f'zall-tilecumulative-{release}.fits'
-        ref_fits_url = f'{root_url}/{release}/zcatalog/{ref_fits}'
+        # Get the file or url location
+        if ref_fits is not None:
+            if Path(ref_fits).is_file():
+                conf_fits = {'name': ref_fits, 'use_fsspec': False}
+            else:
+                raise LiMe_Error(f'File {ref_fits} not found')
 
-        with fits.open(ref_fits_url, use_fsspec=True) as hdul:
+        else:
+            # Select the catalogue type
+            if catalogue == 'healpix':
+                ref_fits = f'zall-pix-{release}.fits'
+            else:
+                ref_fits = f'zall-tilecumulative-{release}.fits'
+            ref_fits_url = f'{root_url}/{release}/zcatalog/{ref_fits}'
+            conf_fits = {'name': ref_fits_url, 'use_fsspec': True}
+
+        # Open the reference file with the redshifts
+        with fits.open(**conf_fits) as hdul:
 
             # Index the object
             zCatalogBin = hdul['ZCATALOG']
@@ -715,27 +726,22 @@ class OpenFits:
                 # check_url_status(url_target)
                 url_list.append(url_target)
 
-        # Additional data from the url site
-        params_dict = {'redshift': redshift}
-
         # Check the objects found
         if len(url_list) == 0:
             raise LiMe_Error(f'No observations for Object ID {target_id} were found for the input {program} (program), '
                              f'{catalogue} (catalogue), {release} (release)')
         elif len(url_list) > 1:
             url = url_list[0]
+            redshift = redshift[0]
             _logger.warning(f' Multiple observations for Object ID {target_id} found for the input {program} (program),'
                              f' {catalogue} (catalogue), {release} (release)\nUsing the first observation.')
         else:
             url = url_list[0]
-
-        # Reshape into an array if necessary
-        # data_ext_list, hdr_ext_list = np.atleast_1d(data_ext_list), np.atleast_1d(hdr_ext_list)
+            redshift = redshift[0]
 
         # Read the url data
         spectra_dict = {}
 
-        #
         with fits.open(url, use_fsspec=True) as hdulist:
 
             file_idtargets = hdulist["FIBERMAP"].data['TARGETID']
@@ -752,7 +758,8 @@ class OpenFits:
         wave, flux, err_flux = desi_bands_reconstruction(spectra_dict)
 
         # Spectrum properties
-        params_dict = {'redshift': redshift, **SPECTRUM_FITS_PARAMS['desi']}
+        params_dict = SPECTRUM_FITS_PARAMS['desi'].copy()
+        params_dict['redshift'] = redshift
 
         return wave, flux, err_flux, None, params_dict
 

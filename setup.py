@@ -32,7 +32,7 @@ setup(
     #              "Programming Language :: Python :: 3.7"],
     packages=find_packages('src'),
     package_dir={'': 'src'},
-    package_data={'': ['config.cfg', 'resources/*']},
+    package_data={'': ['config.toml', 'resources/*']},
     include_package_data=True,
     install_requires=['numpy', 'matplotlib', 'pandas', 'astropy', 'lmfit', 'scipy', 'pylatex', 'openpyxl',
                       'joblib'],

@@ -1,0 +1,10 @@
+[metadata]
+name = 'lime-stable'
+version = '0.9.99'
+
+[matplotlib_cfg]
+
+[matplotlib_cfg.themes]
+low_dpi.dpi = 150
+high_dpi.dpi = 300
+

@@ -168,7 +168,7 @@ class TestCubeClass:
                                  mask_file=spatial_mask_address, wcs=wcs)
 
         intg_flux_file = ouput_folder/f'SHOC579_intg_flux.fits'
-        gauss_flux_file = ouput_folder/f'gauss_flux.fits'
+        gauss_flux_file = ouput_folder/f'profile_flux.fits'
 
         assert intg_flux_file.is_file()
         assert gauss_flux_file.is_file()
