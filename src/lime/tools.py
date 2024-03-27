@@ -22,9 +22,6 @@ _logger = logging.getLogger('LiMe')
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
-# Add astronomical units to default database # TODO check astropy default
-# au.add_enabled_aliases({'F_lam': au.erg/au.s/au.cm**2/au.AA, 'F_nu': au.erg/au.s/au.cm**2/au.Hz,
-#                         'f_E': au.photon/au.s/au.cm**2/au.keV, 'f_lam': au.photon/au.s/au.cm**2/au.AA})
 
 flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
                     format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",

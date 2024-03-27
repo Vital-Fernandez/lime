@@ -24,7 +24,10 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
         _logger.warning(f'The line band for {line.label} has very few valid pixels')
 
     if cont_band_length / cont_wave.size < 0.5:
-        _logger.warning(f'The continuum band for {line.label} has very few valid pixels')
+        if cont_band_length > 0:
+            _logger.warning(f'The continuum band for {line.label} has very few valid pixels)')
+        else:
+            _logger.warning(f'The continuum bands for {line.label} have 0 pixels. The continuum will be approximated')
 
     # Store error very small mask
     if emis_band_lengh <= 1:
@@ -43,8 +46,6 @@ def review_bands(line, emis_wave, cont_wave, limit_narrow=7):
 
 
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
-
-    # TODO read wavelength from table/description "." in configuration log
 
     # Check if imported kinematics come from blended component
     if line.group_label is not None:
@@ -406,7 +407,7 @@ class SpecTreatment(LineFitting):
                 detect_conf = input_conf.get('line_detection', {})
                 bands = self._spec.line_detection(bands, **detect_conf)
 
-            # Loop through the lines # TODO exclude kinematic components, use the core elements...
+            # Loop through the lines # TODO exclude (blended/kinematic) components, use the core elements...
             label_list = bands.index.to_numpy()
             bands_matrix = bands.loc[:, 'w1':'w6'].to_numpy()
             n_lines = label_list.size
@@ -749,7 +750,7 @@ class CubeTreatment(LineFitting):
             elapsed_time = end_time - start_time
             print(f'\n{n_lines} lines measured in {elapsed_time/60:0.2f} minutes.')
 
-        if join_output_files:
+        if join_output_files: # TODO If only one mask and join_output_files the output file has different name
             output_comb_file = f'{address_dir/address_stem}.fits'
 
             # In case of only one file just rename it

@@ -47,6 +47,9 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
 
                 if ('_err' not in param) and (f'{param}_err' in true_log.columns):
                     param_exp_err = true_log.loc[line, f'{param}_err']
+                    diag = np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                    if not diag:
+                        print(param)
                     assert np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
                 else:
                     if param.endswith('_err'):

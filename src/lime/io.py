@@ -25,6 +25,7 @@ from collections.abc import Sequence
 
 from astropy.io import fits
 from .tables import table_fluxes
+from . import Error
 
 try:
     import openpyxl
@@ -414,7 +415,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
 
                 output_file.write(string_DF.encode('UTF-8'))
 
-        # Pdf fluxes table # TODO error while saving all parameters
+        # Pdf fluxes table
         elif file_type == '.pdf':
             table_fluxes(lines_log, log_path.parent / log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
                          lines_notation=log.latex_label.values, **kwargs)
@@ -766,7 +767,6 @@ def log_to_HDU(log, ext_name=None, column_dtypes=None, header_dict=None):
 
     # Empty log
     else:
-        # TODO create and empty HDU
         linesHDU = None
 
     return linesHDU

@@ -19,10 +19,8 @@ except ImportError:
 
 _logger = logging.getLogger('LiMe')
 
-MACHINE_PATH = Path(__file__).parent/'resources'/'LogitistRegression_v2_cost1_logNorm.joblib'
-
-# TODO replace this mechanic
-WAVE_UNITS_DEFAULT, FLUX_UNITS_DEFAULT = au.AA, au.erg / au.s / au.cm ** 2 / au.AA
+MACHINE_PATH = None
+FLUX_PIXEL_CONV = np.linspace(0,1,33)
 
 
 def compute_line_width(idx_peak, spec_flux, delta_i, min_delta=2, emission_check=True):
@@ -56,6 +54,29 @@ def detection_function(x_ratio):
     return 0.5 * np.power(x_ratio, 2) - 0.5 * x_ratio + 5
 
 
+def feature_scaling(data, transformation='min-max', log_base=None, axis=1):
+
+    if transformation == 'min-max':
+        data_min_array = data.min(axis=axis, keepdims=True)
+        data_max_array = data.max(axis=axis, keepdims=True)
+        data_norm = (data - data_min_array) / (data_max_array - data_min_array)
+
+    elif transformation == 'log':
+        y_cont = data - data.min(axis=1, keepdims=True) + 1
+        data_norm = np.emath.logn(log_base, y_cont)
+
+    elif transformation == 'log-min-max':
+        data_cont = data - data.min(axis=1, keepdims=True) + 1
+        log_data = np.emath.logn(log_base, data_cont)
+        log_min_array, log_max_array = log_data.min(axis=axis, keepdims=True), log_data.max(axis=axis, keepdims=True)
+        data_norm = (log_data - log_min_array) / (log_max_array - log_min_array)
+
+    else:
+        raise KeyError(f'Input scaling "{transformation}" is not recognized.')
+
+    return data_norm
+
+
 class LineFinder:
 
     def __init__(self, machine_model_path=MACHINE_PATH):
@@ -74,6 +95,7 @@ class LineFinder:
         else:
             mask_cont = np.ones(self.flux.size).astype(bool)
             input_wave, input_flux = self.wave, self.flux
+
 
         # Loop through the fitting degree
         for i, degree in enumerate(degree_list):
@@ -284,10 +306,17 @@ class LineFinder:
         # Get the wavelength peaks
         wave_peaks = self.wave_rest[idcsLinePeak]
 
-        # Only treat pixels outisde the masks
-        if np.ma.is_masked(wave_peaks):
-            idcsLinePeak = idcsLinePeak[~wave_peaks.mask]
-            wave_peaks = wave_peaks[~wave_peaks.mask].data
+        # from matplotlib import pyplot as plt
+        # fig, ax = plt.subplots()
+        # ax.step(self.wave_rest, self.flux, where='mid')
+        # ax.scatter(self.wave_rest[idcsLinePeak], self.flux[idcsLinePeak])
+        # plt.show()
+        # np.ma.isMaskedArray(wave_peaks)
+
+        # # Only treat pixels outisde the masks
+        # if np.ma.is_masked(wave_peaks):
+        #     idcsLinePeak = idcsLinePeak[~wave_peaks.mask]
+        #     wave_peaks = wave_peaks[~wave_peaks.mask].data
 
         for i in np.arange(wave_peaks.size):
 
@@ -332,6 +361,63 @@ class LineFinder:
         matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
 
         return matched_DF
+
+
+class DetectionInference:
+
+    def __init__(self, spectrum):
+
+        self._spec = spectrum
+        self.narrow_detect = None
+
+        return
+
+    def bands(self, box_width, approximation=None, scale_type='min-max', machine_path=None, log_base=10000):
+
+        # Assign default values
+        approximation = FLUX_PIXEL_CONV if approximation is None else approximation
+        machine_path = MACHINE_PATH if machine_path is None else machine_path
+
+        # Load the model
+        model = joblib.load(machine_path)
+        model_dim = model.n_features_in_
+
+        # Recover the flux (without mask?)
+        input_flux = self._spec.flux if not np.ma.is_masked(self._spec.flux) else self._spec.flux.data
+
+        # Reshape to the detection interval
+        range_box = np.arange(box_width)
+        n_intervals = input_flux.size - box_width + 1
+        input_flux = input_flux[np.arange(n_intervals)[:, None] + range_box]
+
+        # Remove nan entries
+        idcs_nan_rows = np.isnan(input_flux).any(axis=1)
+        input_flux = input_flux[~idcs_nan_rows, :]
+
+        # Add Monte Carlo columns (7858, 13) To (7858, 13, 100)
+
+        # Normalize the flux
+        input_flux = feature_scaling(input_flux, transformation=scale_type, log_base=log_base)
+
+        # Perform the 1D detection
+        if box_width == model_dim:
+            detection_array = model.predict(input_flux)
+        else:
+            array_2D = np.tile(input_flux[:, None, :], (1, approximation.size, 1))
+            array_2D = array_2D > approximation[::-1, None]
+            array_2D = array_2D.astype(int)
+            array_2D = array_2D.reshape((input_flux.shape[0], 1, -1))
+            array_2D = array_2D.squeeze()
+            detection_array = model.predict(array_2D)
+
+        # Reshape array original shape and add with of positive entries # TODO this shape could cause issues with IFUs
+        mask = np.zeros(self._spec.flux.shape, dtype=bool)
+        idcs_detect = np.argwhere(detection_array) + range_box
+        idcs_detect = idcs_detect.flatten()
+        idcs_detect = idcs_detect[idcs_detect < detection_array.size]
+        mask[idcs_detect] = True
+
+        return mask
 
 
 # Line finder default parameters

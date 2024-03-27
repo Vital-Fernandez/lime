@@ -1,15 +1,16 @@
 import logging
 
 import numpy as np
-from lmfit.models import Model
+from lmfit.models import Model, LinearModel
 from lmfit import fit_report
-from scipy import stats
 from scipy.interpolate import interp1d
 from scipy.special import wofz
 from .tools import compute_FWHM0, mult_err_propagation
 from .io import LiMe_Error, _ATTRIBUTES_PROFILE, _RANGE_PROFILE_FIT, _LOG_COLUMNS
+import warnings
 
 _logger = logging.getLogger('LiMe')
+_VERBOSE_WARNINGS = 'ignore'
 
 c_KMpS = 299792.458  # Speed of light in Km/s (https://en.wikipedia.org/wiki/Speed_of_light)
 
@@ -464,7 +465,6 @@ class ProfileModelCompiler:
                                      max=line.mask[5]*(1+redshift)
                                    , vary=True, expr=None) # TODO clean this
 
-                print('TROLETO', _CENTER_PAR_e)
                 self.define_param(idx, line, 'amp', peak_0, AMP_PAR, user_conf)
                 self.define_param(idx, line, 'center', self.ref_wave[idx], _CENTER_PAR_e, user_conf, redshift)
                 self.define_param(idx, line, 'alpha', 1.0/line.pixelWidth, _ALPHA_PAR, user_conf)
@@ -515,7 +515,11 @@ class ProfileModelCompiler:
 
         # Fit the line
         self.params = self.model.make_params()
-        self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
+        # self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(_VERBOSE_WARNINGS)
+            self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
 
         # Check fitting quality
         self.review_fitting(line)
@@ -540,6 +544,7 @@ class ProfileModelCompiler:
                     if j < 2:
                         setattr(line, param, param_value)
                         setattr(line, f'{param}_err', param_err)
+
                     else:
                         setattr(line, param, np.full(self.n_comps, np.nan))
                         setattr(line, f'{param}_err', np.full(self.n_comps, np.nan))
@@ -563,14 +568,6 @@ class ProfileModelCompiler:
             line.profile_flux[i] = np.mean(profile_flux_dist)
             line.profile_flux_err[i] = np.std(profile_flux_dist)
 
-            # Compute the equivalent widths
-            if i == 0:
-                cont_dist = np.random.normal(line.cont, line.cont_err, 1000)
-
-            eqw_dist = profile_flux_dist/cont_dist
-            line.eqw[i] = np.mean(eqw_dist)
-            line.eqw_err[i] = np.std(eqw_dist)
-
             # Compute FWHM_p (Profile Full Width Half Maximum)
             line.FWHM_p[i] = FWHM_FUNCTIONS[line._p_shape[i]](line, i)
 
@@ -581,7 +578,12 @@ class ProfileModelCompiler:
             # Check parameters error propagation
             self.review_err_propagation(line, i, comp_label)
 
-        # Centroid redshifts # TODO always use the centroid
+        # Compute the equivalent widths
+        line.eqw = line.profile_flux / line.cont
+        line.eqw_err = np.abs(line.eqw) * np.sqrt(np.square(line.profile_flux_err/line.profile_flux) +
+                                                  np.square(line.cont_err/line.cont))
+
+        # Centroid redshifts
         line.z_line = line.center/line.wavelength - 1
 
         # Kinematics
@@ -596,85 +598,6 @@ class ProfileModelCompiler:
         # Fitting diagnostics
         line.chisqr, line.redchi = self.output.chisqr, self.output.redchi
         line.aic, line.bic = self.output.aic, self.output.bic
-
-        return
-
-    def save_measurements(self, line, user_conf, inst_FWHM, temp):
-
-        # Recalculate the equivalent width with the gaussian fluxes if blended
-        if line.blended_check:
-            line.eqw = np.empty(self.n_comps)
-            line.eqw_err = np.empty(self.n_comps)
-
-        line.amp, line.amp_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.center, line.center_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.sigma, line.sigma_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.gamma, line.gamma_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.frac, line.frac_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.alpha, line.alpha_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.beta, line.beta_err = np.empty(self.n_comps), np.empty(self.n_comps)
-
-        line.v_r, line.v_r_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.sigma_vel, line.sigma_vel_err = np.empty(self.n_comps), np.empty(self.n_comps)
-        line.profile_flux, line.profile_flux_err = np.empty(self.n_comps), np.empty(self.n_comps)
-
-        line.FWHM_p = np.empty(self.n_comps)
-        line.sigma_thermal = np.empty(self.n_comps)
-
-        # Fitting diagnostics
-        line.chisqr, line.redchi = self.output.chisqr, self.output.redchi
-        line.aic, line.bic = self.output.aic, self.output.bic
-
-        # Instrumental sigma #TODO check this
-        line.sigma_instr = k_gFWHM / line.inst_FWHM if not np.isnan(inst_FWHM) else None
-
-        # Store lmfit measurements
-        for i, user_ref in enumerate(line.list_comps):
-
-            # Recover using the lmfit name
-            comp = f'line{i}'
-
-            # Profile parameters
-            for j, param in enumerate(['amp', 'center', 'sigma', 'gamma', 'frac']):
-                param_fit = self.output.params.get(f'{comp}_{param}', None)
-
-                if param_fit is not None:
-                    term_mag = getattr(line, param)
-                    term_mag[i] = param_fit.value
-                    term_err = getattr(line, f'{param}_err')
-                    term_err[i] = param_fit.stderr
-
-                # Case with error propagation from _kinem command
-                if (term_err[i] == 0) and (f'{user_ref}_{param}_err' in user_conf):
-                    term_err[i] = user_conf[f'{user_ref}_{param}_err'] # TODO do I need this one here, can I use the one below
-
-            # Gaussian area
-            line.profile_flux[i] = self.output.params[f'{comp}_area'].value
-            line.profile_flux_err[i] = self.output.params[f'{comp}_area'].stderr
-
-            # Equivalent with gaussian flux for blended components TODO compute self.cont from linear fit
-            if line.blended_check:
-                line.eqw[i], line.eqw_err[i] = line.profile_flux[i] / line.cont, line.profile_flux_err[i] / line.cont
-
-            # Kinematics
-            line.v_r[i] = c_KMpS * (line.center[i] - self.ref_wave[i])/self.ref_wave[i]
-            line.v_r_err[i] = c_KMpS * (line.center_err[i])/self.ref_wave[i]
-            line.sigma_vel[i] = c_KMpS * line.sigma[i]/self.ref_wave[i]
-            line.sigma_vel_err[i] = c_KMpS * line.sigma_err[i]/self.ref_wave[i]
-            line.FWHM_p[i] = k_gFWHM * line.sigma_vel[i]
-
-            # Compute the thermal correction
-            atom_mass = ATOMIC_MASS.get(line.particle[i].symbol, np.nan)
-            line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / atom_mass) / 1000
-
-            # Check parameters error progragation from the lmfit parameter
-            self.review_err_propagation(line, i, comp)
-
-        # Calculate the line redshift
-        if line.blended_check:
-            line.z_line = line.center/line.wavelength - 1
-        else:
-            line.z_line = line.peak_wave/line.wavelength - 1
 
         return
 
@@ -699,13 +622,10 @@ class ProfileModelCompiler:
 
         # Convert from LiMe -> LmFit label configuration in the expr entries if necessary
         if param_conf['expr'] is not None:
-
-            # TODO this one could be faster
             # Do not parse expressions for single components
             if line.blended_check:
                 expr = param_conf['expr']
                 for i, comp in enumerate(comps):
-                    # for g_param in g_params:
                     for g_param in PROFILE_PARAMS:
                         expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
                 param_conf['expr'] = expr
@@ -800,6 +720,13 @@ class ProfileModelCompiler:
                                                               np.array([line.cont_err, line.profile_flux_err[idx_line]]),
                                                               line.eqw[idx_line])
 
+        # Continuum error
+        if (line.m_cont_err == 0.0) and (line.m_cont != 0.0) and (line.m_cont_err_intg != 0.0):
+            line.m_cont_err = line.m_cont_err_intg
+
+        if (line.n_cont_err == 0.0) and (line.n_cont != 0.0) and (line.n_cont_err_intg != 0.0):
+            line.n_cont_err = line.n_cont_err_intg
+
         return
 
 
@@ -818,15 +745,54 @@ class LineFitting:
     def integrated_properties(self, line, emis_wave, emis_flux, emis_err, cont_wave, cont_flux, cont_err, emission_check,
                               n_steps=1000):
 
-        # Gradient and interception of linear continuum using adjacent regions
-        if line._cont_from_adjacent:
-            if np.ma.isMaskedArray(cont_flux): # TODO check if this is == or is
-                input_wave, input_flux = cont_wave.data[cont_wave.mask == False], cont_flux.data[cont_flux.mask == False]
-            else:
-                input_wave, input_flux = cont_wave, cont_flux
 
-            # TODO include error pixel, there is not m_cont, m_cont_err
-            line.m_cont, line.n_cont, r_value, p_value, std_err = stats.linregress(input_wave, input_flux)
+
+        # Assign values peak/through properties
+        peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
+        line.n_pixels = emis_wave.size
+        line.peak_wave = emis_wave[peakIdx]
+        line.peak_flux = emis_flux[peakIdx]
+        line.pixelWidth = np.diff(emis_wave).mean()
+
+        # Get non-nan entries for continuum
+        if np.ma.isMaskedArray(cont_flux):
+            input_wave, input_flux = cont_wave.data[~cont_wave.mask], cont_flux.data[~cont_wave.mask]
+        else:
+            input_wave, input_flux = cont_wave, cont_flux
+
+        # Check if there are valid entries
+        valid_cont_bands = True if input_flux.size > 0 else False
+
+        # Gradient and interception of linear continuum using adjacent regions
+        if line._cont_from_adjacent and valid_cont_bands:
+
+            model_linear = LinearModel()
+            params = model_linear.make_params()
+
+            weights = np.ones(input_flux.shape) if cont_err is None else 1/cont_err
+            output = model_linear.fit(input_flux, params, x=input_wave, weights=weights, nan_policy='omit')
+
+            m_param, n_param = output.params.get('slope', None), output.params.get('intercept', None)
+            line.m_cont = np.nan if m_param is None else m_param.value
+            line.n_cont = np.nan if n_param is None else n_param.value
+            line.m_cont_err_intg = np.nan if m_param is None else m_param.stderr
+            line.n_cont_err_intg = np.nan if n_param is None else n_param.stderr
+
+            # Use the standard deviation from the continuum minus the linear fitting as the continuum error
+            line.cont = line.peak_wave * line.m_cont + line.n_cont
+            line.cont_err = np.std((cont_wave * line.m_cont + line.n_cont) - cont_flux)
+
+            # Using the middle point has a lot uncertainty
+            # from matplotlib import pyplot as plt
+            # fig, ax = plt.subplots()
+            # ax.step(emis_wave, emis_flux, where='mid')
+            # ax.step(cont_wave, cont_flux, where='mid')
+            # ax.plot(cont_wave, cont_wave * line.m_cont + line.n_cont, linestyle='--')
+            # plt.show()
+
+            #np.sqrt(np.square(line.peak_wave*line.m_cont_err_intg) + np.square(line.n_cont_err_intg))
+
+            # np.sqrt(np.square(line.peak_wave * line.m_cont_err_intg) + np.square(line.n_cont_err_intg))
 
         # Using line first and last point
         else:
@@ -835,23 +801,11 @@ class LineFitting:
             line.m_cont = (f3 - f2) / (w3 - w2)
             line.n_cont = f3 - line.m_cont * w3
 
-        # Compute continuum
-        continuaFit = cont_wave * line.m_cont + line.n_cont
-        lineLinearCont = emis_wave * line.m_cont + line.n_cont
-
-        # Peak or through index
-        peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
-
-        # Assign values
-        line.n_pixels = emis_wave.size
-        line.peak_wave = emis_wave[peakIdx]
-        line.peak_flux = emis_flux[peakIdx]
-        line.pixelWidth = np.diff(emis_wave).mean()
-        line.cont = line.peak_wave * line.m_cont + line.n_cont
-        line.cont_err = np.std(cont_flux - continuaFit) if cont_err is None else np.mean(cont_err)
-        # print('Pixel width', line.pixelWidth)
+            line.cont = line.peak_wave * line.m_cont + line.n_cont
+            line.cont_err = np.sqrt((f2*f2 + f3*f3)/2)
 
         # Warning if continuum above or below line peak/through
+        lineLinearCont = emis_wave * line.m_cont + line.n_cont
         if emission_check and (lineLinearCont[peakIdx] > emis_flux[peakIdx]):
             _logger.warning(f'Line {line.label} introduced as an emission but the line peak is below the continuum level')
 
@@ -903,8 +857,8 @@ class LineFitting:
         lineContinuumMatrix = lineLinearCont + normalNoise
         eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
 
-        line.eqw = np.array(eqwMatrix.mean(), ndmin=1)
-        line.eqw_err = np.array(eqwMatrix.std(), ndmin=1)
+        line.eqw_intg = np.array(eqwMatrix.mean(), ndmin=1)
+        line.eqw_intg_err = np.array(eqwMatrix.std(), ndmin=1)
 
         return
 

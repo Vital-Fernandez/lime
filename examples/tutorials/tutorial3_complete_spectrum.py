@@ -37,6 +37,6 @@ gp_spec.plot.grid(rest_frame=True)
 # Save the data
 gp_spec.save_log('../sample_data/example3_linelog.txt')
 gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
-gp_spec.save_log('../sample_data/example3_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
+gp_spec.save_log('../sample_data/example3_linelog.pdf')
 lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
 

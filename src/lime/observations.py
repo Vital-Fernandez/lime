@@ -7,7 +7,7 @@ from collections import UserDict
 
 from .tools import unit_conversion, define_masks, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au
 
-from .recognition import LineFinder
+from .recognition import LineFinder, DetectionInference
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from .io import _LOG_EXPORT_RECARR, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
@@ -230,7 +230,7 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
 
     # Normalize the spectrum
     if input_flux is not None:
-        flux = flux / norm_flux # TODO check this input changes outside on the user script
+        flux = flux / norm_flux
         if input_err is not None:
             err_flux = err_flux / norm_flux
 
@@ -476,6 +476,7 @@ class Spectrum(LineFinder):
 
         # Treatments objects
         self.fit = SpecTreatment(self)
+        self.infer = DetectionInference(self)
 
         # Plotting objects
         self.plot = SpectrumFigures(self)
@@ -981,6 +982,7 @@ class Cube:
 
         """
 
+        # TODO kwargs are not passing
         # Create file manager object to administrate the file source and observation properties
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
@@ -1050,8 +1052,6 @@ class Cube:
         if not param in ['flux', 'SN_line', 'SN_cont']:
             raise Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
 
-
-        # TODO overwrite spatial mask file not update
         # Line for the background image
         line_bg = Line(line, bands)
 
@@ -1163,8 +1163,6 @@ class Cube:
         return output_func
 
     def unit_conversion(self, units_wave=None, units_flux=None, norm_flux=None):
-
-        # TODO you need to make this acommon function
 
         """
 

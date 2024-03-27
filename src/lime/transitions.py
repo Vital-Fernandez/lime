@@ -330,7 +330,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         trans = comp_conf.get('t', None)
 
         # If none is provided check from the table
-        if (trans is None) and (ref_df is not None): # TODO check if try except is faster here
+        if (trans is None) and (ref_df is not None):
             if (line in ref_df.index) and ('transition' in ref_df.columns):
                 trans = ref_df.loc[line, 'transition']
 
@@ -534,9 +534,12 @@ class Line:
         self.intg_flux, self.intg_flux_err = None, None
         self.peak_wave, self.peak_flux = None, None
         self.eqw, self.eqw_err = None, None
+        self.eqw_intg, self.eqw_intg_err = None, None
         self.profile_flux, self.profile_flux_err = None, None
         self.cont, self.cont_err = None, None
         self.m_cont, self.n_cont = None, None
+        self.m_cont_err, self.n_cont_err = None, None
+        self.m_cont_err_intg, self.n_cont_err_intg = None, None
         self.amp, self.center, self.sigma, self.gamma = None, None, None, None
         self.amp_err, self.center_err, self.sigma_err, self.gamma_err = None, None, None, None
         self.alpha, self.beta = None, None
@@ -579,7 +582,7 @@ class Line:
             band = _PARENT_BANDS
         band = check_file_dataframe(band, DataFrame, copy_input=False)
 
-        # Check line in log #TODO add mechanic to read from log default values if not None
+        # Infer label from log if input line is a wavelength
         self.label = check_line_in_log(label, band)
 
         # Get label components
