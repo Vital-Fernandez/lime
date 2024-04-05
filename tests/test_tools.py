@@ -12,7 +12,7 @@ outputs_folder = Path(__file__).parent / 'outputs'
 
 file_address = baseline_folder/'manga_spaxel.txt'
 lines_log_address = baseline_folder/'manga_lines_log.txt'
-lines_log = lime.load_log(lines_log_address)
+lines_log = lime.load_frame(lines_log_address)
 redshift = 0.0475
 norm_flux = 1e-17
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
@@ -262,12 +262,12 @@ def test_refraction_index_air_vacuum():
 def test_logs_into_fits():
 
     # Load existing log
-    log_orig = lime.load_log(lines_log_address)
+    log_orig = lime.load_frame(lines_log_address)
 
     # New text file
-    lime.save_log(log_orig, outputs_folder/f'log_1.txt')
-    lime.save_log(log_orig, outputs_folder/f'log_2.fits', page='LOG2')
-    lime.save_log(log_orig, outputs_folder/f'log_2.fits', page='LOG3')
+    lime.save_frame(outputs_folder / f'log_1.txt', log_orig)
+    lime.save_frame(outputs_folder / f'log_2.fits', log_orig, page='LOG2')
+    lime.save_frame(outputs_folder / f'log_2.fits', log_orig, page='LOG3')
 
     file_list = [outputs_folder/f'log_1.txt', outputs_folder/f'log_2.fits']
     output_file = outputs_folder/'joined_log.fits'

@@ -67,7 +67,7 @@ specA.plot.spectrum(include_fits=True)
 
 # We can save the combiened sample log, so it can construct the Sample variable in the future.
 sample_log_address = f'{folder_obs}/sample_log.txt'
-sample1.save_log(sample_log_address)
+sample1.save_frame(sample_log_address)
 
 # Just with the combined log and the load function
 sample2 = lime.Sample(sample_log_address, load_function=osiris_load_function, folder_obs=folder_obs, norm_flux=1e-17)

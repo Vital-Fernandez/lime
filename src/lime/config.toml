@@ -1,10 +1,87 @@
 [metadata]
 name = 'lime-stable'
-version = '0.9.99.1'
+version = '0.9.99.5'
 
-[matplotlib_cfg]
+[lime_colors]
 
-[matplotlib_cfg.themes]
-low_dpi.dpi = 150
-high_dpi.dpi = 300
+#Default
+default.bg = '#FFFFFF'
+default.fg = '#000000'
+default.cont_band = '#8c564b'
+default.line_band = '#b5bd61'
+default.color_cycle = ['#279e68', '#d62728', '#aa40fc', '#8c564b',  '#e377c2', '#7f7f7f',
+                       '#b5bd61', '#17becf', '#1f77b4', '#ff7f0e']
+default.match_line = '#b5bd61'
+default.peak = '#aa40fc'
+default.trough = '#7f7f7f'
+default.profile = '#1f77b4'
+default.cont = '#ff7f0e'
+default.error = '#FF0000'
+default.mask_map = 'viridis'
+default.comps_map = 'Dark2'
+default.mask_marker = '#FF0000'
+default.inspection_positive = '#FFFFFF'
+default.inspection_negative = '#ff796c' # 'xkcd:salmon'
 
+
+#Dark theme
+dark.bg = "#2B2B2B"
+dark.fg = "#CCCCCC"
+dark.cont_band = '#e7298a'
+dark.line_band = '#8fff9f'
+dark.color_cycle = ['#66c2a5', '#fc8d62', '#e68ac3', '#a6d854',  '#ffd92f', '#e5c494',
+                       '#8dcbe2', '#e7298a', '#332288', '#88ccee']
+dark.match_line = '#8fff9f'
+dark.peak = '#aa40fc'
+dark.trough = '#7f7f7f'
+dark.profile = '#ddcc77' #'#ffd92f' #'#8dcbe2'
+dark.cont = "#CCCCCC"
+dark.error = '#FF0000'
+dark.mask_map = 'viridis'
+dark.comps_map = 'PuRd'
+dark.mask_marker = '#FF0000'
+dark.inspection_positive = "#2B2B2B"
+dark.inspection_negative = '#840000'
+
+[matplotlib]
+default."figure.dpi" = 200
+default."figure.figsize" = [8, 5]
+default."axes.titlesize" = 14
+default."axes.labelsize" = 14
+default."legend.fontsize" = 12
+default."xtick.labelsize" = 13
+default."ytick.labelsize" = 13
+
+high_res."figure.dpi" = 300
+high_res."figure.figsize" = [11, 6]
+high_res."axes.titlesize" = 14
+high_res."axes.labelsize" = 14
+high_res."legend.fontsize" = 12
+high_res."xtick.labelsize" = 12
+high_res."ytick.labelsize" = 12
+
+dark."figure.facecolor" = "#2B2B2B"
+dark."axes.facecolor" = "#2B2B2B"
+dark."axes.edgecolor" = "#CCCCCC"
+dark."axes.labelcolor" = "#CCCCCC"
+dark."xtick.labelcolor" = "#CCCCCC"
+dark."ytick.labelcolor" = "#CCCCCC"
+dark.'xtick.color'= "#CCCCCC"
+dark.'ytick.color'= "#CCCCCC"
+dark."text.color" = "#CCCCCC"
+dark."legend.edgecolor" = "inherit"
+dark."legend.facecolor" = "inherit"
+
+# Bands plot
+bands."axes.labelsize" = 14
+
+# Grid plot
+grid."axes.titlesize" = 12
+
+# Cube interactive
+cube_interactive.'figure.figsize' = [16, 8]
+cube_interactive.'axes.titlesize' = 12
+cube_interactive.'legend.fontsize' = 12
+cube_interactive.'axes.labelsize' = 12
+cube_interactive.'xtick.labelsize' = 10
+cube_interactive.'ytick.labelsize' = 10

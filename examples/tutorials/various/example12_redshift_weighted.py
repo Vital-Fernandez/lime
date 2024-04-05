@@ -7,8 +7,8 @@ spectrum_log_path = Path(f'sample_data/gp121903_linelog.txt')
 sample_log_path = Path(f'sample_data/sample_log.txt')
 
 # Load the logs
-log_spec = lime.load_log(spectrum_log_path)
-log_sample = lime.load_log(sample_log_path)
+log_spec = lime.load_frame(spectrum_log_path)
+log_sample = lime.load_frame(sample_log_path)
 
 list_ids = ['p10_G395M_24_s00024_x1d', 'p4_PRISM_43440_s43440_x1d', 'p8_G395M_44804_s44804_x1d']
 

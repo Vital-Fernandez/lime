@@ -5,6 +5,7 @@ from pathlib import Path
 from astropy.wcs import WCS
 from sys import stdout
 
+lime.theme.set_style('dark')
 
 # Function to display the download progress on the terminal
 def progress_bar(count, block_size, total_size):

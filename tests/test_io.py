@@ -70,7 +70,7 @@ def test_save_cfg():
 
 def test_log_parameters_calculation():
 
-    log_lines = lime.load_log(lines_log_address)
+    log_lines = lime.load_frame(lines_log_address)
     lime.extract_fluxes(log_lines, flux_type='profile')
 
     parameters = ['eqw_new', 'eqw_new_err']

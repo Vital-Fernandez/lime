@@ -3,6 +3,8 @@ from astropy.io import fits
 import lime
 from pathlib import Path
 
+lime.theme.set_style('dark')
+
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -36,7 +38,7 @@ bands_df = lime.line_bands(wave_intvl=gp_spec)
 bands_df_file = Path('../sample_data/gp121903_bands.txt')
 
 if bands_df_file.is_file() is not True:
-    lime.save_log(bands_df, bands_df_file)
+    lime.save_frame(bands_df_file, bands_df)
 
 # Review the bands file
 gp_spec.check.bands(bands_df_file, maximize=True)

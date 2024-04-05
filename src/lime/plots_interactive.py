@@ -7,10 +7,10 @@ from matplotlib import pyplot as plt, gridspec, rc_context
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 
-from .io import load_log, save_log, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE, hdu_to_log_df
-from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale, parse_figure_format,\
-                    determine_cube_images, load_spatial_mask, check_image_size, image_map_labels, \
-                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, axis_labeling
+from .io import load_frame, save_frame, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
+from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale,\
+                    determine_cube_images, load_spatial_mask, check_image_size, \
+                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme
 
 
 from .tools import blended_label_from_log, define_masks
@@ -88,7 +88,7 @@ def load_redshift_table(file_address, column_name):
 
     # Open the file
     if file_address.is_file():
-        log = load_log(file_address)
+        log = load_frame(file_address)
         if not (column_name in log.columns):
             _logger.info(f'No column "{column_name}" found in input dataframe, a new column will be added to the file')
 
@@ -149,7 +149,7 @@ def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2',
             log_address.unlink()
     else:
         if log_address is not None:
-            save_log(log.loc[activeLines], log_address, parameters=log_parameters)
+            save_frame(log_address, log.loc[activeLines], parameters=log_parameters)
         else:
             _logger.warning(r"Not output redshift log provided, the selection won't be stored")
 
@@ -182,13 +182,13 @@ class BandsInspection:
         self.log = None
 
         self._idx_ax = None
-        self._color_bg = {True: 'white',
-                          False: 'xkcd:salmon'}
+        self._color_bg = {True: theme.colors['inspection_positive'],
+                          False: theme.colors['inspection_negative']}
 
         return
 
     def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              z_log_address=None, object_label=None, z_column='redshift', fig_cfg={}, ax_cfg={}, in_fig=None,
+              z_log_address=None, object_label=None, z_column='redshift', fig_cfg=None, ax_cfg=None, in_fig=None,
               maximize=False):
 
         # TODO the selection should be None
@@ -296,13 +296,12 @@ class BandsInspection:
             n_grid = n_cols * n_rows
 
             # Set the plot format where the user's overwrites the default
-            default_fig_cfg = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1]),
-                               'axes.titlesize': 11}
-            default_fig_cfg.update(fig_cfg)
-            PLT_CONF, self._AXES_CONF = self._figure_format(default_fig_cfg, ax_cfg, norm_flux=self._spec.norm_flux,
-                                                            units_wave=self._spec.units_wave,
-                                                            units_flux=self._spec.units_flux)
-            self._AXES_CONF.pop('xlabel')
+            size_conf = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1])}
+            size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
+
+            PLT_CONF = theme.fig_defaults(size_conf, fig_type='grid')
+            AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
+                                          fig_type=None)
 
             # Launch the interative figure
             with rc_context(PLT_CONF):
@@ -355,7 +354,7 @@ class BandsInspection:
 
                     # Add the current value
                     self.z_df.loc[self._obj_ref, self._redshift_column] = self._spec.redshift
-                    save_log(self.z_df, self._redshift_log_path)
+                    save_frame(self._redshift_log_path, self.z_df)
 
                     self._z_orig = self._spec.redshift
                     self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
@@ -400,14 +399,14 @@ class BandsInspection:
             idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
 
             # Plot the spectrum
-            ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=self._color_dict['fg'])
+            ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'])
 
             # Continuum bands
             self._bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line)
 
             # Plot the masked pixels
             _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH],
-                        color_dict=self._color_dict)
+                        color_dict=theme.colors)
 
             ax.axvline(self.log.loc[line, 'wavelength'], linestyle='--', color='grey', linewidth=0.5)
 
@@ -525,7 +524,7 @@ class BandsInspection:
 
         # Save to the data frame
         self.z_df.loc[self._obj_ref, self._redshift_column] = z_new
-        save_log(self.z_df, self._redshift_log_path)
+        save_frame(self._redshift_log_path, self.z_df, )
 
         return
 
@@ -1082,7 +1081,7 @@ class RedshiftInspection:
 
         # Save to file if provided
         if self._log_address is not None:
-            save_log(self._sample.log, self._log_address)
+            save_frame(self._log_address, self._sample.log)
 
         return
 
@@ -1170,7 +1169,7 @@ class CubeInspection:
 
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
-             rest_frame=False, log_scale=False, fig_cfg={}, ax_cfg_image={}, ax_cfg_spec={}, in_fig=None,
+             rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
              lines_log_file=None, ext_log='_LINELOG', wcs=None, maximize=False):
 
         """
@@ -1318,19 +1317,13 @@ class CubeInspection:
             else:
                 _logger.info(f'The lines log at {lines_log_file} was not found.')
 
-        # State the plot labelling
-        default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, line_fg, self.masks_dict)
-        default_ax_cfg_spec = dict(zip(('xlabel', 'ylabel'), axis_labeling(self._cube.norm_flux, self._cube.units_wave,
-                                                                           self._cube.units_flux)))
-        default_ax_cfg_spec.update(ax_cfg_spec)
-
-        # User configuration overwrite default figure format
-        local_cfg = {'figure.figsize': (16, 8), 'axes.titlesize': 12, 'legend.fontsize': 12, 'axes.labelsize': 12,
-                     'xtick.labelsize': 10, 'ytick.labelsize': 10}
-        self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
-
-        # Container for both axes format
-        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': default_ax_cfg_spec}
+        # Get figure configuration configuration
+        self.fig_conf = theme.fig_defaults(fig_cfg, fig_type='cube_interactive')
+        ax_im = theme.ax_defaults(ax_cfg_image, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
+                                fig_type='cube', line_bg=line_bg, line_fg=line_fg, masks_dict=self.masks_dict, wcs=wcs)
+        ax_spec = theme.ax_defaults(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
+                               g_type='default', line_bg=line_bg, line_fg=line_fg, masks_dict=self.masks_dict, wcs=wcs)
+        self.axes_conf = {'image': ax_im, 'spectrum': ax_spec}
 
         # Create the figure
         with rc_context(self.fig_conf):
@@ -1420,7 +1413,7 @@ class CubeInspection:
             # Plot spectrum
             spec_plot(self._ax1, self._cube.wave, flux_voxel, self._cube.redshift, self._cube.norm_flux,
                       rest_frame=self.rest_frame, log=log, units_wave=self._cube.units_wave,
-                      units_flux=self._cube.units_flux, color_dict=self._color_dict)
+                      units_flux=self._cube.units_flux, color_dict=theme.colors)
 
             if self.log_scale:
                 self._ax.set_yscale('log')
@@ -1587,23 +1580,15 @@ class MaskInspection:
         y, x = np.arange(0, frame_size[1]), np.arange(0, frame_size[2])
         self.grid_mesh = np.meshgrid(x, y)
 
-
         self.mask_ext = 'CUM_SN'
 
-
-        # State the plot labelling
-        default_ax_cfg_im = image_map_labels(ax_cfg_image, wcs, line_bg, None, self.masks_dict)
-        default_ax_cfg_spec = dict(zip(('xlabel', 'ylabel'), axis_labeling(self._cube.norm_flux, self._cube.units_wave,
-                                                                           self._cube.units_flux)))
-        default_ax_cfg_spec.update(ax_cfg_spec)
-
-        # User configuration overwrite default figure format
-        local_cfg = {'figure.figsize': (10, 5), 'axes.titlesize': 10, 'legend.fontsize': 10, 'axes.labelsize': 10,
-                     'xtick.labelsize': 10, 'ytick.labelsize': 10}
-        self.fig_conf = parse_figure_format(fig_cfg, local_cfg)
-
-        # Container for both axes format
-        self.axes_conf = {'image': default_ax_cfg_im, 'spectrum': ax_cfg_spec}
+        # Get figure configuration configuration
+        self.fig_conf = theme.fig_defaults(fig_cfg, fig_type='cube_interactive')
+        ax_im = theme.ax_defaults(ax_cfg_image, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
+                                fig_type='cube', line_bg=line_bg, line_fg=None, masks_dict=self.masks_dict, wcs=wcs)
+        ax_spec = theme.ax_defaults(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
+                               g_type='default', line_bg=line_bg, line_fg=None, masks_dict=self.masks_dict, wcs=wcs)
+        self.axes_conf = {'image': ax_im, 'spectrum': ax_spec}
 
         # Create the figure
         with rc_context(self.fig_conf):

@@ -6,9 +6,9 @@ from astropy.io import fits
 from time import time
 
 from .model import LineFitting, signal_to_noise_rola
-from .tools import define_masks, ProgressBar, logs_into_fits
+from .tools import define_masks, ProgressBar, logs_into_fits, extract_wcs_header, pd_get
 from .transitions import Line
-from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_log, extract_wcs_header, LiMe_Error, check_fit_conf
+from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
 from lmfit.models import PolynomialModel
 
 _logger = logging.getLogger('LiMe')
@@ -119,7 +119,6 @@ def check_spectrum_bands(line, wave_rest_array):
     return valid_check
 
 
-
 def check_cube_bands(input_bands, mask_list, fit_cfg):
 
     if input_bands is None:
@@ -179,6 +178,21 @@ def recover_level_conf(fit_cfg, mask_key, default_key):
     return output_conf
 
 
+def check_compound_line_exclusion(line, lines_df):
+
+    # Confirm the dataframe includes the group of lines
+    group_label = pd_get(lines_df, line, 'group_label', transform='none')
+
+    # Confirm if the line is in the group of lines
+    if group_label is not None:
+        comp_list = group_label.split('+')
+        measure_check = False if line in comp_list else True
+    else:
+        measure_check = True
+
+    return measure_check
+
+
 class SpecTreatment(LineFitting):
 
     def __init__(self, spectrum):
@@ -189,6 +203,8 @@ class SpecTreatment(LineFitting):
         # Lime spectrum object with the scientific data
         self._spec = spectrum
         self.line = None
+        self._i_line = 0
+        self._n_lines = 0
 
     def bands(self, label, bands=None, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
               temp=10000.0, id_conf_prefix=None, default_conf_prefix='default'):
@@ -278,7 +294,7 @@ class SpecTreatment(LineFitting):
             contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
 
             # Check the bands size
-            review_bands(self.line, emisWave, contWave) # TODO put this one in fit frame
+            review_bands(self.line, emisWave, contWave)
 
             # Default line type is in emission unless all are absorption
             emission_check = False if np.all(~self.line._p_type) else True
@@ -398,8 +414,6 @@ class SpecTreatment(LineFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            # fit_conf = {} if fit_conf is None else fit_conf
-            # input_conf = recover_level_conf(fit_conf, id_conf_prefix, default_conf_prefix)
             input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
 
             # Line detection if requested
@@ -407,33 +421,35 @@ class SpecTreatment(LineFitting):
                 detect_conf = input_conf.get('line_detection', {})
                 bands = self._spec.line_detection(bands, **detect_conf)
 
-            # Loop through the lines # TODO exclude (blended/kinematic) components, use the core elements...
+            # Define lines to treat through the lines
             label_list = bands.index.to_numpy()
-            bands_matrix = bands.loc[:, 'w1':'w6'].to_numpy()
-            n_lines = label_list.size
+            self._n_lines = label_list.size
 
             # Loop through the lines
-            if n_lines > 0:
+            if self._n_lines > 0:
 
                 # On screen progress bar
+                pbar = ProgressBar(progress_output, f'{self._n_lines} lines')
                 if progress_output is not None:
                     print(f'\nLine fitting progress:')
-                pbar = ProgressBar(progress_output, f'{n_lines} lines')
 
-                for i in np.arange(n_lines):
+                for self._i_line in np.arange(self._n_lines):
 
-                    # Current line
-                    line = label_list[i]
+                    # Ignore line if part of a blended/merge group
+                    line = label_list[self._i_line]
+                    measure_check = check_compound_line_exclusion(line, bands)
 
-                    # Progress message
-                    pbar.output_message(i, n_lines, pre_text="", post_text=f'({line})')
+                    if measure_check:
 
-                    # Fit the lines
-                    self.bands(line, bands_matrix[i], input_conf, min_method, profile, cont_from_bands, temp,
-                               id_conf_prefix=None, default_conf_prefix=None)
+                        # Progress message
+                        pbar.output_message(self._i_line, self._n_lines, pre_text="", post_text=f'({line})')
 
-                    if plot_fit:
-                        self._spec.plot.bands()
+                        # Fit the lines
+                        self.bands(line, bands, input_conf, min_method, profile, cont_from_bands, temp,
+                                   id_conf_prefix=None, default_conf_prefix=None)
+
+                        if plot_fit:
+                            self._spec.plot.bands()
 
             else:
                 msg = f'No lines were measured from the input dataframe:\n - line_list: {line_list}\n - line_detection: {line_detection}'
@@ -684,7 +700,7 @@ class CubeTreatment(LineFitting):
             if bands is None:
                 bands_file = mask_conf['bands']
                 bands_path = Path(bands_file).absolute() if bands_file[0] == '.' else Path(bands_file)
-                bands_in = load_log(bands_path)
+                bands_in = load_frame(bands_path)
             else:
                 bands_in = bands
 

@@ -5,22 +5,22 @@ import pandas as pd
 from numpy import array, abs, all, diff, char, searchsorted, unique, empty, arange, zeros
 from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
+from .tools import pd_get, au
 
-
-UNITS_LATEX_DICT = {'A': r'\AA',
-                    'um': r'\mu\!m',
-                    'nm': 'nm',
-                    'Hz': 'Hz',
-                    'cm': 'cm',
-                    'mm': 'mm',
-                    'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
-                    'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
-                    'Jy': 'Jy',
-                    'mJy': 'mJy',
-                    'nJy': 'nJy'}
-
-# TODO need a new mechanic to get the units
-DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
+# UNITS_LATEX_DICT = {'A': r'\AA',
+#                     'um': r'\mu\!m',
+#                     'nm': 'nm',
+#                     'Hz': 'Hz',
+#                     'cm': 'cm',
+#                     'mm': 'mm',
+#                     'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
+#                     'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
+#                     'Jy': 'Jy',
+#                     'mJy': 'mJy',
+#                     'nJy': 'nJy'}
+#
+# # TODO need a new mechanic to get the units
+# DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
 
 # FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
 
@@ -165,24 +165,46 @@ def air_to_vacuum_function(input_array, sig_fig=None):
     return output_array
 
 
-def check_units_from_wave(str_wave):
+def check_units_from_wave(line, str_ion, str_wave, lines_df):
 
-    # One character unit
-    units = str_wave[-1] if str_wave[-1] in DISPERSION_UNITS else None
+    # Try to recover from dataframe
+    if lines_df is not None:
 
-    # Two characters unit
-    if units is None:
-        units = str_wave[-2:] if str_wave[-2:] in DISPERSION_UNITS else None
+        # Check literal unit
+        wave = pd_get(lines_df, line, 'wavelength')
+        units = pd_get(lines_df, line, 'units_wave')
 
-        # Warning for an unsuccessful notation
-        if units is None:
-            _logger.warning(f'The units from the transition "{str_wave}" could not be interpreted')
-            wave = None
-        else:
-            wave = float(str_wave[:-2])
+        # Check core element
+        if wave is None:
+            core_element = f'{str_ion}_{str_wave}'
+            wave = pd_get(lines_df, core_element, 'wavelength')
+            units = pd_get(lines_df, core_element, 'units_wave')
+
+        # Convert to units
+        units = au.Unit(units) if units is not None else units
 
     else:
-        wave = float(str_wave[:-1])
+        wave, units = None, None
+
+    # Otherwise decipher from label
+    if (units is None) or (wave is None):
+
+        # First check for Angstroms
+        if str_wave[-1] == 'A':
+            units_label = au.Unit('AA')
+            wave_label = float(str_wave[:-1])
+
+        else:
+            au_unit = au.Unit(str_wave)
+            units_label = au_unit.bases[0]
+            wave_label = au_unit.scale
+
+    else:
+        units_label, wave_label = None, None
+
+    # Give preferences to the tabel values
+    wave = wave_label if wave is None else wave
+    units = units_label if units is None else units
 
     return wave, units
 
@@ -195,9 +217,9 @@ def check_line_in_log(input_label, log=None, tol=1):
         if log is not None:
 
             # Check the wavelength from the wave_obs column
-            if ('wave_obs' in log.columns) and ('units_wave' in log.columns): # TODO is this reading?
-                ref_waves = log.wave_obs.values
-                # units_wave = log.units_wave.values[0]
+            if 'wavelength' in log.columns:
+                ref_waves = log.wavelength.to_numpy()
+
 
             # Get it from the indexes
             else:
@@ -212,8 +234,8 @@ def check_line_in_log(input_label, log=None, tol=1):
                                 f'line label')
 
             # Locate the best candidate
-            idx_closest = searchsorted(ref_waves, input_label)
-            line_ion, line_wave = ion_array[idx_closest], ref_waves[idx_closest]
+            idx_closest = np.argmin(np.abs(ref_waves - input_label))
+            line_wave = ref_waves[idx_closest]
 
             # Check if input wavelength is close to the guessed line
             disc = abs(line_wave - input_label)
@@ -262,7 +284,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
         part_label = particle_notation(particle[i], transition_comp[i])
 
         # Wavelength and units label
-        units_latex = UNITS_LATEX_DICT[units_wave[i]]
+        units_latex = f'{units_wave[i]:latex}'[9:-2]
 
         # Kinematic label
         kinetic_comp = '' if kinem[i] == 0 else f'-k_{kinem[i]}'
@@ -284,7 +306,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
     n_comps = len(line_list)
     particle = [None] * n_comps #empty(n_comps).astype(str)
     wavelength = empty(n_comps)
-    units_wave = empty(n_comps).astype(str)
+    units_wave = [None] * n_comps
     kinem = zeros(n_comps, dtype=int)
     profile_comp = [None] * n_comps
     transition_comp = [None] * n_comps
@@ -307,7 +329,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         particle[i] = Particle.from_label(line_items[0])
 
         # Wavelength properties
-        wavelength[i], units_wave[i] = check_units_from_wave(line_items[1])
+        wavelength[i], units_wave[i] = check_units_from_wave(line, line_items[0], line_items[1], ref_df)
 
         # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'} # TODO better do that with optional_comps
         comp_conf = {optC[0]: optC[2:] for optC in line_items[2:]}
@@ -331,8 +353,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
 
         # If none is provided check from the table
         if (trans is None) and (ref_df is not None):
-            if (line in ref_df.index) and ('transition' in ref_df.columns):
-                trans = ref_df.loc[line, 'transition']
+            trans = pd_get(ref_df, line, 'transition')
 
         # Else assume default
         if trans is None:
@@ -400,8 +421,6 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
         output = tuple(item[0] for item in output)
     else:
         output = tuple(output)
-
-    # TODO should we output as single array only if one property is requested?
 
     return output
 
@@ -659,32 +678,18 @@ class Line:
                 raise LiMe_Error(f'The modularity component {modularity_label} in the input line "{self.label}" is not'
                                  f' recognized')
 
-        # Restore the group label from the log if provided
-        group_label = None
-        if bands_log is not None:
-            if isinstance(bands_log, pd.DataFrame):
-                try:
-                    group_label = bands_log.at[self.label, 'group_label']
-                except KeyError:
-                    group_label = None
+        # Restore the group label if provided (Configuration file over rules log)
+        group_label_cfg = None if fit_conf is None else fit_conf.get(self.label, None)
+        group_label_frame = None if not isinstance(bands_log, pd.DataFrame) else pd_get(bands_log, self.label,
+                                                                                        'group_label', transform='none')
 
-                # Check if we have a blended or merged line
-                if group_label is not None:
-                    if group_label != 'none':
-                        if self.merged_check is False:
-                            self.blended_check = True
-                    else:
-                        group_label = None
+        self.group_label = group_label_cfg if group_label_cfg is not None else group_label_frame
+
+        # Confirm blended or merged
+        self.blended_check = True if (self.group_label is not None) and (self.merged_check is False) else False
 
         # Recover the profile components
         if self.merged_check or self.blended_check:
-
-            # Check for profile label
-            # TODO check this fit_conf is nan
-            if group_label is None:
-                self.group_label = None if fit_conf is None else fit_conf.get(self.label, None)
-            else:
-                self.group_label = group_label
 
             # Reset and warned the line has a suffix but there are no components provided
             if self.group_label is None:
@@ -693,7 +698,7 @@ class Line:
                 # Warning incase there is an input configuration but the line is not there
                 if fit_conf is not None:
                     _logger.warning(f'The {self.label} line has a "_{modularity_label}" suffix but not components were '
-                                    f'specified on the configuration:\n{fit_conf}')
+                                    f' on the lines frames or the input configuration the configuration:\n{fit_conf}')
 
         # List of components only for blended
         if (self.merged_check or self.blended_check) and (self.group_label is not None):

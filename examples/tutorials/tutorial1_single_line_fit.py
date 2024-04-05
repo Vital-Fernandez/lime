@@ -2,6 +2,7 @@ import numpy as np
 from astropy.io import fits
 import lime
 
+lime.theme.set_style('dark')
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -33,7 +34,7 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
-# gp_spec.plot.spectrum(label='GP121903')
+gp_spec.plot.spectrum(label='GP121903')
 
 # Run the fit
 gp_spec.fit.bands(line, band_edges)
@@ -58,13 +59,13 @@ gp_spec.plot.bands(output_address=f'../sample_data/{line}.png')
 print(gp_spec.log)
 
 # It can be saved into different types of document using the function
-gp_spec.save_log('../sample_data/example1_linelog.txt')
-gp_spec.save_log('../sample_data/example1_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
-gp_spec.save_log('../sample_data/example1_linelog.fits', page='GP121903')
-gp_spec.save_log('../sample_data/example1_linelog.xlsx', page='GP121903')
-gp_spec.save_log('../sample_data/example1_linelog.asdf', page='GP121903')
+gp_spec.save_frame('../sample_data/example1_linelog.txt')
+gp_spec.save_frame('../sample_data/example1_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
+gp_spec.save_frame('../sample_data/example1_linelog.fits', page='GP121903')
+gp_spec.save_frame('../sample_data/example1_linelog.xlsx', page='GP121903')
+gp_spec.save_frame('../sample_data/example1_linelog.asdf', page='GP121903')
 
 # A lines log can also be saved/loaded using the lime functions:
 log_address = '../sample_data/example1_linelog.fits'
-lime.save_log(gp_spec.log, log_address, page='GP121903')
-log = lime.load_log(log_address, page='GP121903')
+lime.save_frame(log_address, gp_spec.log, page='GP121903')
+log = lime.load_frame(log_address, page='GP121903')

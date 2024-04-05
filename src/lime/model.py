@@ -515,7 +515,6 @@ class ProfileModelCompiler:
 
         # Fit the line
         self.params = self.model.make_params()
-        # self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
 
         with warnings.catch_warnings():
             warnings.simplefilter(_VERBOSE_WARNINGS)
@@ -562,6 +561,11 @@ class ProfileModelCompiler:
                 line.eqw_err = np.full(self.n_comps, np.nan)
                 line.FWHM_p = np.full(self.n_comps, np.nan)
                 line.sigma_thermal = np.full(self.n_comps, np.nan)
+
+            # Check for negative sigmas # TODO this needs a better place
+            if line.sigma[i] < 0:
+                _logger.warning(f'Negative value for profile sigma at {line.label}')
+                line.sigma[i] = np.nan
 
             # Compute the profile areas
             profile_flux_dist = AREA_FUNCTIONS[line._p_shape[i]](line, i, 1000)
@@ -745,8 +749,6 @@ class LineFitting:
     def integrated_properties(self, line, emis_wave, emis_flux, emis_err, cont_wave, cont_flux, cont_err, emission_check,
                               n_steps=1000):
 
-
-
         # Assign values peak/through properties
         peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
         line.n_pixels = emis_wave.size
@@ -781,18 +783,6 @@ class LineFitting:
             # Use the standard deviation from the continuum minus the linear fitting as the continuum error
             line.cont = line.peak_wave * line.m_cont + line.n_cont
             line.cont_err = np.std((cont_wave * line.m_cont + line.n_cont) - cont_flux)
-
-            # Using the middle point has a lot uncertainty
-            # from matplotlib import pyplot as plt
-            # fig, ax = plt.subplots()
-            # ax.step(emis_wave, emis_flux, where='mid')
-            # ax.step(cont_wave, cont_flux, where='mid')
-            # ax.plot(cont_wave, cont_wave * line.m_cont + line.n_cont, linestyle='--')
-            # plt.show()
-
-            #np.sqrt(np.square(line.peak_wave*line.m_cont_err_intg) + np.square(line.n_cont_err_intg))
-
-            # np.sqrt(np.square(line.peak_wave * line.m_cont_err_intg) + np.square(line.n_cont_err_intg))
 
         # Using line first and last point
         else:

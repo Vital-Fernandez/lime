@@ -48,7 +48,7 @@ shoc579.fit.spatial_mask(spatial_mask_file, fit_conf=obs_cfg, line_detection=Tru
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)
-spaxel.load_log(output_lines_log_file, page='38-35_LINELOG')
+spaxel.load_frame(output_lines_log_file, page='38-35_LINELOG')
 spaxel.plot.bands('He1_5016A')
 
 # Review the fittings

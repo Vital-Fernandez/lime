@@ -9,7 +9,7 @@ outputs_folder = Path(__file__).parent / 'outputs'
 lines_log_address = baseline_folder / 'manga_lines_log.txt'
 
 # Data for the tests
-lines_log = lime.load_log(lines_log_address)
+lines_log = lime.load_frame(lines_log_address)
 
 
 class TestSampleClass:
@@ -20,13 +20,13 @@ class TestSampleClass:
                                         log_list=[lines_log_address, lines_log_address],
                                         file_list=['spec1.fits', 'spec2.fits'],
                                         instrument='isis')
-        sample1.save_log(outputs_folder / f'sample1_3indeces.txt')
+        sample1.save_frame(outputs_folder / f'sample1_3indeces.txt')
 
         assert list(sample1.log.index.names) == ['id', 'file', 'line']
 
         sample2 = lime.Sample.from_file(id_list=['spec1', 'spec2'], log_list=[lines_log_address, lines_log_address],
                                         instrument='isis')
-        sample2.save_log(outputs_folder / f'sample1_2indeces.txt')
+        sample2.save_frame(outputs_folder / f'sample1_2indeces.txt')
         assert list(sample2.log.index.names) == ['id', 'line']
 
         sample3 = lime.Sample(outputs_folder / f'sample1_3indeces.txt', instrument='isis')

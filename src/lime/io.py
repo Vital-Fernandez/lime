@@ -1,12 +1,11 @@
 __all__ = [
     'save_cfg',
     'load_cfg',
-    'load_log',
+    'load_frame',
     'load_spatial_mask',
-    'save_log',
+    'save_frame',
     'log_parameters_calculation',
     'log_to_HDU',
-    'save_parameter_maps',
     '_LOG_EXPORT_RECARR',
     '_LOG_EXPORT',
     '_LOG_COLUMNS']
@@ -56,10 +55,16 @@ except ImportError:
 _logger = logging.getLogger('LiMe')
 
 # Reading file with the format and export status for the measurements
-_params_table_file = Path(__file__).parent/'resources/types_params.txt'
+_LIME_FOLDER = Path(__file__).parent
+_params_table_file = _LIME_FOLDER/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
 
-_LINES_DATABASE_FILE = Path(__file__).parent/'resources/parent_bands.txt'
+_LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
+_CONF_FILE = _LIME_FOLDER/'config.toml'
+
+# # Read lime configuration file
+# with open(_CONF_FILE, mode="rb") as fp:
+#     _cfg_lime = tomllib.load(fp)
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -247,7 +252,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     return
 
 
-def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line']):
+def load_frame(fname, page: str = 'LINELOG', levels: list = ['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
@@ -260,8 +265,8 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
     To reconstruct a `MultiIndex dataframe <https://pandas.pydata.org/docs/user_guide/advanced.html#advanced-hierarchical>`_
     the user needs to specify the ``sample_levels``.
 
-    :param file_address: Input log address.
-    :type file_address: str, Path
+    :param fname: Lines frame file address.
+    :type fname: str, Path
 
     :param page: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "_LINELOG".
     :type page: str, optional
@@ -275,9 +280,9 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
     """
 
     # Check file is at path
-    log_path = Path(file_address)
+    log_path = Path(fname)
     if not log_path.is_file():
-        raise LiMe_Error(f'No lines log found at {file_address}\n')
+        raise LiMe_Error(f'No lines log found at {fname}\n')
 
     file_name, file_type = log_path.name, log_path.suffix
 
@@ -323,12 +328,12 @@ def load_log(file_address, page: str = 'LINELOG', levels: list = ['id', 'line'])
     return log
 
 
-def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=None, column_dtypes=None,
-             safe_version=True, **kwargs):
+def save_frame(fname, dataframe, page='LINELOG', parameters='all', header=None, column_dtypes=None,
+               safe_version=True, **kwargs):
 
     """
 
-    This function saves the input ``log_dataframe`` at the ``file_address`` provided by the user.
+    This function saves the input ``dataframe`` at the ``fname`` provided by the user.
 
     The accepted extensions are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
 
@@ -341,11 +346,11 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
     string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
     same columns as the file names.
 
-    :param dataframe: Lines log dataframe.
-    :type dataframe: pandas.DataFrame
+    :param fname: Lines frame file address.
+    :type fname: str, Path
 
-    :param file_address: Output log address.
-    :type file_address: str, Path
+    :param dataframe: Lines dataframe.
+    :type dataframe: pandas.DataFrame
 
     :param parameters: Output parameters list. The default value is "all"
     :type parameters: list
@@ -367,7 +372,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
     """
 
     # Confirm file path exits
-    log_path = Path(file_address)
+    log_path = Path(fname)
     assert log_path.parent.exists(), LiMe_Error(f'- ERROR: Output lines log folder not found: {log_path.parent}')
     file_name, file_type = log_path.name, log_path.suffix
 
@@ -477,7 +482,7 @@ def save_log(dataframe, file_address, page='LINELOG', parameters='all', header=N
                     wb.save(log_path)
 
             else:
-                _logger.critical(f'openpyxl is not installed. Lines log {file_address} could not be saved')
+                _logger.critical(f'openpyxl is not installed. Lines log {fname} could not be saved')
 
         # Advance Scientific Storage Format
         elif file_type == '.asdf':
@@ -559,7 +564,7 @@ def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_level
     elif isinstance(df_variable, (str, Path)):
         input_path = Path(df_variable)
         if input_path.is_file():
-            output = load_log(df_variable, page=ext, levels=sample_levels)
+            output = load_frame(df_variable, page=ext, levels=sample_levels)
         else:
             _logger.warning(f'Lines bands file not found at {df_variable}')
             output = None
@@ -638,7 +643,7 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
 
 
 _parent_bands_file = Path(__file__).parent/'resources/parent_bands.txt'
-_PARENT_BANDS = load_log(_parent_bands_file)
+_PARENT_BANDS = load_frame(_parent_bands_file)
 
 
 def check_numeric_value(s):
@@ -697,7 +702,7 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     elif isinstance(input_log, (str, Path)):
         file_check = True
-        log_df = load_log(input_log)
+        log_df = load_frame(input_log)
 
     else:
         _logger.critical(
@@ -714,38 +719,11 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
     # Save to the previous location
     if file_check:
-        save_log(log_df, input_log)
+        save_frame(log_df, input_log)
 
 
     return
 
-
-def extract_wcs_header(wcs, drop_axis=None):
-
-    if wcs is not None:
-
-        # Remove 3rd dimensional axis if present
-        if drop_axis is not None:
-            if drop_axis == 'spectral':
-                input_wcs = wcs.dropaxis(2) if wcs.naxis == 3 else wcs
-            elif drop_axis == 'spatial':
-                if wcs.naxis == 3:
-                    input_wcs = wcs.dropaxis(1)
-                    input_wcs = wcs.dropaxis(0)
-            else:
-                raise LiMe_Error(f'Fits coordinates axis: "{drop_axis}" not recognized. Please use: "spectral" or'
-                                 f' "spatial"')
-
-        else:
-            input_wcs = wcs
-
-        # Convert to HDU header
-        hdr_coords = input_wcs.to_fits()[0].header
-
-    else:
-        hdr_coords = None
-
-    return hdr_coords
 
 
 def log_to_HDU(log, ext_name=None, column_dtypes=None, header_dict=None):
@@ -815,201 +793,19 @@ def formatStringOutput(value, key, section_label=None, float_format=None, nan_fo
     return formatted_value
 
 
-def progress_bar(i, i_max, post_text, n_bar=10):
+# def progress_bar(i, i_max, post_text, n_bar=10):
+#
+#     # Size of progress bar
+#     j = i/i_max
+#     stdout.write('\r')
+#     message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
+#     stdout.write(message)
+#     stdout.flush()
+#
+#     return
 
-    # Size of progress bar
-    j = i/i_max
-    stdout.write('\r')
-    message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
-    stdout.write(message)
-    stdout.flush()
-
-    return
 
 
-def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, mask_file=None, mask_list='all',
-                        image_shape=None, log_ext_suffix='_LINELOG', spaxel_fill_value=np.nan, output_file_prefix=None,
-                        header=None, wcs=None):
-
-    """
-
-    This function converts a line measurements log from an IFS cube, into a set of 2D parameter maps.
-
-    The parameter ".fits" files are saved into the ``output_folder``. These files are named after the parameters in the
-    ``param_list`` with the optional prefix from the ``output_file_prefix`` argument. These files will have one page per
-    line in the ``line_list`` argument.
-
-    The user can provide a spatial mask file address from which to recover the spaxels with line measurements. If the
-    mask ``.fits`` file contains several pages, the user can provide a ``mask_list`` with the ones to explore. Otherwise,
-    all mask pages will be used.
-
-    .. attention::
-        The user can provide an ``image_shape`` tuple to generate the output parameter map. However, for a large image
-        size this approach may require a long time to query the log file pages.
-
-    The expected page name in the input ``lines_log_file`` is "idx_j-idx_i_log_ext_suffix" where "idx_j" and "idx_i"
-    are the y and x array coordinates of the cube coordinates, by default ``log_ext_suffix='_LINELOG'``.
-
-    The output ``.fits`` parameter page header includes the ``PARAM`` and ``LINE`` entries with the line and parameter
-    labels respectively. The user should also include a ``wcs`` argument to export the astronomical coordinates to the
-    output files. The user can add additional information via the ``header`` argument.
-
-    :param lines_log_file: Fits file with IFU cube line measurements.
-    :param lines_log_file: str, pathlib.Path
-
-    :param param_list: List of parameters to map
-    :param param_list: list
-
-    :param line_list: List of lines to map
-    :param line_list: list
-
-    :param output_folder: Output folder to save the maps
-    :param output_folder: str, pathlib.Path
-
-    :param mask_file: Address of binary spatial mask file
-    :type mask_file: str, pathlib.Path
-
-    :param mask_list: Mask name list to explore on the ``mask_file``.
-    :type mask_list: list, optional
-
-    :param image_shape: Array with the image spatial size.
-    :param image_shape: list, tuple, optional
-
-    :param spaxel_fill_value: Map filling value for empty pixels. The default value is "numpy.nan".
-    :param spaxel_fill_value: float, optional
-
-    :param log_ext_suffix: Suffix for the lines log extension. The default value is "_LINELOG"
-    :param log_ext_suffix: str, optional
-
-    :param output_file_prefix: Prefix for the output parameter ".fits" file. The default value is None.
-    :param output_file_prefix: str, optional
-
-    :param header: Dictionary for parameter ".fits" file header
-    :type header: dict, optional
-
-    :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
-    :type wcs: astropy WCS, optional
-
-    """
-
-    assert Path(lines_log_file).is_file(), f'- ERROR: lines log at {lines_log_file} not found'
-    assert Path(output_folder).is_dir(), f'- ERROR: Output parameter maps folder {output_folder} not found'
-
-    # Compile the list of voxels to recover the provided masks
-    if mask_file is not None:
-
-        assert Path(mask_file).is_file(), f'- ERROR: mask file at {mask_file} not found'
-
-        with fits.open(mask_file) as maskHDUs:
-
-            # Get the list of mask extensions
-            if mask_list == 'all':
-                if ('PRIMARY' in maskHDUs) and (len(maskHDUs) > 1):
-                    mask_list = []
-                    for i, HDU in enumerate(maskHDUs):
-                        mask_name = HDU.name
-                        if mask_name != 'PRIMARY':
-                            mask_list.append(mask_name)
-                    mask_list = np.array(mask_list)
-                else:
-                    mask_list = np.array(['PRIMARY'])
-            else:
-                mask_list = np.array(mask_list, ndmin=1)
-
-            # Combine all the mask voxels into one
-            for i, mask_name in enumerate(mask_list):
-                if i == 0:
-                    mask_array = maskHDUs[mask_name].data
-                    image_shape = mask_array.shape
-                else:
-                    assert image_shape == maskHDUs[mask_name].data.shape, '- ERROR: Input masks do not have the same dimensions'
-                    mask_array += maskHDUs[mask_name].data
-
-            # Convert to boolean
-            mask_array = mask_array.astype(bool)
-
-            # List of spaxels in list [(idx_j, idx_i), ...] format
-            spaxel_list = np.argwhere(mask_array)
-
-    # No mask file is provided and the user just defines an image size tupple (nY, nX)
-    else:
-        mask_array = np.ones(image_shape).astype(bool)
-        spaxel_list = np.argwhere(mask_array)
-
-    # Generate containers for the data:
-    images_dict = {}
-    for param in param_list:
-
-        # Make sure is an array and loop throuh them
-        for line in line_list:
-            images_dict[f'{param}-{line}'] = np.full(image_shape, spaxel_fill_value)
-
-    # Loop through the spaxels and fill the parameter images
-    n_spaxels = spaxel_list.shape[0]
-    spaxel_range = np.arange(n_spaxels)
-
-    with fits.open(lines_log_file) as logHDUs:
-
-        for i_spaxel in spaxel_range:
-            idx_j, idx_i = spaxel_list[i_spaxel]
-            spaxel_ref = f'{idx_j}-{idx_i}{log_ext_suffix}'
-
-            progress_bar(i_spaxel, n_spaxels, post_text=f'of spaxels from file ({lines_log_file}) read ({n_spaxels} total spaxels)')
-
-            # Confirm log extension exists
-            if spaxel_ref in logHDUs:
-
-                # Recover extension data
-                log_data = logHDUs[spaxel_ref].data
-                log_lines = log_data['index']
-
-                # Loop through the parameters and the lines:
-                for param in param_list:
-                    idcs_log = np.argwhere(np.in1d(log_lines, line_list))
-                    for i_line in idcs_log:
-                        images_dict[f'{param}-{log_lines[i_line][0]}'][idx_j, idx_i] = log_data[param][i_line][0]
-
-    # New line after the rustic progress bar
-    print()
-
-    # Recover coordinates from the wcs to store in the headers:
-    hdr_coords = extract_wcs_header(wcs, drop_axis='spectral')
-
-    # Save the parameter maps as individual fits files with one line per page
-    output_file_prefix = '' if output_file_prefix is None else output_file_prefix
-    for param in param_list:
-
-        # Primary header
-        paramHDUs = fits.HDUList()
-        paramHDUs.append(fits.PrimaryHDU())
-
-        # ImageHDU for the parameter maps
-        for line in line_list:
-
-            # Create page header with the default data
-            hdr_i = fits.Header()
-            hdr_i['LINE'] = (line, 'Line label')
-            hdr_i['PARAM'] = (param, 'LiMe parameter label')
-
-            # Add WCS information
-            if hdr_coords is not None:
-                hdr_i.update(hdr_coords)
-
-            # Add user information
-            if header is not None:
-                page_hdr = header.get(f'{param}-{line}', None)
-                page_hdr = header if page_hdr is None else page_hdr
-                hdr_i.update(page_hdr)
-
-            # Create page HDU entry
-            HDU_i = fits.ImageHDU(name=line, data=images_dict[f'{param}-{line}'], header=hdr_i, ver=1)
-            paramHDUs.append(HDU_i)
-
-        # Write to new file
-        output_file = Path(output_folder)/f'{output_file_prefix}{param}.fits'
-        paramHDUs.writeto(output_file, overwrite=True, output_verify='fix')
-
-    return
 
 
 def load_spatial_mask(mask_file, mask_list=None, return_coords=False):
