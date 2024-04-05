@@ -200,10 +200,10 @@ class TestSpectrumClass:
     def test_measurements_txt_file(self):
 
         extension = 'txt'
-        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(outputs_folder / f'test_lines_log.{extension}')
 
-        log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
+        log_orig = lime.load_frame(lines_log_address)
+        log_test = lime.load_frame(outputs_folder / f'test_lines_log.{extension}')
 
         measurement_tolerance_test(spec, log_orig, log_test)
 
@@ -212,10 +212,10 @@ class TestSpectrumClass:
     def test_measurements_fits_file(self):
 
         extension = 'fits'
-        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(outputs_folder / f'test_lines_log.{extension}')
 
-        log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
+        log_orig = lime.load_frame(lines_log_address)
+        log_test = lime.load_frame(outputs_folder / f'test_lines_log.{extension}')
 
         measurement_tolerance_test(spec, log_orig, log_test)
 
@@ -224,10 +224,10 @@ class TestSpectrumClass:
     def test_measurements_csv_file(self):
 
         extension = 'csv'
-        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(outputs_folder / f'test_lines_log.{extension}')
 
-        log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
+        log_orig = lime.load_frame(lines_log_address)
+        log_test = lime.load_frame(outputs_folder / f'test_lines_log.{extension}')
 
         measurement_tolerance_test(spec, log_orig, log_test)
 
@@ -236,10 +236,10 @@ class TestSpectrumClass:
     def test_measurements_xlsx_file(self):
 
         extension = 'xlsx'
-        spec.save_log(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(outputs_folder / f'test_lines_log.{extension}')
 
-        log_orig = lime.load_log(lines_log_address)
-        log_test = lime.load_log(outputs_folder / f'test_lines_log.{extension}')
+        log_orig = lime.load_frame(lines_log_address)
+        log_test = lime.load_frame(outputs_folder / f'test_lines_log.{extension}')
 
         measurement_tolerance_test(spec, log_orig, log_test)
 
@@ -256,11 +256,11 @@ class TestSpectrumClass:
             except OSError as e:
                 print(f"Error: {e.strerror}")
 
-        log_orig = lime.load_log(lines_log_address)
+        log_orig = lime.load_frame(lines_log_address)
 
         for page in ['LINELOG', 'LINESLOG2', 'LINELOG']:
-            spec.save_log(outputs_folder / file_xlsx, page=page)
-            log_test = lime.load_log(file_xlsx)
+            spec.save_frame(outputs_folder / file_xlsx, page=page)
+            log_test = lime.load_frame(file_xlsx)
 
             measurement_tolerance_test(spec, log_orig, log_test)
 
@@ -301,10 +301,10 @@ class TestSpectrumClass:
         spec0 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                              pixel_mask=pixel_mask)
 
-        spec0.load_log(lines_log_address)
+        spec0.load_frame(lines_log_address)
 
         new_log_spectrum = outputs_folder / 'manga_lines_log_from_spectrum.txt'
-        spec0.save_log(new_log_spectrum)
+        spec0.save_frame(new_log_spectrum)
 
         assert new_log_spectrum.is_file()
 

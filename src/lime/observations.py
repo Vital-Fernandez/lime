@@ -5,13 +5,13 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from .tools import unit_conversion, define_masks, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au
+from .tools import unit_conversion, define_masks, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header
 
 from .recognition import LineFinder, DetectionInference
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
 from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_EXPORT_RECARR, save_log, LiMe_Error, check_file_dataframe, extract_wcs_header, _PARENT_BANDS, \
-    check_file_array_mask, load_log
+from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, _PARENT_BANDS, \
+    check_file_array_mask, load_frame
 
 from .read_fits import OpenFits, SPECTRUM_FITS_PARAMS
 from .transitions import Line, latex_from_label, air_to_vacuum_function
@@ -260,7 +260,7 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     return wave, wave_rest, flux, err_flux
 
 
-def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=None, units_wave='A', decimals=None,
+def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=None, units_wave='Angstrom', decimals=None,
                vacuum=False, ref_bands=None):
     """
 
@@ -331,9 +331,9 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
         mask_df[air_columns] = mask_df[air_columns].apply(air_to_vacuum_function, raw=True)
 
     # Convert to requested units
-    if units_wave != 'A':
-
-        conversion_factor = unit_conversion('A', units_wave, wave_array=1, dispersion_units='dispersion axis')
+    units_wave = au.Unit(units_wave)
+    if units_wave != 'Angstrom':
+        conversion_factor = unit_conversion('Angstrom', units_wave, wave_array=1, dispersion_units='dispersion axis')
         mask_df.loc[:, 'wavelength':'w6'] = mask_df.loc[:, 'wavelength':'w6'] * conversion_factor
 
     # Reconstruct the latex label
@@ -349,9 +349,11 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
     wave_array = np.round(wave_array, decimals) if decimals is not None else np.round(wave_array, 0).astype(int)
     wave_array = wave_array.astype(str)
 
+    unit_string = 'A' if units_wave == 'Angstrom' else str(units_wave)
+
     labels_array = np.core.defchararray.add(particle_array, '_')
     labels_array = np.core.defchararray.add(labels_array, wave_array)
-    labels_array = np.core.defchararray.add(labels_array, units_wave)
+    labels_array = np.core.defchararray.add(labels_array, unit_string)
 
     mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
 
@@ -719,8 +721,8 @@ class Spectrum(LineFinder):
 
         return
 
-    def save_log(self, file_address, page='LINELOG', param_list='all', header=None, column_dtypes=None,
-                 safe_version=True):
+    def save_frame(self, fname, page='LINELOG', param_list='all', header=None, column_dtypes=None,
+                   safe_version=True):
 
 
         """
@@ -739,8 +741,8 @@ class Spectrum(LineFinder):
         same columns as the file names.
 
 
-        :param file_address: Output log address.
-        :type file_address: str, Path
+        :param fname: Output log address.
+        :type fname: str, Path
 
         :param param_list: Output parameters list. The default value is "all"
         :type param_list: list
@@ -763,18 +765,18 @@ class Spectrum(LineFinder):
 
         # Meta parameters from the observations
         meta_params = {'LiMe':       __version__,
-                       'units_wave': self.units_wave.to_string(),
-                       'units_flux': self.units_flux.to_string(),
+                       'u_wave':     self.units_wave.to_string(),
+                       'u_flux':     self.units_flux.to_string(),
                        'redshift':   self.redshift,
                        'id':         self.label}
 
         # Save the file
-        save_log(self.log, file_address, page, param_list, header, column_dtypes=column_dtypes,
-                 safe_version=safe_version, **meta_params)
+        save_frame(fname, self.log, page, param_list, header, column_dtypes=column_dtypes,
+                   safe_version=safe_version, **meta_params)
 
         return
 
-    def load_log(self, file_address, page='LINELOG'):
+    def load_frame(self, fname, page='LINELOG'):
 
         """
 
@@ -782,8 +784,8 @@ class Spectrum(LineFinder):
 
         The appropriate variables are normalized by the current spectrum flux normalization.
 
-        :param file_address: Input log address.
-        :type file_address: str, Path
+        :param fname: Input log address.
+        :type fname: str, Path
 
         :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
         :type page: str, optional
@@ -791,7 +793,7 @@ class Spectrum(LineFinder):
         """
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(file_address, pd.DataFrame, ext=page)
+        log_df = check_file_dataframe(fname, pd.DataFrame, ext=page)
 
         # Security checks:
         if log_df.index.size > 0:
@@ -800,13 +802,14 @@ class Spectrum(LineFinder):
             # Get the first line in the log
             line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
 
-            # Confirm the lines in the log match the one of the spectrum # TODO fix the units
-            # if line_0.units_wave != self.units_wave:
-            #     _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
-            #                     f' in {line_0.units_wave}')
+            # Confirm the lines in the log match the one of the spectrum
+            if line_0.units_wave[0] != self.units_wave:
+                _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
+                                f' in {line_0.units_wave[0]}')
 
             # Confirm all the log lines have the same units
-            same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), line_0.units_wave) != -1).size == line_list.size
+            au_str = 'A' if line_0.units_wave[0] == 'Angstrom' else str(line_0.units_wave)
+            same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), au_str) != -1).size == line_list.size
             if not same_units_check:
                 _logger.warning(f'The log has lines with different units')
 
@@ -814,7 +817,7 @@ class Spectrum(LineFinder):
             self.log = log_df
 
         else:
-            _logger.info(f'Log file with 0 entries ({file_address})')
+            _logger.info(f'Log file with 0 entries ({fname})')
 
         return
 
@@ -1411,7 +1414,7 @@ class Sample(UserDict, OpenFits):
     """
 
     def __init__(self, sample_log, levels=('id', 'file', 'line'), load_function=None, instrument=None, folder_obs=None,
-                 **kwargs):
+                 units_wave='AA', units_flux='FLAM', **kwargs):
 
         # Initiate the user dictionary with a dictionary of observations if provided
         super().__init__()
@@ -1427,6 +1430,9 @@ class Sample(UserDict, OpenFits):
 
         # Check the levels on combined labels target log
         check_sample_levels(self.levels)
+
+        # Checks units
+        self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
         self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
         self._load_function = load_function
@@ -1519,7 +1525,7 @@ class Sample(UserDict, OpenFits):
 
             # Load the log and check the levels
             if log_list is not None:
-                log_i = load_log(log_list[i], page_name, levels)
+                log_i = load_frame(log_list[i], page_name, levels)
                 df_list.append(review_sample_levels(log_i, id_spec, file_spec))
             else:
                 log_i = pd.DataFrame(columns=["id", "file"], data=(id_spec, file_spec))
@@ -1657,10 +1663,10 @@ class Sample(UserDict, OpenFits):
     def size(self):
         return self.log.index.size
 
-    def load_log(self, log_var, ext='LINELOG', sample_levels=['id', 'line']):
+    def load_frame(self, dataframe, ext='LINELOG', sample_levels=['id', 'line']):
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(log_var, pd.DataFrame, ext=ext, sample_levels=sample_levels)
+        log_df = check_file_dataframe(dataframe, pd.DataFrame, ext=ext, sample_levels=sample_levels)
 
         # Security checks:
         if log_df.index.size > 0:
@@ -1683,17 +1689,17 @@ class Sample(UserDict, OpenFits):
                     _logger.warning(f'The log has lines with different units')
 
         else:
-            _logger.info(f'Log file with 0 entries ({log_var})')
+            _logger.info(f'Log file with 0 entries ({dataframe})')
 
         # Assign the log
         self.log = log_df
 
         return
 
-    def save_log(self, file_address, ext='LINELOG', param_list='all', fits_header=None):
+    def save_frame(self, fname, ext='LINELOG', param_list='all', fits_header=None):
 
         # Save the file
-        save_log(self.log, file_address, ext, param_list, fits_header)
+        save_frame(fname, self.log, ext, param_list, fits_header)
 
         return
 

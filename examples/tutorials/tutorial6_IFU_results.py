@@ -35,7 +35,7 @@ shoc579.check.cube('H1_6563A', lines_log_file=output_lines_log_file, masks_file=
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)
-spaxel.load_log(output_lines_log_file, page='38-35_LINELOG')
+spaxel.load_frame(output_lines_log_file, page='38-35_LINELOG')
 spaxel.plot.grid()
 
 # Export the measurements log as maps:

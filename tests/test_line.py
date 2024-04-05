@@ -10,18 +10,18 @@ def test_label_decomposition():
 
     particle, wavelength, latex = label_decomposition('O3_5007A', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5007.0
-    assert latex[0] == r'$[OIII]5007\AA$'
+    assert wavelength[0] == 5006.7664
+    assert latex[0] == '$[OIII]5007\\mathring{A}$'
 
     particle, wavelength, latex = label_decomposition('O3_5007A_b', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5007.0
-    assert latex[0] == r'$[OIII]5007\AA$'
+    assert wavelength[0] ==  5006.7664
+    assert latex[0] == '$[OIII]5007\\mathring{A}$'
 
     particle, wavelength, latex = label_decomposition('O3_5007A_m', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5007.0
-    assert latex[0] == r'$[OIII]5007\AA$+$[OIII]5007\AA-k_1$'
+    assert wavelength[0] == 5006.7664
+    assert latex[0] == '$[OIII]5007\\mathring{A}$+$[OIII]5007\\mathring{A}-k_1$'
 
     return
 
@@ -40,11 +40,11 @@ class TestLineClass:
         line = Line('O3_5007A', fit_conf=fit_conf)
         assert line.particle[0].label == 'O3'
         assert line.particle[0].symbol == 'O', line.particle[0].ionization == 3
-        assert np.all(line.wavelength == np.array([5007.]))
+        assert np.all(line.wavelength == np.array([5006.7664]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == np.array(['col']))
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'$[OIII]5007\AA$']))
+        assert np.all(line.latex_label == np.array(['$[OIII]5007\mathring{A}$']))
         assert np.all(line.list_comps == ['O3_5007A'])
 
         assert line.label == 'O3_5007A'
@@ -53,11 +53,11 @@ class TestLineClass:
 
         line = Line('O3_5007A_b', band=None, fit_conf=fit_conf)
         assert np.all(line.particle == [Particle.from_label('O3'), Particle.from_label('O3'), Particle.from_label('He1')])
-        assert np.all(line.wavelength == np.array([5007., 5007., 5016.]))
+        assert np.all(line.wavelength == np.array([5006.7664, 5006.7664, 5016.]))
         assert np.all(line.kinem == np.array([0, 1, 0]))
         assert np.all(line.transition_comp == np.array(['col', 'col', 'rec']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi', 'g-emi']))
-        assert np.all(line.latex_label == np.array([r'$[OIII]5007\AA$', r'$[OIII]5007\AA-k_1$', r'$HeI5016\AA$']))
+        assert np.all(line.latex_label == np.array(['$[OIII]5007\mathring{A}$', '$[OIII]5007\mathring{A}-k_1$', '$HeI5016\mathring{A}$']))
         assert np.all(line.list_comps == ['O3_5007A', 'O3_5007A_k-1', 'He1_5016A'])
 
         assert line.label == 'O3_5007A_b'
@@ -70,7 +70,7 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == np.array(['col']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi']))
-        assert np.all(line.latex_label == np.array([r'$[OIII]5007\AA$+$[OIII]5007\AA-k_1$']))
+        assert np.all(line.latex_label == np.array([r'$[OIII]5007\mathring{A}$+$[OIII]5007\mathring{A}-k_1$']))
         assert np.all(line.list_comps == ['O3_5007A_m'])
 
         assert line.label == 'O3_5007A_m'
@@ -87,7 +87,7 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == [None])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'OIII-$5007\AA$']))
+        assert np.all(line.latex_label == np.array(['OIII-$5007\\mathring{A}$']))
         assert np.all(line.list_comps == ['OIII_5007A'])
 
         assert line.label == 'OIII_5007A'
@@ -100,7 +100,7 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == [None])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'Halpha-$6563\AA$']))
+        assert np.all(line.latex_label == np.array(['Halpha-$6563\\mathring{A}$']))
         assert np.all(line.list_comps == ['Halpha_6563A'])
 
         assert line.label == 'Halpha_6563A'
@@ -113,7 +113,7 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == [None])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'HIPas4-3-$18751\AA$']))
+        assert np.all(line.latex_label == np.array(['HIPas4-3-$18751\\mathring{A}$']))
         assert np.all(line.list_comps == ['HIPas4-3_18751A'])
 
         assert line.label == 'HIPas4-3_18751A'
@@ -126,7 +126,7 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == [None])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'OIII-$5007\AA$']))
+        assert np.all(line.latex_label == np.array(['OIII-$5007\\mathring{A}$']))
         assert np.all(line.list_comps == ['OIII_5007A'])
 
         assert line.label == 'OIII_5007A'
@@ -135,11 +135,11 @@ class TestLineClass:
 
         line = Line('C3_1909A')
         assert line.particle[0].label == 'C3'
-        assert np.all(line.wavelength == np.array([1909.]))
+        assert np.all(line.wavelength == np.array([1908.0803]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == ['sem'])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'$CIII]1909\AA$']))
+        assert np.all(line.latex_label == np.array(['$CIII]1909\\mathring{A}$']))
         assert np.all(line.list_comps == ['C3_1909A'])
 
         assert line.label == 'C3_1909A'
@@ -148,11 +148,11 @@ class TestLineClass:
 
         line = Line('C3_1909A_t-sem', band=None)
         assert line.particle[0].label == 'C3'
-        assert np.all(line.wavelength == np.array([1909.]))
+        assert np.all(line.wavelength == np.array([1908.0803]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == ['sem'])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array([r'$CIII]1909\AA$']))
+        assert np.all(line.latex_label == np.array(['$CIII]1908\\mathring{A}$']))
         assert np.all(line.list_comps == ['C3_1909A_t-sem'])
 
         assert line.label == 'C3_1909A_t-sem'

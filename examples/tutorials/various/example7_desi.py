@@ -43,7 +43,7 @@ gp_spec.plot.spectrum(rest_frame=True)
 gp_spec.fit.bands('O3_5007A')
 gp_spec.plot.bands(rest_frame=True, y_scale='linear')
 gp_spec.fit.bands('H1_6563A', )
-gp_spec.save_log('desi_line_measurements.txt')
+gp_spec.save_frame('desi_line_measurements.txt')
 
 data = np.column_stack((gp_spec.wave, gp_spec.flux))
 np.savetxt('/home/vital/Astrodata/LiMe_ml/desi_spectrum.txt', np.c_[data])

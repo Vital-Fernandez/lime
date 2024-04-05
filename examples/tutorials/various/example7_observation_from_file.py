@@ -23,7 +23,7 @@ lineBandsFile = '../../sample_data/osiris_bands.txt'
 cfgFile = '../../sample_data/osiris.toml'
 
 # Load line bands
-bands = lime.load_log(lineBandsFile)
+bands = lime.load_frame(lineBandsFile)
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)

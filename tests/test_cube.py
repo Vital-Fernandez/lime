@@ -116,8 +116,8 @@ class TestCubeClass:
 
         assert spatial_log_address.is_file()
 
-        spax_log = lime.load_log(spatial_log_address, page=f'{spaxel_label}_LINELOG')
-        orig_log = lime.load_log(lines_log_address)
+        spax_log = lime.load_frame(spatial_log_address, page=f'{spaxel_label}_LINELOG')
+        orig_log = lime.load_frame(lines_log_address)
 
         # Test 3 lines # TODO review these fluxes
         assert np.sum(spax_log.index.isin(['O3_5007A', 'O3_5007A_k-1', 'He1_5016A'])) == 3
@@ -179,7 +179,7 @@ class TestCubeClass:
         assert np.isnan(int_flux_map).sum() == 5443
         assert np.isnan(gauss_flux_map).sum() == 5443
 
-        orig_log = lime.load_log(lines_log_address)
+        orig_log = lime.load_frame(lines_log_address)
 
         idx_j, idx_x = [int(item) for item in spaxel_label.split('-')]
 

@@ -2,6 +2,9 @@ import numpy as np
 from astropy.io import fits
 import lime
 
+lime.theme.set_style('dark')
+
+
 # State the data files
 obsFitsFile = '../sample_data/spectra/gp121903_osiris.fits'
 lineBandsFile = '../sample_data/osiris_bands.txt'
@@ -23,7 +26,7 @@ gp_spec.plot.spectrum(label='GP121903 matched lines', line_bands=match_bands, lo
 
 # Saving GP121903 bands
 obj_bands_file = '../sample_data/gp121903_bands.txt'
-lime.save_log(match_bands, obj_bands_file)
+lime.save_frame(obj_bands_file, match_bands)
 
 # Measure the emission lines
 gp_spec.fit.frame(obj_bands_file, obs_cfg, id_conf_prefix='gp121903')
@@ -35,8 +38,8 @@ gp_spec.plot.spectrum(include_fits=True)
 gp_spec.plot.grid(rest_frame=True)
 
 # Save the data
-gp_spec.save_log('../sample_data/example3_linelog.txt')
-gp_spec.save_log('../sample_data/example3_linelog.xlsx', page='GP121903b')
-gp_spec.save_log('../sample_data/example3_linelog.pdf')
-lime.save_log(gp_spec.log, '../sample_data/example3_linelog.fits', page='GP121903b')
+gp_spec.save_frame('../sample_data/example3_linelog.txt')
+gp_spec.save_frame('../sample_data/example3_linelog.xlsx', page='GP121903b')
+gp_spec.save_frame('../sample_data/example3_linelog.pdf')
+lime.save_frame('../sample_data/example3_linelog.fits', gp_spec.log, page='GP121903b')
 

@@ -7,10 +7,10 @@ spectrum_log_path = r'D:\Pycharm Projects\lime_online\data\tables\fluxes_log.txt
 sample_log_path = Path(f'sample_data/sample_log.txt')
 
 # Load the logs
-log_spec = lime.load_log(spectrum_log_path, levels=['sample', 'id', 'line'])
+log_spec = lime.load_frame(spectrum_log_path, levels=['sample', 'id', 'line'])
 
 sample = lime.Sample()
-sample.load_log(spectrum_log_path, sample_levels=['sample', 'id', 'line'])
+sample.load_frame(spectrum_log_path, sample_levels=['sample', 'id', 'line'])
 
 print(sample.log)
 sample.extract_fluxes()

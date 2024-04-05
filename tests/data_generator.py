@@ -4,6 +4,8 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
 
+# lime.theme.set_style('dark')
+
 baseline_folder = Path(__file__).parent / 'baseline'
 
 # Inputs
@@ -52,7 +54,9 @@ np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35', progress_output=None)
-spax.save_log(lines_log_file)
+spax.save_frame(lines_log_file)
+
+spax.plot.velocity_profile('H1_4861A')
 
 # Plots
 spax.plot.spectrum(include_fits=True)

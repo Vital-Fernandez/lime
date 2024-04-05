@@ -145,11 +145,6 @@ class LineFinder:
         limit_threshold = np.percentile(self.flux, 84) if limit_threshold is None else limit_threshold
         limit_threshold = limit_threshold + continuum if continuum is not None else limit_threshold
 
-        # Index the intensity peaks
-        # input_flux = self.flux.data if np.ma.is_masked()
-        # mask_valid = ~self.flux.mask if np.ma.is_masked(self.flux) else np.ones(self.flux.data.size).astype(bool)
-        # peak_fp, _ = signal.find_peaks(self.flux.data[mask_valid], height=limit_threshold[mask_valid], distance=distance)
-
         peak_fp, _ = signal.find_peaks(self.flux, height=limit_threshold, distance=distance)
 
         # Plot the results
@@ -395,6 +390,7 @@ class DetectionInference:
         input_flux = input_flux[~idcs_nan_rows, :]
 
         # Add Monte Carlo columns (7858, 13) To (7858, 13, 100)
+
 
         # Normalize the flux
         input_flux = feature_scaling(input_flux, transformation=scale_type, log_base=log_base)

@@ -25,7 +25,7 @@ cfgFile = './sample_data/osiris.toml'
 wave, flux, header = import_osiris_fits(obsFitsFile)
 
 # Load line bands
-bands = lime.load_log(lineBandsFile)
+bands = lime.load_frame(lineBandsFile)
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)

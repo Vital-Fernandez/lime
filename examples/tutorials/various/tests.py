@@ -1,3 +1,29 @@
+from lime.tools import au
+
+print('aqui')
+
+list_units = ['5007A', '5007AA', '500.7nm', '500.7e-9m', '12.3e-15Hz', '0.3keV']
+for item in list_units:
+    coso = au.Unit(item)
+    base = coso.bases[0]
+    mag = coso.scale
+    print(coso, f'{base:latex}', '||', f'{base:latex}'[9:-2])
+
+# from pip._vendor.rich.progress import Progress
+# import numpy as np
+
+# Bar = Progress()
+# with Bar('Processing', max=20) as bar:
+#     for i in range(20):
+#         # Do some work
+#         bar.next()
+
+# from tqdm import tqdm
+# combinations = np.array(list(product(int_ratio_range, res_ratio_range)))
+# bar = tqdm(combinations, desc="Item", mininterval=0.2, unit=" combinations")
+
+# pbar = tqdm(array_product, unit=" line")
+
 # import astropy
 # from astropy import units as au
 #
@@ -11,46 +37,42 @@
 #     except ValueError:
 #         print(f'{keyword} is NOT a valid unit')
 
-import astropy
-from astropy import units as au
-import synphot.units as su
-
-# au.add_enabled_aliases({'F_lam': au.erg/au.s/au.cm**2/au.AA, 'F_nu': au.erg/au.s/au.cm**2/au.Hz,
-#                         'f_E': au.photon/au.s/au.cm**2/au.keV, 'f_lam': au.photon/au.s/au.cm**2/au.AA,
-#                         'WN': 1/au.cm})
-
-flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
-                    format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
-                            "generic": "FLAM", "console": "FLAM"})
-
-fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
-                    format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
-                            "generic": "FNU", "console": "FNU"})
-
-photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
-                        format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
-                        "generic": "PHOTLAM", "console": "PHOTLAM"})
-
-photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
-                        format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
-                        "generic": "PHOTNU", "console": "PHOTNU"})
-
-au.add_enabled_units([flam, fnu, photlam, photnu])
-
-# 'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
-# 'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
-
-for keyword in ['photnu', 'PHOTNU', 'photlam', 'PHOTLAM', 'f_lam', 'flam', '1e17*flam', 'AA', 'Angstrom', 'Pa', 'atm']:
-
-    try:
-        unit_variable = au.Unit(keyword)
-        print(f'{keyword} is a VALID unit, {unit_variable:latex}')
-        print(isinstance(unit_variable, au.UnitBase))
-    except ValueError:
-        print(f'{keyword} is NOT a valid unit')
+# import astropy
+# from astropy import units as au
+# import synphot.units as su
+#
+# # au.add_enabled_aliases({'F_lam': au.erg/au.s/au.cm**2/au.AA, 'F_nu': au.erg/au.s/au.cm**2/au.Hz,
+# #                         'f_E': au.photon/au.s/au.cm**2/au.keV, 'f_lam': au.photon/au.s/au.cm**2/au.AA,
+# #                         'WN': 1/au.cm})
+#
+# flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
+#                             "generic": "FLAM", "console": "FLAM"})
+#
+# fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
+#                             "generic": "FNU", "console": "FNU"})
+#
+# photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
+#                         "generic": "PHOTLAM", "console": "PHOTLAM"})
+#
+# photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
+#                         "generic": "PHOTNU", "console": "PHOTNU"})
+#
+# au.add_enabled_units([flam, fnu, photlam, photnu])
+#
+# for keyword in ['photnu', 'PHOTNU', 'photlam', 'PHOTLAM', 'f_lam', 'flam', '1e17*flam', 'AA', 'A', 'Angstrom', 'Pa', 'atm']:
+#
+#     try:
+#         unit_variable = au.Unit(keyword)
+#         print(f'{keyword} is a VALID unit, {unit_variable:latex}')
+#         print(isinstance(unit_variable, au.UnitBase))
+#     except ValueError:
+#         print(f'{keyword} is NOT a valid unit')
 
 # format={"latex": r"\mathring{A}", "unicode": "Å", "vounit": "Angstrom"},
-su.FLAM
 # {"latex": r"\mathring{A}", "unicode": "Å", "vounit": "Angstrom"}
 # FLAM = u.def_unit(
 #     'flam', u.erg / (u.cm**2 * u.s * u.AA),
