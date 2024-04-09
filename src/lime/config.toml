@@ -1,10 +1,10 @@
 [metadata]
 name = 'lime-stable'
-version = '0.9.99.5'
+version = '0.9.99.9'
 
 [lime_colors]
 
-#Default
+#Default theme
 default.bg = '#FFFFFF'
 default.fg = '#000000'
 default.cont_band = '#8c564b'
@@ -22,7 +22,7 @@ default.comps_map = 'Dark2'
 default.mask_marker = '#FF0000'
 default.inspection_positive = '#FFFFFF'
 default.inspection_negative = '#ff796c' # 'xkcd:salmon'
-
+default.fade_fg = "#CCCCCC"
 
 #Dark theme
 dark.bg = "#2B2B2B"
@@ -42,6 +42,7 @@ dark.comps_map = 'PuRd'
 dark.mask_marker = '#FF0000'
 dark.inspection_positive = "#2B2B2B"
 dark.inspection_negative = '#840000'
+dark.fade_fg = "#73879B"
 
 [matplotlib]
 default."figure.dpi" = 200

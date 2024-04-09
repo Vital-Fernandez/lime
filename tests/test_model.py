@@ -26,7 +26,6 @@ pseudo_voigt_array = frac * gaussian_array + (1 - frac) * lorentzian_array
 
 def test_gaussian():
 
-
     y_array = gaussian_array + cont_array + noise_array
     spec = lime.Spectrum(x_array, y_array, redshift=0, norm_flux=1)
     spec.fit.bands('H1_4861A')
@@ -38,8 +37,7 @@ def test_gaussian():
     assert np.allclose(spec.fit.line.frac, np.nan, equal_nan=True)
 
     assert np.allclose(spec.fit.line.m_cont, m_cont, rtol=0.05)
-    print(spec.fit.line.n_cont_err)
-    assert np.allclose(spec.fit.line.n_cont, n_cont, rtol=0.5) # TODO check why so big...
+    assert np.allclose(spec.fit.line.n_cont, n_cont, rtol=spec.fit.line.n_cont_err)
 
     p_shape = spec.fit.line._p_shape[0]
     g_fwhm = 2 * np.sqrt(2 * np.log(2)) * sigma

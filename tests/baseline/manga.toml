@@ -11,9 +11,10 @@ Ar4_4711A_m = "Ar4_4711A+He1_4713A"
 [MASK_0_line_fitting]
 bands = "./baseline/manga_line_bands.txt"
 
-line_detection.cont_fit_degree = [3, 7, 7, 7]
-line_detection.cont_int_thres = [5, 3, 2, 2]
-line_detection.line_type = 'emission'
+continuum_fit.degree_list = [3, 6, 6]
+continuum_fit.emis_threshold = [5, 3, 2]
+
+line_detection.emission_type = true
 
 O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
 H1_4861A_b = "H1_4861A+H1_4861A_k-1"
@@ -36,9 +37,9 @@ O3_5007A_k-1_kinem = "O3_4959A_k-1"
 O3_5007A_k-1_amp = "expr:<10.0*O3_5007A_amp"
 
 H1_6563A_k-1_sigma = "expr:>2.0*H1_6563A_sigma"
-H1_6563A_k-1_amp = "expr:<10.0*H1_6563A_amp"
 N2_6548A_amp = "expr:N2_6584A_amp/2.94"
 N2_6548A_kinem = "N2_6584A"
+
 H1_9548A_sigma = "min:1.0,max:2.0"
 
 [38-35_line_fitting]
