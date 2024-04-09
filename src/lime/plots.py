@@ -877,7 +877,7 @@ class Plotter:
 
         return
 
-    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum=None, plot_title='', ml_mask=None):
+    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum, match_bands):
 
 
         norm_flux = self._spec.norm_flux
@@ -894,17 +894,17 @@ class Plotter:
 
         continuum = continuum if continuum is not None else np.zeros(flux.size)
 
+        idcs_detect = match_bands['signal_peak'].to_numpy(dtype=int)
+
         with rc_context(PLOT_CONF):
 
             fig, ax = plt.subplots()
             ax.step(wave_plot, flux_plot, color=theme.colors['fg'], label='Object spectrum', where='mid')
 
-            if ml_mask is not None:
-                if np.any(ml_mask):
-                    ax.scatter(wave_plot[ml_mask], flux_plot[ml_mask], label='ML detection', color='palegreen')
-
-            ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=theme.colors['peak'], facecolors='none')
+            ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=theme.colors['fade_fg'], facecolors='none')
             ax.fill_between(wave_plot, continuum, detect_limit, facecolor=theme.colors['line_band'], label='Noise_region', alpha=0.5)
+            ax.scatter(wave_plot[idcs_detect], flux_plot[idcs_detect], marker='o', label='Matched lines',
+                       color=theme.colors['peak'], facecolors='none')
 
             if continuum is not None:
                 ax.plot(wave_plot, continuum, label='Continuum')
@@ -1034,7 +1034,7 @@ class SpectrumFigures(Plotter):
                 # List of lines in the log
                 line_list = self._spec.log.index.values
 
-                # Do not include the legend as the labels are necessary for mplcursors
+                # Do not include the legend as the labels are necessary for mplcursors # TODO improve mechanics
                 legend_check = False
 
                 if line_list.size > 0:
@@ -1056,7 +1056,13 @@ class SpectrumFigures(Plotter):
 
             # Plot the normalize continuum
             if include_cont and self._spec.cont is not None:
-                in_ax.plot(wave_plot/z_corr, self._spec.cont, label='Fitted continuum', linestyle='--')
+                in_ax.plot(wave_plot/z_corr, self._spec.cont*z_corr, label='Continuum', color=theme.colors['fade_fg'], linestyle='--')
+
+                low_limit, high_limit = self._spec.cont-self._spec.cont_std, self._spec.cont + self._spec.cont_std
+                in_ax.fill_between(wave_plot/z_corr, low_limit*z_corr, high_limit*z_corr, alpha=0.2,
+                                   color=theme.colors['fade_fg'])
+
+                # legend_check = True
 
             # Switch y_axis to logarithmic scale if requested
             if log_scale:
@@ -1564,37 +1570,40 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def _continuum_iteration(self, wave, flux, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor,
-                             plot_title=''):
+    def _continuum_iteration(self, wave, flux, continuum_fit, smooth_flux, idcs_cont, low_lim, high_lim, threshold_factor,
+                             user_ax):
 
-        PLOT_CONF = STANDARD_PLOT.copy()
-        AXES_CONF = STANDARD_AXES.copy()
+        PLT_CONF = theme.fig_defaults(None)
+        AXES_CONF = theme.ax_defaults(user_ax, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux)
 
-        norm_label = r' $\,/\,{}$'.format(latex_science_float(self._spec.norm_flux)) if self._spec.norm_flux != 1.0 else ''
-        AXES_CONF['ylabel'] = f'Flux $({UNITS_LATEX_DICT[self._spec.units_flux]})$' + norm_label
-        AXES_CONF['xlabel'] = f'Wavelength $({UNITS_LATEX_DICT[self._spec.units_wave]})$'
-        AXES_CONF['title'] = plot_title
+        smooth_check = True if np.all(flux != smooth_flux) else False
+        # wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, self._spec.redshift, False)
 
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, self._spec.redshift, False)
-
-        with rc_context(PLOT_CONF):
+        with rc_context(PLT_CONF):
 
             fig, ax = plt.subplots()
 
             # Object spectrum
-            ax.step(wave_plot, flux_plot, label='Object spectrum', color=self._color_dict['fg'], where='mid')
+            label_spec = 'Smoothed spectrum' if smooth_check else 'Object spectrum'
+            ax.step(wave, smooth_flux, label=label_spec, color=theme.colors['fg'], where='mid')
+
+            # Unsmooth
+            if smooth_check:
+                ax.step(wave, flux, label='Input spectrum', color=theme.colors['fade_fg'], where='mid', linestyle=':')
 
             # Band limits
             label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
-            ax.axhspan(low_lim, high_lim, alpha=0.2, label=label, color=self._color_dict['line_band'])
-            ax.axhline(np.median(flux_plot[idcs_cont]), label='Median flux', linestyle=':', color='black')
+            # ax.axhspan(low_lim, high_lim, alpha=0.2, label=label, color=theme.colors['line_band'])
+            ax.axhline(np.median(smooth_flux[idcs_cont]), label='Median flux', linestyle=':', color='black')
+
+            ax.fill_between(wave, low_lim, high_lim, alpha=0.2, color=theme.colors['inspection_negative'])
 
             # Masked and rectected pixels
-            ax.scatter(wave_plot[~idcs_cont], flux_plot[~idcs_cont], label='Rejected pixels', color=self._color_dict['peak'], facecolor='none')
-            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], marker='x', label='Masked pixels', color=self._color_dict['mask_marker'])
+            ax.scatter(wave[~idcs_cont], smooth_flux[~idcs_cont], label='Rejected pixels', color=theme.colors['peak'],
+                       facecolor='none')
 
             # Output continuum
-            ax.plot(wave_plot, continuum_fit, label='Continuum')
+            ax.plot(wave, continuum_fit, label='Continuum')
 
             ax.update(AXES_CONF)
             ax.legend()

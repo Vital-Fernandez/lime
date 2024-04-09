@@ -126,7 +126,8 @@ class TestSpectrumClass:
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_line_detection_plot(self):
 
-        match_bands = spec.line_detection(bands_file_address, cont_fit_degree=[3, 7, 7, 7], cont_int_thres=[5, 3, 2, 1.5])
+        spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[5, 3, 2])
+        match_bands = spec.line_detection(bands_file_address)
 
         fig = plt.figure()
         spec.plot.spectrum(in_fig=fig, line_bands=match_bands)

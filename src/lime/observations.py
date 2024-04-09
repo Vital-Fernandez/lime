@@ -1061,6 +1061,7 @@ class Cube:
         # Get the band indexes
         idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_bg.pixel_mask)
         signal_slice = self.flux[idcsEmis, :, :]
+        signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
 
         # Get indeces all nan entries to exclude them from the analysis
         idcs_all_nan = np.all(np.isnan(signal_slice.data), axis=0)
@@ -1078,12 +1079,15 @@ class Cube:
         elif param == 'SN_line':
             n_pixels = np.sum(idcsCont)
             cont_slice = self.flux[idcsCont, :, :]
+            cont_slice = cont_slice if not np.ma.isMaskedArray(cont_slice) else cont_slice.data
+
             Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
             std_image = np.nanstd(cont_slice, axis=0)
             param_image = (np.sqrt(2 * n_pixels * np.pi) / 6) * (Amp_image / std_image)
 
         else:
             raise LiMe_Error(f'Parameter {param} is not recognized please use: "flux", "SN_line" or "SN_cont"')
+
 
         # Percentiles vector for the target parameter
         param_array = np.nanpercentile(param_image, inver_percentiles)
@@ -1126,6 +1130,8 @@ class Cube:
             region_label, region_mask = region_items
 
             # Metadata for the fits page
+            signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
+
             hdr_i = fits.Header({'PARAM': param,
                                  'PARAMIDX': boundary_dict[region_label],
                                  'PARAMVAL': param_level[region_label],
