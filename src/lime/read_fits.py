@@ -19,29 +19,48 @@ _logger = logging.getLogger('LiMe')
 
 DESI_SPECTRA_BANDS = ('B', 'R', 'Z')
 
-SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan,
-                                    'units_wave': 'um', 'units_flux': 'MJy', 'pixel_mask': None, 'id_label': None},
+SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None,
+                                    'units_wave': 'um', 'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
 
-                        'isis': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan,
-                                 'units_wave': 'Angstrom', 'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None},
+                        'isis': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None,
+                                 'units_wave': 'Angstrom', 'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                        'osiris': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
-                                   'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None},
+                        'osiris': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                                   'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                        'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
+                        'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None},
 
-                        'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
-                                 'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None}}
+                        'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                                 'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None}}
 
-CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': 1, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
-                              'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None},
+CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                              'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                    'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
-                              'units_flux': '1e-20*FLAM', 'pixel_mask': None, 'id_label': None},
+                    'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                              'units_flux': '1e-20*FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': np.nan, 'units_wave': 'Angstrom',
-                               'units_flux': 'Jy', 'pixel_mask': None, 'id_label': None}}
+                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                               'units_flux': 'Jy', 'pixel_mask': "nan", 'id_label': None}}
+
+
+def show_instrument_cfg():
+
+    print(f'\nSingle ".fits" spectra files configuration:')
+    for i, items in enumerate(SPECTRUM_FITS_PARAMS.items()):
+        key, value = items
+        print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]}, '
+              f'pixel_mask: {value["pixel_mask"]}, inst_FWHM: {value["inst_FWHM"]}')
+        # print(f'\t\t pixel mask: {value["pixel_mask"]}, instrumental FWHM: {value["inst_FWHM"]}')
+
+    print(f'\nCube ".fits" spectra files configuration:')
+    for i, items in enumerate(CUBE_FITS_PARAMS.items()):
+        key, value = items
+        print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]},'
+              f'pixel_mask: {value["pixel_mask"]}, inst_FWHM: {value["inst_FWHM"]}')
+        # print(f'\t\t pixel mask: {value["pixel_mask"]}, instrumental FWHM: {value["inst_FWHM"]}')
+
+    return
 
 
 def check_url_status(url):
@@ -316,23 +335,43 @@ class OpenFits:
 
         # Read the fits data
         wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(file_address)
+        pixel_mask = pixel_mask if pixel_mask is not None else fits_params['pixel_mask']
 
         # Mask requested entries
         if pixel_mask is not None:
             pixel_mask = np.atleast_1d(pixel_mask)
             mask_array = np.zeros(flux_array.shape).astype(bool)
-            for entry in pixel_mask:
-                if entry == 'negative':
-                    idcs = flux_array < 0
-                else:
-                    idcs = (flux_array == entry)
-                mask_array[idcs] = True
+
+            # String array:
+            if pixel_mask.dtype.kind in ['U', 'S']:
+                for entry in pixel_mask:
+                    if entry == 'negative':
+                        idcs = flux_array < 0
+                    elif entry == 'nan':
+                        idcs = np.isnan(flux_array) if err_array is None else np.isnan(flux_array) | np.isnan(err_array)
+                    elif entry == 'zero':
+                        idcs = (flux_array == entry) if err_array is None else (flux_array == entry) | (err_array == entry)
+                    else:
+                        raise LiMe_Error(f'Pixel entry "{entry}" is not recognized. Only boolean masks for the masked '
+                                         f'data or these strings are supported: "nan", "negative", "zero"')
+                    mask_array[idcs] = True
+
+            # Boolean mask
+            else:
+                assert flux_array.shape == pixel_mask.shape, LiMe_Error(f'- Input pixel mask shape {pixel_mask.shape}'
+                                                                        f'is different from data array shape {flux_array.shape}')
+                mask_array = pixel_mask
+
         else:
             mask_array = None
 
         # Construct attributes for LiMe object
-        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array, 'pixel_mask': mask_array}
+        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}#'pixel_mask': mask_array}
         fits_args.update(fits_params)
+
+        # Add mask entry
+        if mask_array is not None:
+            fits_args['pixel_mask'] = mask_array
 
         return fits_args
 
@@ -526,7 +565,7 @@ class OpenFits:
         # Get data table and header dict lists
         data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
 
-        # Re-construct spectrum arrays
+        # Re-construct spectrum arrays # TODO add error
         wave_array = 10.0 ** data_list[0]['loglam']
         flux_array = data_list[0]['flux']
         err_array = None
@@ -569,14 +608,20 @@ class OpenFits:
         flux_cube = data_list[1]
         ivar_cube = data_list[1]
 
-        pixel_mask_cube = ivar_cube == 0
-        pixel_mask_cube = pixel_mask_cube.reshape(ivar_cube.shape)
-        err_cube = np.sqrt(1 / np.ma.masked_array(ivar_cube, pixel_mask_cube))
+        # Convert ivar = 0 to nan
+        ivar_cube[ivar_cube == 0] = np.nan
 
+        # Get standard deviation cube
+        err_cube = np.sqrt(1 / ivar_cube)
+
+        # Pixel mask
+        pixel_mask_cube = None
+
+        # WCS from hearder
         wcs = WCS(header_list[0])
 
         # Fits properties
-        fits_params = {**CUBE_FITS_PARAMS['manga'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
+        fits_params = {**CUBE_FITS_PARAMS['manga'], 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
 

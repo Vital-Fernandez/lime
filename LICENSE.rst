@@ -1,7 +1,7 @@
 The line measuring library for ionized nebulae (lime) is available under
 the GNU licence (see below) providing you cite the developer Vital Fernandez using the following reference
 
-* Fernandez et al (2021)
+* Fernandez et al (2024)
 
 
 GNU GENERAL PUBLIC LICENSE

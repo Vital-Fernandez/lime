@@ -413,7 +413,7 @@ class ProfileModelCompiler:
         # Decide the line reference wavelength
         self.ref_wave = line.wavelength * (1 + redshift) if line.blended_check else np.atleast_1d(line.peak_wave)
 
-        # Continuum model
+        # Continuum models
         self.model = Model(linear_model)
         self.model.prefix = f'line0_'
 
@@ -423,7 +423,7 @@ class ProfileModelCompiler:
         self.define_param(0, line, 'm_cont', line.m_cont, m_cont_conf, user_conf)
         self.define_param(0, line, 'n_cont', line.n_cont, n_cont_conf, user_conf)
 
-        # Add one gaussian model per component
+        # Add one gaussian models per component
         for idx, comp in enumerate(line.list_comps):
 
             # Gaussian comp
@@ -498,20 +498,22 @@ class ProfileModelCompiler:
 
     def fit(self, line, x, y, err, method):
 
-        # Compute weights
-        if err is None:
-            weights = np.full(x.size, 1.0 / line.cont_err)
-        else:
-            weights = 1.0/err
-
         # Unpack the mask for LmFit analysis
-        if np.ma.is_masked(x):
+        if np.ma.isMaskedArray(x):
             idcs_good = ~x.mask
             x_in = x.data[idcs_good]
             y_in = y.data[idcs_good]
-            weights_in = weights[idcs_good]
         else:
-            x_in, y_in, weights_in = x, y, weights
+            x_in, y_in = x, y
+
+        # Compute weights
+        if err is None:
+            weights = np.full(x.size, 1.0 / line.cont_err)
+            weights_in = weights
+        else:
+            weights = 1.0/err
+            weights_in = weights if not np.ma.isMaskedArray(weights) else weights.data[idcs_good]
+
 
         # Fit the line
         self.params = self.model.make_params()
@@ -562,10 +564,11 @@ class ProfileModelCompiler:
                 line.FWHM_p = np.full(self.n_comps, np.nan)
                 line.sigma_thermal = np.full(self.n_comps, np.nan)
 
-            # Check for negative sigmas # TODO this needs a better place
-            if line.sigma[i] < 0:
-                _logger.warning(f'Negative value for profile sigma at {line.label}')
-                line.sigma[i] = np.nan
+            # Check for negative -0.0 # TODO this needs a better place # FIXME -0.0 error
+            if np.signbit(line.sigma_err[i]):
+                line.sigma_err[i] = np.nan
+                if self.output.errorbars:
+                    _logger.warning(f'Negative value for profile sigma at {line.label}')
 
             # Compute the profile areas
             profile_flux_dist = AREA_FUNCTIONS[line._p_shape[i]](line, i, 1000)
@@ -685,14 +688,7 @@ class ProfileModelCompiler:
                     if param_conf_entry in param_user_conf:
                         param_conf[param_conf_entry] = param_conf[param_conf_entry] * (1 + z_obj)
 
-        # Check the limits on the fitting # TODO some params (blended lines) do not have initial value amp wide
-        param_value = param_conf.get('value')
-        # if param_value is not None:
-        #     if (param_value < param_conf['min']) or (param_value > param_conf['max']):
-        #         _logger.warning(f'Initial value for {param_ref} is outside min-max boundaries: '
-        #                         f'{param_conf["min"]} < {param_value} < {param_conf["max"]}')
-
-        # Assign the parameter configuration to the model
+        # Assign the parameter configuration to the models
         self.model.set_param_hint(param_ref, **param_conf)
 
         return
@@ -740,8 +736,6 @@ class LineFitting:
 
     def __init__(self):
 
-        # self.fit_params = {}
-        # self.fit_output = None
         self.profile = None
 
         return
@@ -758,9 +752,16 @@ class LineFitting:
 
         # Get non-nan entries for continuum
         if np.ma.isMaskedArray(cont_flux):
-            input_wave, input_flux = cont_wave.data[~cont_wave.mask], cont_flux.data[~cont_wave.mask]
+            idcs_true = ~cont_flux.mask
+            input_wave, input_flux = cont_wave.data[idcs_true], cont_flux.data[idcs_true]
         else:
             input_wave, input_flux = cont_wave, cont_flux
+
+        # Prepare the continuum error
+        if cont_err is None:
+            input_err = np.ones(input_flux.shape)
+        else:
+            input_err = cont_err.data[idcs_true] if np.ma.isMaskedArray(cont_err) else cont_err
 
         # Check if there are valid entries
         valid_cont_bands = True if input_flux.size > 0 else False
@@ -771,8 +772,7 @@ class LineFitting:
             model_linear = LinearModel()
             params = model_linear.make_params()
 
-            weights = np.ones(input_flux.shape) if cont_err is None else 1/cont_err
-            output = model_linear.fit(input_flux, params, x=input_wave, weights=weights, nan_policy='omit')
+            output = model_linear.fit(input_flux, params, x=input_wave, weights=1/input_err, nan_policy='omit')
 
             m_param, n_param = output.params.get('slope', None), output.params.get('intercept', None)
             line.m_cont = np.nan if m_param is None else m_param.value
@@ -857,7 +857,7 @@ class LineFitting:
         # Compile the Lmfit component models
         self.profile = ProfileModelCompiler(line, z_obj, user_conf, y)
 
-        # Fit the model
+        # Fit the models
         self.profile.fit(line, x, y, err, fit_method)
 
         # Store the results into the line attributes
@@ -871,7 +871,7 @@ class LineFitting:
         if vel_array.size > 2:
 
             # Only compute the velocity percentiles for line bands with more than 15 pixels
-            valid_pixels = vel_array.size if not np.ma.is_masked(vel_array) else np.sum(~vel_array.mask)
+            valid_pixels = vel_array.size if not np.ma.isMaskedArray(vel_array) else np.sum(~vel_array.mask)
 
             if valid_pixels > min_array_dim:
 

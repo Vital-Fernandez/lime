@@ -57,7 +57,9 @@ class TestLineClass:
         assert np.all(line.kinem == np.array([0, 1, 0]))
         assert np.all(line.transition_comp == np.array(['col', 'col', 'rec']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi', 'g-emi']))
-        assert np.all(line.latex_label == np.array(['$[OIII]5007\mathring{A}$', '$[OIII]5007\mathring{A}-k_1$', '$HeI5016\mathring{A}$']))
+        assert np.all(line.latex_label == np.array(['$[OIII]5007\mathring{A}$',
+                                                    '$[OIII]5007\mathring{A}-k_1$',
+                                                    '$HeI5016\mathring{A}$']))
         assert np.all(line.list_comps == ['O3_5007A', 'O3_5007A_k-1', 'He1_5016A'])
 
         assert line.label == 'O3_5007A_b'
@@ -72,6 +74,7 @@ class TestLineClass:
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi']))
         assert np.all(line.latex_label == np.array([r'$[OIII]5007\mathring{A}$+$[OIII]5007\mathring{A}-k_1$']))
         assert np.all(line.list_comps == ['O3_5007A_m'])
+        assert np.all(line.mask == np.array([1, 2, 3, 4, 5, 6]))
 
         assert line.label == 'O3_5007A_m'
         assert line.group_label == 'O3_5007A+O3_5007A_k-1'

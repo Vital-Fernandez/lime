@@ -24,23 +24,29 @@ VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
 
-flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
-                    format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
-                            "generic": "FLAM", "console": "FLAM"})
+dict_units = {'flam': au.erg/au.s/au.cm**2/au.AA, 'FLAM': au.erg/au.s/au.cm**2/au.AA,
+              'fnu': au.erg/au.s/au.cm**2/au.Hz, 'FNU': au.erg/au.s/au.cm**2/au.Hz,
+              'photlam': au.photon/au.s/au.cm**2/au.AA, 'PHOTLAM': au.photon/au.s/au.cm**2/au.AA,
+              'photnu': au.photon/au.s/au.cm**2/au.Hz, 'PHOTNU': au.photon/au.s/au.cm**2/au.Hz}
+au.set_enabled_aliases(dict_units)
 
-fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
-                    format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
-                            "generic": "FNU", "console": "FNU"})
-
-photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
-                        format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
-                        "generic": "PHOTLAM", "console": "PHOTLAM"})
-
-photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
-                        format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
-                        "generic": "PHOTNU", "console": "PHOTNU"})
-
-au.add_enabled_units([flam, fnu, photlam, photnu])
+# flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
+#                             "generic": "FLAM", "console": "FLAM"})
+#
+# fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
+#                             "generic": "FNU", "console": "FNU"})
+#
+# photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
+#                         "generic": "PHOTLAM", "console": "PHOTLAM"})
+#
+# photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
+#                         "generic": "PHOTNU", "console": "PHOTNU"})
+#
+# au.add_enabled_units([flam, fnu, photlam, photnu])
 
 
 PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
@@ -80,6 +86,7 @@ def pd_get(df, row, column, default=None, transform=None):
 
     return cell
 
+
 # Favoured method to get line fluxes according to resolution
 def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='line_flux', column_positions=None):
 
@@ -95,7 +102,7 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
 
         idcs_blended = (log['group_label'] != 'none') & (~log.index.get_level_values('line').str.endswith('_m'))
 
-    # Mixture model: Integrated fluxes for all lines except blended
+    # Mixture models: Integrated fluxes for all lines except blended
     if flux_type == 'mixture' and np.any(idcs_blended):
         obsFlux = log['intg_flux'].to_numpy(copy=True)
         obsErr = log['intg_flux_err'].to_numpy(copy=True)
@@ -205,63 +212,63 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
 
     # Add new line with normalization by default
     if column_normalization_name not in log.columns:
-        log.insert(loc=column_position+2, column=column_normalization_name, value=np.nan)
+        log.insert(loc=column_position+2, column=column_normalization_name, value='none')
 
     # Loop throught the lines to compute their normalization
     single_index = not isinstance(log.index, pd.MultiIndex)
     for i in np.arange(len(line_array)):
 
-            numer, denom = line_array[i], norm_array[i]
-            numer_flux, denom_flux = None, None
+        numer, denom = line_array[i], norm_array[i]
+        numer_flux, denom_flux = None, None
 
-            # Single-index dataframe
-            if single_index:
-                idcs_ratios = numer
-                if (numer in log.index) and (denom in log.index):
-                    numer_flux = log.loc[numer, flux_column]
-                    numer_err = log.loc[numer, f'{flux_column}_err']
+        # Single-index dataframe
+        if single_index:
+            idcs_ratios = numer
+            if (numer in log.index) and (denom in log.index):
+                numer_flux = log.loc[numer, flux_column]
+                numer_err = log.loc[numer, f'{flux_column}_err']
 
-                    denom_flux = log.loc[denom, flux_column]
-                    denom_err = log.loc[denom, f'{flux_column}_err']
+                denom_flux = log.loc[denom, flux_column]
+                denom_err = log.loc[denom, f'{flux_column}_err']
 
-            #Multi-index dataframe
-            else:
+        #Multi-index dataframe
+        else:
 
-                if numer == denom:  # Same line normalization
-                    idcs_slice = log.index.get_level_values(sample_levels[-1]) == numer
-                    df_slice = log.loc[idcs_slice]
-                else:  # Rest cases
-                    idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
-                    grouper = log.index.droplevel('line')
-                    idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
-                    df_slice = log.loc[idcs_slice]
+            if numer == denom:  # Same line normalization
+                idcs_slice = log.index.get_level_values(sample_levels[-1]) == numer
+                df_slice = log.loc[idcs_slice]
+            else:  # Rest cases
+                idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
+                grouper = log.index.droplevel('line')
+                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+                df_slice = log.loc[idcs_slice]
 
-                # Get fluxes
-                if df_slice.size > 0:
-                    num_slice = df_slice.xs(numer, level=sample_levels[-1], drop_level=False)
-                    numer_flux = num_slice[flux_column].to_numpy()
-                    numer_err = num_slice[f'{flux_column}_err'].to_numpy()
+            # Get fluxes
+            if df_slice.size > 0:
+                num_slice = df_slice.xs(numer, level=sample_levels[-1], drop_level=False)
+                numer_flux = num_slice[flux_column].to_numpy()
+                numer_err = num_slice[f'{flux_column}_err'].to_numpy()
 
-                    denom_slice = df_slice.xs(denom, level=sample_levels[-1], drop_level=False)
-                    denom_flux = denom_slice[flux_column].to_numpy()
-                    denom_err = denom_slice[f'{flux_column}_err'].to_numpy()
+                denom_slice = df_slice.xs(denom, level=sample_levels[-1], drop_level=False)
+                denom_flux = denom_slice[flux_column].to_numpy()
+                denom_err = denom_slice[f'{flux_column}_err'].to_numpy()
 
-                    idcs_ratios = num_slice.index
+                idcs_ratios = num_slice.index
 
-            # Compute the ratios with error propagation
-            ratio_array, ratio_err = None, None
-            if (numer_flux is not None) and (denom_flux is not None):
-                ratio_array = numer_flux / denom_flux
-                ratio_err = ratio_array * np.sqrt(np.power(numer_err / numer_flux, 2) + np.power(denom_err / denom_flux, 2))
+        # Compute the ratios with error propagation
+        ratio_array, ratio_err = None, None
+        if (numer_flux is not None) and (denom_flux is not None):
+            ratio_array = numer_flux / denom_flux
+            ratio_err = ratio_array * np.sqrt(np.power(numer_err / numer_flux, 2) + np.power(denom_err / denom_flux, 2))
 
-            # Store in dataframe (with empty columns)
-            if (ratio_array is not None) and (ratio_err is not None):
-                log.loc[idcs_ratios, f'{column_name}'] = ratio_array
-                log.loc[idcs_ratios, f'{column_name}_err'] = ratio_err
+        # Store in dataframe (with empty columns)
+        if (ratio_array is not None) and (ratio_err is not None):
+            log.loc[idcs_ratios, f'{column_name}'] = ratio_array
+            log.loc[idcs_ratios, f'{column_name}_err'] = ratio_err
 
-                # Store normalization line
-                if column_normalization_name is not None:
-                    log.loc[idcs_ratios, f'{column_normalization_name}'] = denom
+            # Store normalization line
+            if column_normalization_name is not None:
+                log.loc[idcs_ratios, f'{column_normalization_name}'] = denom
 
     return
 
@@ -344,80 +351,6 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_l
         z_df.loc[idx, 'z_mean':'weight'] = z_mean, z_std, obsLineList, weight_parameter
 
     return z_df
-
-
-# def compute_line_ratios(log, line_ratios=None, flux_columns=['intg_flux', 'intg_flux_err'], sample_levels=['id', 'line'],
-#                         object_id='obj_0', keep_empty_columns=True):
-#
-#     # If normalization_line is not none
-#     if len(flux_columns) != np.sum(log.columns.isin(flux_columns)):
-#         raise LiMe_Error(f'Input log is missing {len(flux_columns)} "flux_entries" in the column headers')
-#
-#     # Check if single or multi-index
-#     sample_check = isinstance(log.index, pd.MultiIndex)
-#
-#     if sample_check:
-#         idcs = log.index.droplevel(sample_levels[-1]).unique()
-#     else:
-#         idcs = np.array([object_id])
-#
-#     ratio_df = pd.DataFrame(index=idcs)
-#
-#     # Loop through
-#     if line_ratios is not None:
-#
-#         # Loop through the ratios
-#         for ratio_str in line_ratios:
-#             numer, denom = ratio_str.split('/')
-#
-#             # Slice the dataframe to objects having both lines
-#             numer_flux, denom_flux = None, None
-#             if not isinstance(log.index, pd.MultiIndex):
-#                 if (numer in log.index) and (denom in log.index):
-#                     numer_flux = log.loc[numer, flux_columns[0]]
-#                     numer_err = log.loc[numer, flux_columns[1]]
-#
-#                     denom_flux = log.loc[denom, flux_columns[0]]
-#                     denom_err = log.loc[denom, flux_columns[1]]
-#                     idcs_slice = object_id
-#                 else:
-#                     idcs_slice = ratio_df.index
-#
-#             else:
-#
-#                 # Slice the dataframe to objects which have both lines
-#                 idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
-#                 grouper = log.index.droplevel('line')
-#                 idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
-#                 df_slice = log.loc[idcs_slice]
-#
-#                 # Get fluxes
-#                 if df_slice.size > 0:
-#                     numer_flux = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[0]]
-#                     numer_err = df_slice.xs(numer, level=sample_levels[-1])[flux_columns[1]]
-#
-#                     denom_flux = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[0]]
-#                     denom_err = df_slice.xs(denom, level=sample_levels[-1])[flux_columns[1]]
-#                     idcs_slice = numer_flux.index
-#                 else:
-#                     idcs_slice = ratio_df.index
-#
-#             # Check there have been measure
-#             if (numer_flux is not None) and (denom_flux is not None):
-#
-#                 # Compute the ratios with the error propagation
-#                 ratio_array = numer_flux/denom_flux
-#                 errRatio_array = ratio_array * np.sqrt(np.power(numer_err/numer_flux, 2) +
-#                                                        np.power(denom_err/denom_flux, 2))
-#             else:
-#                 ratio_array, errRatio_array = np.nan, np.nan
-#
-#             # Store in dataframe (with empty columns)
-#             if not ((numer_flux is None) and (denom_flux is None) and (keep_empty_columns is False)):
-#                 ratio_df.loc[idcs_slice, ratio_str] = ratio_array
-#                 ratio_df.loc[idcs_slice, f'{ratio_str}_err'] = errRatio_array
-#
-#     return ratio_df
 
 
 def compute_FWHM0(idx_peak, spec_flux, delta_wave, cont_flux, emission_check=True):
@@ -563,14 +496,21 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
-def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no'):
+def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no', line=None):
 
     # Make sure it is a matrix
     # TODO warning for mask outside limimes
-    masks_array = np.array(masks_array, ndmin=2)
+    # masks_array = np.array(masks_array, ndmin=2)
+    masks_array = np.atleast_2d(masks_array)
+
+    if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
+        warn_message = ('below', wavelength_array[:, 0] if np.any(masks_array[:, 0] < wavelength_array[0]) else
+                        'above', masks_array[:, 5])
+        _logger.warning(f'Bands for {line} are {warn_message[0]} the wavelength range {warn_message[1]}.')
+
 
     # Check if it is a masked array
-    if np.ma.is_masked(wavelength_array):
+    if np.ma.isMaskedArray(wavelength_array):
         wave_arr = wavelength_array.data
     else:
         wave_arr = wavelength_array
@@ -596,24 +536,24 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
     
     # Return left and right continua merged in one array
     if merge_continua:
-
         idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
                           (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
                           ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
                            wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
 
-        return idcsLineRegion, idcsContRegion
+        outputs = idcsLineRegion, idcsContRegion
 
     # Return left and right continua in separated arrays
     else:
-
         idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
         idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
 
-        return idcsLineRegion, idcsContLeft, idcsContRight
+        outputs = idcsLineRegion, idcsContLeft, idcsContRight
+
+    return outputs
 
 
-def logs_into_fits(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):
+def join_fits_files(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):
 
     """
     This functions combines multiple log files into single *.fits* file. The user can request to the delete the individual

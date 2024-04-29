@@ -451,25 +451,47 @@ def label_profiling(profile_comp, default_type='emi'):
 
 def label_mask_assigning(line_label, input_band, blend_check, merged_check, core_comp):
 
-    # TODO what about a "core" label
-
     if isinstance(input_band, DataFrame):
 
-        # Query for the input label # TODO put a try with .at and the other in the except
-        if line_label in input_band.index:
-            mask = input_band.loc[line_label, 'w1':'w6'].to_numpy().astype(float)
+        # Query for input label
+        if pd_get(input_band, line_label, 'w1') is not None:
+            ref_label = line_label
 
-        # Remove blended/merged suffix to check
-        elif (blend_check or merged_check) and (line_label[:-2] in input_band.index):
-            mask = input_band.loc[line_label[:-2], 'w1':'w6'].to_numpy().astype(float)
+        # Blended or merged line
+        elif pd_get(input_band, line_label[:-2], 'w1') is not None:
+            ref_label = line_label[:-2]
 
         # Case where we introduce a line with a different profile (H1_4861A_l)
-        elif core_comp in input_band.index:
-            mask = input_band.loc[core_comp, 'w1':'w6'].to_numpy().astype(float)
+        elif pd_get(input_band, core_comp, 'w1') is not None:
+            ref_label = core_comp
 
-        # Could not find the mask
+        # Not found
+        else:
+            ref_label = None
+
+        # Recover the mask
+        if ref_label is not None:
+            mask = np.array([input_band.at[ref_label, 'w1'], input_band.at[ref_label, 'w2'],
+                             input_band.at[ref_label, 'w3'], input_band.at[ref_label, 'w4'],
+                             input_band.at[ref_label, 'w5'], input_band.at[ref_label, 'w6']])
         else:
             mask = None
+
+        # # Query for the input label # TODO put a try with .at and the other in the except
+        # if line_label in input_band.index:
+        #     mask = input_band.loc[line_label, 'w1':'w6'].to_numpy().astype(float)
+        #
+        # # Remove blended/merged suffix to check
+        # elif (blend_check or merged_check) and (line_label[:-2] in input_band.index):
+        #     mask = input_band.loc[line_label[:-2], 'w1':'w6'].to_numpy().astype(float)
+        #
+        # # Case where we introduce a line with a different profile (H1_4861A_l)
+        # elif core_comp in input_band.index:
+        #     mask = input_band.loc[core_comp, 'w1':'w6'].to_numpy().astype(float)
+        #
+        # # Could not find the mask
+        # else:
+        #     mask = None
 
     # No band
     elif input_band is None:
@@ -641,11 +663,23 @@ class Line:
     @classmethod
     def from_log(cls, label, log=None, norm_flux=1):
 
-        # Create the line object
-        inline = cls(label, band=log)
+        # Confirm we are not introducing a blended line which has been blended
 
-        # TODO loop through the log columns and match with line
         if label in log.index:
+            measured_check = True
+        elif (label[-2:] == '_b') and (label[:-2] in log.index):
+            _logger.warning(f'Blended line {label} not found in log, reading {label[:-2]}')
+            label = label[:-2]
+            measured_check = True
+        else:
+            _logger.warning(f'Input line {label} not found in log')
+            measured_check = False
+
+        # Reload the line
+        if measured_check:
+
+            # Create the line object
+            inline = cls(label, band=log)
 
             # Recover "simple" attributes
             for i, param in enumerate(_LOG_EXPORT):
@@ -659,7 +693,8 @@ class Line:
                 inline.__setattr__(param, param_value)
 
         else:
-            _logger.warning(f'Input line {inline.label} not found in log')
+
+            inline = None
 
         return inline
 

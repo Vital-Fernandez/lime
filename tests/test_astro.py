@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import lime
 
+
 def test_line_bands():
 
     log0 = lime.line_bands()
@@ -9,8 +10,8 @@ def test_line_bands():
 
     # TODO rework on the master database
     # assert np.all(log0.index == parent_bands.index)
-    assert np.all(log0.columns == parent_bands.columns)
     # assert log0.equals(parent_bands)
+    assert np.all(log0.columns == parent_bands.columns)
 
     log1 = lime.line_bands(wave_intvl=(3000, 7000))
     assert np.all((3000 <= log1.wavelength.to_numpy()) & (log1.wavelength.to_numpy() <= 7000))

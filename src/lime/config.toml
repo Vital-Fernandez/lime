@@ -1,10 +1,8 @@
 [metadata]
 name = 'lime-stable'
-version = '0.9.99.9'
+version = '1.0.0'
 
-[lime_colors]
-
-#Default theme
+[colors] #Default theme
 default.bg = '#FFFFFF'
 default.fg = '#000000'
 default.cont_band = '#8c564b'
@@ -24,6 +22,12 @@ default.inspection_positive = '#FFFFFF'
 default.inspection_negative = '#ff796c' # 'xkcd:salmon'
 default.fade_fg = "#CCCCCC"
 
+default.single_width = '1'
+default.comp_width = '0.75'
+default.err_width = '2'
+default.cont_width = '0.5'
+default.spectrum_width = '0.75'
+
 #Dark theme
 dark.bg = "#2B2B2B"
 dark.fg = "#CCCCCC"
@@ -34,7 +38,7 @@ dark.color_cycle = ['#66c2a5', '#fc8d62', '#e68ac3', '#a6d854',  '#ffd92f', '#e5
 dark.match_line = '#8fff9f'
 dark.peak = '#aa40fc'
 dark.trough = '#7f7f7f'
-dark.profile = '#ddcc77' #'#ffd92f' #'#8dcbe2'
+dark.profile = '#ddcc77'
 dark.cont = "#CCCCCC"
 dark.error = '#FF0000'
 dark.mask_map = 'viridis'
@@ -44,14 +48,29 @@ dark.inspection_positive = "#2B2B2B"
 dark.inspection_negative = '#840000'
 dark.fade_fg = "#73879B"
 
+dark.single_width = '2'
+dark.comp_width = '1.5'
+dark.err_width = '3'
+dark.cont_width = '0.5'
+dark.spectrum_width = '0.75'
+
 [matplotlib]
 default."figure.dpi" = 200
-default."figure.figsize" = [8, 5]
-default."axes.titlesize" = 14
-default."axes.labelsize" = 14
-default."legend.fontsize" = 12
-default."xtick.labelsize" = 13
-default."ytick.labelsize" = 13
+default."figure.figsize" = [4.85, 3]
+default."axes.titlesize" = 9
+default."axes.labelsize" = 9
+default."legend.fontsize" = 7
+default."xtick.labelsize" = 8
+default."ytick.labelsize" = 8
+default."font.size" = 5
+
+#default."figure.dpi" = 150
+#default."figure.figsize" = [8, 5]
+#default."axes.titlesize" = 14
+#default."axes.labelsize" = 14
+#default."legend.fontsize" = 12
+#default."xtick.labelsize" = 13
+#default."ytick.labelsize" = 13
 
 high_res."figure.dpi" = 300
 high_res."figure.figsize" = [11, 6]
@@ -74,15 +93,35 @@ dark."legend.edgecolor" = "inherit"
 dark."legend.facecolor" = "inherit"
 
 # Bands plot
-bands."axes.labelsize" = 14
+bands."axes.labelsize" = 8
+bands."legend.fontsize" = 5
 
 # Grid plot
-grid."axes.titlesize" = 12
+grid."axes.titlesize" = 6
+grid."axes.titlepad" = 1
+
+# Cube
+cube."legend.fontsize" = 5
+cube."axes.titlesize" = 6
+cube."axes.labelsize" = 6
+cube."xtick.labelsize" = 4
+cube."ytick.labelsize" = 4
+
 
 # Cube interactive
-cube_interactive.'figure.figsize' = [16, 8]
-cube_interactive.'axes.titlesize' = 12
-cube_interactive.'legend.fontsize' = 12
-cube_interactive.'axes.labelsize' = 12
-cube_interactive.'xtick.labelsize' = 10
-cube_interactive.'ytick.labelsize' = 10
+cube_interactive.'figure.figsize' = [6.85, 3]
+cube_interactive.'axes.titlesize' = 6
+cube_interactive.'legend.fontsize' = 6
+cube_interactive.'axes.labelsize' = 6
+cube_interactive.'xtick.labelsize' = 4
+cube_interactive.'ytick.labelsize' = 4
+cube_interactive."contour.linewidth" = 0.75
+cube_interactive."axes.labelpad" = 1
+
+#cube_interactive.'figure.figsize' = [16, 8]
+#cube_interactive.'axes.titlesize' = 12
+#cube_interactive.'legend.fontsize' = 12
+#cube_interactive.'axes.labelsize' = 12
+#cube_interactive.'xtick.labelsize' = 10
+#cube_interactive.'ytick.labelsize' = 10
+

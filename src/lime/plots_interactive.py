@@ -8,7 +8,7 @@ from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 
 from .io import load_frame, save_frame, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
-from .plots import Plotter, frame_mask_switch_2, save_close_fig_swicth, _auto_flux_scale,\
+from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, _auto_flux_scale,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
                     image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme
 
@@ -389,8 +389,8 @@ class BandsInspection:
             list_comps = profile_label.split('+') if blended_check else [line]
 
             # Reference _frame for the plot
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                          self._spec.redshift, frame)
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                        self._spec.redshift, frame)
 
             # Establish the limits for the line spectrum plot
             mask = self.log.loc[list_comps[0], 'w1':'w6'] * (1 + self._spec.redshift)
@@ -399,7 +399,8 @@ class BandsInspection:
             idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
 
             # Plot the spectrum
-            ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'])
+            ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'],
+                    linewidth=theme.colors['spectrum_width'])
 
             # Continuum bands
             self._bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line)
@@ -688,16 +689,17 @@ class RedshiftInspectionSingle:
         for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum
-            spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+            spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
 
             # Plot on the observed frame with reshift = 0
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, 0, 'observed')
 
             # Plot the spectrum
-            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid')
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid',
+                    linewidth=theme.colors['spectrum_width'])
 
             # Plot the masked pixels
-            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=self._color_dict)
 
         return
 
@@ -708,7 +710,7 @@ class RedshiftInspectionSingle:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+                spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
 
                 wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
                 wavelength = wavelength[~np.isnan(wavelength)]
@@ -819,8 +821,8 @@ class RedshiftInspectionSingle:
                 idx_item = list(self._sample.index.names).index(self._legend_handle)
                 spec_label = idx_sample[idx_item]
 
-            elif self._legend_handle in self._sample.log.columns:
-                spec_label = self._sample.log.loc[idx_sample, self._legend_handle]
+            elif self._legend_handle in self._sample.frame.columns:
+                spec_label = self._sample.frame.loc[idx_sample, self._legend_handle]
 
             else:
                 raise LiMe_Error(f'The input handle "{self._legend_handle}" is not found on the sample log columns')
@@ -883,7 +885,7 @@ class RedshiftInspection:
                             f' on the displayed spectrum')
 
         # Check the redshift column exists
-        if self._column_log not in self._sample.log.columns:
+        if self._column_log not in self._sample.frame.columns:
             raise LiMe_Error(f'Redshift column "{redshift_column}" does not exist in the current sample log.')
 
         # Read initial value for the redshift
@@ -986,16 +988,17 @@ class RedshiftInspection:
         for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum
-            spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+            spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
 
             # Plot on the observed frame with reshift = 0
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, 0, 'observed')
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, 0, 'observed')
 
             # Plot the spectrum
-            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid')
+            ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid',
+                    linewidth=theme.colors['spectrum_width'])
 
             # Plot the masked pixels
-            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.log, idcs_mask, color_dict=self._color_dict)
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=self._color_dict)
 
         return
 
@@ -1006,7 +1009,7 @@ class RedshiftInspection:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                spec = self._sample.load_function(self._sample.log, obj_idx, **self._sample.load_params)
+                spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
 
                 wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
                 wavelength = wavelength[~np.isnan(wavelength)]
@@ -1081,7 +1084,7 @@ class RedshiftInspection:
 
         # Save to file if provided
         if self._log_address is not None:
-            save_frame(self._log_address, self._sample.log)
+            save_frame(self._log_address, self._sample.frame)
 
         return
 
@@ -1124,8 +1127,8 @@ class RedshiftInspection:
                 idx_item = list(self._sample.index.names).index(self._legend_handle)
                 spec_label = idx_sample[idx_item]
 
-            elif self._legend_handle in self._sample.log.columns:
-                spec_label = self._sample.log.loc[idx_sample, self._legend_handle]
+            elif self._legend_handle in self._sample.frame.columns:
+                spec_label = self._sample.frame.loc[idx_sample, self._legend_handle]
 
             else:
                 raise LiMe_Error(f'The input handle "{self._legend_handle}" is not found on the sample log columns')
@@ -1170,7 +1173,7 @@ class CubeInspection:
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
-             lines_log_file=None, ext_log='_LINELOG', wcs=None, maximize=False):
+             lines_file=None, ext_frame_suffix='_LINELOG', wcs=None, maximize=False):
 
         """
 
@@ -1250,11 +1253,11 @@ class CubeInspection:
         :param ax_cfg_spec: Dictionary with the spaxel spectrum plot "xlabel", "ylabel" and "title" values.
         :type ax_cfg_spec: dict, optional
 
-        :param lines_log_file: Address for the line measurements log ".fits" file.
-        :type lines_log_file: str, pathlib.Path, optional
+        :param lines_file: Address for the line measurements log ".fits" file.
+        :type lines_file: str, pathlib.Path, optional
 
-        :param ext_log: Suffix for the line measurements log spaxel page name
-        :type ext_log: str, optional
+        :param ext_frame_suffix: Suffix for the line measurements log spaxel page name
+        :type ext_frame_suffix: str, optional
 
         :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
         :type wcs: astropy WCS, optional
@@ -1264,7 +1267,7 @@ class CubeInspection:
 
         """
 
-        self.ext_log = ext_log
+        self.ext_log = ext_frame_suffix
         self.mask_file = masks_file
 
         # Prepare the background image data
@@ -1311,18 +1314,18 @@ class CubeInspection:
             self.mask_ext = self.ext_log
 
         # Load the complete fits lines log if input
-        if lines_log_file is not None:
-            if Path(lines_log_file).is_file():
-                self.hdul_linelog = fits.open(lines_log_file, lazy_load_hdus=False)
+        if lines_file is not None:
+            if Path(lines_file).is_file():
+                self.hdul_linelog = fits.open(lines_file, lazy_load_hdus=False)
             else:
-                _logger.info(f'The lines log at {lines_log_file} was not found.')
+                _logger.info(f'The lines log at {lines_file} was not found.')
 
         # Get figure configuration configuration
         self.fig_conf = theme.fig_defaults(fig_cfg, fig_type='cube_interactive')
         ax_im = theme.ax_defaults(ax_cfg_image, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
                                 fig_type='cube', line_bg=line_bg, line_fg=line_fg, masks_dict=self.masks_dict, wcs=wcs)
         ax_spec = theme.ax_defaults(ax_cfg_spec, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
-                               g_type='default', line_bg=line_bg, line_fg=line_fg, masks_dict=self.masks_dict, wcs=wcs)
+                                g_type='default', line_bg=line_bg, line_fg=line_fg, masks_dict=self.masks_dict, wcs=wcs)
         self.axes_conf = {'image': ax_im, 'spectrum': ax_spec}
 
         # Create the figure
@@ -1334,7 +1337,7 @@ class CubeInspection:
 
             # Create subgrid for buttons if mask file provided
             if len(self.masks_dict) > 0:
-                gs_image = gridspec.GridSpecFromSubplotSpec(nrows=2, ncols=1, subplot_spec=gs[0], height_ratios=[0.8, 0.2])
+                gs_image = gridspec.GridSpecFromSubplotSpec(nrows=2, ncols=1, subplot_spec=gs[0], height_ratios=[0.7, 0.3])
             else:
                 gs_image = gs
 
@@ -1354,11 +1357,11 @@ class CubeInspection:
                 radio = RadioButtons(self._ax2, list(self.masks_dict.keys()))
 
                 for r in radio.labels:
-                    r.set_fontsize(10)
+                    r.set_fontsize(5)
 
-                for circle in radio.circles:  # Make the buttons a bit rounder
-                    # circle.set_height(0.025)
-                    circle.set_width(0.04)
+                # for circle in radio.circles:  # Make the buttons a bit rounder
+                #     # circle.set_height(0.025)
+                #     circle.set_width(0.04)
 
             # Plot the data
             self.data_plots()
@@ -1413,7 +1416,7 @@ class CubeInspection:
             # Plot spectrum
             spec_plot(self._ax1, self._cube.wave, flux_voxel, self._cube.redshift, self._cube.norm_flux,
                       rest_frame=self.rest_frame, log=log, units_wave=self._cube.units_wave,
-                      units_flux=self._cube.units_flux, color_dict=theme.colors)
+                      units_flux=self._cube.units_flux)
 
             if self.log_scale:
                 self._ax.set_yscale('log')
@@ -1541,7 +1544,8 @@ class MaskInspection:
         line_bg = Line(line, bands)
 
         # Get the band indexes
-        idcsEmis, idcsCont = define_masks(self._cube.wave, line_bg.mask * (1 + self._cube.redshift), line_bg.pixel_mask)
+        idcsEmis, idcsCont = define_masks(self._cube.wave, line_bg.mask * (1 + self._cube.redshift), line_mask_entry=line_bg.pixel_mask,
+                                          line=line.label)
         signal_slice = self._cube.flux[idcsEmis, :, :]
 
         # Compute the Signal to noise in the complete image

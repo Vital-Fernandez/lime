@@ -44,9 +44,9 @@ def test_gaussian():
     g_area = amp * sigma * np.sqrt(2 * np.pi)
     assert p_shape == 'g'
     assert np.allclose(spec.fit.line.FWHM_p, g_fwhm, rtol=0.01)
-    # assert np.allclose(spec.fit.line.FWHM_i, g_fwhm, rtol=0.01)   # TODO correct this calculation
     assert np.allclose(spec.fit.line.intg_flux, g_area, rtol=0.01)
     assert np.allclose(spec.fit.line.profile_flux, g_area, rtol=0.01)
+    # assert np.allclose(spec.fit.line.FWHM_i, g_fwhm, rtol=0.01)   # TODO correct this calculation
 
     return
 

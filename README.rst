@@ -7,8 +7,8 @@
 |Repo status| |CI badge| |Documentation Status| |Code cov| |PyPI version| |PyPI downloads| |Code Size| |PyPI license|
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
-for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
-and storing the results. . The output measurements are focused on the gas chemical and kinematic analysis.
+for both single lines and large data sets. The functions can be used for masking data, detecting lines, fitting profiles
+and storing the results. The output measurements support the chemical and kinematic analysis of the observed transitions.
 
 Please check the `online documentation <https://lime-stable.readthedocs.io/>`_.
 
@@ -22,8 +22,7 @@ The library can be installed directly from its PyPi_ project page running the co
 Development
 ===========
 
-LiMe is currently in a beta release. Please check its github_ for the latest version news and tutorials.
-Any comment/issue/request can be added as an issue on the github_ page.
+LiMe is currently on its initial release. Any comment/issue/request can be added as an issue on the github_ page.
 
 .. _PyPi: https://pypi.org/project/lime-stable/
 .. _github: https://github.com/Vital-Fernandez/lime

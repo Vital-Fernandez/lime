@@ -2,8 +2,7 @@ import lime
 from lime.transitions import Line
 
 # List of line strings
-conf_dict = {
-             'O3_5007A':                None,
+conf_dict = {'O3_5007A':                None,
              'O3_5007A_t-col':          None,
              'O3_5007A_b':              None,
              "O3_5007.89A_b":           "O3_5007A+O3_5007A_k-1+O3_5007A_k-2",
@@ -18,8 +17,7 @@ conf_dict = {
              'Halpha_6563.56A_b':       "H1_6563A+N2_6583A+N2_6548A",
 
              'sky_8600A':               None,
-             'H1-PashAlpha_18751A':     None
-            }
+             'H1-PashAlpha_18751A':     None}
 
 # Proceed to the conversion
 line_list = list(conf_dict.keys())

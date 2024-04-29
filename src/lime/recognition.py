@@ -9,6 +9,7 @@ from inspect import signature
 from .io import LiMe_Error, check_file_dataframe
 from .transitions import label_decomposition
 import astropy.units as au
+from timeit import default_timer as timer
 
 try:
     import joblib
@@ -77,6 +78,64 @@ def feature_scaling(data, transformation='min-max', log_base=None, axis=1):
     return data_norm
 
 
+def enbox_spectrum(input_flux, box_size, range_box):
+
+    # Use only the true entries from the mask
+    flux_array = input_flux if not np.ma.isMaskedArray(input_flux) else input_flux.data[~input_flux.mask]
+
+    # Reshape to the detection interval
+    n_intervals = flux_array.size - box_size + 1
+    flux_array = flux_array[np.arange(n_intervals)[:, None] + range_box]
+
+    # # Remove nan entries
+    # idcs_nan_rows = np.isnan(input_flux).any(axis=1)
+    # flux_array = input_flux[~idcs_nan_rows, :]
+
+    return flux_array
+
+
+def flux_to_image(flux_array, approximation, model_2D):
+
+    if model_2D is not None:
+
+        img_flux_array = np.tile(flux_array[:, None, :, :], (1, approximation.size, 1, 1))
+        img_flux_array = img_flux_array > approximation[::-1, None, None]
+        img_flux_array = img_flux_array.astype(int)
+        img_flux_array = img_flux_array.reshape((flux_array.shape[0], 1, -1, flux_array.shape[-1]))
+        img_flux_array = img_flux_array.squeeze()
+
+        # Original
+        # flux_array_0 = flux_array[:, :, 0]
+        # Old_img = np.tile(flux_array_0[:, None, :], (1, approximation.size, 1))
+        # Old_img = Old_img > approximation[::-1, None]
+        # Old_img = Old_img.astype(int)
+        # Old_img = Old_img.reshape((flux_array_0.shape[0], 1, -1))
+        # Old_img = Old_img.squeeze()
+
+    else:
+      img_flux_array = None
+
+    return img_flux_array
+
+
+def prop_func(data_arr, box_width):
+
+    prop_arr = np.zeros(data_arr.shape, dtype=bool)
+    idcs_true = np.argwhere(data_arr) + np.arange(box_width)
+    idcs_true = idcs_true.flatten()
+    idcs_true = idcs_true[idcs_true < data_arr.size] # in case the error propagation gives a great
+    prop_arr[idcs_true] = True
+
+    # Original
+    # self.mask = np.zeros(n_pixels, dtype=bool)
+    # idcs_detect = np.argwhere(pred_array[:, 0]) + range_box
+    # idcs_detect = idcs_detect.flatten()
+    # idcs_detect = idcs_detect[idcs_detect < pred_array[:, 0].size]
+    # self.mask[idcs_detect] = True
+
+    return prop_arr
+
+
 class LineFinder:
 
     def __init__(self, machine_model_path=MACHINE_PATH):
@@ -89,7 +148,7 @@ class LineFinder:
                           return_std=False):
 
         # Check for a masked array
-        if np.ma.is_masked(self.flux):
+        if np.ma.isMaskedArray(self.flux):
             mask_cont = ~self.flux.mask
             input_wave, input_flux = self.wave.data, self.flux.data
         else:
@@ -145,7 +204,7 @@ class LineFinder:
             model = joblib.load(MACHINE_PATH)
 
         # Normalize the flux
-        input_flux = self.flux if not np.ma.is_masked(self.flux) else self.flux.data
+        input_flux = self.flux if not np.ma.isMaskedArray(self.flux) else self.flux.data
         input_flux = np.log10((input_flux/continuum - 1) + 10)
 
         # Reshape to the training dimensions
@@ -226,7 +285,7 @@ class LineFinder:
 
         return matched_DF
 
-
+    #
     def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, band_modification=None, detect_check=False):
 
         # TODO auto param should be changed to boolean
@@ -308,62 +367,147 @@ class LineFinder:
         return matched_DF
 
 
+class FeatureClassifier:
+
+    def __init__(self, data_array, box_width, model, n_pixels):
+
+        # Attributes
+        self.pred_matrix = None
+        self.confidence = None
+        self.n_pixels = n_pixels
+
+        # Recover the models linear coefficients:
+        w, b = np.squeeze(model.coef_), np.squeeze(model.intercept_)
+
+        # Compute the prediction
+        self.pred_matrix = np.tensordot(data_array, w, axes=([1], [0])) + b
+        self.pred_matrix = self.pred_matrix > 0
+
+        # # Propagate the true detections for the box window # Convolution
+        # kernel = np.r_[np.zeros(box_width - 1), np.ones(box_width)][None]
+        # column_kernel = kernel.reshape(-1, 1)
+        # self.pred_matrix = signal.convolve2d(self.pred_matrix, column_kernel, mode='same').astype(bool)
+
+        # Propagate the true detections for the box window
+        self.pred_matrix = np.apply_along_axis(prop_func, 0, self.pred_matrix, box_width)
+
+        # Confidence array from Montecarlo
+        self.confidence = self.pred_matrix.sum(axis=1)
+
+        return
+
+    def __call__(self, confidence=None, entry=None, confidence_max=100):
+
+        mask = np.zeros(self.n_pixels).astype(bool)
+
+        if confidence is not None:
+
+            if (confidence < 0) or (confidence > 100):
+                raise LiMe_Error(f'Please define the detection confidence in an [0, 100] interval. '
+                                 f'The input value was "{confidence}".')
+            else:
+
+                mask[:self.confidence.shape[0]] = (self.confidence >= confidence) & (confidence_max >= self.confidence)
+
+        elif entry is not None:
+
+            if (entry < 0) or (entry > 100):
+                raise LiMe_Error(f'Please define the Monte Carlo entry in the [0, 100] interval. '
+                                 f'The input value was "{entry}".')
+
+            mask[:self.pred_matrix.shape[0]] = self.pred_matrix[:, entry]
+
+        else:
+            raise LiMe_Error(f'Please define a confidence interval or an Monte Carlo for the bands detection mask')
+
+        return mask
+
+
 class DetectionInference:
 
     def __init__(self, spectrum):
 
         self._spec = spectrum
         self.narrow_detect = None
+        self.box_width = None
+        self.range_box = None
+        self.n_mc = 100
+
+        self.line_1d_pred = None
+        self.line_2d_pred = None
+        self.line_pred = None
 
         return
 
-    def bands(self, box_width, approximation=None, scale_type='min-max', machine_path=None, log_base=10000):
+    def bands(self, box_width, approximation=None, scale_type='min-max', log_base=10000, model_1d_path=None,
+              model_2d_path=None):
 
         # Assign default values
+        self.box_width, self.range_box = box_width, np.arange(box_width)
         approximation = FLUX_PIXEL_CONV if approximation is None else approximation
-        machine_path = MACHINE_PATH if machine_path is None else machine_path
 
-        # Load the model
-        model = joblib.load(machine_path)
-        model_dim = model.n_features_in_
+        # Load the models
+        model1D = joblib.load(model_1d_path)
+        model2D = joblib.load(model_2d_path)
 
-        # Recover the flux (without mask?)
-        input_flux = self._spec.flux if not np.ma.is_masked(self._spec.flux) else self._spec.flux.data
+        # Reshape to the detection interval (n x box_size) matrix
+        input_flux = enbox_spectrum(self._spec.flux, self.box_width, self.range_box)
 
-        # Reshape to the detection interval
-        range_box = np.arange(box_width)
-        n_intervals = input_flux.size - box_width + 1
-        input_flux = input_flux[np.arange(n_intervals)[:, None] + range_box]
-
-        # Remove nan entries
-        idcs_nan_rows = np.isnan(input_flux).any(axis=1)
-        input_flux = input_flux[~idcs_nan_rows, :]
-
-        # Add Monte Carlo columns (7858, 13) To (7858, 13, 100)
-
+        # Add random noise for Monte Carlo
+        input_flux = self.monte_carlo_expansion(input_flux)
 
         # Normalize the flux
         input_flux = feature_scaling(input_flux, transformation=scale_type, log_base=log_base)
 
-        # Perform the 1D detection
-        if box_width == model_dim:
-            detection_array = model.predict(input_flux)
+        # Reshape for detection types
+        input_flux_2D = flux_to_image(input_flux, approximation, model2D)
+
+        # Perform and store the detections
+        self.feature_detection(input_flux, input_flux_2D, model1D, model2D, self._spec.flux.size)
+
+        return
+
+    def monte_carlo_expansion(self, flux_array, noise_scale=None):
+
+        # Get the noise scale for the selections
+        if noise_scale is None:
+            noise_scale = self._spec.err_flux if self._spec.err_flux is not None else self._spec.cont_std
+
+            if noise_scale is None:
+                _logger.warning(f"No flux uncertainty provided for the line detection. There won't be a confidence value"
+                                f" for the predictions.")
+                self.n_mc = 1
+
+        # Single flux uncertainty
+        noise_matrix_shape = (flux_array.shape[0], flux_array.shape[1], self.n_mc)
+        if isinstance(noise_scale, float):
+            noise_array = np.random.normal(0, noise_scale, size=noise_matrix_shape)
+
+        # Array of flux uncertainty
         else:
-            array_2D = np.tile(input_flux[:, None, :], (1, approximation.size, 1))
-            array_2D = array_2D > approximation[::-1, None]
-            array_2D = array_2D.astype(int)
-            array_2D = array_2D.reshape((input_flux.shape[0], 1, -1))
-            array_2D = array_2D.squeeze()
-            detection_array = model.predict(array_2D)
+            # Rescale to the box format
+            input_err = enbox_spectrum(noise_scale, self.box_width, self.range_box)
+            noise_array = np.random.normal(0, input_err[..., None], size=noise_matrix_shape)
 
-        # Reshape array original shape and add with of positive entries # TODO this shape could cause issues with IFUs
-        mask = np.zeros(self._spec.flux.shape, dtype=bool)
-        idcs_detect = np.argwhere(detection_array) + range_box
-        idcs_detect = idcs_detect.flatten()
-        idcs_detect = idcs_detect[idcs_detect < detection_array.size]
-        mask[idcs_detect] = True
+        # Add the noise
+        flux_array = flux_array[:, :, np.newaxis] + noise_array
 
-        return mask
+        # flux_0 = flux_array * 1
+        # fluxMC_0 = flux_mc[:, :, 0]
+        # noise_0 = noise_array[:, :, 0]
+        # np.all(np.isclose(fluxMC_0 - noise_0, flux_0, atol=0.0000000000001))
+
+        return flux_array
+
+    def feature_detection(self, flux_array_1d, flux_array_2d, model_1d, model_2d, n_pixels):
+
+        # Perform the line 1D detection
+        self.line_1d_pred = FeatureClassifier(flux_array_1d, self.box_width, model_1d, n_pixels)
+
+        # Perform the line 2d detection
+        self.line_2d_pred = FeatureClassifier(flux_array_2d, self.box_width, model_2d, n_pixels)
+
+        return
 
 
 # Line finder default parameters

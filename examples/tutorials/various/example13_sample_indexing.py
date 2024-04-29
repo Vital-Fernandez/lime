@@ -12,7 +12,7 @@ log_spec = lime.load_frame(spectrum_log_path, levels=['sample', 'id', 'line'])
 sample = lime.Sample()
 sample.load_frame(spectrum_log_path, sample_levels=['sample', 'id', 'line'])
 
-print(sample.log)
+print(sample.frame)
 sample.extract_fluxes()
 ratio_list = ['H1_6565A/H1_4862A', 'H1_4341A/H1_4862A']
 ratio_df = sample.compute_line_ratios(line_ratios=ratio_list, sample_levels=['sample', 'id', 'line'])

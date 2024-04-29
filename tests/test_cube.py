@@ -147,7 +147,7 @@ class TestCubeClass:
     def test_check_cube(self):
 
         fig = plt.figure()
-        cube.check.cube('H1_6563A', lines_log_file=spatial_log_address, masks_file=spatial_mask_address, in_fig=fig)
+        cube.check.cube('H1_6563A', lines_file=spatial_log_address, masks_file=spatial_mask_address, in_fig=fig)
 
         return fig
 

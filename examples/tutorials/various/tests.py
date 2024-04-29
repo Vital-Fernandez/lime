@@ -1,13 +1,52 @@
+import lime
 from lime.tools import au
 
-print('aqui')
+lime.show_instrument_cfg()
 
-list_units = ['5007A', '5007AA', '500.7nm', '500.7e-9m', '12.3e-15Hz', '0.3keV']
-for item in list_units:
-    coso = au.Unit(item)
-    base = coso.bases[0]
-    mag = coso.scale
-    print(coso, f'{base:latex}', '||', f'{base:latex}'[9:-2])
+# unit = au.Unit('FLAM')
+# uArea = unit * au.Unit('AA')
+#
+#
+# flam = au.erg/au.s/au.cm**2/au.AA
+# flamIntg = flam * au.AA
+
+dict_units = {'flam': au.erg/au.s/au.cm**2/au.AA, 'FLAM': au.erg/au.s/au.cm**2/au.AA,
+              'fnu': au.erg/au.s/au.cm**2/au.Hz, 'FNU': au.erg/au.s/au.cm**2/au.Hz,
+              'photlam': au.photon/au.s/au.cm**2/au.AA, 'PHOTLAM': au.photon/au.s/au.cm**2/au.AA,
+              'photnu': au.photon/au.s/au.cm**2/au.Hz, 'PHOTNU': au.photon/au.s/au.cm**2/au.Hz}
+au.set_enabled_aliases(dict_units)
+unit = au.Unit('FLAM')
+uArea = unit * au.Unit('AA')
+
+# u.set_enabled_aliases({'Angstroem': u.Angstrom})
+#
+# flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
+#                             "generic": "FLAM", "console": "FLAM"})
+#
+# fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
+#                     format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
+#                             "generic": "FNU", "console": "FNU"})
+#
+# photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
+#                         "generic": "PHOTLAM", "console": "PHOTLAM"})
+#
+# photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
+#                         format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
+#                         "generic": "PHOTNU", "console": "PHOTNU"})
+#
+# au.add_enabled_units([flam, fnu, photlam, photnu])
+
+
+# print('aqui')
+#
+# list_units = ['5007A', '5007AA', '500.7nm', '500.7e-9m', '12.3e-15Hz', '0.3keV']
+# for item in list_units:
+#     coso = au.Unit(item)
+#     base = coso.bases[0]
+#     mag = coso.scale
+#     print(coso, f'{base:latex}', '||', f'{base:latex}'[9:-2])
 
 # from pip._vendor.rich.progress import Progress
 # import numpy as np

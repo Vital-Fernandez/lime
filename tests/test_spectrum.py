@@ -30,8 +30,8 @@ spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
 
 def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
 
-    for line in input_spec.log.index:
-        for param in input_spec.log.columns:
+    for line in input_spec.frame.index:
+        for param in input_spec.frame.columns:
 
             # String
             if _LOG_EXPORT_DICT[param].startswith('<U'):
@@ -259,7 +259,7 @@ class TestSpectrumClass:
 
         log_orig = lime.load_frame(lines_log_address)
 
-        for page in ['LINELOG', 'LINESLOG2', 'LINELOG']:
+        for page in ['FRAME', 'FRAME2', 'FRAME']:
             spec.save_frame(outputs_folder / file_xlsx, page=page)
             log_test = lime.load_frame(file_xlsx)
 

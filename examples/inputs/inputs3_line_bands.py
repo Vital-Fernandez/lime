@@ -2,7 +2,7 @@ import numpy as np
 from astropy.io import fits
 from pathlib import Path
 import lime
-
+from lime.io import
 # Complete lines database with the default format
 bands_df = lime.line_bands()
 
@@ -33,10 +33,10 @@ print(bands_df.loc['H1_1215A':'He2_1640A', 'wavelength'].to_numpy())
 print(bands_df.loc['H1_1215A', 'w1':'w6'].to_numpy())
 
 # Save to the current folder in several formats:
-lime.save_frame(bands_df, 'bands_frame.txt')
-lime.save_frame(bands_df, 'bands_frame.pdf', parameters=['wavelength', 'latex_label'])
-lime.save_frame(bands_df, 'bands_frame.xlsx', page='BANDS')
-lime.save_frame(bands_df, 'bands_frame.fits', page='BANDS')
+lime.save_frame('bands_frame.txt', bands_df)
+lime.save_frame('bands_frame.pdf', bands_df, parameters=['wavelength', 'latex_label'])
+lime.save_frame('bands_frame.xlsx', bands_df, page='BANDS')
+lime.save_frame('bands_frame.fits', bands_df, page='BANDS')
 
 # Load the database into a pandas daframe
 bands_df = lime.load_frame('bands_frame.txt')

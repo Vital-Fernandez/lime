@@ -3,7 +3,6 @@ from lime.model import gaussian_model
 from matplotlib import pyplot as plt, rcParams
 from matplotlib import font_manager
 from pathlib import Path
-import shutil
 import matplotlib
 
 matplotlib.font_manager._load_fontmanager(try_read_cache=False)
@@ -82,8 +81,8 @@ ax.axes.yaxis.set_visible(False)
 plt.tight_layout()
 doc_images_folder = Path('../../docs/source/_static/')
 plt.savefig(doc_images_folder/'logo_dark_transparent.png', bbox_inches='tight', transparent=True)
+# plt.show()
 
 # plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)
 # plt.savefig(doc_images_folder/'logo_white.png', bbox_inches='tight')
 # print(f'Saving {doc_images_folder}')
-# plt.show()

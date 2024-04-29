@@ -22,21 +22,21 @@ class TestSampleClass:
                                         instrument='isis')
         sample1.save_frame(outputs_folder / f'sample1_3indeces.txt')
 
-        assert list(sample1.log.index.names) == ['id', 'file', 'line']
+        assert list(sample1.frame.index.names) == ['id', 'file', 'line']
 
         sample2 = lime.Sample.from_file(id_list=['spec1', 'spec2'], log_list=[lines_log_address, lines_log_address],
                                         instrument='isis')
         sample2.save_frame(outputs_folder / f'sample1_2indeces.txt')
-        assert list(sample2.log.index.names) == ['id', 'line']
+        assert list(sample2.frame.index.names) == ['id', 'line']
 
         sample3 = lime.Sample(outputs_folder / f'sample1_3indeces.txt', instrument='isis')
         sample4 = lime.Sample(outputs_folder / f'sample1_2indeces.txt', levels=['id', 'line'], instrument='isis')
 
-        assert list(sample3.log.index.names) == ['id', 'file', 'line']
-        assert list(sample4.log.index.names) == ['id', 'line']
+        assert list(sample3.frame.index.names) == ['id', 'file', 'line']
+        assert list(sample4.frame.index.names) == ['id', 'line']
 
-        assert sample3.log.equals(sample1.log)
-        assert sample4.log.equals(sample2.log)
+        assert sample3.frame.equals(sample1.frame)
+        assert sample4.frame.equals(sample2.frame)
 
         return
 

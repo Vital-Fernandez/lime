@@ -4,11 +4,11 @@ from astropy.io import fits
 
 
 # Example load function for osiris spectra file
-def osiris_load_function(log_df, obs_idx, folder_obs, **kwargs):
+def osiris_load_function(log_df, obs_idx, data_folder, **kwargs):
 
     # Open fits file
     ext = 0
-    file_address = f'{folder_obs}/{obs_idx[log_df.index.names.index("file")]}'
+    file_address = f'{data_folder}/{obs_idx[log_df.index.names.index("file")]}'
     with fits.open(file_address) as hdul:
         data, hdr = hdul[ext].data, hdul[ext].header
 

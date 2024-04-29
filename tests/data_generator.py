@@ -4,8 +4,6 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
 
-# lime.theme.set_style('dark')
-
 baseline_folder = Path(__file__).parent / 'baseline'
 
 # Inputs

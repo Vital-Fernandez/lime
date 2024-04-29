@@ -31,9 +31,9 @@ Inputs/outputs
        Example of :math:`\textsc{LiMe}` configuration file
 
 
-.. autofunction:: lime.load_log
+.. autofunction:: lime.load_frame
 
-.. autofunction:: lime.save_log
+.. autofunction:: lime.save_frame
 
 .. autofunction:: lime.OpenFits.sdss
 
@@ -46,7 +46,7 @@ Tools
 
 .. autofunction:: lime.Spectrum.line_detection
 
-.. autofunction:: lime.tools.logs_into_fits
+.. autofunction:: lime.tools.join_fits_files
 
 .. autofunction:: lime.unit_conversion
 

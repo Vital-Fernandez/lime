@@ -3,33 +3,14 @@ from astropy.io import fits
 import lime
 from pathlib import Path
 
-lime.theme.set_style('dark')
-
-
-def import_osiris_fits(file_address, ext=0):
-
-    # Open fits file
-    with fits.open(file_address) as hdul:
-        data, header = hdul[ext].data, hdul[ext].header
-
-    w_min, dw, n_pix = header['CRVAL1'],  header['CD1_1'], header['NAXIS1']
-    w_max = w_min + dw * n_pix
-    wavelength = np.linspace(w_min, w_max, n_pix, endpoint=False)
-
-    return wavelength, data, header
-
-
 # State the data files
 obsFitsFile = '../sample_data/spectra/gp121903_osiris.fits'
 instrMaskFile = '../sample_data/osiris_bands.txt'
 
-# Load the spectrum
-wave, flux, header = import_osiris_fits(obsFitsFile)
-
 # Create the Spectrum object
 z_obj = 0.19531
 norm_flux = 1e-18
-gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=norm_flux)
+gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
 
 # Import the default lines database:
 bands_df = lime.line_bands(wave_intvl=gp_spec)

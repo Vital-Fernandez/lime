@@ -43,7 +43,7 @@ class Themer:
 
         return
 
-    def fig_defaults(self, user_fig, fig_type=None):
+    def fig_defaults(self, user_fig=None, fig_type=None):
 
         # Get plot configuration
         if fig_type is None:
@@ -134,30 +134,31 @@ class Themer:
 
         return ax_cfg
 
-    def set_style(self, style, style_conf=None, colors_conf=None):
+    def set_style(self, style=None, fig_cfg=None, colors_conf=None):
 
         # Set the new style
-        self.style = np.atleast_1d(style)
-
-        # Add the new configuration
-        if style_conf is not None:
-            existing_set = {} if self.style not in self.conf[self.library] else self.conf[self.library][self.style]
-            self.conf[self.library][self.style] = {**existing_set, **style_conf}
+        if style is not None:
+            self.style = np.atleast_1d(style)
+        else:
+            self.style = np.atleast_1d('default')
 
         # Generate the default
         self.base_conf = self.conf[self.library]['default'].copy()
         for style in self.style:
             self.base_conf = {**self.base_conf, **self.conf[self.library][style]}
 
-        # Add the new colors
-        if colors_conf is not None:
-            existing_set = {} if self.style not in self.conf['lime_colors'] else self.conf['lime_colors'][self.style]
-            self.conf['lime_colors'][self.style] = {**existing_set, **colors_conf}
+        # Add the new configuration
+        if fig_cfg is not None:
+            self.base_conf = {**self.base_conf, **fig_cfg}
 
         # Set the colors
         for i_style in self.style:
-            if i_style in self.conf['lime_colors']:
-                self.colors = self.conf['lime_colors'][style].copy()
+            if i_style in self.conf['colors']:
+                self.colors = self.conf['colors'][style].copy()
+
+        # Add the new colors
+        if colors_conf is not None:
+            self.colors = {**self.colors, **colors_conf}
 
         if self.colors is None:
             _logger.warning(f'The input style {self.style} does not have a LiMe color database')
@@ -167,46 +168,6 @@ class Themer:
 
 # LiMe figure labels and color formatter
 theme = Themer(_setup_cfg)
-
-# PLOT_SIZE_FONT = {'figure.figsize': (11, 6),
-#                   'axes.titlesize': 14,
-#                   'axes.labelsize': 14,
-#                   'legend.fontsize': 12,
-#                   'xtick.labelsize': 12,
-#                   'ytick.labelsize': 12}
-#
-# COLOR_DICT = {'bg': 'white', 'fg': 'black',
-#              'cont_band': '#8c564b', 'line_band': '#b5bd61',
-#              'color_cycle': ['#279e68', '#d62728', '#aa40fc', '#8c564b',
-#                              '#e377c2', '#7f7f7f', '#b5bd61', '#17becf', '#1f77b4', '#ff7f0e'],
-#              'matched_line': '#b5bd61',
-#              'peak': '#aa40fc',
-#              'trough': '#7f7f7f',
-#              'profile': '#1f77b4',
-#              'cont': '#ff7f0e',
-#              'error': 'red',
-#              'mask_map': 'viridis',
-#              'comps_map': 'Dark2',
-#              'mask_marker': 'red'}
-#
-# PLOT_COLORS = {'figure.facecolor': COLOR_DICT['bg'], 'axes.facecolor': COLOR_DICT['bg'],
-#                'axes.edgecolor': COLOR_DICT['fg'], 'axes.labelcolor': COLOR_DICT['fg'],
-#                'xtick.color': COLOR_DICT['fg'], 'ytick.color': COLOR_DICT['fg'],
-#                'text.color': COLOR_DICT['fg'], 'legend.edgecolor': 'inherit', 'legend.facecolor': 'inherit'}
-#
-# colorDictDark = {'bg': np.array((43, 43, 43))/255.0, 'fg': np.array((179, 199, 216))/255.0,
-#                  'red': np.array((43, 43, 43))/255.0, 'yellow': np.array((191, 144, 0))/255.0}
-#
-# PLOT_COLORS_DARK = {'figure.facecolor': colorDictDark['bg'], 'axes.facecolor': colorDictDark['bg'],
-#                     'axes.edgecolor': colorDictDark['fg'], 'axes.labelcolor': colorDictDark['fg'],
-#                     'xtick.color': colorDictDark['fg'],  'ytick.color': colorDictDark['fg'],
-#                     'text.color': colorDictDark['fg'], 'legend.edgecolor': 'inherit', 'legend.facecolor': 'inherit'}
-#
-# PLOT_COLORS = {}
-#
-# STANDARD_PLOT = {**PLOT_SIZE_FONT, **PLOT_COLORS}
-#
-# STANDARD_AXES = {'xlabel': r'Wavelength $(\AA)$', 'ylabel': r'Flux $(erg\,cm^{-2} s^{-1} \AA^{-1})$'}
 
 
 def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):
@@ -268,13 +229,13 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
     return output_fig
 
 
-def frame_mask_switch_2(wave_obs, flux_obs, redshift, rest_frame):
+def frame_mask_switch(wave_obs, flux_obs, redshift, rest_frame):
 
     # Doppler factor for rest _frame plots
     z_corr = (1 + redshift) if rest_frame else 1
 
     # Remove mask from plots and recover bad indexes
-    if np.ma.is_masked(wave_obs):
+    if np.ma.isMaskedArray(wave_obs):
         idcs_mask = wave_obs.mask
         wave_plot, flux_plot = wave_obs.data, flux_obs.data
 
@@ -355,9 +316,9 @@ def check_line_for_bandplot(in_label, user_band, spec, log_ref=_PARENT_BANDS):
     # If no line provided, use the one from the last fitting
     label = None
     if in_label is None:
-        if spec.log.index.size > 0:
-            label = spec.log.iloc[-1].name
-            band = spec.log.loc[label, 'w1':'w6'].values
+        if spec.frame.index.size > 0:
+            label = spec.frame.iloc[-1].name
+            band = spec.frame.loc[label, 'w1':'w6'].values
         else:
             band = None
             _logger.info(f'The lines log is empty')
@@ -375,14 +336,14 @@ def check_line_for_bandplot(in_label, user_band, spec, log_ref=_PARENT_BANDS):
                 in_label = in_label[:-2]
 
         # Case of a float entry
-        if in_label not in spec.log.index:
+        if in_label not in spec.frame.index:
 
             # First we try the user spec log
-            if spec.log.index.size > 0:
-                test_label = check_line_in_log(in_label, spec.log)
+            if spec.frame.index.size > 0:
+                test_label = check_line_in_log(in_label, spec.frame)
                 if test_label != in_label:
                     label = test_label
-                    band = spec.log.loc[label, 'w1':'w6'].values
+                    band = spec.frame.loc[label, 'w1':'w6'].values
 
             # We use the reference log
             if label is None:
@@ -395,7 +356,7 @@ def check_line_for_bandplot(in_label, user_band, spec, log_ref=_PARENT_BANDS):
         # The line has been plotted before
         else:
             label = in_label
-            band = spec.log.loc[in_label, 'w1':'w6'].values
+            band = spec.frame.loc[in_label, 'w1':'w6'].values
 
     return label, band
 
@@ -427,7 +388,8 @@ def determine_cube_images(cube, line, band, percentiles, color_scale, contours_c
         line = Line(line, band)
 
         # Compute the band map slice
-        idcsEmis, idcsCont = define_masks(cube.wave, line.mask * (1 + cube.redshift), line.pixel_mask)
+        idcsEmis, idcsCont = define_masks(cube.wave, line.mask * (1 + cube.redshift), line_mask_entry=line.pixel_mask,
+                                          line=line.label)
         image = cube.flux[idcsEmis, :, :].sum(axis=0)
 
         # If no scale provided compute a default one
@@ -456,7 +418,8 @@ def image_plot(ax, image_bg, image_fg, fg_levels, fg_mesh, bg_scale, fg_scale, b
 
     # Foreground contours
     if image_fg is not None:
-        contours = ax.contour(fg_mesh[0], fg_mesh[1], image_fg, cmap=fg_color, levels=fg_levels, norm=fg_scale)
+        contours = ax.contour(fg_mesh[0], fg_mesh[1], image_fg, cmap=fg_color, levels=fg_levels, norm=fg_scale,
+                              linewidth=0.2)
     else:
         contours = None
 
@@ -515,14 +478,14 @@ def spatial_mask_plot(ax, masks_dict, mask_color, mask_alpha, units_flux, mask_l
 
 
 def spec_plot(ax, wave, flux, redshift, norm_flux, label='', rest_frame=False, log=None, include_fits=True,
-              units_wave='A', units_flux='Flam', log_scale=False, color_dict=theme.colors):
-
+              units_wave='A', units_flux='Flam', log_scale=False):
 
     # Reference frame for the plot
-    wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, redshift, rest_frame)
+    wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, rest_frame)
 
     # Plot the spectrum
-    ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=color_dict['fg'])
+    ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
+            linewidth=theme.colors['spectrum_width'])
 
     # List of lines in the log
     line_list = []
@@ -546,30 +509,23 @@ def spec_plot(ax, wave, flux, redshift, norm_flux, label='', rest_frame=False, l
     return
 
 
-def _profile_plot(axis, x, y, label, idx_line=0, n_comps=1, observations_list='yes', color_dict=theme.colors):
+def _profile_plot(axis, x, y, label, idx_line=0, n_comps=1, observations_list='yes'):
 
     # Color and thickness
     if observations_list == 'no':
 
         # If only one component or combined
         if n_comps == 1:
-            width_i, style, color = 1.5, '-', color_dict['profile']
+            width_i, style, color = theme.colors['single_width'], '-', theme.colors['profile']
 
         # Component
         else:
-            cmap = cm.get_cmap(color_dict['comps_map'])
-
-            """  /home/usuario/PycharmProjects/lime/src/lime/plots.py:725: MatplotlibDeprecationWarning: 
-            The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. 
-            Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
-                cmap = cm.get_cmap(color_dict['comps_map'])
-            """
-
-            width_i, style, color = 2, ':', cmap(idx_line/n_comps)
+            cmap = cm.get_cmap(theme.colors['comps_map'])
+            width_i, style, color = theme.colors['comp_width'], ':', cmap(idx_line/n_comps)
 
     # Case where the line has an error
     else:
-        width_i, style, color = 3, '-', 'red'
+        width_i, style, color = theme.colors['err_width'], '-', theme.colors['error']
 
     # Plot the profile
     line_g = axis.plot(x, y, label=label, linewidth=width_i, linestyle=style, color=color)
@@ -584,23 +540,16 @@ def color_selector(label, observations, idx_line, n_comps):
 
         # If only one component or combined
         if n_comps == 1:
-            width_i, style, color = 1.5, '-', theme.colors['profile']
+            width_i, style, color = theme.colors['single_width'], '-', theme.colors['profile']
 
         # Component
         else:
             cmap = cm.get_cmap(theme.colors['comps_map'])
-
-            """  /home/usuario/PycharmProjects/lime/src/lime/plots.py:725: MatplotlibDeprecationWarning: 
-            The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. 
-            Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
-                cmap = cm.get_cmap(color_dict['comps_map'])
-            """
-
-            width_i, style, color = 2, ':', cmap(idx_line/n_comps)
+            width_i, style, color = theme.colors['comp_width'], ':', cmap(idx_line/n_comps)
 
     # Case where the line has an error
     else:
-        width_i, style, color = 3, '-', 'red'
+        width_i, style, color = theme.colors['err_width'], '-', 'red'
 
     # Make dictionary with the params
     cont_format = dict(label=label, color=color, linestyle=style, linewidth=width_i)
@@ -689,12 +638,11 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
         if idcs_comp is not None:
             gauss_comb = gaussian_array[:, idcs_comp].sum(axis=1) + cont_i
             _profile_plot(axis, wave_i/z_corr, gauss_comb*z_corr/norm_flux, None,
-                               idx_line=idx_line, n_comps=1, observations_list=observations[i], color_dict=theme.colors)
+                               idx_line=idx_line, n_comps=1, observations_list=observations[i])
 
         # Gaussian component plot
         line_g_list[i] = _profile_plot(axis, wave_i/z_corr, (gauss_i+cont_i)*z_corr/norm_flux, latex_label,
-                                       idx_line=idx_line, n_comps=n_comps, observations_list=observations[i],
-                                       color_dict=theme.colors)
+                                       idx_line=idx_line, n_comps=n_comps, observations_list=observations[i])
 
     return line_g_list
 
@@ -849,7 +797,7 @@ class Plotter:
         PLOT_CONF = theme.fig_defaults(None)
         AXES_CONF = theme.ax_defaults(None, units_wave, units_flux, norm_flux)
 
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, redshift, False)
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, False)
 
         with rc_context(PLOT_CONF):
 
@@ -890,7 +838,7 @@ class Plotter:
         PLOT_CONF = theme.fig_defaults(None)
         AXES_CONF = theme.ax_defaults(None, units_wave, units_flux, norm_flux)
 
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(wave, flux, redshift, 'observed')
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, 'observed')
 
         continuum = continuum if continuum is not None else np.zeros(flux.size)
 
@@ -936,7 +884,8 @@ class SpectrumFigures(Plotter):
         return
 
     def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
-                 include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False):
+                 include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
+                 detection_band=None):
 
         """
 
@@ -1016,11 +965,12 @@ class SpectrumFigures(Plotter):
                 in_ax.set(**AXES_CONF)
 
             # Reference _frame for the plot
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                          self._spec.redshift, rest_frame)
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                        self._spec.redshift, rest_frame)
 
             # Plot the spectrum
-            in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'])
+            in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
+                       linewidth=theme.colors['spectrum_width'])
 
             # Plot peaks and troughs if provided
             if line_bands is not None:
@@ -1029,10 +979,10 @@ class SpectrumFigures(Plotter):
                                          self._spec.units_wave)
 
             # Plot the fittings
-            if include_fits and self._spec.log is not None:
+            if include_fits and self._spec.frame is not None:
 
                 # List of lines in the log
-                line_list = self._spec.log.index.values
+                line_list = self._spec.frame.index.values
 
                 # Do not include the legend as the labels are necessary for mplcursors # TODO improve mechanics
                 legend_check = False
@@ -1043,16 +993,16 @@ class SpectrumFigures(Plotter):
                     profile_list = [None] * line_list.size
                     for i, line_label in enumerate(line_list):
 
-                        line_i = Line.from_log(line_label, self._spec.log)
-                        profile_list[i] = _profile_plt(in_ax, line_i, z_corr, self._spec.log, self._spec.redshift,
+                        line_i = Line.from_log(line_label, self._spec.frame)
+                        profile_list[i] = _profile_plt(in_ax, line_i, z_corr, self._spec.frame, self._spec.redshift,
                                                        self._spec.norm_flux)
 
                     # Add the interactive pop-ups
-                    _mplcursor_parser(profile_list, line_list, self._spec.log, self._spec.norm_flux, self._spec.units_wave,
+                    _mplcursor_parser(profile_list, line_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave,
                                       self._spec.units_flux)
 
                 # Plot the masked pixels
-                _masks_plot(in_ax, line_list, wave_plot, flux_plot, z_corr, self._spec.log, idcs_mask, theme.colors)
+                _masks_plot(in_ax, line_list, wave_plot, flux_plot, z_corr, self._spec.frame, idcs_mask, theme.colors)
 
             # Plot the normalize continuum
             if include_cont and self._spec.cont is not None:
@@ -1062,9 +1012,46 @@ class SpectrumFigures(Plotter):
                 in_ax.fill_between(wave_plot/z_corr, low_limit*z_corr, high_limit*z_corr, alpha=0.2,
                                    color=theme.colors['fade_fg'])
 
-                # legend_check = True
+            # Include the detection bands
+            if detection_band is not None:
 
-            # Switch y_axis to logarithmic scale if requested
+                detec_obj = getattr(self._spec.infer, 'line_1d_pred')
+
+                if detec_obj.confidence is not None:
+
+                    # Boundaries array for confidence intervals
+                    bounds = np.array([0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+
+                    # Adjust color map to match lower detection limit to fg color
+                    cmap = cm.get_cmap(theme.colors['mask_map'])
+                    cmaplist = [cmap(i) for i in range(cmap.N)]
+                    cmaplist[0] = theme.colors['fg']
+                    cmap = colors.LinearSegmentedColormap.from_list('mcm', cmaplist, bounds.size-1)
+                    norm = colors.BoundaryNorm(bounds * 100, cmap.N)
+
+                    # Iterate through the confidence intervals and plot the step spectrum
+                    for i in range(1, len(bounds)):
+                        if i > 1:
+                            idcs = detec_obj(bounds[i-1]*100, confidence_max=bounds[i]*100)
+                            wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
+                            wave_nan[idcs], flux_nan[idcs] = wave_plot[idcs] / z_corr, flux_plot[idcs] * z_corr
+
+                            in_ax.step(wave_nan, flux_nan, label=label, where='mid', color=cmap(i-1))
+
+
+                    # Color bar
+                    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+                    sm.set_array([])
+                    cbar = plt.colorbar(sm, ax=in_ax)
+                    cbar.set_label('Detection confidence %', rotation=270, labelpad=35)
+
+
+                else:
+                    _logger.warning(f'The line detection bands confidence has not been calculated. They are not included'
+                                    f' on plot.')
+
+
+                # Switch y_axis to logarithmic scale if requested
             if log_scale:
                 in_ax.set_yscale('log')
 
@@ -1133,7 +1120,7 @@ class SpectrumFigures(Plotter):
         display_check = True if in_fig is None else False
 
         # Link to observation log
-        log = self._spec.log
+        log = self._spec.frame
 
         # Check that the log type and content
         if not isinstance(log, pd.DataFrame):
@@ -1181,8 +1168,8 @@ class SpectrumFigures(Plotter):
                         line_i = Line.from_log(lineList[i], log, self._spec.norm_flux)
 
                         # Reference _frame for the plot
-                        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                                      self._spec.redshift, rest_frame)
+                        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                                    self._spec.redshift, rest_frame)
 
                         # Establish the limits for the line spectrum plot
                         idcs_m = np.searchsorted(wave_plot, line_i.mask * (1 + self._spec.redshift))
@@ -1191,7 +1178,7 @@ class SpectrumFigures(Plotter):
 
                         # Plot the spectrum
                         in_ax.step(wave_plot[idx_blue:idx_red] / z_corr, flux_plot[idx_blue:idx_red] * z_corr,
-                                   where='mid', color=theme.colors['fg'])
+                                   where='mid', color=theme.colors['fg'], linewidth=theme.colors['spectrum_width'])
 
                         # Continuum bands
                         self._bands_plot(in_ax, wave_plot, flux_plot, z_corr, idcs_m, line_i)
@@ -1206,7 +1193,7 @@ class SpectrumFigures(Plotter):
                             line_list, profiles_list = [line_i.label], line_i._p_shape
                             wave_array, gaussian_array = profiles_computation([line_i.label], log,
                                                                               (1 + self._spec.redshift), profiles_list)
-                            wave_array, cont_array = linear_continuum_computation(line_list, self._spec.log,
+                            wave_array, cont_array = linear_continuum_computation(line_list, self._spec.frame,
                                                                                   (1 + self._spec.redshift))
 
                             # Single component lines
@@ -1286,11 +1273,9 @@ class SpectrumFigures(Plotter):
         :return:
         """
 
-
-
         # TODO check plot without fit
         # Unpack variables
-        log, norm_flux, redshift = self._spec.log, self._spec.norm_flux, self._spec.redshift
+        log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
 
         # Display check for the user figures
@@ -1301,7 +1286,7 @@ class SpectrumFigures(Plotter):
             if log.index.size > 0:
                 line = log.index[-1]
 
-        # Reconsand to user for the analysis
+        # Reconstruct the line for the analysis
         if line is not None:
             line = Line.from_log(line, log, norm_flux)
 
@@ -1334,8 +1319,8 @@ class SpectrumFigures(Plotter):
                 in_ax[0].set(**AXES_CONF)
 
                 # Reference _frame for the plot
-                wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                              redshift, rest_frame)
+                wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                            redshift, rest_frame)
                 err_plot = self._spec.err_flux
 
                 # Establish the limits for the line spectrum plot
@@ -1343,13 +1328,14 @@ class SpectrumFigures(Plotter):
                 idcsM = np.searchsorted(wave_plot, mask) # TODO remove this one
 
                 pixel_mask = 'no' if line not in log.index else log.loc[line, 'pixel_mask']
-                idcsEmis, idcsCont = define_masks(self._spec.wave, line.mask * (1 + self._spec.redshift), line_mask_entry=line.pixel_mask)
+                idcsEmis, idcsCont = define_masks(self._spec.wave, line.mask * (1 + self._spec.redshift),
+                                                  line_mask_entry=line.pixel_mask, line=line.label)
                 idcs_line = idcsEmis + idcsCont
 
                 # Plot the spectrum
                 label = '' if include_fits else line
                 in_ax[0].step(wave_plot[idcsM[0]:idcsM[5]] / z_corr, flux_plot[idcsM[0]:idcsM[5]] * z_corr,
-                              where='mid', color=theme.colors['fg'], label=label)
+                              where='mid', color=theme.colors['fg'], label=label, linewidth=theme.colors['spectrum_width'])
 
                 # Add the fitting results
                 if include_fits:
@@ -1364,7 +1350,7 @@ class SpectrumFigures(Plotter):
                     self._bands_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcsM, line)
 
                     # Gaussian profiles
-                    idcs_lines = self._spec.log.index.isin(list_comps)
+                    idcs_lines = self._spec.frame.index.isin(list_comps)
                     line_g_list = _gaussian_line_profiler(in_ax[0], list_comps, wave_array, gaussian_array, cont_array,
                                                           z_corr, log.loc[idcs_lines], norm_flux)
 
@@ -1420,11 +1406,11 @@ class SpectrumFigures(Plotter):
                                       fig_type='velocity')
 
         # Recover the line data
-        line = Line.from_log(line, self._spec.log, self._spec.norm_flux)
+        line = Line.from_log(line, self._spec.frame, self._spec.norm_flux)
 
         # Line spectrum
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(self._spec.wave, self._spec.flux,
-                                                                      self._spec.redshift, False)
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                    self._spec.redshift, False)
 
         # Establish the limits for the line spectrum plot
         mask = band * (1 + self._spec.redshift)
@@ -1454,7 +1440,8 @@ class SpectrumFigures(Plotter):
             trans = self._ax.get_xaxis_transform()
 
             # Plot the spectrum
-            self._ax.step(vel_plot, flux_plot, label=line.latex_label, where='mid', color=theme.colors['fg'])
+            self._ax.step(vel_plot, flux_plot, label=line.latex_label, where='mid', color=theme.colors['fg'],
+                          linewidth=theme.colors['spectrum_width'])
 
             # Velocity percentiles
             target_percen = ['v_1', 'v_5', 'v_10', 'v_50', 'v_90', 'v_95', 'v_99']
@@ -1526,7 +1513,7 @@ class SpectrumFigures(Plotter):
     def _residual_line_plotter(self, axis, x, y, err, list_comps, z_corr, spec_mask, cont_std, profile_list):
 
         # Unpack properties
-        log, norm_flux, redshift = self._spec.log, self._spec.norm_flux, self._spec.redshift
+        log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
 
         # Continuum level
         cont_level = log.loc[list_comps[0], 'cont']
@@ -1539,7 +1526,7 @@ class SpectrumFigures(Plotter):
         # Lower plot residual
         label_residual = r'$\frac{F_{obs} - F_{fit}}{F_{cont}}$'
         residual = ((y - total_resd / norm_flux) / (cont_level/norm_flux))
-        axis.step(x/z_corr, residual*z_corr, where='mid', color=theme.colors['fg'])
+        axis.step(x/z_corr, residual*z_corr, where='mid', color=theme.colors['fg'], linewidth=theme.colors['spectrum_width'])
 
         # Shade Continuum flux standard deviation # TODO revisit this calculation
         label = r'$\sigma_{Continuum}/\overline{F_{cont}}$'
@@ -1563,7 +1550,7 @@ class SpectrumFigures(Plotter):
 
         # Residual plot labeling
         axis.legend(loc='center right')
-        axis.set_ylabel(label_residual, fontsize=22)
+        axis.set_ylabel(label_residual)
 
         # Spectrum mask
         _masks_plot(axis, [list_comps[0]], x, y, z_corr, log, spec_mask, color_dict=theme.colors)
@@ -1585,11 +1572,12 @@ class SpectrumFigures(Plotter):
 
             # Object spectrum
             label_spec = 'Smoothed spectrum' if smooth_check else 'Object spectrum'
-            ax.step(wave, smooth_flux, label=label_spec, color=theme.colors['fg'], where='mid')
+            ax.step(wave, smooth_flux, label=label_spec, color=theme.colors['fg'], where='mid', linewidth=theme.colors['spectrum_width'])
 
             # Unsmooth
             if smooth_check:
-                ax.step(wave, flux, label='Input spectrum', color=theme.colors['fade_fg'], where='mid', linestyle=':')
+                ax.step(wave, flux, label='Input spectrum', color=theme.colors['fade_fg'], where='mid', linestyle=':',
+                        linewidth=theme.colors['spectrum_width'])
 
             # Band limits
             label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
@@ -1625,10 +1613,6 @@ class CubeFigures(Plotter):
 
         # Container for the matplotlib figures
         self._fig, self._ax = None, None
-
-        # self.param_conv = {'SN_line': r'$\frac{S}{N}_{line}$',
-        #                    'SN_cont': r'$\frac{S}{N}_{cont}$',
-        #                    self._cube.units_flux: None}
 
         return
 
@@ -1746,10 +1730,10 @@ class CubeFigures(Plotter):
         display_check = True if in_fig is None else False
 
         # Set the plot format where the user's overwrites the default
-        size_conf = {'figure.figsize': (8 if masks_file is None else 15, 8)}
+        size_conf = {'figure.figsize': (4 if masks_file is None else 5.5, 4)}
         size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
 
-        PLT_CONF = theme.fig_defaults(size_conf)
+        PLT_CONF = theme.fig_defaults(size_conf, fig_type='cube')
         AXES_CONF = theme.ax_defaults(ax_cfg, self._cube.units_wave, self._cube.units_flux, self._cube.norm_flux,
                                       fig_type='cube', line_bg=line_bg, line_fg=line_fg, masks_dict=masks_dict, wcs=wcs)
 
@@ -1824,7 +1808,7 @@ class SampleFigures(Plotter):
 
             # Check for logs without lines # TODO we need common method for just providing the first entry
             if 'line' in sub_sample.index.names:
-                obj_idcs = sub_sample.log.droplevel('line').index.unique()
+                obj_idcs = sub_sample.frame.droplevel('line').index.unique()
             else:
                 obj_idcs = sub_sample.index.unique()
 
@@ -1839,19 +1823,20 @@ class SampleFigures(Plotter):
                     # Loop through the SMACS_v2.0 in the sample
                     for sample_idx in obj_idcs:
 
-                        legend_label = label_generator(sample_idx, self._sample.log, legend_handle)
-                        spec = self._sample.load_function(self._sample.log, sample_idx, self._sample.file_address,
+                        legend_label = label_generator(sample_idx, self._sample.frame, legend_handle)
+                        spec = self._sample.load_function(self._sample.frame, sample_idx, self._sample.file_address,
                                                           **self._sample.load_params)
 
                         # Reference _frame for the plot
-                        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch_2(spec.wave, spec.flux, spec.redshift,
-                                                                                      rest_frame)
+                        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, spec.redshift,
+                                                                                    rest_frame)
 
                         # Plot the spectrum
-                        self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=legend_label, where='mid')
+                        self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=legend_label, where='mid',
+                                      linewidth=theme.colors['spectrum_width'])
 
                         # List of lines in the log
-                        line_list = spec.log.index.values
+                        line_list = spec.frame.index.values
 
                         # Plot the fittings
                         if include_fits:
@@ -1861,20 +1846,20 @@ class SampleFigures(Plotter):
 
                             if line_list.size > 0:
 
-                                wave_array, gaussian_array = profiles_computation(line_list, spec.log, (1 + spec.redshift))
-                                wave_array, cont_array = linear_continuum_computation(line_list, spec.log, (1 + spec.redshift))
+                                wave_array, gaussian_array = profiles_computation(line_list, spec.frame, (1 + spec.redshift))
+                                wave_array, cont_array = linear_continuum_computation(line_list, spec.frame, (1 + spec.redshift))
 
                                 # Single component lines
                                 line_g_list = self._gaussian_line_profiler(self._ax, line_list,
                                                                            wave_array, gaussian_array, cont_array,
-                                                                           z_corr, spec.log, spec.norm_flux,)
+                                                                           z_corr, spec.frame, spec.norm_flux, )
 
                                 # Add the interactive pop-ups
-                                self._mplcursor_parser(line_g_list, line_list, spec.log, spec.norm_flux, spec.units_wave,
+                                self._mplcursor_parser(line_g_list, line_list, spec.frame, spec.norm_flux, spec.units_wave,
                                                        spec.units_flux)
 
                         # Plot the masked pixels
-                        _masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, spec.log, idcs_mask)
+                        _masks_plot(self._ax, line_list, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask)
 
                     # Switch y_axis to logarithmic scale if requested
                     if log_scale:
@@ -1903,11 +1888,11 @@ class SampleFigures(Plotter):
         # Check selected variables are located in the panel columns
         for param in [x_param, y_param, x_param_err, y_param_err, groups_variable]:
             if param is not None:
-                if param not in self._sample.log:
+                if param not in self._sample.frame:
                     raise LiMe_Error(f'Variable {param} is not found in the sample panel columns')
 
         # Panel slice
-        slice_df = self._sample.log.loc[observation_list]
+        slice_df = self._sample.frame.loc[observation_list]
 
         # Confirm selection has data
         if len(slice_df) > 0:

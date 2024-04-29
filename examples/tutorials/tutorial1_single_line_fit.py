@@ -2,7 +2,6 @@ import numpy as np
 from astropy.io import fits
 import lime
 
-lime.theme.set_style('dark')
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -56,7 +55,7 @@ gp_spec.plot.bands()
 gp_spec.plot.bands(output_address=f'../sample_data/{line}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
-print(gp_spec.log)
+print(gp_spec.frame)
 
 # It can be saved into different types of document using the function
 gp_spec.save_frame('../sample_data/example1_linelog.txt')
@@ -67,5 +66,5 @@ gp_spec.save_frame('../sample_data/example1_linelog.asdf', page='GP121903')
 
 # A lines log can also be saved/loaded using the lime functions:
 log_address = '../sample_data/example1_linelog.fits'
-lime.save_frame(log_address, gp_spec.log, page='GP121903')
+lime.save_frame(log_address, gp_spec.frame, page='GP121903')
 log = lime.load_frame(log_address, page='GP121903')

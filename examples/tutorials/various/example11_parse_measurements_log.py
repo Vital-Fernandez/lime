@@ -45,7 +45,7 @@ for i, lineLabel in enumerate(matched_masks_DF.index.values):
     gp_spec.fit_from_wavelengths(lineLabel, wave_regions, user_cfg=fit_cfg)
 
 # Save the results
-lime.save_frame('./sample_data/example_3.txt', gp_spec.log)
+lime.save_frame('./sample_data/example_3.txt', gp_spec.frame)
 
 # Add new parameters to the log
 parameters = ['eqw_gaussian',

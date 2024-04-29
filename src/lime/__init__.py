@@ -4,7 +4,6 @@ LiMe - A python package for measuring lines in astronomical spectra
 
 import os
 import sys
-import configparser
 import logging
 from pathlib import Path
 
@@ -24,12 +23,6 @@ _logger.addHandler(consoleHandle)
 
 # Get python version being used
 __python_version__ = sys.version_info
-
-# Read lime configuration .ini
-# _dir_path = os.path.dirname(os.path.realpath(__file__))
-# _setup_cfg = configparser.ConfigParser()
-# _setup_cfg.optionxform = str
-# _setup_cfg.read(os.path.join(_dir_path, 'config.toml'))
 
 # Read lime configuration .toml
 _inst_dir = Path(__file__).parent
@@ -51,6 +44,6 @@ from .observations import Spectrum, Sample, Cube, line_bands
 from .io import *
 from .tools import *
 from .transitions import Line, label_decomposition
-from .read_fits import OpenFits
+from .read_fits import OpenFits, show_instrument_cfg
 from .recognition import detection_function
 from .plots import theme

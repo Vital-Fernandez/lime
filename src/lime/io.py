@@ -57,7 +57,7 @@ _logger = logging.getLogger('LiMe')
 # Reading file with the format and export status for the measurements
 _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
-_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, delim_whitespace=True, header=0, index_col=0)
+_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep='\s+', header=0, index_col=0)
 
 _LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
 _CONF_FILE = _LIME_FOLDER/'config.toml'
@@ -178,7 +178,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     overwrites the data
 
     """
-    # TODO for line_fitting/model save dictionaries as line
+    # TODO for line_fitting/models save dictionaries as line
     output_path = Path(output_file)
 
     if output_path.suffix == '.toml':
@@ -252,7 +252,7 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     return
 
 
-def load_frame(fname, page: str = 'LINELOG', levels: list = ['id', 'line']):
+def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
 
     """
     This function reads the input ``file_address`` as a pandas dataframe.
@@ -309,14 +309,14 @@ def load_frame(fname, page: str = 'LINELOG', levels: list = ['id', 'line']):
 
         # Text file
         elif file_type == '.txt':
-            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0, comment='#')
+            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
-            log = pd.read_csv(log_path, sep=',', delim_whitespace=False, header=0, index_col=0, comment='#')
+            log = pd.read_csv(log_path, sep=',', header=0, index_col=0, comment='#')
 
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
-            log = pd.read_csv(log_path, delim_whitespace=True, header=0, index_col=0)
+            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0)
 
     except ValueError as e:
         exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
@@ -328,7 +328,7 @@ def load_frame(fname, page: str = 'LINELOG', levels: list = ['id', 'line']):
     return log
 
 
-def save_frame(fname, dataframe, page='LINELOG', parameters='all', header=None, column_dtypes=None,
+def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, column_dtypes=None,
                safe_version=True, **kwargs):
 
     """
@@ -338,7 +338,7 @@ def save_frame(fname, dataframe, page='LINELOG', parameters='all', header=None, 
     The accepted extensions are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
 
     For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-    The default name is "LINELOG".
+    The default name is "FRAME".
 
     The user can specify the ``parameters`` to be saved in the output file.
 
@@ -553,7 +553,7 @@ def results_to_log(line, log, norm_flux):
     return
 
 
-def check_file_dataframe(df_variable, variable_type, ext='LINELOG', sample_levels=['id', 'line'], copy_input=True):
+def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=['id', 'line'], copy_input=True):
 
     if isinstance(df_variable, variable_type):
         if copy_input:

@@ -37,7 +37,10 @@ class TestOpenFits:
         assert SHOC579.redshift == redshift_dict['SHOC579']
         assert SHOC579.units_wave == 'Angstrom'
         assert SHOC579.units_flux.scale == 1e-17
-        assert SHOC579.units_flux.bases[0] == 'FLAM'
+        assert SHOC579.units_flux.bases[0] == 'erg'
+        assert SHOC579.units_flux.bases[1] == 'Angstrom'
+        assert SHOC579.units_flux.bases[2] == 's'
+        assert SHOC579.units_flux.bases[3] == 'cm'
         assert SHOC579.norm_flux == 1
 
         return
@@ -48,7 +51,10 @@ class TestOpenFits:
         assert SHOC579.redshift == redshift_dict['SHOC579']
         assert SHOC579.units_wave == 'Angstrom'
         assert SHOC579.units_flux.scale == 1e-17
-        assert SHOC579.units_flux.bases[0] == 'FLAM'
+        assert SHOC579.units_flux.bases[0] == 'erg'
+        assert SHOC579.units_flux.bases[1] == 'Angstrom'
+        assert SHOC579.units_flux.bases[2] == 's'
+        assert SHOC579.units_flux.bases[3] == 'cm'
         assert SHOC579.norm_flux == 1
 
         return

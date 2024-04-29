@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum, logs_into_fits
+from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum, join_fits_files
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
 from astropy.io import fits
 
@@ -45,7 +45,7 @@ def test_extract_fluxes():
     log1 = lines_log.copy()
     log2 = lines_log.copy()
     log3 = lines_log.copy()
-    log4 = obs.log.copy()
+    log4 = obs.frame.copy()
 
     lime.extract_fluxes(log1)
     lime.extract_fluxes(log2, flux_type='intg', column_name='integrated', column_positions=3)
@@ -134,13 +134,13 @@ def test_extract_fluxes_single_index():
 
 def test_extract_fluxes_multi_index():
 
-    idcs_remove = (obs.log.index.get_level_values('id') == 'obj_1') &\
-                  (~obs.log.index.get_level_values('line').isin(['H1_6563A', 'O3_4363A', 'H1_4861A']))
+    idcs_remove = (obs.frame.index.get_level_values('id') == 'obj_1') & \
+                  (~obs.frame.index.get_level_values('line').isin(['H1_6563A', 'O3_4363A', 'H1_4861A']))
 
-    log1 = obs.log.loc[~idcs_remove].copy()
-    log2 = obs.log.copy()
-    log3 = obs.log.copy()
-    log4 = obs.log.copy()
+    log1 = obs.frame.loc[~idcs_remove].copy()
+    log2 = obs.frame.copy()
+    log3 = obs.frame.copy()
+    log4 = obs.frame.copy()
 
     # One line normalization
     lime.normalize_fluxes(log1, norm_list='H1_4861A')
@@ -203,10 +203,10 @@ def test_redshift_calculation():
     assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
 
     # Multi-index
-    z_df = lime.redshift_calculation(obs.log)
-    z_df_eqw = lime.redshift_calculation(obs.log, weight_parameter='eqw')
-    z_df_flux_gauss = lime.redshift_calculation(obs.log, weight_parameter='profile_flux')
-    z_df_strong = lime.redshift_calculation(obs.log, line_list=['O3_5007A', 'H1_6563A'])
+    z_df = lime.redshift_calculation(obs.frame)
+    z_df_eqw = lime.redshift_calculation(obs.frame, weight_parameter='eqw')
+    z_df_flux_gauss = lime.redshift_calculation(obs.frame, weight_parameter='profile_flux')
+    z_df_strong = lime.redshift_calculation(obs.frame, line_list=['O3_5007A', 'H1_6563A'])
 
     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
@@ -272,7 +272,7 @@ def test_logs_into_fits():
     file_list = [outputs_folder/f'log_1.txt', outputs_folder/f'log_2.fits']
     output_file = outputs_folder/'joined_log.fits'
 
-    logs_into_fits(file_list, output_file, delete_after_join=True)
+    join_fits_files(file_list, output_file, delete_after_join=True)
 
     # Check new and deteled files
     assert output_file.is_file()

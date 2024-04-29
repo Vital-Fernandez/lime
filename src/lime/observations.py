@@ -114,12 +114,11 @@ def check_spectrum_axes(lime_object):
     array_labels = ['wave', 'wave_rest', 'flux']
     check_mask = np.zeros(3).astype(bool)
     for i, arg in enumerate(array_labels):
-        if np.ma.is_masked(lime_object.__getattribute__(arg)):
+        if np.ma.isMaskedArray(lime_object.__getattribute__(arg)):
             check_mask[i] = True
 
     # TODO this one should go at the begining and review inputs
     if np.any(check_mask) and isinstance(lime_object, Spectrum):
-        lime_object._masked_inputs = True
         if ~np.all(check_mask):
             for i, arg in enumerate(array_labels):
                 if not check_mask[i]:
@@ -333,7 +332,7 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
     # Convert to requested units
     units_wave = au.Unit(units_wave)
     if units_wave != 'Angstrom':
-        conversion_factor = unit_conversion('Angstrom', units_wave, wave_array=1, dispersion_units='dispersion axis')
+        conversion_factor = unit_conversion(au.Unit('Angstrom'), units_wave, wave_array=1, dispersion_units='dispersion axis')
         mask_df.loc[:, 'wavelength':'w6'] = mask_df.loc[:, 'wavelength':'w6'] * conversion_factor
 
     # Reconstruct the latex label
@@ -453,7 +452,7 @@ class Spectrum(LineFinder):
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 inst_FWHM=np.nan, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
+                 inst_FWHM=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -467,14 +466,13 @@ class Spectrum(LineFinder):
         self.cont = None
         self.cont_std = None
 
-        self.log = None
+        self.frame = None
 
         self.redshift = None
         self.norm_flux = None
         self.inst_FWHM = None
         self.units_wave = None
         self.units_flux = None
-        self._masked_inputs = False # TODO quitar este
 
         # Treatments objects
         self.fit = SpecTreatment(self)
@@ -505,15 +503,13 @@ class Spectrum(LineFinder):
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
         spec.redshift = cube.redshift
-        spec.log = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
+        spec.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
         spec.inst_FWHM = cube.inst_FWHM
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
 
         # Check if masked array
-        spec._masked_inputs = False
         if np.ma.isMaskedArray(spec.flux):
-            spec._masked_inputs = True
             spec.wave = np.ma.masked_array(spec.wave, cube.flux[:, idx_j, idx_i].mask)
             spec.wave_rest = np.ma.masked_array(cube.wave_rest, cube.flux[:, idx_j, idx_i].mask)
 
@@ -609,7 +605,7 @@ class Spectrum(LineFinder):
 
         # Class attributes
         self.label = label
-        self.inst_FWHM = inst_FWHM
+        self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
 
         # Review the inputs
         check_inputs_arrays(input_wave, input_flux, input_err, self)
@@ -633,7 +629,7 @@ class Spectrum(LineFinder):
         check_spectrum_axes(self)
 
         # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
-        self.log = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
+        self.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
 
         return
 
@@ -721,7 +717,7 @@ class Spectrum(LineFinder):
 
         return
 
-    def save_frame(self, fname, page='LINELOG', param_list='all', header=None, column_dtypes=None,
+    def save_frame(self, fname, page='FRAME', param_list='all', header=None, column_dtypes=None,
                    safe_version=True):
 
 
@@ -732,7 +728,7 @@ class Spectrum(LineFinder):
         The accepted extensions  are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
 
         For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-        The default name is "LINELOG".
+        The default name is "LINESFRAME".
 
         The user can specify the ``parameters`` to be saved in the output file.
 
@@ -771,12 +767,12 @@ class Spectrum(LineFinder):
                        'id':         self.label}
 
         # Save the file
-        save_frame(fname, self.log, page, param_list, header, column_dtypes=column_dtypes,
+        save_frame(fname, self.frame, page, param_list, header, column_dtypes=column_dtypes,
                    safe_version=safe_version, **meta_params)
 
         return
 
-    def load_frame(self, fname, page='LINELOG'):
+    def load_frame(self, fname, page='LINESFRAME'):
 
         """
 
@@ -814,7 +810,7 @@ class Spectrum(LineFinder):
                 _logger.warning(f'The log has lines with different units')
 
             # Assign the log
-            self.log = log_df
+            self.frame = log_df
 
         else:
             _logger.info(f'Log file with 0 entries ({fname})')
@@ -824,7 +820,7 @@ class Spectrum(LineFinder):
     def update_redshift(self, redshift):
 
         # Check if it is a masked array
-        if np.ma.is_masked(self.wave):
+        if np.ma.isMaskedArray(self.wave):
             input_wave = self.wave.data
             input_flux = self.flux.data
             input_err = self.err_flux.data
@@ -910,7 +906,7 @@ class Cube:
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 inst_FWHM=np.nan, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
+                 inst_FWHM=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
         # Review the inputs
         check_inputs_arrays(input_wave, input_flux, input_err, self)
@@ -922,8 +918,7 @@ class Cube:
         self.flux = None
         self.err_flux = None
         self.log = None
-        self.inst_FWHM = inst_FWHM
-        self._masked_inputs = False
+        self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
         self.wcs = wcs
 
         # Treatments objects
@@ -965,7 +960,7 @@ class Cube:
         instrument or survey name.
 
         The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
-        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
+        user introduces ["nan", "negative"] the output spectrum will mask np.nan entries and negative fluxes.
 
         This method procures the instrument observations units, normalization and wcs but the user should introduce the
         LiMe.Spectrum arguments (such as the observation redshift).
@@ -1059,7 +1054,8 @@ class Cube:
         line_bg = Line(line, bands)
 
         # Get the band indexes
-        idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_bg.pixel_mask)
+        idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_mask_entry=line_bg.pixel_mask,
+                                          line=line_bg.label)
         signal_slice = self.flux[idcsEmis, :, :]
         signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
 
@@ -1087,7 +1083,6 @@ class Cube:
 
         else:
             raise LiMe_Error(f'Parameter {param} is not recognized please use: "flux", "SN_line" or "SN_cont"')
-
 
         # Percentiles vector for the target parameter
         param_array = np.nanpercentile(param_image, inver_percentiles)
@@ -1198,12 +1193,12 @@ class Cube:
         if units_wave is not None:
 
             # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
+            input_wave = self.wave.data if np.ma.isMaskedArray(self.wave) else self.wave
 
             output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
 
             # Reflect the new units
-            if np.ma.is_masked(self.wave):
+            if np.ma.isMaskedArray(self.wave):
                 self.wave = np.ma.masked_array(output_wave, self.wave.mask)
                 self.wave_rest = np.ma.masked_array(output_wave/(1+self.redshift), self.wave.mask)
             else:
@@ -1215,9 +1210,9 @@ class Cube:
         if units_flux is not None:
 
             # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.is_masked(self.wave) else self.wave
-            input_flux = self.flux.data if np.ma.is_masked(self.flux) else self.flux
-            input_err = self.err_flux.data if np.ma.is_masked(self.err_flux) else self.err_flux
+            input_wave = self.wave.data if np.ma.isMaskedArray(self.wave) else self.wave
+            input_flux = self.flux.data if np.ma.isMaskedArray(self.flux) else self.flux
+            input_err = self.err_flux.data if np.ma.isMaskedArray(self.err_flux) else self.err_flux
 
             # TODO this is slow
             flux_shape = input_flux.shape
@@ -1237,18 +1232,18 @@ class Cube:
                                              flux_array=input_err, dispersion_units=self.units_wave)
 
             # Reflect the new units
-            if np.ma.is_masked(self.flux):
+            if np.ma.isMaskedArray(self.flux):
                 self.flux = np.ma.masked_array(output_flux, self.flux.mask)
             else:
                 self.flux = output_flux
             if input_err is not None:
-                self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.is_masked(self.err_flux) else output_err
+                self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.isMaskedArray(self.err_flux) else output_err
             self.units_flux = units_flux
 
         # Switch the normalization
         if norm_flux is not None:
-            # TODO isMaskedArray checks individually?
-            mask_check = np.ma.is_masked(self.flux)
+
+            mask_check = np.ma.isMaskedArray(self.flux)
 
             # Remove old
             if mask_check:
@@ -1440,7 +1435,7 @@ class Sample(UserDict, OpenFits):
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
-        self.log = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
+        self.frame = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
         self._load_function = load_function
         self.load_params = kwargs
 
@@ -1449,7 +1444,7 @@ class Sample(UserDict, OpenFits):
         self.check = SampleCheck(self)
 
         # Check if there is not a log
-        if self.log is None:
+        if self.frame is None:
             _logger.warning(f'Sample was created with a null log')
 
         return
@@ -1527,7 +1522,7 @@ class Sample(UserDict, OpenFits):
 
             # Page and spec index
             file_spec = None if file_list is None else file_list[i]
-            page_name = page_list[i] if page_list is not None else 'LINELOG'
+            page_name = page_list[i] if page_list is not None else 'LINESFRAME'
 
             # Load the log and check the levels
             if log_list is not None:
@@ -1584,16 +1579,16 @@ class Sample(UserDict, OpenFits):
             if isinstance(id_key, pd.Index) or isinstance(id_key, pd.MultiIndex) or isinstance(id_key, pd.Series):
                 idcs = id_key
             elif isinstance(id_key, (np.ndarray, np.bool_)):
-                idcs = self.log.index[id_key]
+                idcs = self.frame.index[id_key]
             else:
-                idcs = self.log.index.get_level_values('id').isin([id_key])
+                idcs = self.frame.index.get_level_values('id').isin([id_key])
 
             # Not entry found
             if np.all(idcs is False):
                 raise KeyError(id_key)
 
             # Crop sample
-            output = Sample(self.log.loc[idcs], self.levels, self.load_function, self.source, self.file_address,
+            output = Sample(self.frame.loc[idcs], self.levels, self.load_function, self.source, self.file_address,
                             **self.load_params)
 
         return output
@@ -1607,17 +1602,17 @@ class Sample(UserDict, OpenFits):
 
             # Case only ID string
             if isinstance(input_index, str):
-                idcs = self.log.index.get_level_values('id').isin(np.atleast_1d(input_index))
+                idcs = self.frame.index.get_level_values('id').isin(np.atleast_1d(input_index))
 
                 # Not entry found
                 if np.all(idcs is False):
                     raise KeyError(input_index)
 
                 # Check for logs without lines
-                if 'line' not in self.log.index.names:
-                    obj_idcs = self.log.loc[idcs].index.unique()
+                if 'line' not in self.frame.index.names:
+                    obj_idcs = self.frame.loc[idcs].index.unique()
                 else:
-                    obj_idcs = self.log.loc[idcs].iloc[0].name
+                    obj_idcs = self.frame.loc[idcs].iloc[0].name
             else:
                 obj_idcs = input_index
 
@@ -1626,50 +1621,50 @@ class Sample(UserDict, OpenFits):
             #     raise LiMe_Error(f'Multiple observations match the input id: {obj_idcs}')
 
             # Load the LiMe object
-            output = self.load_function(self.log, obj_idcs, self.file_address, **self.load_params)
+            output = self.load_function(self.frame, obj_idcs, self.file_address, **self.load_params)
 
         return output
 
     def get_spectrum(self, idx):
 
         if isinstance(idx, pd.Series):
-            idx_true = self.log.loc[idx].index
+            idx_true = self.frame.loc[idx].index
 
             if idx_true.size > 1:
                 raise LiMe_Error(f'Input sample spectrum extraction has more than one existing entry')
 
-            idx_in = self.log.loc[idx_true].index.values[0]
+            idx_in = self.frame.loc[idx_true].index.values[0]
 
         else:
             idx_in = idx
 
-        return self.load_function(self.log, idx_in, self.file_address, **self.load_params)
+        return self.load_function(self.frame, idx_in, self.file_address, **self.load_params)
 
     @property
     def index(self):
-        return self.log.index
+        return self.frame.index
 
     @property
     def loc(self):
-        return self.log.loc
+        return self.frame.loc
 
     @property
     def ids(self):
-        return self.log.index.get_level_values('id')
+        return self.frame.index.get_level_values('id')
 
     @property
     def files(self):
-        return self.log.index.get_level_values('file')
+        return self.frame.index.get_level_values('file')
 
     @property
     def lines(self):
-        return self.log.index.get_level_values('line')
+        return self.frame.index.get_level_values('line')
 
     @property
     def size(self):
-        return self.log.index.size
+        return self.frame.index.size
 
-    def load_frame(self, dataframe, ext='LINELOG', sample_levels=['id', 'line']):
+    def load_frame(self, dataframe, ext='LINESFRAME', sample_levels=['id', 'line']):
 
         # Load the log file if it is a log file
         log_df = check_file_dataframe(dataframe, pd.DataFrame, ext=ext, sample_levels=sample_levels)
@@ -1698,32 +1693,32 @@ class Sample(UserDict, OpenFits):
             _logger.info(f'Log file with 0 entries ({dataframe})')
 
         # Assign the log
-        self.log = log_df
+        self.frame = log_df
 
         return
 
-    def save_frame(self, fname, ext='LINELOG', param_list='all', fits_header=None):
+    def save_frame(self, fname, ext='LINESFRAME', param_list='all', fits_header=None):
 
         # Save the file
-        save_frame(fname, self.log, ext, param_list, fits_header)
+        save_frame(fname, self.frame, ext, param_list, fits_header)
 
         return
 
     def extract_fluxes(self, flux_type='mixture', sample_level='line', column_names='line_flux', column_positions=1):
 
-        return extract_fluxes(self.log, flux_type, sample_level, column_names, column_positions)
+        return extract_fluxes(self.frame, flux_type, sample_level, column_names, column_positions)
 
     def normalize_fluxes(self, normalization_line, flux_entries=['line_flux', 'line_flux_err'], column_names=None,
                          column_positions=[1, 2]):
 
-        return normalize_fluxes(self.log, normalization_line, flux_entries, column_names, column_positions)
+        return normalize_fluxes(self.frame, normalization_line, flux_entries, column_names, column_positions)
 
     def _review_df_indexes(self):
 
         # Check there is a log
         check = False
 
-        if self.log is None:
+        if self.frame is None:
             _logger.info(f'Sample does not contain observations')
 
         # Check there is load function
@@ -1731,11 +1726,11 @@ class Sample(UserDict, OpenFits):
             _logger.info(f'The sample does not contain a load_function')
 
         # Check there is a 'file' index
-        elif 'id' not in self.log.index.names:
+        elif 'id' not in self.frame.index.names:
             _logger.info(f'The sample log does not contain an "id" index column the observation label')
 
         # Check there is a 'file' index
-        elif 'file' not in self.log.index.names:
+        elif 'file' not in self.frame.index.names:
             _logger.info(f'The sample log does not contain a "file" index column with the observation file')
 
         else:

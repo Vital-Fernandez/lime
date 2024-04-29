@@ -75,3 +75,5 @@ comments                   0               1                   0          0     
 wave_vac                   0               0                   0          1           0    <f8       $\lambda_{vac}$       wave
 transition                 0               0                   0          1           0    <U5  Transition-component        str
 rel_int                    0               0                   0          1           0    <f8           $Int_{rel}$       none
+units_wave                 0               0                   0          1           0   <U50         $units\,wave$       none
+units_flux                 0               0                   0          1           0   <U50         $units\,wave$       none
