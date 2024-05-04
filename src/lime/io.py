@@ -120,6 +120,21 @@ def hdu_to_log_df(file_path, page_name):
     return df_log
 
 
+def parse_lime_cfg(toml_cfg, fit_cfg_suffix='_line_fitting'):
+
+    # Convert the configuration entries from the string format if possible
+    if fit_cfg_suffix is not None:
+        for section, items in toml_cfg.items():
+            if section.endswith(fit_cfg_suffix):
+                for i_key, i_value in items.items():
+                    try:
+                        toml_cfg[section][i_key] = format_option_value(i_value, i_key, section)
+                    except:
+                        _logger.critical(f'Failure to convert entry: "{i_key} = {i_value}" at section [{section}] ')
+
+    return toml_cfg
+
+
 # Function to load SpecSyzer configuration file
 def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
@@ -158,14 +173,7 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
         raise LiMe_Error(f'The configuration file was not found at: {file_address}')
 
     # Convert the configuration entries from the string format if possible
-    if fit_cfg_suffix is not None:
-        for section, items in cfg_lime.items():
-            if section.endswith(fit_cfg_suffix):
-                for i_key, i_value in items.items():
-                    try:
-                        cfg_lime[section][i_key] = format_option_value(i_value, i_key, section)
-                    except:
-                        _logger.critical(f'Failure to convert entry: "{i_key} = {i_value}" at section [{section}] ')
+    cfg_lime = parse_lime_cfg(cfg_lime, fit_cfg_suffix)
 
     return cfg_lime
 
@@ -280,11 +288,16 @@ def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
     """
 
     # Check file is at path
-    log_path = Path(fname)
-    if not log_path.is_file():
-        raise LiMe_Error(f'No lines log found at {fname}\n')
+    if type(fname).__name__ != 'UploadedFile':
+        log_path = Path(fname)
+        if not log_path.is_file():
+            raise LiMe_Error(f'No lines log found at {fname}\n')
 
-    file_name, file_type = log_path.name, log_path.suffix
+        file_name, file_type = log_path.name, log_path.suffix
+
+    else:
+        file_name, file_type = fname, 'UploadedFile'
+
 
     try:
 
@@ -310,6 +323,10 @@ def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
         # Text file
         elif file_type == '.txt':
             log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0, comment='#')
+
+        # Uploaded file from streamlit
+        elif file_type == 'UploadedFile':
+            log = pd.read_csv(file_name, sep='\s+', header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
             log = pd.read_csv(log_path, sep=',', header=0, index_col=0, comment='#')

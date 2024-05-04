@@ -25,6 +25,22 @@ if mplcursors_check:
     popupProps['bbox']['alpha'] = 0.9
 
 
+def spectrum_figure_labels(units_wave, units_flux, norm_flux):
+
+    # Wavelength axis units
+    x_label = units_wave.to_string('latex')
+    x_label = f'Wavelength ({x_label})'
+
+    # Flux axis units
+    norm_flux = units_flux.scale if norm_flux is None else norm_flux
+    norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(1 / norm_flux))
+
+    y_label = f"Flux {units_flux.to_string('latex')}"
+    y_label = y_label.replace('$\mathrm{', '$\left(')
+    y_label = y_label.replace('}$', norm_label)
+
+    return x_label, y_label
+
 class Themer:
 
     def __init__(self, conf, style='default', library='matplotlib'):
@@ -61,18 +77,8 @@ class Themer:
         # Default wavelength and flux
         if fig_type == 'default':
 
-            # Wavelength axis units
-            x_label = units_wave.to_string('latex')
-            x_label = f'Wavelength ({x_label})'
-
-            # Flux axis units
-            norm_flux = units_flux.scale if norm_flux is None else norm_flux
-            norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(1/norm_flux))
-
-            y_label = f"Flux {units_flux.to_string('latex')}"
-            y_label = y_label.replace('$\mathrm{', '$\left(')
-            y_label = y_label.replace('}$', norm_label)
-
+            # Spectrum labels x-wavelegth, y-flux
+            x_label, y_label = spectrum_figure_labels(units_wave, units_flux, norm_flux)
             ax_cfg = {'xlabel': x_label, 'ylabel': y_label}
 
             # Update with the user configuration
@@ -1015,7 +1021,7 @@ class SpectrumFigures(Plotter):
             # Include the detection bands
             if detection_band is not None:
 
-                detec_obj = getattr(self._spec.infer, 'line_1d_pred')
+                detec_obj = getattr(self._spec.infer, detection_band)
 
                 if detec_obj.confidence is not None:
 
@@ -1037,7 +1043,6 @@ class SpectrumFigures(Plotter):
                             wave_nan[idcs], flux_nan[idcs] = wave_plot[idcs] / z_corr, flux_plot[idcs] * z_corr
 
                             in_ax.step(wave_nan, flux_nan, label=label, where='mid', color=cmap(i-1))
-
 
                     # Color bar
                     sm = cm.ScalarMappable(cmap=cmap, norm=norm)

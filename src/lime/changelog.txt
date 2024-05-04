@@ -1,0 +1,8 @@
+1.0.0 LiMe Release
+1.0.1 LiMe minor
+   - Created lime.io.parce_lime_cfg function to convert the .toml sections with lime suffix to the expected format to
+   be its own operation
+   - Created lime.plots.spectrum_labels to generate spectrum figure axis labels
+   - Delete "log" attribute from lime.Cube class
+   - Fix error normalize_fluxes was not cropping the lines frame for an input line list. Need to fix normalize flux error
+   - log now returns the dataframe

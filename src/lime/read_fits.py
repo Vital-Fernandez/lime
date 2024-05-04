@@ -29,7 +29,7 @@ SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'inst_F
                                    'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
                         'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
-                                 'units_flux': '1e-17*FLAM', 'pixel_mask': None, 'id_label': None},
+                                 'units_flux': '1e-17*FLAM', 'pixel_mask': 'nan', 'id_label': None},
 
                         'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None}}
@@ -172,6 +172,10 @@ def check_fits_location(fits_address, lime_object=None, source=None):
                     output = fits_folder, False
             else:
                 output = None, False
+
+        # Streamlit BytesIO input
+        elif type(fits_address).__name__ == 'UploadedFile':
+            output = fits_address, False
 
         # File address or url
         else:
@@ -568,7 +572,13 @@ class OpenFits:
         # Re-construct spectrum arrays # TODO add error
         wave_array = 10.0 ** data_list[0]['loglam']
         flux_array = data_list[0]['flux']
-        err_array = None
+        ivar_array = data_list[0]['ivar']
+
+        # Convert ivar = 0 to nan
+        ivar_array[ivar_array == 0] = np.nan
+
+        # Get standard deviation cube
+        err_array = np.sqrt(1 / ivar_array)
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['sdss']

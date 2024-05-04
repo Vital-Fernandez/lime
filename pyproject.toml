@@ -1,6 +1,6 @@
 [project]
 name = "lime-stable"
-version = "1.0.0"
+version = "1.0.1"
 readme = "README.rst"
 requires-python = ">=3.8"
 license = {file = "COPYING"}
@@ -34,4 +34,3 @@ pythonpath = ["src"]
 mpl-baseline-path = 'tests/baseline'
 mpl-results-path = 'tests/outputs'
 mpl-results-always = false
-#mpl-default-tolerance = 25 #2

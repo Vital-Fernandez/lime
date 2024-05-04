@@ -271,7 +271,7 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
 
     Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
     lists. These inputs must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
-    
+
     If the user provides a redshift interval (``z_intvl``) alongside the wavelength interval (``wave_intvl``) the output
     bands will be limited to the transitions which can be observed given the two parameters.
 
@@ -917,7 +917,6 @@ class Cube:
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.log = None
         self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
         self.wcs = wcs
 

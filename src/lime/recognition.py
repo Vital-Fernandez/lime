@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import logging
@@ -6,10 +7,10 @@ from pathlib import Path
 from scipy import signal
 from lmfit.models import PolynomialModel
 from inspect import signature
-from .io import LiMe_Error, check_file_dataframe
+from .io import LiMe_Error, check_file_dataframe, _PARENT_BANDS
 from .transitions import label_decomposition
-import astropy.units as au
-from timeit import default_timer as timer
+from . import _setup_cfg
+from .model import gaussian_model
 
 try:
     import joblib
@@ -134,6 +135,23 @@ def prop_func(data_arr, box_width):
     # self.mask[idcs_detect] = True
 
     return prop_arr
+
+
+def check_lisa(model1D, model2D):
+
+    if model1D is None:
+        coeffs1D = np.array(_setup_cfg['linear']['model1D_coeffs']), np.array(_setup_cfg['linear']['model1D_intercept'])
+    else:
+        model1D_job = joblib.load(model1D)
+        coeffs1D = np.squeeze(model1D_job.coef_), np.squeeze(model1D_job.intercept_)
+
+    if model2D is None:
+        coeffs2D = np.array(_setup_cfg['linear']['model2D_coeffs']), np.array(_setup_cfg['linear']['model2D_intercept'])
+    else:
+        model2D_job = joblib.load(model2D)
+        coeffs2D = np.squeeze(model2D_job.coef_), np.squeeze(model2D_job.intercept_)
+
+    return coeffs1D, coeffs2D
 
 
 class LineFinder:
@@ -367,6 +385,35 @@ class LineFinder:
         return matched_DF
 
 
+def compute_z_key(redshift, lines_lambda, wave_matrix, amp_arr, sigma_arr):
+
+    # Compute the observed line wavelengths
+    obs_lambda = lines_lambda * (1 + redshift)
+    obs_lambda = obs_lambda[(obs_lambda > wave_matrix[0, 0]) & (obs_lambda < wave_matrix[0, -1])]
+
+    if obs_lambda.size > 0:
+
+        # Compute indexes ion array
+        idcs_obs = np.searchsorted(wave_matrix[0, :], obs_lambda)
+
+        # Compute lambda arrays:
+        sigma_lines = sigma_arr[idcs_obs]
+        mu_lines = wave_matrix[0, :][idcs_obs]
+
+        # Compute the Gaussian bands
+        x_matrix = wave_matrix[:idcs_obs.size, :]
+        gauss_matrix = gaussian_model(x_matrix, amp_arr, mu_lines[:, None], sigma_lines[:, None])
+        gauss_arr = gauss_matrix.sum(axis=0)
+
+        # Set maximum to 1:
+        idcs_one = gauss_arr > 1
+        gauss_arr[idcs_one] = 1
+
+    else:
+        gauss_arr = None
+
+    return gauss_arr
+
 class FeatureClassifier:
 
     def __init__(self, data_array, box_width, model, n_pixels):
@@ -377,7 +424,7 @@ class FeatureClassifier:
         self.n_pixels = n_pixels
 
         # Recover the models linear coefficients:
-        w, b = np.squeeze(model.coef_), np.squeeze(model.intercept_)
+        w, b = model
 
         # Compute the prediction
         self.pred_matrix = np.tensordot(data_array, w, axes=([1], [0])) + b
@@ -439,16 +486,18 @@ class DetectionInference:
 
         return
 
-    def bands(self, box_width, approximation=None, scale_type='min-max', log_base=10000, model_1d_path=None,
+    def bands(self, box_width=None, approximation=None, scale_type='min-max', log_base=10000, model_1d_path=None,
               model_2d_path=None):
 
         # Assign default values
-        self.box_width, self.range_box = box_width, np.arange(box_width)
+        self.box_width = box_width if box_width is not None else _setup_cfg['linear']['box_width']
+        self.range_box = np.arange(self.box_width)
         approximation = FLUX_PIXEL_CONV if approximation is None else approximation
 
         # Load the models
-        model1D = joblib.load(model_1d_path)
-        model2D = joblib.load(model_2d_path)
+        # model1D = joblib.load(model_1d_path)
+        # model2D = joblib.load(model_2d_path)
+        model1D, model2D = check_lisa(model_1d_path, model_2d_path)
 
         # Reshape to the detection interval (n x box_size) matrix
         input_flux = enbox_spectrum(self._spec.flux, self.box_width, self.range_box)
@@ -508,6 +557,83 @@ class DetectionInference:
         self.line_2d_pred = FeatureClassifier(flux_array_2d, self.box_width, model_2d, n_pixels)
 
         return
+
+    def redshift(self, detection_bands=None, z_step_resolution=10000, z_max=10):
+
+        # Get spectra and its mask
+        wave_obs = self._spec.wave.data
+        flux_obs = self._spec.flux.data
+        mask = ~self._spec.flux.mask if np.ma.isMaskedArray(self._spec.flux) else np.ones(flux_obs.size)
+        flux_scaled = (flux_obs - np.nanmin(flux_obs)) / (np.nanmax(flux_obs) - np.nanmin(flux_obs))
+
+        # Compute the resolution params
+        deltalamb_arr = np.diff(wave_obs)
+        R_arr = wave_obs[1:] / deltalamb_arr
+        FWHM_arr = wave_obs[1:] / R_arr
+        sigma_arr = np.zeros(wave_obs.size)
+        sigma_arr[:-1] = FWHM_arr / (2 * np.sqrt(2 * np.log(2)))
+        sigma_arr[-1] = sigma_arr[-2]
+        sigma_arr = sigma_arr * 2
+
+        # Lines selection
+        ref_lines = ['H1_1216A', 'He2_1640A', 'O2_3726A', 'H1_4340A', 'H1_4861A', 'O3_4959A', 'O3_5007A',
+                     'H1_6563A', 'S3_9530A', 'He1_10830A']
+        theo_lambda = _PARENT_BANDS.loc[ref_lines].wavelength.to_numpy()
+
+        # Parameters for the brute analysis
+        z_arr = np.linspace(0, z_max, z_step_resolution)
+        wave_matrix = np.tile(wave_obs, (theo_lambda.size, 1))
+        F_sum = np.zeros(z_arr.size)
+
+        # Use the dectection bands if provided
+        detection_weight = np.zeros(wave_obs.size)
+        if detection_bands is not None:
+            detec_obj = getattr(self._spec.infer, detection_bands)
+            idcs = detec_obj(80)
+            detection_weight[idcs] = 1
+            mask = mask & idcs
+        else:
+            detection_weight = np.ones(wave_obs.size)
+            idcs = detection_weight.astype(bool)
+            mask = mask & idcs
+
+        for i, z_i in enumerate(z_arr):
+
+            # Generate the redshift key
+            gauss_arr = compute_z_key(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
+
+            # Compute flux cumulative sum
+            F_sum[i] = 0 if gauss_arr is None else np.sum(flux_obs[mask] * gauss_arr[mask])
+
+        z_max = z_arr[np.argmax(F_sum)]
+
+        # fig, ax = plt.subplots()
+        # ax.scatter(wave_obs[mask], flux_obs[mask])
+        # # ax.step(wave_obs[idcs], flux_obs[idcs], where='mid')
+        # plt.show()
+
+        # # Plot the addition:
+        # fig, ax = plt.subplots()
+        # ax.step(z_arr, F_sum, where='mid', color='tab:blue')
+        # ax.axvline(0.0475, color='red', linestyle='--', alpha=0.5)
+        # ax.axvline(z_max, color='blue', linestyle='--', alpha=0.5)
+        # plt.show()
+
+        # Plot keys at max:
+        # gauss_arr_max = compute_z_key(z_max, theo_lambda, wave_matrix, 1, sigma_arr)
+        # gauss_arr_true = compute_z_key(0.0475, theo_lambda, wave_matrix, 1, sigma_arr)
+        # F_sum_max = np.sum(flux_obs[mask] * gauss_arr_max[mask])
+        # F_sum_true = np.sum(flux_obs[mask] * gauss_arr_true[mask])
+        # fig, ax = plt.subplots()
+        # ax.step(wave_obs[mask], flux_scaled[mask], where='mid', color='tab:blue')
+        # ax.step(wave_obs[mask], gauss_arr_max[mask], where='mid', color='tab:orange')
+        # plt.show()
+
+        # fig, ax = plt.subplots()
+        # ax.plot(self._spec.wave, sigma_arr)
+        # plt.show()
+
+        return z_max
 
 
 # Line finder default parameters
