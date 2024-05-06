@@ -77,7 +77,7 @@ class Themer:
         # Default wavelength and flux
         if fig_type == 'default':
 
-            # Spectrum labels x-wavelegth, y-flux
+            # Spectrum labels x-wavelegth, y-flux # TODO without units
             x_label, y_label = spectrum_figure_labels(units_wave, units_flux, norm_flux)
             ax_cfg = {'xlabel': x_label, 'ylabel': y_label}
 
