@@ -8,3 +8,5 @@
    - log now returns the dataframe
 1.0.2 LiMe Minor
    - SDSS lime.Spectrum.from_file no reads redshift from fits header
+1.0.3 LiMe Minor
+    - Restored deleted config.toml
