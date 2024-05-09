@@ -6,3 +6,5 @@
    - Delete "log" attribute from lime.Cube class
    - Fix error normalize_fluxes was not cropping the lines frame for an input line list. Need to fix normalize flux error
    - log now returns the dataframe
+1.0.2 LiMe Minor
+   - SDSS lime.Spectrum.from_file no reads redshift from fits header

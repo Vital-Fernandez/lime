@@ -542,7 +542,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=0, pixel_mask=None):
+    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=(0), pixel_mask=None):
 
         """
 
@@ -569,10 +569,17 @@ class OpenFits:
         # Get data table and header dict lists
         data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
 
-        # Re-construct spectrum arrays # TODO add error
+        # Re-construct spectrum arrays
         wave_array = 10.0 ** data_list[0]['loglam']
         flux_array = data_list[0]['flux']
         ivar_array = data_list[0]['ivar']
+
+        # Recover the redshift
+        try:
+            redshift = data_list[1]['Z'][0]
+        except:
+            redshift = None
+            _logger.warning(f'The SDSS redshift could not be read. ZWARNING = {data_list[1]["ZWARNING"]}')
 
         # Convert ivar = 0 to nan
         ivar_array[ivar_array == 0] = np.nan
@@ -582,6 +589,7 @@ class OpenFits:
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['sdss']
+        params_dict['redshift'] = redshift
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
