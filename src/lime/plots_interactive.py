@@ -337,7 +337,7 @@ class BandsInspection:
 
                 # Mask sweep slider configuration
                 self._inter_mask = np.median(np.diff(self._spec.wave_rest))
-                mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -10, 10, 0, valstep=1)
+                mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -10, 10, valinit=0.0, valstep=1)
                 mask_slider.on_changed(self._on_mask_slider_MI)
 
                 # Redshift sweep slider configuration
@@ -358,7 +358,7 @@ class BandsInspection:
 
                     self._z_orig = self._spec.redshift
                     self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
-                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -10, 10, 0, valstep=1)
+                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -10, 10, valinit=0, valstep=1)
                     z_slider.on_changed(self._on_z_slider_MI)
 
                 # Connecting the figure to the interactive widgets

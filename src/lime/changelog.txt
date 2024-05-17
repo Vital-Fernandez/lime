@@ -1,7 +1,7 @@
 1.0.0 LiMe Release
 1.0.1 LiMe minor
    - Created lime.io.parce_lime_cfg function to convert the .toml sections with lime suffix to the expected format to
-   be its own operation
+     be its own operation
    - Created lime.plots.spectrum_labels to generate spectrum figure axis labels
    - Delete "log" attribute from lime.Cube class
    - Fix error normalize_fluxes was not cropping the lines frame for an input line list. Need to fix normalize flux error
@@ -9,4 +9,9 @@
 1.0.2 LiMe Minor
    - SDSS lime.Spectrum.from_file no reads redshift from fits header
 1.0.3 LiMe Minor
-    - Restored deleted config.toml
+   - Restored deleted config.toml
+1.0.4 LiMe Minor
+   - Corrected MANGA flux error measurement
+   - New tests for comparison between standard and lime loading of SDSS and MANGA observations
+   - Change cm.get_cmap to plt.get_cmap due to matplotlib depreciation
+   - Bug fix for multi-index flux extraction function due to pandas depreciation

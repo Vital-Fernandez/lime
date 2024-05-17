@@ -624,16 +624,13 @@ class OpenFits:
         # Re-construct spectrum arrays
         wave_array = data_list[0]
         flux_cube = data_list[1]
-        ivar_cube = data_list[1]
+        ivar_cube = data_list[2]
 
         # Convert ivar = 0 to nan
         ivar_cube[ivar_cube == 0] = np.nan
 
         # Get standard deviation cube
         err_cube = np.sqrt(1 / ivar_cube)
-
-        # Pixel mask
-        pixel_mask_cube = None
 
         # WCS from hearder
         wcs = WCS(header_list[0])

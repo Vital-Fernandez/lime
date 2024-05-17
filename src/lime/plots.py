@@ -443,7 +443,7 @@ def spatial_mask_plot(ax, masks_dict, mask_color, mask_alpha, units_flux, mask_l
     # Container for the legends
     legend_list = [None] * len(masks_dict)
 
-    cmap_contours = cm.get_cmap(mask_color, len(masks_dict))
+    cmap_contours = plt.get_cmap(mask_color, len(masks_dict))
 
     for idx_mask, items in enumerate(masks_dict.items()):
 
@@ -526,7 +526,7 @@ def _profile_plot(axis, x, y, label, idx_line=0, n_comps=1, observations_list='y
 
         # Component
         else:
-            cmap = cm.get_cmap(theme.colors['comps_map'])
+            cmap = plt.get_cmap(theme.colors['comps_map'])
             width_i, style, color = theme.colors['comp_width'], ':', cmap(idx_line/n_comps)
 
     # Case where the line has an error
@@ -550,7 +550,7 @@ def color_selector(label, observations, idx_line, n_comps):
 
         # Component
         else:
-            cmap = cm.get_cmap(theme.colors['comps_map'])
+            cmap = plt.get_cmap(theme.colors['comps_map'])
             width_i, style, color = theme.colors['comp_width'], ':', cmap(idx_line/n_comps)
 
     # Case where the line has an error
@@ -1029,7 +1029,7 @@ class SpectrumFigures(Plotter):
                     bounds = np.array([0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
 
                     # Adjust color map to match lower detection limit to fg color
-                    cmap = cm.get_cmap(theme.colors['mask_map'])
+                    cmap = plt.get_cmap(theme.colors['mask_map'])
                     cmaplist = [cmap(i) for i in range(cmap.N)]
                     cmaplist[0] = theme.colors['fg']
                     cmap = colors.LinearSegmentedColormap.from_list('mcm', cmaplist, bounds.size-1)

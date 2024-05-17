@@ -240,7 +240,7 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
             else:  # Rest cases
                 idcs_slice = log.index.get_level_values(sample_levels[-1]).isin([numer, denom])
                 grouper = log.index.droplevel('line')
-                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).array
+                idcs_slice = pd.Series(idcs_slice).groupby(grouper).transform('sum').ge(2).to_numpy()
                 df_slice = log.loc[idcs_slice]
 
             # Get fluxes
