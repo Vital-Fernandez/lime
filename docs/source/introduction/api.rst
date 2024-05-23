@@ -3,22 +3,34 @@
 API
 ===
 
-Most of :math:`\textsc{LiMe}` functions can be organized in two categories. In the first one we have the ``Spectrum``,
-``Cube`` and ``Sample`` classes. These functions recreate astronomical observations:
+:math:`\textsc{LiMe}` features a composite software design, utilizing instances of other classes to implement the target
+functionality. This approach is akin to that of IRAF: Functions are organized into multi-level packages, which users
+access to perform the corresponding task. The diagram below outlines this workflow:
 
-.. image:: ../../../examples/images/Core_objects.png
+.. image:: ../../../examples/images/LiMe_structure.png
     :align: center
 
-The second set of functions belong to the astronomical objects mentioned above. For example, the ``.fit``, ``.plot`` or
-``.check`` functions allow us to measure, plot and interact with the data:
+At the highest level, :math:`\textsc{LiMe}` provides of observational classes: spectrum, cube, and sample. The first two are essentially
+2D and 3D data containers, respectively. The third class functions as a dictionary-like container for multiple spectrum
+or cube objects. Moreover, as illustrated in the figure above, various tools can be invoked via the :math:`\textsc{LiMe}`
+import for tasks, such as loading and saving data. Many of these functions are also within the observations.
 
-.. image:: ../../../examples/images/Auxiliary_diagram.png
-    :align: center
+At an intermediate level, each observational class includes the *.fit*, *.plot*, and *.check* objects.
+The first provides functions to launch the measurements from the observation data. The second organizes functions to plot
+the observations and/or measurements, while the \emph{.check} object facilitates interactive plots, allowing users to
+select or adjust data through mouse clicks or widgets. In these functions, users must specify an output file to store
+these user inputs.
 
-Finally, there are additional utility functions. Some of these tools belong to the astronomical objects or they can be
-imported directly from :math:`\textsc{LiMe}` or both (as in the case of ``.load_log``/``.save_log``)
+Finally, at the lowest level, we find the functions that execute the measurements or plots. Beyond the aforementioned
+functionality, the main distinction between these commands lies in the extent of the data they handle. For instance,
+the `Spectrum.fit.bands <https://lime-stable.readthedocs.io/en/latest/introduction/api.html#lime.workflow.SpecTreatment.bands>`_
+and `Spectrum.fit.frame <https://lime-stable.readthedocs.io/en/latest/introduction/api.html#lime.workflow.SpecTreatment.frame>`_
+commands fit a single line and a list of lines in a spectrum, respectively. Conversely, the
+`Cube.fit.spatial_mask <https://lime-stable.readthedocs.io/en/latest/introduction/api.html#lime.workflow.CubeTreatment.spatial_mask>`_
+command fits a list of lines within a spatial region of an IFS cube.
 
-In the following sections we describe these functions and their attributes.
+The next sections detail the functions attributes and their outputs:
+
 
 Inputs/outputs
 --------------

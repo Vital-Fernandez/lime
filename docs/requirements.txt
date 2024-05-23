@@ -8,6 +8,7 @@ nbsphinx~=0.9
 numpy~=1.24
 openpyxl~=3.1
 pandas~=2.0
+ipympl~=0.9
 PyLaTeX~=1.4
 pytest~=7.4
 pytest-cov~=4.1
