@@ -9,6 +9,11 @@ zErr_array = [7.389e-5, 0.000129, 0.0001403]
 norm_flux = 1e-17
 
 [default_line_fitting]
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [3, 2, 1.5]
+
+line_detection.sigma_threshold = 3
+
 O2_3726A_m = 'O2_3726A+O2_3729A'
 H1_3889A_m = "H1_3889A+He1_3889A"
 Ar4_4711A_m = "Ar4_4711A+He1_4713A"

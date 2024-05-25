@@ -20,8 +20,8 @@ O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
 [MASK_0_line_fitting]
 bands = "../sample_data/SHOC579_MASK0_bands.txt"
 
-continuum_fit.degree_list = [3, 6, 6]
-continuum_fit.emis_threshold = [5, 3, 2]
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [5, 3, 2]
 
 O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
 H1_4861A_b = "H1_4861A+H1_4861A_k-1"
@@ -50,8 +50,8 @@ H1_9548A_sigma = "min:1.0,max:2.0"
 [MASK_1_line_fitting]
 bands = "../sample_data/SHOC579_MASK1_bands.txt"
 
-continuum_fit.degree_list = [3, 6, 6]
-continuum_fit.emis_threshold = [5, 3, 2]
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [5, 3, 2]
 
 O2_3726A_b = "O2_3726A+O2_3729A"
 H1_6563A_b = "H1_6563A+N2_6584A+N2_6548A"
@@ -70,6 +70,6 @@ H1_9548A_sigma = "min:1.0,max:2.0"
 
 [MASK_2_line_fitting]
 bands = "../sample_data/SHOC579_MASK2_bands.txt"
-continuum_fit.degree_list = [3, 6, 6]
-continuum_fit.emis_threshold = [5, 3, 2]
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [5, 3, 2]
 

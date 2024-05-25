@@ -11,8 +11,8 @@ Ar4_4711A_m = "Ar4_4711A+He1_4713A"
 [MASK_0_line_fitting]
 bands = "./baseline/manga_line_bands.txt"
 
-continuum_fit.degree_list = [3, 6, 6]
-continuum_fit.emis_threshold = [5, 3, 2]
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [5, 3, 2]
 line_detection.emission_type = true
 
 O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"

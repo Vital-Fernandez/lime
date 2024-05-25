@@ -440,7 +440,7 @@ class SpecTreatment(LineFitting):
 
             # Line detection if requested
             if line_detection:
-                cont_fit_conf = input_conf.get('continuum_fit', {})
+                cont_fit_conf = input_conf.get('continuum', {})
                 self._spec.fit.continuum(**cont_fit_conf)
 
                 detect_conf = input_conf.get('line_detection', {})
