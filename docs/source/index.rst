@@ -11,7 +11,7 @@ and storing the results. The output measurements are focused on the gas chemical
 
 .. raw:: html
 
-   <iframe width="560" height="315" src="https://youtu.be/k733YS84cUg?si=Y-g7epSrFRYBFWo7" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/k733YS84cUg" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 
 These are some of the features currently available:
