@@ -7,22 +7,23 @@ LiMe: A Line Measuring library
 
 This library provides a set of tools to fit lines in astronomical spectra. Its design aims for a user-friendly workflow
 for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
-and storing the results. The output measurements are focused on the gas chemical and kinematic analysis.
+and storing the results. The output measurements are focused on the gas chemical and kinematic analysis. You can read
+
+Check the scientific publication at `the arxiv <https://arxiv.org/abs/2405.15072>`_ and the video introduction:
 
 .. raw:: html
 
    <iframe width="560" height="315" src="https://www.youtube.com/embed/k733YS84cUg" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
-
 These are some of the features currently available:
 
-* Non-profile and Gaussian profile emission and absorption line measurements.
+* Integrated and profile-dependent emission and absorption line flux measurements.
 * The user can include the pixel error spectrum in the calculation.
-* The Multi-Gaussian profile parameters can be constrained by the user during the fitting.
+* The Multi-Component profile parameters can be constrained by the user during the fitting.
 * Tools to confirm the presence of lines.
-* Static and interactive plots for the visual appraisal of inputs and outputs
+* Interactive plots for the visual appraisal of inputs and outputs
 * Line labels adhere to the `PyNeb <http://research.iac.es/proyecto/PyNeb/>`_ format.
-* The measurements can be saved in several file types, including multi-page *.fits*, *.asdf* and *.xlsx* files
+* The measurements can be saved in several file types, including .txt, .pdfs, multi-page *.fits*, *.asdf* and *.xlsx* files.
 
 .. admonition:: Where to find what you need
    :class: hint
