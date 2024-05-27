@@ -9,6 +9,11 @@ This library provides a set of tools to fit lines in astronomical spectra. Its d
 for both single lines and large data sets. The library provides tools for masking, detecting, profile fitting
 and storing the results. The output measurements are focused on the gas chemical and kinematic analysis.
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://youtu.be/k733YS84cUg?si=Y-g7epSrFRYBFWo7" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+
 These are some of the features currently available:
 
 * Non-profile and Gaussian profile emission and absorption line measurements.

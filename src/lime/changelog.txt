@@ -16,5 +16,5 @@
    - Change cm.get_cmap to plt.get_cmap due to matplotlib depreciation
    - Bug fix for multi-index flux extraction function due to pandas depreciation
 1.0.5 LiMe Minor
-   - Change "continuum_fit" keyword for toml keyword for continuum fitting configuration to "continuum" to match function
+   - Change "continuum_fit" keyword for toml keyword in continuum fitting configuration to "continuum" to match function
      name
