@@ -1203,7 +1203,7 @@ class Cube:
             else:
                 self.wave = output_wave
                 self.wave_rest = output_wave/(1+self.redshift)
-            self.units_wave = units_wave
+            self.units_wave = au.Unit(units_wave)
 
         # Flux axis conversion
         if units_flux is not None:
@@ -1237,7 +1237,7 @@ class Cube:
                 self.flux = output_flux
             if input_err is not None:
                 self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.isMaskedArray(self.err_flux) else output_err
-            self.units_flux = units_flux
+            self.units_flux = au.Unit(units_flux)
 
         # Switch the normalization
         if norm_flux is not None:

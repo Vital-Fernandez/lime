@@ -41,6 +41,7 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux):
 
     return x_label, y_label
 
+
 class Themer:
 
     def __init__(self, conf, style='default', library='matplotlib'):
@@ -312,7 +313,13 @@ def _auto_flux_scale(axis, y, y_scale):
             else:
                 y_scale = 'linear'
 
+            # Add note on the scale:
+
     axis.set_yscale(y_scale)
+
+    if y_scale != 'linear':
+        axis.text(0.12, 0.8, f'${y_scale}$', fontsize=theme.colors['textsize_notes'], ha='center', va='center',
+                  transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
 
     return
 

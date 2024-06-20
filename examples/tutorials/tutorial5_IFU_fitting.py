@@ -22,6 +22,8 @@ shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
 spaxel = shoc579.get_spectrum(38, 35)
 spaxel.plot.spectrum(log_scale=True)
 
+spaxel.fit.frame(bands_file_0, cfg_file, id_conf_prefix='MASK_0', plot_fit=False)
+
 # Load the spaxels mask coordinates
 masks_dict = lime.load_spatial_mask(spatial_mask_file, return_coords=True)
 for i, coords in enumerate(masks_dict['MASK_0']):

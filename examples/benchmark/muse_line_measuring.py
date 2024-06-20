@@ -4,6 +4,8 @@ from astropy.wcs import WCS
 import numpy as np
 import lime
 
+lime.theme.set_style('dark')
+
 
 def read_muse_cube(file_address):
 
