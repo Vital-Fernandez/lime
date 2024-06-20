@@ -1,6 +1,6 @@
 [project]
 name = "lime-stable"
-version = "1.0.5"
+version = "1.0.6"
 readme = "README.rst"
 requires-python = ">=3.8"
 license = {file = "COPYING"}

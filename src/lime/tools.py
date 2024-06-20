@@ -504,10 +504,9 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
     masks_array = np.atleast_2d(masks_array)
 
     if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
-        warn_message = ('below', wavelength_array[:, 0] if np.any(masks_array[:, 0] < wavelength_array[0]) else
-                        'above', masks_array[:, 5])
-        _logger.warning(f'Bands for {line} are {warn_message[0]} the wavelength range {warn_message[1]}.')
-
+        _logger.warning(f'The {line} bands do not match the spectrum wavelength range (observed):')
+        _logger.warning(f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
+        _logger.warning(f'-- The {line} bands are: {masks_array} (rest frame * (1 + z))')
 
     # Check if it is a masked array
     if np.ma.isMaskedArray(wavelength_array):
@@ -531,7 +530,7 @@ def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_e
     # Find indeces for six points in spectrum
     idcsW = np.searchsorted(wave_arr, masks_array)
 
-    # Emission region
+    # Emission region # TODO add a try here to locate the error
     idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
     
     # Return left and right continua merged in one array

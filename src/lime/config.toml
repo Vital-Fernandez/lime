@@ -1,6 +1,6 @@
 [metadata]
 name = 'lime-stable'
-version = '1.0.5'
+version = '1.0.6'
 
 [colors] #Default theme
 default.bg = '#FFFFFF'
@@ -27,6 +27,7 @@ default.comp_width = '0.75'
 default.err_width = '2'
 default.cont_width = '0.5'
 default.spectrum_width = '0.75'
+default.textsize_notes = 4
 
 #Dark theme
 dark.bg = "#2B2B2B"
@@ -53,6 +54,7 @@ dark.comp_width = '1.5'
 dark.err_width = '3'
 dark.cont_width = '0.5'
 dark.spectrum_width = '0.75'
+dark.textsize_notes = 4
 
 [matplotlib]
 default."figure.dpi" = 200

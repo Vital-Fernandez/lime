@@ -5,10 +5,12 @@ import pytest
 from matplotlib import pyplot as plt
 from lime.io import _LOG_EXPORT_DICT
 from os import remove
+import pandas as pd
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / 'outputs'
+spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
 file_address = baseline_folder/'manga_spaxel.txt'
 conf_file_address = baseline_folder/'manga.toml'
 bands_file_address = baseline_folder/f'manga_line_bands.txt'
@@ -245,7 +247,7 @@ class TestSpectrumClass:
         measurement_tolerance_test(spec, log_orig, log_test)
 
         return
-
+    #
     def test_extra_pages_xlsx(self):
 
         file_xlsx = outputs_folder / 'test_lines_log_multi_page.xlsx'
@@ -308,5 +310,30 @@ class TestSpectrumClass:
         spec0.save_frame(new_log_spectrum)
 
         assert new_log_spectrum.is_file()
+
+        return
+
+    def test_line_dectection_implicit_explicit_params(self, file_name='sdss_dr18_0358-51818-0504.fits'):
+
+        SHOC579_a = lime.Spectrum.from_file(spectra_folder/file_name, instrument='sdss')
+
+        assert np.isclose(SHOC579_a.redshift, 0.047232304)
+
+        # Measure lines explicit
+        cfg_file, bands_file = baseline_folder/'sample_cfg.toml', baseline_folder/'SHOC579_bands.txt'
+        sample_cfg, shoc549_df = lime.load_cfg(cfg_file),  lime.load_frame(bands_file)
+        SHOC579_a.fit.frame(shoc549_df, sample_cfg, id_conf_prefix='SHOC579', line_detection=True)
+        df_a = SHOC579_a.frame.copy()
+
+        # Clear measurements
+        SHOC579_a.frame = SHOC579_a.frame[0:0]
+
+        # Measure lines implicit
+        SHOC579_a.fit.frame(bands_file, cfg_file, id_conf_prefix='SHOC579', line_detection=True)
+        df_b = SHOC579_a.frame.copy()
+
+        assert np.all(df_a.index == df_b.index)
+        assert np.all(np.isclose(df_a.intg_flux, df_b.intg_flux, rtol=2*df_b.intg_flux_err))
+        assert np.all(np.isclose(df_a.profile_flux, df_b.profile_flux, rtol=2*df_b.profile_flux_err))
 
         return

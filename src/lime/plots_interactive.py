@@ -1148,6 +1148,8 @@ class CubeInspection:
         self.fg_levels = None
         self.hdul_linelog = None
         self.ext_log = None
+        self.spaxel_button = None
+        self.add_remove_button = None
 
         # Mask correction attributes
         self.mask_file = None
@@ -1173,7 +1175,8 @@ class CubeInspection:
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
-             lines_file=None, ext_frame_suffix='_LINELOG', wcs=None, maximize=False):
+             lines_file=None, ext_frame_suffix='_LINELOG', wcs=None, spaxel_selection_button=1, add_remove_button=3,
+             maximize=False):
 
         """
 
@@ -1196,6 +1199,12 @@ class CubeInspection:
 
         If the user has installed the library `mplcursors <https://mplcursors.readthedocs.io/en/stable/>`_, a left-click
         on a fitted profile will pop-up properties of the fitting, right-click to delete the annotation.
+
+        By default the left mouse button selects the displayed spaxel (if you use the zoom tool the first click
+        will switch the spaxel). The right mouse button will add/remove pixels from the current mask. You can switch the
+        mouse buttons for these operations using the Matplotlib classification: LEFT = 1, MIDDLE = 2, RIGHT = 3, BACK = 8
+        and FORWARD = 9
+
 
         :param line: Line label for the spatial map background image.
         :type line: str
@@ -1262,13 +1271,22 @@ class CubeInspection:
         :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
         :type wcs: astropy WCS, optional
 
+        :param spaxel_selection_button: Mouse button for switching displayed spaxel. The default value is 1 (left button).
+        :type spaxel_selection_button: int, optional
+
+        :param add_remove_button: Mouse button to add/remove spaxels from the current mask. The default value is 2 (right button).
+        :type add_remove_button: int, optional
+
         :param maximize: Maximise plot window. The default value is False.
         :type maximize:  bool, optional
+
 
         """
 
         self.ext_log = ext_frame_suffix
         self.mask_file = masks_file
+        self.spaxel_button = spaxel_selection_button
+        self.add_remove_button = add_remove_button
 
         # Prepare the background image data
         line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, bands,
@@ -1435,7 +1453,7 @@ class CubeInspection:
             # Save axes zoom
             self.save_zoom()
 
-            if event.button == new_voxel_button:
+            if event.button == self.spaxel_button:
 
                 # Save clicked coordinates for next plot
                 self.key_coords = np.rint(event.ydata).astype(int), np.rint(event.xdata).astype(int)
@@ -1450,7 +1468,7 @@ class CubeInspection:
                 self._fig.canvas.draw()
 
             # if event.dblclick:
-            if event.button == 2:
+            if event.button == self.add_remove_button:
                 if len(self.masks_dict) > 0:
 
                     # Save clicked coordinates for next plot

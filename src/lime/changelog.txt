@@ -18,3 +18,10 @@
 1.0.5 LiMe Minor
    - Change "continuum_fit" keyword for toml keyword in continuum fitting configuration to "continuum" to match function
      name
+1.0.6 LiMe Minor
+   - Fix error in unit conversion of Cubes
+   - Clearer messages for bands not matching the spectrum wavelength range
+   - Added test for line fitting with line detection using implicit and explicit configuration and bands declaration
+   - Plots using the automatic scale now show the scale as in figure text.
+
+
