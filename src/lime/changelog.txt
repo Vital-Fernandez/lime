@@ -23,5 +23,6 @@
    - Clearer messages for bands not matching the spectrum wavelength range
    - Added test for line fitting with line detection using implicit and explicit configuration and bands declaration
    - Plots using the automatic scale now show the scale as in figure text.
+   - AAdded own stringBool from distiutils because it is being discontinued in python 3.12
 
 
