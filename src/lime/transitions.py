@@ -2,28 +2,9 @@ import logging
 
 import numpy as np
 import pandas as pd
-from numpy import array, abs, all, diff, char, searchsorted, unique, empty, arange, zeros
 from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
 from .tools import pd_get, au
-
-# UNITS_LATEX_DICT = {'A': r'\AA',
-#                     'um': r'\mu\!m',
-#                     'nm': 'nm',
-#                     'Hz': 'Hz',
-#                     'cm': 'cm',
-#                     'mm': 'mm',
-#                     'Flam': r'erg\,cm^{-2}s^{-1}\AA^{-1}',
-#                     'Fnu': r'erg\,cm^{-2}s^{-1}\Hz^{-1}',
-#                     'Jy': 'Jy',
-#                     'mJy': 'mJy',
-#                     'nJy': 'nJy'}
-#
-# # TODO need a new mechanic to get the units
-# DISPERSION_UNITS = ('A', 'um', 'nm', 'Hz', 'cm', 'mm')
-
-# FLUX_DENSITY_UNITS = ('Flam', 'Fnu', 'Jy', 'mJy', 'nJy')
-
 
 _DEFAULT_PROFILE = 'g-emi'
 
@@ -225,10 +206,10 @@ def check_line_in_log(input_label, log=None, tol=1):
             else:
                 ion_array, ref_waves = zip(*log.index.str.split('_').to_numpy())
                 _wave0, units_wave = check_units_from_wave(ref_waves[0])
-                ref_waves = char.strip(ref_waves, units_wave).astype(float)
+                ref_waves = np.char.strip(ref_waves, units_wave).astype(float)
 
             # Check if table rows are not sorted
-            if not all(diff(ref_waves) >= 0): # TODO we might need to use something else than searchsorted
+            if not all(np.diff(ref_waves) >= 0): # TODO we might need to use something else than searchsorted
                 _logger.warning(f'The lines log rows are not sorted from lower to higher wavelengths. This can cause '
                                 f'issues to identify the lines using the transition wavelength. Try to use the string '
                                 f'line label')
@@ -263,14 +244,14 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
 
     # Reshape to 1d array
     else:
-        particle = array(particle, ndmin=1)
-        wave = array(wave, ndmin=1)
-        units_wave = array(units_wave, ndmin=1)
-        kinem = array(kinem, ndmin=1)
-        transition_comp = array(transition_comp, ndmin=1)
+        particle = np.array(particle, ndmin=1)
+        wave = np.array(wave, ndmin=1)
+        units_wave = np.array(units_wave, ndmin=1)
+        kinem = np.array(kinem, ndmin=1)
+        transition_comp = np.array(transition_comp, ndmin=1)
 
     n_items = wave.size
-    latex_array = empty(n_items).astype('object')
+    latex_array = np.empty(n_items).astype('object')
 
     # Significant figures
     if decimals is None:
@@ -278,7 +259,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
     else:
         wave = np.round(wave, decimals)
 
-    for i in arange(n_items):
+    for i in np.arange(n_items):
 
         # Particle label
         part_label = particle_notation(particle[i], transition_comp[i])
@@ -305,9 +286,9 @@ def label_composition(line_list, ref_df=None, default_profile=None):
     # Empty containers for the label componentes
     n_comps = len(line_list)
     particle = [None] * n_comps #empty(n_comps).astype(str)
-    wavelength = empty(n_comps)
+    wavelength = np.empty(n_comps)
     units_wave = [None] * n_comps
-    kinem = zeros(n_comps, dtype=int)
+    kinem = np.zeros(n_comps, dtype=int)
     profile_comp = [None] * n_comps
     transition_comp = [None] * n_comps
 
@@ -477,22 +458,6 @@ def label_mask_assigning(line_label, input_band, blend_check, merged_check, core
         else:
             mask = None
 
-        # # Query for the input label # TODO put a try with .at and the other in the except
-        # if line_label in input_band.index:
-        #     mask = input_band.loc[line_label, 'w1':'w6'].to_numpy().astype(float)
-        #
-        # # Remove blended/merged suffix to check
-        # elif (blend_check or merged_check) and (line_label[:-2] in input_band.index):
-        #     mask = input_band.loc[line_label[:-2], 'w1':'w6'].to_numpy().astype(float)
-        #
-        # # Case where we introduce a line with a different profile (H1_4861A_l)
-        # elif core_comp in input_band.index:
-        #     mask = input_band.loc[core_comp, 'w1':'w6'].to_numpy().astype(float)
-        #
-        # # Could not find the mask
-        # else:
-        #     mask = None
-
     # No band
     elif input_band is None:
         mask = None
@@ -502,6 +467,25 @@ def label_mask_assigning(line_label, input_band, blend_check, merged_check, core
         mask = np.atleast_1d(input_band)
 
     return mask
+
+
+def format_line_mask_option(entry_value, wave_array):
+
+    # Check if several entries
+    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
+
+    # Check if interval or single pixel mask
+    for i, element in enumerate(formatted_value):
+        if '-' in element:
+            formatted_value[i] = element.split('-')
+        else:
+            element = float(element)
+            pix_width = (np.diff(wave_array).mean())/2
+            formatted_value[i] = [element-pix_width, element+pix_width]
+
+    formatted_value = np.array(formatted_value).astype(float)
+
+    return formatted_value
 
 
 class Particle:
@@ -741,7 +725,7 @@ class Line:
 
             # Check if there are repeated elements
             if len(self.list_comps) > 1:
-                uniq, count = unique(self.list_comps, return_counts=True)
+                uniq, count = np.unique(self.list_comps, return_counts=True)
                 if any(count > 1):
                     _logger.warning(f'There are repeated entries in the line label: {self.label} = {self.list_comps}')
 
@@ -766,7 +750,7 @@ class Line:
                 latex_list = list(bands_df.loc[self.list_comps, 'latex_label'].to_numpy())
             else:
                 latex_list = list(latex_from_label(self.group_label.split('+')))
-            self.latex_label = array('+'.join(latex_list), ndmin=1)
+            self.latex_label = np.array('+'.join(latex_list), ndmin=1)
 
         # Blended and single
         else:
@@ -785,3 +769,70 @@ class Line:
     def __repr__(self):
 
         return self.label
+
+    def index_bands(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
+
+        if self.mask is None:
+            raise KeyError(f'The line {self.label} does not have bands. Please select another line or update the database.')
+
+        # Make sure it is a matrix
+        masks_array = np.atleast_2d(self.mask) * (1 + redshift)
+
+        if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
+            _logger.warning(f'The {self.label} bands do not match the spectrum wavelength range (observed):')
+            _logger.warning(
+                f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
+            _logger.warning(f'-- The {self.label} bands are: {masks_array} (rest frame * (1 + z))')
+
+        # Check if it is a masked array
+        if np.ma.isMaskedArray(wavelength_array):
+            wave_arr = wavelength_array.data
+        else:
+            wave_arr = wavelength_array
+
+        # Remove masked pixels from this function wavelength array
+        if self.pixel_mask != 'no':
+
+            # Convert cfg mask string to limits
+            line_mask_limits = format_line_mask_option(self.pixel_mask, wave_arr)
+
+            # Get masked indeces
+            idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+            idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
+
+        else:
+            idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
+
+        # Find indeces for six points in spectrum
+        idcsW = np.searchsorted(wave_arr, masks_array)
+
+        # Return just the edges of the bands
+        if just_band_edges:
+            outputs = idcsW[0]
+
+        # Return the indeces of all the pixels within the bands
+        else:
+
+            # Emission region
+            idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (
+                        wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
+
+            # Return left and right continua merged in one array
+            if merge_continua:
+                idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
+                                   (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
+                                  ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+                                          wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
+
+                outputs = idcsLineRegion, idcsContRegion
+
+            # Return left and right continua in separated arrays
+            else:
+                idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (
+                            wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
+                idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+                            wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
+
+                outputs = idcsLineRegion, idcsContLeft, idcsContRight
+
+        return outputs

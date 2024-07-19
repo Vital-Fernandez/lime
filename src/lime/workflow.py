@@ -6,7 +6,7 @@ from astropy.io import fits
 from time import time
 
 from .model import LineFitting, signal_to_noise_rola
-from .tools import define_masks, ProgressBar, join_fits_files, extract_wcs_header, pd_get
+from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get
 from .transitions import Line
 from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
 from lmfit.models import PolynomialModel
@@ -304,8 +304,7 @@ class SpecTreatment(LineFitting):
         if bands_integrity:
 
             # Get the bands regions
-            idcsEmis, idcsCont = define_masks(self._spec.wave, self.line.mask * (1 + self._spec.redshift),
-                                              line_mask_entry=self.line.pixel_mask, line=self.line.label)
+            idcsEmis, idcsCont = self.line.index_bands(self._spec.wave, self._spec.redshift)
 
             emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
             emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsEmis]

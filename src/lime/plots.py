@@ -6,9 +6,8 @@ from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
 
 from .model import c_KMpS, profiles_computation, linear_continuum_computation
 from .tools import latex_science_float, PARAMETER_LATEX_DICT
-from .tools import define_masks, format_line_mask_option
 from .io import check_file_dataframe, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
-from .transitions import check_line_in_log, Line, label_decomposition
+from .transitions import check_line_in_log, Line, label_decomposition, format_line_mask_option
 from . import _setup_cfg
 
 _logger = logging.getLogger('LiMe')
@@ -45,6 +44,8 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux):
 class Themer:
 
     def __init__(self, conf, style='default', library='matplotlib'):
+
+        # TODO add tests to match the configuration
 
         # Attributes
         self.conf = None
@@ -401,8 +402,7 @@ def determine_cube_images(cube, line, band, percentiles, color_scale, contours_c
         line = Line(line, band)
 
         # Compute the band map slice
-        idcsEmis, idcsCont = define_masks(cube.wave, line.mask * (1 + cube.redshift), line_mask_entry=line.pixel_mask,
-                                          line=line.label)
+        idcsEmis, idcsCont = line.index_bands(cube.wave, cube.redshift)
         image = cube.flux[idcsEmis, :, :].sum(axis=0)
 
         # If no scale provided compute a default one
@@ -1313,7 +1313,7 @@ class SpectrumFigures(Plotter):
             AXES_CONF = theme.ax_defaults(ax_cfg, units_wave, units_flux, norm_flux)
 
             # Create and fill the figure
-            with rc_context(PLT_CONF):
+            with (rc_context(PLT_CONF)):
 
                 # Generate the figure if not provided
                 if in_fig is None:
@@ -1336,17 +1336,11 @@ class SpectrumFigures(Plotter):
                 err_plot = self._spec.err_flux
 
                 # Establish the limits for the line spectrum plot
-                mask = line.mask * (1 + self._spec.redshift)
-                idcsM = np.searchsorted(wave_plot, mask) # TODO remove this one
-
-                pixel_mask = 'no' if line not in log.index else log.loc[line, 'pixel_mask']
-                idcsEmis, idcsCont = define_masks(self._spec.wave, line.mask * (1 + self._spec.redshift),
-                                                  line_mask_entry=line.pixel_mask, line=line.label)
-                idcs_line = idcsEmis + idcsCont
+                idcs_bands = line.index_bands(self._spec.wave, self._spec.redshift, just_band_edges=True)
 
                 # Plot the spectrum
                 label = '' if include_fits else line
-                in_ax[0].step(wave_plot[idcsM[0]:idcsM[5]] / z_corr, flux_plot[idcsM[0]:idcsM[5]] * z_corr,
+                in_ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
                               where='mid', color=theme.colors['fg'], label=label, linewidth=theme.colors['spectrum_width'])
 
                 # Add the fitting results
@@ -1359,7 +1353,7 @@ class SpectrumFigures(Plotter):
                     wave_array, cont_array = linear_continuum_computation(list_comps, log, (1 + redshift))
 
                     # Continuum bands
-                    self._bands_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcsM, line)
+                    self._bands_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line)
 
                     # Gaussian profiles
                     idcs_lines = self._spec.frame.index.isin(list_comps)
@@ -1369,14 +1363,11 @@ class SpectrumFigures(Plotter):
                     # Add the interactive text
                     _mplcursor_parser(line_g_list, list_comps, log, norm_flux, units_wave, units_flux)
 
-
-                    cont_linear_flux = (log.loc[list_comps[0], 'm_cont'] * wave_plot[idcsCont] + log.loc[list_comps[0], 'n_cont'])
-                    linear_cont_std = np.std(cont_linear_flux - flux_plot[idcsCont]*norm_flux)
-
                     # Residual flux component
-                    err_region = None if err_plot is None else err_plot[idcsM[0]:idcsM[5]]
-                    self._residual_line_plotter(in_ax[1], wave_plot[idcsM[0]:idcsM[5]], flux_plot[idcsM[0]:idcsM[5]],
-                                                err_region, list_comps, z_corr, idcs_mask[idcsM[0]:idcsM[5]], linear_cont_std,
+                    err_region = None if err_plot is None else err_plot[idcs_bands[0]:idcs_bands[5]]
+                    self._residual_line_plotter(in_ax[1],
+                                                wave_plot[idcs_bands[0]:idcs_bands[5]], flux_plot[idcs_bands[0]:idcs_bands[5]],
+                                                err_region, list_comps, z_corr, idcs_mask[idcs_bands[0]:idcs_bands[5]],
                                                 line._p_shape)
 
                     # Synchronizing the x-axis
@@ -1385,14 +1376,14 @@ class SpectrumFigures(Plotter):
                     in_ax[0].set_xlabel(None)
 
                 # Plot the masked pixels
-                _masks_plot(in_ax[0], [line], wave_plot[idcsM[0]:idcsM[5]], flux_plot[idcsM[0]:idcsM[5]], z_corr,
-                            log, idcs_mask[idcsM[0]:idcsM[5]], theme.colors)
+                _masks_plot(in_ax[0], [line], wave_plot[idcs_bands[0]:idcs_bands[5]], flux_plot[idcs_bands[0]:idcs_bands[5]], z_corr,
+                            log, idcs_mask[idcs_bands[0]:idcs_bands[5]], theme.colors)
 
                 # Display the legend
                 in_ax[0].legend()
 
                 # Set the scale
-                _auto_flux_scale(in_ax[0], y=flux_plot[idcsM[0]:idcsM[5]] * z_corr, y_scale=y_scale)
+                _auto_flux_scale(in_ax[0], y=flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr, y_scale=y_scale)
 
                 # By default, plot on screen unless an output address is provided
                 in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
@@ -1522,13 +1513,14 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def _residual_line_plotter(self, axis, x, y, err, list_comps, z_corr, spec_mask, cont_std, profile_list):
+    def _residual_line_plotter(self, axis, x, y, err, list_comps, z_corr, spec_mask, profile_list):
 
         # Unpack properties
         log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
 
         # Continuum level
         cont_level = log.loc[list_comps[0], 'cont']
+        cont_std = log.loc[list_comps[0], 'cont_err']
 
         # Calculate the fluxes for the residual plot
         cont_i_resd = linear_continuum_computation(list_comps, log, z_corr=(1 + redshift), x_array=x)

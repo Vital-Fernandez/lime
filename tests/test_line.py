@@ -1,5 +1,15 @@
-from lime.transitions import Line, label_decomposition, Particle
+from pathlib import Path
+from lime.transitions import Line, label_decomposition, Particle, format_line_mask_option
 import numpy as np
+import lime
+
+# Data for the tests
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+
+file_address = baseline_folder/'manga_spaxel.txt'
+wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
+pixel_mask = np.isnan(err_array)
 
 
 def test_label_decomposition():
@@ -15,7 +25,7 @@ def test_label_decomposition():
 
     particle, wavelength, latex = label_decomposition('O3_5007A_b', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] ==  5006.7664
+    assert wavelength[0] == 5006.7664
     assert latex[0] == '$[OIII]5007\\mathring{A}$'
 
     particle, wavelength, latex = label_decomposition('O3_5007A_m', fit_conf=fit_conf)
@@ -25,6 +35,18 @@ def test_label_decomposition():
 
     return
 
+def test_format_line_mask_option():
+
+    array1 = format_line_mask_option('5000-5009', wave_array)
+    array2 = format_line_mask_option('5000-5009,5876,6550-6570', wave_array)
+
+    assert np.all(array1[0] == np.array([5000, 5009.]))
+
+    assert np.all(array2[0] == np.array([5000, 5009.]))
+    assert np.allclose(array2[1], np.array([5875.26214276, 5876.73785724]))
+    assert np.all(array2[2] == np.array([6550, 6570.]))
+
+    return
 
 class TestLineClass:
 
