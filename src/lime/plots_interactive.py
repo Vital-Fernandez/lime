@@ -13,7 +13,7 @@ from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, _auto_flux
                     image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme
 
 
-from .tools import blended_label_from_log, define_masks
+from .tools import blended_label_from_log
 from .transitions import label_decomposition, Line
 
 
@@ -1562,8 +1562,8 @@ class MaskInspection:
         line_bg = Line(line, bands)
 
         # Get the band indexes
-        idcsEmis, idcsCont = define_masks(self._cube.wave, line_bg.mask * (1 + self._cube.redshift), line_mask_entry=line_bg.pixel_mask,
-                                          line=line.label)
+        line_bg.index_bands(self.wave, self.redshift)
+        idcsEmis, idcsCont = line_bg.index_bands(self._cube.wave, self._cube.wave)
         signal_slice = self._cube.flux[idcsEmis, :, :]
 
         # Compute the Signal to noise in the complete image

@@ -5,7 +5,7 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from .tools import unit_conversion, define_masks, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header
+from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header
 
 from .recognition import LineFinder, DetectionInference
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -1053,8 +1053,7 @@ class Cube:
         line_bg = Line(line, bands)
 
         # Get the band indexes
-        idcsEmis, idcsCont = define_masks(self.wave, line_bg.mask * (1 + self.redshift), line_mask_entry=line_bg.pixel_mask,
-                                          line=line_bg.label)
+        idcsEmis, idcsCont = line_bg.index_bands(self.wave, self.redshift)
         signal_slice = self.flux[idcsEmis, :, :]
         signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
 

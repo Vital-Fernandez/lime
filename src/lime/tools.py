@@ -477,79 +477,65 @@ def refraction_index_air_vacuum(wavelength_array, units='A'):
     return refraction_index
 
 
-def format_line_mask_option(entry_value, wave_array):
-
-    # Check if several entries
-    formatted_value = entry_value.split(',') if ',' in entry_value else [f'{entry_value}']
-
-    # Check if interval or single pixel mask
-    for i, element in enumerate(formatted_value):
-        if '-' in element:
-            formatted_value[i] = element.split('-')
-        else:
-            element = float(element)
-            pix_width = (np.diff(wave_array).mean())/2
-            formatted_value[i] = [element-pix_width, element+pix_width]
-
-    formatted_value = np.array(formatted_value).astype(float)
-
-    return formatted_value
 
 
-def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no', line=None):
 
-    # Make sure it is a matrix
-    # TODO warning for mask outside limimes
-    # masks_array = np.array(masks_array, ndmin=2)
-    masks_array = np.atleast_2d(masks_array)
-
-    if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
-        _logger.warning(f'The {line} bands do not match the spectrum wavelength range (observed):')
-        _logger.warning(f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
-        _logger.warning(f'-- The {line} bands are: {masks_array} (rest frame * (1 + z))')
-
-    # Check if it is a masked array
-    if np.ma.isMaskedArray(wavelength_array):
-        wave_arr = wavelength_array.data
-    else:
-        wave_arr = wavelength_array
-
-    # Remove masked pixels from this function wavelength array
-    if line_mask_entry != 'no':
-
-        # Convert cfg mask string to limits
-        line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
-
-        # Get masked indeces
-        idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
-        idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
-
-    else:
-        idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
-
-    # Find indeces for six points in spectrum
-    idcsW = np.searchsorted(wave_arr, masks_array)
-
-    # Emission region # TODO add a try here to locate the error
-    idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
-    
-    # Return left and right continua merged in one array
-    if merge_continua:
-        idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
-                          (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
-                          ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-                           wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
-
-        outputs = idcsLineRegion, idcsContRegion
-
-    # Return left and right continua in separated arrays
-    else:
-        idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
-        idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
-
-        outputs = idcsLineRegion, idcsContLeft, idcsContRight
-
-    return outputs
+# def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no', line=None):
+#
+#     # TODO we might delete this one and leave the transitions one
+#     if masks_array is None:
+#         raise LiMe_Error()
+#
+#     # Make sure it is a matrix
+#     masks_array = np.atleast_2d(masks_array)
+#
+#     if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
+#         _logger.warning(f'The {line} bands do not match the spectrum wavelength range (observed):')
+#         _logger.warning(f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
+#         _logger.warning(f'-- The {line} bands are: {masks_array} (rest frame * (1 + z))')
+#
+#     # Check if it is a masked array
+#     if np.ma.isMaskedArray(wavelength_array):
+#         wave_arr = wavelength_array.data
+#     else:
+#         wave_arr = wavelength_array
+#
+#     # Remove masked pixels from this function wavelength array
+#     if line_mask_entry != 'no':
+#
+#         # Convert cfg mask string to limits
+#         line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
+#
+#         # Get masked indeces
+#         idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+#         idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
+#
+#     else:
+#         idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
+#
+#     # Find indeces for six points in spectrum
+#     idcsW = np.searchsorted(wave_arr, masks_array)
+#
+#     # Emission region
+#     idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
+#
+#     # Return left and right continua merged in one array
+#     if merge_continua:
+#         idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
+#                           (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
+#                           ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+#                            wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
+#
+#         outputs = idcsLineRegion, idcsContRegion
+#
+#     # Return left and right continua in separated arrays
+#     else:
+#         idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
+#         idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
+#
+#         outputs = idcsLineRegion, idcsContLeft, idcsContRight
+#
+#     return outputs
 
 
 def join_fits_files(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):
@@ -882,6 +868,7 @@ def extract_wcs_header(wcs, drop_axis=None):
         hdr_coords = None
 
     return hdr_coords
+
 
 class ProgressBar:
 

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, format_line_mask_option, refraction_index_air_vacuum, join_fits_files
+from lime.tools import int_to_roman, refraction_index_air_vacuum, join_fits_files
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
 from astropy.io import fits
 
@@ -233,20 +233,6 @@ def test_unit_conversion():
     assert np.allclose(spec.wave.data, wave_array, equal_nan=True)
     assert np.allclose(spec.flux.data, flux_array, equal_nan=True)
     assert spec.norm_flux == 1
-
-    return
-
-
-def test_format_line_mask_option():
-
-    array1 = format_line_mask_option('5000-5009', wave_array)
-    array2 = format_line_mask_option('5000-5009,5876,6550-6570', wave_array)
-
-    assert np.all(array1[0] == np.array([5000, 5009.]))
-
-    assert np.all(array2[0] == np.array([5000, 5009.]))
-    assert np.allclose(array2[1], np.array([5875.26214276, 5876.73785724]))
-    assert np.all(array2[2] == np.array([6550, 6570.]))
 
     return
 
