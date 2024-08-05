@@ -190,7 +190,7 @@ def check_fits_location(fits_address, lime_object=None, source=None):
             else:
 
                 # Check valid address
-                fits_url = urlparse(fits_address)
+                fits_url = urlparse(str(fits_address))
                 if all([fits_url.scheme, fits_url.netloc]):
                     url_validator(fits_address)
                     output = fits_address, True

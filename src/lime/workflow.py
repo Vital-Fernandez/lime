@@ -14,6 +14,10 @@ from lmfit.models import PolynomialModel
 _logger = logging.getLogger('LiMe')
 
 
+def review_configuration_entries(cfg_dict):
+
+    return
+
 def review_bands(line, emis_wave, cont_wave, emis_flux, cont_flux, limit_narrow=7):
 
     # Review the transition bands before
@@ -435,14 +439,20 @@ class SpecTreatment(LineFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
+            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix, line_detection=line_detection)
 
             # Line detection if requested
             if line_detection:
-                cont_fit_conf = input_conf.get('continuum', {})
-                self._spec.fit.continuum(**cont_fit_conf)
 
+                # Review the configuration entries
+
+                cont_fit_conf = input_conf.get('continuum', {})
                 detect_conf = input_conf.get('line_detection', {})
+
+                # Warning message error missin entries:
+
+                # Perform the line detection
+                self._spec.fit.continuum(**cont_fit_conf)
                 bands = self._spec.line_detection(bands, **detect_conf)
 
             # Define lines to treat through the lines

@@ -859,7 +859,7 @@ class RedshiftInspection:
 
     def redshift(self, obj_idcs, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
                  none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
-                 output_address=None, plt_cfg={}, ax_cfg={}, in_fig=None):
+                 output_address=None, fig_cfg={}, ax_cfg={}, in_fig=None):
 
         # Assign the attributes
         self._obj_idcs = obj_idcs if isinstance(obj_idcs, pd.MultiIndex) else self._sample.loc[obj_idcs].index
@@ -908,16 +908,23 @@ class RedshiftInspection:
         idcs_sorted = np.argsort(_waves_array)
         self._waves_array, self._latex_array = _waves_array[idcs_sorted], _latex_array[idcs_sorted]
 
-        # Set figure format with the user inputs overwriting the default conf
-        plt_cfg.setdefault('figure.figsize', (10, 6))
-        plt_cfg.setdefault('axes.labelsize', 12)
-        plt_cfg.setdefault('xtick.labelsize', 10)
-        plt_cfg.setdefault('ytick.labelsize', 10)
 
-        norm_flux = self._sample.load_params.get('norm_flux')
-        units_wave, units_flux = self._sample.load_params.get('units_wave'), self._sample.load_params.get('units_flux')
-        PLT_CONF, self._AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux, units_wave=units_wave,
-                                                        units_flux=units_flux)
+        # # Set the plot format where the user's overwrites the default
+        # size_conf = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1])}
+        # size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
+        #
+        # PLT_CONF = theme.fig_defaults(size_conf, fig_type='grid')
+        # AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
+        #                               fig_type=None)
+
+        # Set the plot format where the user's overwrites the default
+        size_conf = {'figure.figsize': (10, 6), 'axes.labelsize': 12, 'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
+
+        PLT_CONF = theme.fig_defaults(size_conf)
+        self._AXES_CONF = theme.ax_defaults(ax_cfg, self._sample.load_params.get('units_wave'),
+                                            self._sample.load_params.get('units_flux'),
+                                            self._sample.load_params.get('norm_flux'), fig_type=None)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
@@ -988,7 +995,7 @@ class RedshiftInspection:
         for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum
-            spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
+            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
 
             # Plot on the observed frame with reshift = 0
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, 0, 'observed')
@@ -998,7 +1005,7 @@ class RedshiftInspection:
                     linewidth=theme.colors['spectrum_width'])
 
             # Plot the masked pixels
-            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=self._color_dict)
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=theme.colors)
 
         return
 
@@ -1009,7 +1016,7 @@ class RedshiftInspection:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
+                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
 
                 wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
                 wavelength = wavelength[~np.isnan(wavelength)]
@@ -1035,7 +1042,7 @@ class RedshiftInspection:
                 if latexRange[i] == self._lineSelection:
                     color_line = 'tab:red'
                 else:
-                    color_line = self._color_dict['fg']
+                    color_line = theme.colors['fg']
 
                 ax.axvline(x=lineWave * (1 + redshift_pred), color=color_line, linestyle='--', linewidth=0.5)
 

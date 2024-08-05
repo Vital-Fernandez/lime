@@ -55,6 +55,10 @@ def detection_function(x_ratio):
 
     return 0.5 * np.power(x_ratio, 2) - 0.5 * x_ratio + 5
 
+def cosmic_ray_function(x_ratio):
+
+    return np.exp(0.5 * np.power(x_ratio, -2))
+
 
 def feature_scaling(data, transformation='min-max', log_base=None, axis=1):
 
