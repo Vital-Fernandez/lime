@@ -101,7 +101,7 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
     if norm_flux is None:
         if units_flux.scale == 1:
             norm_flux = np.nanmean(flux_array) / norm_factor
-            _logger.info(f'Normalizing input flux by {norm_flux}')
+            # _logger.info(f'Normalizing input flux by {norm_flux}')
         else:
             norm_flux = 1
 
@@ -1623,7 +1623,7 @@ class Sample(UserDict, OpenFits):
 
         return output
 
-    def get_spectrum(self, idx):
+    def get_spectrum(self, idx, **kwargs):
 
         if isinstance(idx, pd.Series):
             idx_true = self.frame.loc[idx].index
@@ -1636,7 +1636,9 @@ class Sample(UserDict, OpenFits):
         else:
             idx_in = idx
 
-        return self.load_function(self.frame, idx_in, self.file_address, **self.load_params)
+        new_params = {**self.load_params, **kwargs}
+
+        return self.load_function(self.frame, idx_in, self.file_address, **new_params)
 
     @property
     def index(self):

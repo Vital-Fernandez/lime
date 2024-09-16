@@ -1,6 +1,6 @@
 [metadata]
 name = 'lime-stable'
-version = '1.0.7'
+version = '1.0.8'
 
 [colors] #Default theme
 default.bg = '#FFFFFF'
@@ -244,3 +244,16 @@ box_width = 13
 #cube_interactive.'xtick.labelsize' = 10
 #cube_interactive.'ytick.labelsize' = 10
 
+#C41E3A  Red
+#A330C9  Dark Magenta
+#FF7C0A  Orange
+#33937F  Dark Emerald
+#AAD372  Pistachio
+#3FC7EB  Light Blue
+#00FF98  Spring Green
+#F48CBA  Pink
+#FFFFFF  White*
+#FFF468  Yellow*
+#0070DD  Blue
+#8788EE  Purple
+#C69B6D  Tan
