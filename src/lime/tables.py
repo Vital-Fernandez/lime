@@ -120,7 +120,7 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         try:
             pdf.generate_pdf(table_address, clean_tex=True)
         except:
-            print('-- PDF compilation failure')
+            print('\n-- PDF compilation failure')
 
     return
 

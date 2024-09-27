@@ -757,7 +757,13 @@ class Plotter:
         # Loop through the detections and plot the names
         for i in np.arange(latex.size):
             label = 'Matched line' if i == 0 else '_'
-            max_region = np.max(y[idcsLineBand[0, i]:idcsLineBand[1, i]])
+
+            # Y limit for the label check if same pixel
+            if idcsLineBand[0, i] != idcsLineBand[0, i]:
+                max_region = np.max(y[idcsLineBand[0, i]:idcsLineBand[0, i]])
+            else:
+                max_region = y[idcsLineBand[0, i]]
+
             axis.axvspan(w3[i]/z_corr, w4[i]/z_corr, label=label, alpha=0.30, color=theme.colors['match_line'])
             axis.text(wave_array[i] * (1 + redshift) / z_corr, max_region * 0.9 * z_corr, latex[i], rotation=270)
 
