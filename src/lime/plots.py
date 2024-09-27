@@ -756,14 +756,12 @@ class Plotter:
 
         # Loop through the detections and plot the names
         for i in np.arange(latex.size):
-            label = 'Matched line' if i == 0 else '_'
-
-            # Y limit for the label check if same pixel
-            if idcsLineBand[0, i] != idcsLineBand[0, i]:
+            if idcsLineBand[0, i] != idcsLineBand[0, i]: # Y limit for the label check if same pixel
                 max_region = np.max(y[idcsLineBand[0, i]:idcsLineBand[0, i]])
             else:
                 max_region = y[idcsLineBand[0, i]]
 
+            label = 'Matched line' if i == 0 else '_'
             axis.axvspan(w3[i]/z_corr, w4[i]/z_corr, label=label, alpha=0.30, color=theme.colors['match_line'])
             axis.text(wave_array[i] * (1 + redshift) / z_corr, max_region * 0.9 * z_corr, latex[i], rotation=270)
 
@@ -905,9 +903,6 @@ class SpectrumFigures(Plotter):
     def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
                  include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
                  detection_band=None, show_masks=True):
-
-
-        # TODO high masks option
 
         """
 
