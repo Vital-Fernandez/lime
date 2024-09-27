@@ -28,6 +28,9 @@
    - define_masks function has been replaces by line.index_bands()
    - The line.index_bands() now warns if line does not have bands at the point of indexing an input spectrum wavelength.
    - Corrections on the measurements documentation page
-
+1.0.8
+   - The check_fit_cfg function now reviews if the continuum and line_detection functions parameters are present and gives
+   warning if not.
+   - show_masks attribute in Spectrum.plot.spectrum to hide the pixels masks on the output plot
 
 

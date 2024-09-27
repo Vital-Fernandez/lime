@@ -904,7 +904,10 @@ class SpectrumFigures(Plotter):
 
     def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
                  include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
-                 detection_band=None):
+                 detection_band=None, show_masks=True):
+
+
+        # TODO high masks option
 
         """
 
@@ -960,6 +963,9 @@ class SpectrumFigures(Plotter):
 
         :param maximize: Maximise plot window. The default value is False.
         :type maximize:  bool, optional
+
+        :param show_masks: Show masked pixels as red crosses. The default value is True.
+        :type show_masks:  bool, optional
 
         """
 
@@ -1021,7 +1027,8 @@ class SpectrumFigures(Plotter):
                                       self._spec.units_flux)
 
                 # Plot the masked pixels
-                _masks_plot(in_ax, line_list, wave_plot, flux_plot, z_corr, self._spec.frame, idcs_mask, theme.colors)
+                if show_masks:
+                    _masks_plot(in_ax, line_list, wave_plot, flux_plot, z_corr, self._spec.frame, idcs_mask, theme.colors)
 
             # Plot the normalize continuum
             if include_cont and self._spec.cont is not None:

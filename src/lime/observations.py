@@ -59,95 +59,37 @@ def review_sample_levels(log, id_name, file_name, id_level="id", file_level="fil
     return log
 
 
-def mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, pixel_target_value, output_pixel_mask):
+def check_inputs_arrays(wave, flux, err_flux, lime_object):
 
-    mask_arr = value_arr[pixel_mask] if mask_check else value_arr
-
-    if np.isnan(pixel_target_value):
-        idcs_target = np.isnan(mask_arr)
-    elif np.isinf(pixel_target_value):
-        idcs_target = np.isinf(mask_arr)
-    else:
-        raise LiMe_Error(f'Pixel target value "{pixel_target_value}" is not recognized')
-
-    target_check = np.any(idcs_target)
-
-    if target_check:
-        message = f'The input {name_arr} array contains "{pixel_target_value}" entries'
-        if name_arr == 'wave':
-            message += f' you need to manually remove the invalid wavelength values'
-            raise LiMe_Error(message)
-        else:
-            message += f' not included on the input pixel_mask array' if mask_check else  ' a pixel_mask will be generated automatically'
-            _logger.warning(message)
-
-        # Create the mask
-        if mask_check is False:
-
-            # First initiation
-            output_pixel_mask = np.zeros(value_arr.shape).astype(bool) if output_pixel_mask is None else output_pixel_mask
-
-            # Assign values
-            output_pixel_mask[idcs_target] = True
-
-    return output_pixel_mask
-
-
-def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
-
-    # Check there is a mask
-    mask_check = True if pixel_mask is not None else False
-
-    # Automatic pixel mask
-    output_pixel_mask = None
-
-    # Loop through the observation properties
     for i, items in enumerate(locals().items()):
-        name_arr, value_arr = items
 
-        if i < 4:
-            if value_arr is not None:
+        if i < 3:
 
-                # Check numpy array dimensions
-                if isinstance(value_arr, np.ndarray):
+            key, value = items
+            if value is not None:
 
-                    dimensions = len(value_arr.shape)
-                    spec_check = dimensions == 1 and (isinstance(lime_object, Spectrum) or i == 0)
+                # Confirm numpy array inputs
+                if isinstance(value, np.ndarray):
+
+                    # Confirm dimensions
+                    dimensions = len(value.shape)
+                    spec_check = dimensions == 1 and (isinstance(lime_object, Spectrum) or key == 'wave')
                     cube_type = dimensions == 3 and isinstance(lime_object, Cube)
-
                     if not spec_check and not cube_type:
-                        raise LiMe_Error(f'The dimensions of the input {name_arr} are {dimensions}.\n'
+                        raise LiMe_Error(f'The dimensions of the input {key} are {dimensions}.\n'
                                          f'LiMe only recognizes 1D arrays for the wavelength array, \n'
                                          f'1D flux arrays for the Spectrum objects \n'
                                          f'and 3D flux arrays Cube objects.')
                 else:
-                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}')
-
-                # Check for unmasked nan and inf entries
-                if i < 3:
-
-                    # Ignore the wavelength array for cube data)
-                    if not (i == 0 and isinstance(lime_object, Cube)):
-                        output_pixel_mask = mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, np.nan, output_pixel_mask)
-                        output_pixel_mask = mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, np.inf, output_pixel_mask)
-
+                    raise LiMe_Error(f'The input {key} array must be numpy array. The input variable type is a {type(value)}')
             else:
-                if i <= 1:
-                    _logger.warning(f'No input array for the observation {name_arr} was provided.')
+                if key in ['wave', 'flux']:
+                    _logger.info(f'No value has been provided for {key}.')
 
-    # Assign the output mask
-    output_pixel_mask = pixel_mask if mask_check else output_pixel_mask
-
-    # Check not all the pixels are masked
-    if mask_check:
-        if np.all(output_pixel_mask):
-            raise LiMe_Error(f'All the input observation pixels are masked. Please check that only bad pixels entries'
-                             f' are masked (in numpy arrays flux_arr[pixel_mask] = bad_entries)')
-
-    return output_pixel_mask
+    return
 
 
-def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=-2):
+def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=100):
 
     if redshift is None:
         _logger.info(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
@@ -158,45 +100,38 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
 
     if norm_flux is None:
         if units_flux.scale == 1:
-            norm_flux = np.power(10, np.floor(np.log10(np.nanmean(flux_array))) + norm_factor)
-            _logger.info(f'No input flux normalization, using {norm_flux}')
+            norm_flux = np.nanmean(flux_array) / norm_factor
+            _logger.info(f'Normalizing input flux by {norm_flux}')
         else:
             norm_flux = 1
 
     return redshift, norm_flux
 
 
-# def check_spectrum_axes(lime_object):
-#
-#     # Check for masked arrays
-#     array_labels = ['wave', 'wave_rest', 'flux']
-#     check_mask = np.zeros(3).astype(bool)
-#     for i, arg in enumerate(array_labels):
-#         if np.ma.isMaskedArray(lime_object.__getattribute__(arg)):
-#             check_mask[i] = True
-#
-#     # TODO this one should go at the begining and review inputs
-#     if np.any(check_mask) and isinstance(lime_object, Spectrum):
-#         if ~np.all(check_mask):
-#             for i, arg in enumerate(array_labels):
-#                 if not check_mask[i]:
-#                     _logger.warning(f'Your {arg} array does not include a pixel mask this can caused issues on the fittings')
-#
-#     # Check for nan and inf entries
-#     check_mask, check_nan = np.zeros(3).astype(bool)
-#     for i, obs_array in enumerate([lime_object.wave, lime_object.flux, lime_object.err_flux]):
-#         check_mask[i] = True if np.ma.isMaskedArray(obs_array) else False
-#         check_nan = np.any(np.isnan(obs_array))
-#         check_inf = np.any(np.isinf(obs_array))
-#
-#     # Check that the flux and wavelength normalization #
-#     # if not isinstance(lime_object, Cube):
-#     #     if np.nanmedian(lime_object.flux) < 0.0001:
-#     #         _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
-#     #                         f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
-#     #                         f'Try changing the flux normalization')
-#
-#     return
+def check_spectrum_axes(lime_object):
+
+    # Check for masked arrays
+    array_labels = ['wave', 'wave_rest', 'flux']
+    check_mask = np.zeros(3).astype(bool)
+    for i, arg in enumerate(array_labels):
+        if np.ma.isMaskedArray(lime_object.__getattribute__(arg)):
+            check_mask[i] = True
+
+    # TODO this one should go at the begining and review inputs
+    if np.any(check_mask) and isinstance(lime_object, Spectrum):
+        if ~np.all(check_mask):
+            for i, arg in enumerate(array_labels):
+                if not check_mask[i]:
+                    _logger.warning(f'Your {arg} array does not include a pixel mask this can caused issues on the fittings')
+
+    # Check that the flux and wavelength normalization #
+    # if not isinstance(lime_object, Cube):
+    #     if np.nanmedian(lime_object.flux) < 0.0001:
+    #         _logger.info(f'The input flux has a median value of {np.nanmedian(lime_object.flux):.2e} '
+    #                         f'{UNITS_LATEX_DICT[lime_object.units_flux]}. This can cause issues in the fitting. '
+    #                         f'Try changing the flux normalization')
+
+    return
 
 
 def check_sample_input_files(log_list, file_list, page_list, id_list):
@@ -245,6 +180,11 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
 
     if crop_waves is not None:
 
+        # min_limit = crop_waves[0] if crop_waves[0] != 0 else input_wave[0]
+        # max_limit = crop_waves[1] if crop_waves[1] != -1 else input_wave[-1]
+        #
+        # idcs_crop = np.searchsorted(input_wave, (min_limit, max_limit))
+        # input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
         idx_min = np.searchsorted(input_wave, crop_waves[0]) if crop_waves[0] != 0 else 0
         idx_max = np.searchsorted(input_wave, crop_waves[1]) if crop_waves[1] != -1 else None
 
@@ -276,19 +216,24 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
 
 def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, redshift, norm_flux):
 
-    # Wavelength
-    wave = input_wave
-    wave_rest = None if wave is None else input_wave / (1 + redshift)
+    # Apply the redshift correction
+    if input_wave is not None:
+        wave_rest = input_wave / (1 + redshift)
+        if (input_wave is not None) and (input_flux is not None):
+            wave = input_wave
+            flux = input_flux  # * (1 + self.redshift)
+            if input_err is not None:
+                err_flux = input_err  # * (1 + self.redshift)
+            else:
+                err_flux = None
 
-    # Flux
-    flux = input_flux
-    err_flux = None if input_err is None else input_err
+    # Normalize the spectrum
+    if input_flux is not None:
+        flux = flux / norm_flux
+        if input_err is not None:
+            err_flux = err_flux / norm_flux
 
-    # Normalization
-    flux = flux if flux is None else flux/norm_flux
-    err_flux = err_flux if err_flux is None else err_flux/norm_flux
-
-    # Mask the data
+    # Masked the arrays if requested
     if pixel_mask is not None:
 
         # Confirm boolean mask
@@ -301,40 +246,15 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
 
         # Spectrum or Cube spectral masking
         flux = np.ma.masked_array(flux, bool_mask)
-        err_flux = None if err_flux is None else np.ma.masked_array(err_flux, bool_mask)
 
+        # if len(input_flux.shape) == 1:
+        #     mask_array = pixel_mask
+        # else:
+        #     mask_array = np.ones(flux.shape).astype(bool)
+        #     mask_array[pixel_mask, :, :] = pixel_mask
 
-    # # Apply the redshift correction
-    # if input_wave is not None:
-    #     wave_rest = input_wave / (1 + redshift)
-    #     if (input_wave is not None) and (input_flux is not None):
-    #         wave = input_wave
-    #         flux = input_flux
-    #         if input_err is not None:
-    #             err_flux = input_err
-    #         else:
-    #             err_flux = None
-    #
-    # # Normalize the spectrum
-    # if input_flux is not None:
-    #     flux = flux / norm_flux
-    #     if input_err is not None:
-    #         err_flux = err_flux / norm_flux
-    #
-    # # Masked the arrays if requested
-    # if pixel_mask is not None:
-    #
-    #     # Confirm boolean mask
-    #     bool_mask = pixel_mask.astype(bool)
-    #
-    #     # Check for non-1D arrays
-    #     if len(pixel_mask.shape) == 1:
-    #         wave = np.ma.masked_array(wave, bool_mask)
-    #         wave_rest = np.ma.masked_array(wave_rest, bool_mask)
-    #
-    #     # Spectrum or Cube spectral masking
-    #     flux = np.ma.masked_array(flux, bool_mask)
-    #     err_flux = None if err_flux is None else np.ma.masked_array(err_flux, bool_mask)
+        if err_flux is not None:
+            err_flux = np.ma.masked_array(err_flux, bool_mask)
 
     return wave, wave_rest, flux, err_flux
 
@@ -688,7 +608,7 @@ class Spectrum(LineFinder):
         self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
 
         # Review the inputs
-        pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
+        check_inputs_arrays(input_wave, input_flux, input_err, self)
 
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
@@ -696,7 +616,7 @@ class Spectrum(LineFinder):
         # Check redshift and normalization
         self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux, self.units_flux)
 
-        # Crop the input spectrum if necessary
+        # Start cropping the input spectrum if necessary
         input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
                                                                           pixel_mask)
 
@@ -706,9 +626,9 @@ class Spectrum(LineFinder):
                                                                                          self.redshift, self.norm_flux)
 
         # Check nan entries and mask quality
-        # check_spectrum_axes(self)
+        check_spectrum_axes(self)
 
-        # Generate empty dataframe to store measurement use cwd as default storing folder
+        # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
         self.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
 
         return
@@ -989,7 +909,7 @@ class Cube:
                  inst_FWHM=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
         # Review the inputs
-        pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
+        check_inputs_arrays(input_wave, input_flux, input_err, self)
 
         # Class attributes
         self.obj_name = id_label
@@ -1021,6 +941,9 @@ class Cube:
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
                                                                                          input_err, pixel_mask,
                                                                                          self.redshift, self.norm_flux)
+
+        # Check nan entries and mask quality
+        check_spectrum_axes(self)
 
         return
 
