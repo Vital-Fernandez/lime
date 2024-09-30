@@ -684,13 +684,14 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
             _logger.critical(f'Automatic line detection but the input configuration does not include a '
                              f'"continuum" entry with a "degree_list" and "emis_threshold" keys')
 
-        if output_cfg.get('line_detection') is not None:
-            if output_cfg['line_detection'].get('bands') is None:
-                _logger.critical(f'Automatic line detection but the input configuration does not include a '
-                                 f'"bands" entry')
-        else:
-            _logger.critical(f'The fitting requires automatic line detection but the input configuration does not include a '
-                             f' a "line_detection" entry with a "bands" key')
+        # if output_cfg.get('line_detection') is not None: # TODO need to rethink if we need this one... masks are always provided
+        #     if output_cfg['line_detection'].get('bands') is None:
+        #         _logger.critical(f'Automatic line detection but the input configuration does not include a '
+        #                          f'"bands" entry')
+        # else:
+        #     _logger.critical(f'The fitting requires automatic line detection but the input configuration does not include a '
+        #                      f' a "line_detection" entry with a "bands" key')
+
     return output_cfg
 
 

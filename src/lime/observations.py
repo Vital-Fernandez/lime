@@ -61,7 +61,7 @@ def review_sample_levels(log, id_name, file_name, id_level="id", file_level="fil
 
 def mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, pixel_target_value, output_pixel_mask):
 
-    mask_arr = value_arr[pixel_mask] if mask_check else value_arr
+    mask_arr = np.ma.masked_array(value_arr, mask=pixel_mask) if mask_check else value_arr
 
     if np.isnan(pixel_target_value):
         idcs_target = np.isnan(mask_arr)
@@ -146,10 +146,10 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
     return output_pixel_mask
 
 
-def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=100):
+def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1):
 
     if redshift is None:
-        _logger.info(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
+        _logger.warning(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
         redshift = 0
 
     if redshift < 0:
@@ -157,8 +157,12 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
 
     if norm_flux is None:
         if units_flux.scale == 1:
-            norm_flux = np.power(10, np.floor(np.log10(np.nanmean(flux_array))) + norm_factor)
-            _logger.info(f'No input flux normalization, using {norm_flux}')
+            median_flux = np.nanmedian(flux_array)
+            if median_flux < 0.001:
+                norm_flux = np.power(10, np.floor(np.log10(median_flux)) - norm_factor)
+                _logger.info(f'No input flux normalization,dividing flux by {norm_flux}.')
+            else:
+                norm_flux = 1
         else:
             norm_flux = 1
 
@@ -403,7 +407,7 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=Non
 class Spectrum(LineFinder):
 
     """
-    This class creates an astronomical cube variable for an integral field spectrograph observation.
+    This class creates a long-slit spectroscopic observation.
 
     The user needs to provide wavelength and flux arrays. Additionally, the user can include a flux uncertainty
     array. This uncertainty must be in the same units as the flux. The cube should include its ``redshift``.

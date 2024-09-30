@@ -1,36 +1,49 @@
-1.0.0 LiMe Release
-1.0.1 LiMe minor
-   - Created lime.io.parce_lime_cfg function to convert the .toml sections with lime suffix to the expected format to
-     be its own operation
+LiMe release - 1.0.0 - 04/29/2024
+   - First stable release
+
+LiMe minor update - 1.0.1 - 05/04/2024
+   - Created lime.io.parce_lime_cfg function to convert the .toml sections with lime suffix to the expected format to be its own operation
    - Created lime.plots.spectrum_labels to generate spectrum figure axis labels
    - Delete "log" attribute from lime.Cube class
    - Fix error normalize_fluxes was not cropping the lines frame for an input line list. Need to fix normalize flux error
    - log now returns the dataframe
-1.0.2 LiMe Minor
+
+LiMe minor update - 1.0.2 - 05/09/2024
    - SDSS lime.Spectrum.from_file no reads redshift from fits header
-1.0.3 LiMe Minor
+
+LiMe minor update - 1.0.3 - 05/09/2024
    - Restored deleted config.toml
-1.0.4 LiMe Minor
+
+LiMe minor update - 1.0.4 - 05/17/2024
    - Corrected MANGA flux error measurement
    - New tests for comparison between standard and lime loading of SDSS and MANGA observations
    - Change cm.get_cmap to plt.get_cmap due to matplotlib depreciation
    - Bug fix for multi-index flux extraction function due to pandas depreciation
-1.0.5 LiMe Minor
-   - Change "continuum_fit" keyword for toml keyword in continuum fitting configuration to "continuum" to match function
-     name
-1.0.6 LiMe Minor
+
+LiMe minor update - 1.0.5 - 05/25/2024
+   - Change "continuum_fit" keyword for toml keyword in continuum fitting configuration to "continuum" to match function name
+
+LiMe minor update - 1.0.6 - 06/20/2024
    - Fix error in unit conversion of Cubes
    - Clearer messages for bands not matching the spectrum wavelength range
    - Added test for line fitting with line detection using implicit and explicit configuration and bands declaration
    - Plots using the automatic scale now show the scale as in figure text.
-   - AAdded own stringBool from distiutils because it is being discontinued in python 3.12
-1.0.7 LiMe Minor
+   - Added own stringBool from distiutils because it is being discontinued in python 3.12
+
+LiMe minor update - 1.0.7 - 07/19/2024
    - define_masks function has been replaces by line.index_bands()
    - The line.index_bands() now warns if line does not have bands at the point of indexing an input spectrum wavelength.
    - Corrections on the measurements documentation page
-1.0.8
-   - The check_fit_cfg function now reviews if the continuum and line_detection functions parameters are present and gives
-   warning if not.
-   - show_masks attribute in Spectrum.plot.spectrum to hide the pixels masks on the output plot
+
+LiMe minor update - 1.0.8 - 09/15/2024
+   - The check_fit_cfg function now reviews if the continuum and line_detection functions parameters are present and gives a warning if not.
+   - show_masks attribute in Spectrum.plot.spectrum to hide the pixels masks on the output plot.
+
+LiMe medium update - 1.1.0 - 09/30/2024
+   - By default LiMe will now mask the input spectrum if "nan" and "inf" entries are present in the flux and err_flux arrays but the user does not provide a pixel mask. If the user provides a mask but "nan" or "inf" entries are detected only a warning will be provided.
+   - The website now includes the changelog with the LiMe updates.
+   - Fixed bug where nan entries would cause an error in the line band detection.
+   - New logic operator to store bands which only cover one pixel in band detection.
+   - Documentation corrections by E.C. Herenz
 
 

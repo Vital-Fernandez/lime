@@ -443,7 +443,7 @@ class OpenFits:
 
         # Re-construct spectrum arrays
         wave_array, flux_array, err_array = data_list[0]['WAVELENGTH'], data_list[0]['FLUX'], data_list[0]['FLUX_ERROR']
-        pixel_mask = np.isnan(flux_array)
+        pixel_mask = np.isnan(flux_array) | np.isnan(err_array)
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['nirspec']
