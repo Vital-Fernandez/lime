@@ -198,7 +198,6 @@ def check_compound_line_exclusion(line, lines_df):
 
 def continuum_model_fit(x_array, y_array, idcs, degree):
 
-
     poly3Mod = PolynomialModel(prefix=f'poly_{degree}', degree=degree)
     poly3Params = poly3Mod.guess(y_array[idcs], x=x_array[idcs])
 
@@ -435,14 +434,17 @@ class SpecTreatment(LineFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
+            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix, line_detection=line_detection)
 
             # Line detection if requested
             if line_detection:
-                cont_fit_conf = input_conf.get('continuum', {})
-                self._spec.fit.continuum(**cont_fit_conf)
 
+                # Review the configuration entries
+                cont_fit_conf = input_conf.get('continuum', {})
                 detect_conf = input_conf.get('line_detection', {})
+
+                # Perform the line detection
+                self._spec.fit.continuum(**cont_fit_conf)
                 bands = self._spec.line_detection(bands, **detect_conf)
 
             # Define lines to treat through the lines
@@ -535,12 +537,12 @@ class SpecTreatment(LineFitting):
 
             # First iteration use percentile limits for an initial fit
             if i == 0:
-                low_lim, high_lim = np.percentile(input_flux_s[mask_cont], (16, 84))
+                low_lim, high_lim = np.nanpercentile(input_flux_s[mask_cont], (16, 84))
                 mask_cont_0 = mask_cont & (input_flux_s >= low_lim) & (input_flux_s <= high_lim)
                 cont_fit = continuum_model_fit(input_wave, input_flux_s, mask_cont_0, degree)
 
             # Establishing the flux limits
-            std_flux = np.std((input_flux_s - cont_fit)[mask_cont])
+            std_flux = np.nanstd((input_flux_s - cont_fit)[mask_cont])
             low_lim, high_lim = cont_fit - abs_threshold[i] * std_flux, cont_fit + emis_threshold[i] * std_flux
 
             # Add new entries to the mask

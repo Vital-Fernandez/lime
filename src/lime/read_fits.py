@@ -190,7 +190,7 @@ def check_fits_location(fits_address, lime_object=None, source=None):
             else:
 
                 # Check valid address
-                fits_url = urlparse(fits_address)
+                fits_url = urlparse(str(fits_address))
                 if all([fits_url.scheme, fits_url.netloc]):
                     url_validator(fits_address)
                     output = fits_address, True
@@ -443,7 +443,7 @@ class OpenFits:
 
         # Re-construct spectrum arrays
         wave_array, flux_array, err_array = data_list[0]['WAVELENGTH'], data_list[0]['FLUX'], data_list[0]['FLUX_ERROR']
-        pixel_mask = np.isnan(flux_array)
+        pixel_mask = np.isnan(flux_array) | np.isnan(err_array)
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['nirspec']

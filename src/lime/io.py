@@ -409,9 +409,9 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
     if len(dataframe.index) > 0:
 
-        # In case of multi-index dataframe
+        # In case of multi-index dataframe # TODO add option to lime.save_frame that the input frame is a lime.Sample
         if isinstance(dataframe.index, pd.MultiIndex):
-            log = dataframe.reset_index()
+            log = dataframe.reset_index() # TODO why do I need this
         else:
             log = dataframe
 
@@ -606,7 +606,7 @@ def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=
     return output
 
 
-def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_suffix='_line_fitting'):
+def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_suffix='_line_fitting', line_detection=False):
 
     # Check that there is an input configuration
     if fit_conf is not None:
@@ -659,7 +659,7 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
             # Update the levels
             output_cfg = {**output_cfg, **mask_conf}
 
-            # If no line detection don't add it
+            # If no line detection don't add it # TODO this is wrong lower should update upper
             if mask_detect is not None:
                 output_cfg['line_detection'] = mask_detect
             elif default_detect is not None:
@@ -669,6 +669,28 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
 
     else:
         output_cfg = {}
+
+    # Check the detection entries are included
+    if line_detection:
+
+        if output_cfg.get('continuum') is not None:
+            if output_cfg['continuum'].get('degree_list') is None:
+                _logger.critical(f'Automatic line detection but the input configuration does not include a '
+                                 f'"degree_list" key')
+            if output_cfg['continuum'].get('emis_threshold') is None:
+                _logger.critical(f'TAutomatic line detection but the input configuration does not include a '
+                    f'"emis_threshold" key')
+        else:
+            _logger.critical(f'Automatic line detection but the input configuration does not include a '
+                             f'"continuum" entry with a "degree_list" and "emis_threshold" keys')
+
+        # if output_cfg.get('line_detection') is not None: # TODO need to rethink if we need this one... masks are always provided
+        #     if output_cfg['line_detection'].get('bands') is None:
+        #         _logger.critical(f'Automatic line detection but the input configuration does not include a '
+        #                          f'"bands" entry')
+        # else:
+        #     _logger.critical(f'The fitting requires automatic line detection but the input configuration does not include a '
+        #                      f' a "line_detection" entry with a "bands" key')
 
     return output_cfg
 

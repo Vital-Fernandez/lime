@@ -56,20 +56,21 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
     wave_interval = wave_interval[~np.isnan(wave_interval)]
     w_min, w_max = wave_interval[0], wave_interval[-1]
 
-    idx_rows_cont = (user_mask.w2 > w_min) & (user_mask.w5 < w_max)
-    idx_row_line = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
+    # idx_rows_cont = (user_mask.w2 > w_min) & (user_mask.w5 < w_max)
+    idx_rows_cont = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
 
-    # Inform if one or more lines have been excluded from the interface
-    if np.sum(idx_rows_cont) != np.sum(idx_row_line):
-
-        output_message = ''
-        range_lines = user_mask.loc[idx_row_line].index.values
-        if user_mask.loc[range_lines[0]].w3 > w_min:
-            output_message += f'\n-Transition {range_lines[0]} has been excluded from the inspection because its ' \
-                              f'continuum is below the spectrum lower wavelength '
-        if user_mask.loc[range_lines[1]].w4 < w_min:
-            output_message += f'\n-Transition {range_lines[1]} has been excluded from the inspection because its ' \
-                              f'continuum is above the spectrum higher wavelength '
+    # # Inform if one or more lines have been excluded from the interface
+    # idx_row_line = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
+    # if np.sum(idx_rows_cont) != np.sum(idx_row_line):
+    #
+    #     output_message = ''
+    #     range_lines = user_mask.loc[idx_row_line].index.values
+    #     if user_mask.loc[range_lines[0]].w3 > w_min:
+    #         output_message += f'\n-Transition {range_lines[0]} has been excluded from the inspection because its ' \
+    #                           f'continuum is below the spectrum lower wavelength '
+    #     if user_mask.loc[range_lines[1]].w4 < w_min:
+    #         output_message += f'\n-Transition {range_lines[1]} has been excluded from the inspection because its ' \
+    #                           f'continuum is above the spectrum higher wavelength '
 
     # Trim to the output lines
     user_mask = user_mask.loc[idx_rows_cont]
@@ -188,8 +189,8 @@ class BandsInspection:
         return
 
     def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              z_log_address=None, object_label=None, z_column='redshift', fig_cfg=None, ax_cfg=None, in_fig=None,
-              maximize=False):
+              z_log_address=None, object_label=None, z_column='redshift',  n_pixels=10, fig_cfg=None, ax_cfg=None,
+              in_fig=None, maximize=False):
 
         # TODO the selection should be None
 
@@ -243,6 +244,9 @@ class BandsInspection:
 
         :param z_column: Column label for redshift dataframe column indexing. The default value is "redshift".
         :type z_column: str, optional
+
+        :param n_pixels: Maximum number of pixels for the bands correction slider. The default value is 10.
+        :type n_pixels: int, optional
 
         :param fig_cfg: Dictionary with the matplotlib `rcParams parameters <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
         :type fig_cfg: dict, optional
@@ -337,7 +341,7 @@ class BandsInspection:
 
                 # Mask sweep slider configuration
                 self._inter_mask = np.median(np.diff(self._spec.wave_rest))
-                mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -10, 10, valinit=0.0, valstep=1)
+                mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -n_pixels, n_pixels, valinit=0.0, valstep=1)
                 mask_slider.on_changed(self._on_mask_slider_MI)
 
                 # Redshift sweep slider configuration
@@ -358,7 +362,7 @@ class BandsInspection:
 
                     self._z_orig = self._spec.redshift
                     self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
-                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -10, 10, valinit=0, valstep=1)
+                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -n_pixels, n_pixels, valinit=0, valstep=1)
                     z_slider.on_changed(self._on_z_slider_MI)
 
                 # Connecting the figure to the interactive widgets
@@ -393,7 +397,7 @@ class BandsInspection:
                                                                         self._spec.redshift, frame)
 
             # Establish the limits for the line spectrum plot
-            mask = self.log.loc[list_comps[0], 'w1':'w6'] * (1 + self._spec.redshift)
+            mask = self.log.loc[list_comps[0], 'w1':'w6'] * z_corr
             idcsM = np.searchsorted(wave_plot, mask)
             idxL = idcsM[0] - 5 if idcsM[0] > 5 else idcsM[0]
             idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
@@ -859,7 +863,7 @@ class RedshiftInspection:
 
     def redshift(self, obj_idcs, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
                  none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
-                 output_address=None, plt_cfg={}, ax_cfg={}, in_fig=None):
+                 output_address=None, n_pixels=10, fig_cfg={}, ax_cfg={}, in_fig=None):
 
         # Assign the attributes
         self._obj_idcs = obj_idcs if isinstance(obj_idcs, pd.MultiIndex) else self._sample.loc[obj_idcs].index
@@ -878,11 +882,6 @@ class RedshiftInspection:
             self._output_idcs = self._obj_idcs
         else:
             self._output_idcs = output_idcs if isinstance(output_idcs, pd.MultiIndex) else self._sample.loc[output_idcs].index
-
-        # Check all the object indeces are in the output indecs
-        if np.sum(self._obj_idcs.isin(self._output_idcs)) < self._obj_idcs.size:
-            _logger.warning(f'Some of the input "obj_idcs" are not present in output "output_idcs" this can cause issues'
-                            f' on the displayed spectrum')
 
         # Check the redshift column exists
         if self._column_log not in self._sample.frame.columns:
@@ -908,16 +907,15 @@ class RedshiftInspection:
         idcs_sorted = np.argsort(_waves_array)
         self._waves_array, self._latex_array = _waves_array[idcs_sorted], _latex_array[idcs_sorted]
 
-        # Set figure format with the user inputs overwriting the default conf
-        plt_cfg.setdefault('figure.figsize', (10, 6))
-        plt_cfg.setdefault('axes.labelsize', 12)
-        plt_cfg.setdefault('xtick.labelsize', 10)
-        plt_cfg.setdefault('ytick.labelsize', 10)
 
-        norm_flux = self._sample.load_params.get('norm_flux')
-        units_wave, units_flux = self._sample.load_params.get('units_wave'), self._sample.load_params.get('units_flux')
-        PLT_CONF, self._AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux, units_wave=units_wave,
-                                                        units_flux=units_flux)
+        # Set the plot format where the user's overwrites the default
+        size_conf = {'figure.figsize': (10, 6), 'axes.labelsize': 12, 'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
+
+        PLT_CONF = theme.fig_defaults(size_conf)
+        self._AXES_CONF = theme.ax_defaults(ax_cfg, self._sample.load_params.get('units_wave'),
+                                            self._sample.load_params.get('units_flux'),
+                                            self._sample.load_params.get('norm_flux'), fig_type=None)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
@@ -988,7 +986,7 @@ class RedshiftInspection:
         for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum
-            spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
+            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
 
             # Plot on the observed frame with reshift = 0
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, 0, 'observed')
@@ -998,7 +996,7 @@ class RedshiftInspection:
                     linewidth=theme.colors['spectrum_width'])
 
             # Plot the masked pixels
-            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=self._color_dict)
+            _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=theme.colors)
 
         return
 
@@ -1009,7 +1007,7 @@ class RedshiftInspection:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
+                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
 
                 wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
                 wavelength = wavelength[~np.isnan(wavelength)]
@@ -1035,7 +1033,7 @@ class RedshiftInspection:
                 if latexRange[i] == self._lineSelection:
                     color_line = 'tab:red'
                 else:
-                    color_line = self._color_dict['fg']
+                    color_line = theme.colors['fg']
 
                 ax.axvline(x=lineWave * (1 + redshift_pred), color=color_line, linestyle='--', linewidth=0.5)
 
@@ -1080,6 +1078,7 @@ class RedshiftInspection:
             _redshift_pred = redshift_output
 
         # Store the new redshift
+        #
         self._sample.loc[self._output_idcs, self._column_log] = _redshift_pred
 
         # Save to file if provided

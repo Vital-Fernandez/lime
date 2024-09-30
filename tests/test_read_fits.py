@@ -137,6 +137,69 @@ class TestOpenFits:
 
         return
 
+    def test_normalization_masks(self, isis='IZW18_isis.fits', sdss='sdss_dr18_0358-51818-0504.fits',
+                                 nirspec='hlsp_ceers_jwst_nirspec_nirspec10-001027_comb-mgrat_v0.7_x1d-masked.fits'):
+
+        ceers1027 = lime.Spectrum.from_file(spectra_folder/nirspec, instrument='nirspec', redshift=redshift_dict['ceers1027'])
+
+        SHOC579 = lime.Spectrum.from_file(spectra_folder/sdss, instrument='sdss')
+
+        izw18 = lime.Spectrum.from_file(spectra_folder/isis, instrument='ISIS', redshift=redshift_dict['Izw18'])
+
+        # ceers1027.plot.spectrum(rest_frame=True)
+
+        # Automatic normalization
+        assert ceers1027.norm_flux == 1e-8
+        assert SHOC579.norm_flux == 1
+        assert izw18.norm_flux == 1e-17
+
+        # Open with traditional methods
+        with fits.open(spectra_folder/sdss) as hdul:
+            data1 = hdul[1].data
+            data2 = hdul[2].data
+            header = hdul[1].header
+
+        # Recover the data
+        flux_array = data1['flux']
+        wave_array = np.power(10, data1['loglam'])
+        units_flux = 'FLAM'
+        ivar_array = data1['ivar']
+        err_array = np.sqrt(1/ivar_array)
+        pixel_mask = ivar_array == 0
+        redshift = data2['Z'][0]
+
+        # Manual opening
+        SHOC579_manual = lime.Spectrum(wave_array, flux_array, err_array, pixel_mask=pixel_mask, units_flux=units_flux,
+                                       redshift=redshift)
+
+        assert SHOC579_manual.norm_flux == 1
+        assert SHOC579_manual.flux.mask[0] == False
+        assert SHOC579_manual.flux.mask[1] == True
+
+        # Manual opening automatic masking/normalization
+        flux_array = data1['flux'] * 1e-17
+        err_array = err_array * 1e-17
+        pixel_mask = None
+
+        SHOC579_manual = lime.Spectrum(wave_array, flux_array, err_array, pixel_mask=pixel_mask, units_flux=units_flux,
+                                       redshift=redshift)
+
+        assert SHOC579_manual.norm_flux == 1e-17
+        assert SHOC579_manual.flux.mask[0] == False
+        assert SHOC579_manual.flux.mask[1] == True
+
+        pixel_mask = np.zeros(flux_array.shape).astype(bool)
+
+        SHOC579_manual = lime.Spectrum(wave_array, flux_array, err_array, pixel_mask=pixel_mask, norm_flux=1e-20,
+                                       redshift=redshift)
+
+        assert SHOC579_manual.norm_flux == 1e-20
+        assert SHOC579_manual.flux.mask[0] == False
+        assert SHOC579_manual.flux.mask[1] == False
+        assert np.isinf(SHOC579_manual.err_flux[1])
+
+        return
+
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_read_isis(self, file_name='IZW18_isis.fits'):
 

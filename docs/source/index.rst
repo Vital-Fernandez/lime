@@ -50,6 +50,8 @@ These are some of the features currently available:
 
    introduction/installation
    introduction/api
+   introduction/changelog
+
 
 .. toctree::
    :maxdepth: 1
