@@ -46,4 +46,9 @@ LiMe medium update - 1.1.0 - 09/30/2024
    - New logic operator to store bands which only cover one pixel in band detection.
    - Documentation corrections by E.C. Herenz
 
-
+LiMe minor update - 1.1.1 - 10/29/2024
+    - Adding bands from frame function
+    - Bug fix for re-normalization in the units_conversion function
+    - Bug fix to normalize by 1 if nanmedian flux is <= 0
+    - Added security fix for re-normalization in the units_conversion function
+    - The review_bands function now checks if all the line_band pixels flux and all the continuum_band pixels flux sum is zero. This is done to avoid all zero line or continuum entries.

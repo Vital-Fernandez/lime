@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 import pandas as pd
+from numpy.core.fromnumeric import argmin
+
 from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
 from pandas import DataFrame
 from .tools import pd_get, au
@@ -488,6 +490,81 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
+def bands_from_frame(frame, lines_level='line', sort=True):
+
+    # Empty container to store the data
+    headers = ['wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'group_label', 'latex_label', 'units_wave', 'particle', 'transition']
+    bands = pd.DataFrame(columns=headers)
+
+    # Single frame
+    if not isinstance(frame.index, pd.MultiIndex):
+        print('bicho')
+
+    # Multi-index
+    else:
+
+        line_list = frame.index.get_level_values(lines_level).unique()
+
+        # Loop through the lines
+        for i, line_label in enumerate(line_list):
+
+            # Exclude kinematic components:
+            if '_k-' not in line_label:
+                df_line = frame.xs(line_label, level=lines_level, drop_level=False)
+                group_list = df_line.group_label.unique()
+
+                for j, group in enumerate(group_list):
+
+                    # Get same group entries and compute mean bands
+                    df_group = df_line.loc[df_line.group_label == group]
+                    bands_limits = np.median(df_group.loc[:, 'w1':'w6'].to_numpy(), axis=0)
+
+                    # Single
+                    if group == 'none':
+                        entry_label = line_label
+
+                    # Merged and blended
+                    else:
+
+                        # Merged
+                        if line_label.endswith('_m'):
+                            entry_label = line_label
+
+                        # Blended Compute name
+                        else:
+                            entry_label = f'{line_label}_b'
+                            if entry_label in bands.index:
+                                comps = line_label.split('_')
+                                entry_label = f'{comps[0]}-{j}_{comps[1]}_b'
+
+                        # Re-assign scalar wavelength
+
+
+                    # Generate single line df with the line information
+                    ref_df = df_group.iloc[0,:].copy()
+                    ref_df.name = entry_label
+                    ref_df['w1':'w6'] = bands_limits
+                    ref_df = ref_df.to_frame().T
+
+                    # Define LiMe line and add data to dataframe
+                    line = Line(entry_label, band=ref_df)
+
+                    # Assign the values:
+                    bands.loc[line.label, 'wavelength'] = line.wavelength[line._ref_idx]
+                    bands.loc[line.label, 'w1':'w6'] = line.mask
+                    bands.loc[line.label, 'group_label'] = line.group_label
+                    bands.loc[line.label, 'latex_label'] = line.latex_label
+                    bands.loc[line.label, 'units_wave'] = line.units_wave[line._ref_idx]
+                    bands.loc[line.label, 'particle'] = line.particle[line._ref_idx]
+                # bands.loc[line.label, 'transition'] = line.transition
+
+
+    if sort:
+        bands.sort_values(by=['wavelength', 'group_label'], inplace=True)
+
+    return bands
+
+
 class Particle:
 
     def __init__(self, label: str = None, symbol: str = None, ionization: int = str):
@@ -552,6 +629,7 @@ class Line:
         self.profile_comp = profile
         self.transition_comp = None
 
+        self._ref_idx = None
         self._p_type = None
         self._p_shape = None
 
@@ -628,6 +706,13 @@ class Line:
 
         # Quick elements for the line profile
         self._p_shape, self._p_type = label_profiling(self.profile_comp)
+
+        # Index of the line closest to the one in label
+        if self.blended_check or self.merged_check:
+            wave_label, _label_units = check_units_from_wave(None, None, comps_list[1], None)
+            self._ref_idx = argmin(self.wavelength - wave_label)
+        else:
+            self._ref_idx = 0
 
         # Provide a bands from the log if possible
         core_comp = f'{comps_list[0]}_{comps_list[1]}'

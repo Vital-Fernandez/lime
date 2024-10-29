@@ -57,7 +57,7 @@ def detection_function(x_ratio):
 
 def cosmic_ray_function(x_ratio, res_ratio_check=True):
 
-    # Resolution ratio
+    # Resolution ration
     if res_ratio_check:
         output = np.exp(0.5 * np.power(x_ratio, -2))
 
