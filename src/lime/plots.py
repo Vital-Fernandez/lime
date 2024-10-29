@@ -59,6 +59,21 @@ class Themer:
         self.library = library
         self.set_style(style)
 
+        # TODO should this one be here
+        # Colors categories
+        self.components = {"undefined" : 'black',
+                            "white-noise" : '#C41E3A',     # Red
+                            "continuum" : '#F48CBA',       # Pink
+                            "emission" : '#00FF98',       # Spring Green
+                            "cosmic-ray": '#FFF468',       # Yellow
+                            "pixel-line" : '#0070DD',      # Blue
+                            "broad": '#A330C9',           # Dark magenta
+                            "doublet": '#3FC7EB' ,        # Light blue
+                            "peak": '#C69B6D',            # Tan
+                            "absorption": '#FF7C0A',      # Orange
+                            "dead-pixel": '#8788EE'}      # Purple}
+
+
         return
 
     def fig_defaults(self, user_fig=None, fig_type=None):
@@ -902,7 +917,7 @@ class SpectrumFigures(Plotter):
 
     def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
                  include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
-                 detection_band=None, show_masks=True):
+                 detection_band=None, show_masks=True, show_categories=False):
 
         """
 
@@ -1069,6 +1084,20 @@ class SpectrumFigures(Plotter):
                 else:
                     _logger.warning(f'The line detection bands confidence has not been calculated. They are not included'
                                     f' on plot.')
+
+            if show_categories:
+                if self._spec.features.pred_arr is not None:
+                    categories = np.sort(np.unique(self._spec.features.pred_arr))
+                    for category in categories:
+                        if category != 0:
+                            feature_name = self._spec.features.model.number_feature_dict[category]
+                            feature_color = theme.components[feature_name]
+                            idcs_comp =  self._spec.features.pred_arr == category
+                            in_ax.scatter(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, color=feature_color)
+
+                            # in_ax.step(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, where='mid',
+                            #            color=feature_color, linewidth=theme.colors['spectrum_width'])
+
 
 
                 # Switch y_axis to logarithmic scale if requested

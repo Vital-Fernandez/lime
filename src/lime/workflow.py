@@ -45,6 +45,15 @@ def review_bands(line, emis_wave, cont_wave, emis_flux, cont_flux, limit_narrow=
             length = emis_band_lengh
         _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
 
+    # Security check not all the pixels are zero
+    if emis_flux.sum() == 0:
+        _logger.warning(f'The {line.label} line pixels sum is zero, it has been excluded from the analysis')
+        proceed = False
+
+    if cont_flux.sum() == 0:
+        _logger.warning(f'The {line.label} continuum pixels sum is zero, it has been excluded from the analysi')
+        proceed = False
+
     return proceed
 
 

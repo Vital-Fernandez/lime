@@ -27,6 +27,12 @@ try:
 except ImportError:
     mplcursors_check = False
 
+try:
+    from aspect import SpectrumDetector
+    aspect_check = True
+except ImportError:
+    aspect_check = False
+
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
@@ -92,6 +98,7 @@ def mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, pixel_target_v
 
     return output_pixel_mask
 
+
 def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
 
     # Check there is a mask
@@ -148,7 +155,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
 
 def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1):
 
-    if redshift is None:
+    if redshift is None: # TODO add case nan or inf
         _logger.warning(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
         redshift = 0
 
@@ -159,8 +166,12 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
         if units_flux.scale == 1:
             median_flux = np.nanmedian(flux_array)
             if median_flux < 0.001:
-                norm_flux = np.power(10, np.floor(np.log10(median_flux)) - norm_factor)
-                _logger.info(f'No input flux normalization,dividing flux by {norm_flux}.')
+                if median_flux <= 0:
+                    norm_flux = 1
+                    _logger.info(f'Mediam normflux is 0 {norm_flux}.')
+                else:
+                    norm_flux = np.power(10, np.floor(np.log10(median_flux)) - norm_factor)
+                    _logger.info(f'No input flux normalization,dividing flux by {norm_flux}.')
             else:
                 norm_flux = 1
         else:
@@ -495,6 +506,9 @@ class Spectrum(LineFinder):
         self.fit = SpecTreatment(self)
         self.infer = DetectionInference(self)
 
+        if aspect_check:
+            self.features = SpectrumDetector(self)
+
         # Plotting objects
         self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
@@ -719,10 +733,12 @@ class Spectrum(LineFinder):
         # Switch the normalization
         if norm_flux is not None:
 
-            # Remove mask and then apply normalization
+            # Remove mask and then re-apply normalization
             input_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
-            flux_arr = self.flux.data / norm_flux if input_mask is None else self.flux / norm_flux
-            err_arr = self.err_flux.data / norm_flux if input_mask is None else self.err_flux / norm_flux
+            old_norm = 1 if self.norm_flux is None else self.norm_flux
+
+            flux_arr = self.flux * (old_norm/norm_flux) if input_mask is None else self.flux.data * (old_norm/norm_flux)
+            err_arr = self.err_flux* (old_norm/norm_flux) if input_mask is None else self.err_flux.data * (old_norm/norm_flux)
 
             # Re-apply mask
             self.flux = flux_arr if input_mask is None else np.ma.masked_array(flux_arr, self.flux.mask)
@@ -1636,6 +1652,7 @@ class Sample(UserDict, OpenFits):
 
     def get_spectrum(self, idx):
 
+        # TODO add trick to convert tupple to multi-index MultiIndex.from_tuples([idx_obs], names=sample_files.frame.index.names)
         if isinstance(idx, pd.Series):
             idx_true = self.frame.loc[idx].index
 

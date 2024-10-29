@@ -58,7 +58,7 @@ _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep='\s+', header=0, index_col=0)
 
 _LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
-_CONF_FILE = _LIME_FOLDER/'config.toml'
+# _CONF_FILE = _LIME_FOLDER/'config.toml'
 
 # # Read lime configuration file
 # with open(_CONF_FILE, mode="rb") as fp:
