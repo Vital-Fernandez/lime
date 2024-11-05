@@ -16,43 +16,55 @@ _logger = logging.getLogger('LiMe')
 
 def review_bands(line, emis_wave, cont_wave, emis_flux, cont_flux, limit_narrow=7):
 
-    # Review the transition bands before
-    emis_band_lengh = emis_wave.size if not np.ma.isMaskedArray(emis_wave) else np.sum(~emis_wave.mask)
-    cont_band_length = cont_wave.size if not np.ma.isMaskedArray(cont_wave) else np.sum(~cont_wave.mask)
-
+    # Default value
     proceed = True
 
-    if emis_band_lengh / emis_wave.size < 0.5:
-        _logger.warning(f'The line band for {line.label} has very few valid pixels')
+    # Mask check
+    mask_check = np.ma.isMaskedArray(emis_flux)
 
-    if cont_band_length / cont_wave.size < 0.5:
-        if cont_band_length > 0:
-            _logger.warning(f'The continuum band for {line.label} has very few valid pixels)')
-        else:
-            _logger.warning(f"The continuum bands for {line.label} have 0 pixels. It won't be measured")
+    # Confirm is not all the pixels are masked
+    if mask_check:
+        if np.all(emis_flux.mask) or np.all(cont_flux.mask):
             proceed = False
 
-    # Store error very small mask
-    if emis_band_lengh <= 1:
-        if line.observations == 'no':
-            line.observations = 'Small_line_band'
-        else:
-            line.observations += '-Small_line_band'
+    # Review the number and type of pixel values
+    if proceed:
 
-        if np.ma.isMaskedArray(emis_wave):
-            length = np.sum(~emis_wave.mask)
-        else:
-            length = emis_band_lengh
-        _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
+        # Review the transition bands before
+        emis_band_lengh = emis_wave.size if not mask_check else np.sum(~emis_wave.mask)
+        cont_band_length = cont_wave.size if not mask_check else np.sum(~cont_wave.mask)
 
-    # Security check not all the pixels are zero
-    if emis_flux.sum() == 0:
-        _logger.warning(f'The {line.label} line pixels sum is zero, it has been excluded from the analysis')
-        proceed = False
+        if emis_band_lengh / emis_wave.size < 0.5:
+            _logger.warning(f'The line band for {line.label} has very few valid pixels')
 
-    if cont_flux.sum() == 0:
-        _logger.warning(f'The {line.label} continuum pixels sum is zero, it has been excluded from the analysi')
-        proceed = False
+        if cont_band_length / cont_wave.size < 0.5:
+            if cont_band_length > 0:
+                _logger.warning(f'The continuum band for {line.label} has very few valid pixels)')
+            else:
+                _logger.warning(f"The continuum bands for {line.label} have 0 pixels. It won't be measured")
+                proceed = False
+
+        # Store error very small mask
+        if emis_band_lengh <= 1:
+            if line.observations == 'no':
+                line.observations = 'Small_line_band'
+            else:
+                line.observations += '-Small_line_band'
+
+            if np.ma.isMaskedArray(emis_wave):
+                length = np.sum(~emis_wave.mask)
+            else:
+                length = emis_band_lengh
+            _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
+
+        # Security check not all the pixels are zero
+        if emis_flux.sum() == 0:
+            _logger.warning(f'The {line.label} line pixels sum is zero, it has been excluded from the analysis')
+            proceed = False
+
+        if cont_flux.sum() == 0:
+            _logger.warning(f'The {line.label} continuum pixels sum is zero, it has been excluded from the analysi')
+            proceed = False
 
     return proceed
 

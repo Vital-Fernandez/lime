@@ -1,8 +1,11 @@
 import logging
+from itertools import count
+
 import numpy as np
 import pandas as pd
+from docutils.nodes import legend
 
-from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors
+from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines
 
 from .model import c_KMpS, profiles_computation, linear_continuum_computation
 from .tools import latex_science_float, PARAMETER_LATEX_DICT
@@ -12,6 +15,10 @@ from . import _setup_cfg
 
 _logger = logging.getLogger('LiMe')
 
+
+category_conf_styles = {0: 'dotted',
+                        1: 'dashed',
+                        2: 'solid'}
 
 try:
     import mplcursors
@@ -990,7 +997,7 @@ class SpectrumFigures(Plotter):
         AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux)
 
         # Create and fill the figure
-        with rc_context(PLT_CONF):
+        with (rc_context(PLT_CONF)):
 
             # Generate the figure object and figures
             if in_fig is None:
@@ -1086,14 +1093,59 @@ class SpectrumFigures(Plotter):
                                     f' on plot.')
 
             if show_categories:
+                # Define the bins you want
+                bins = [40, 60, 80, 100]
+
+                # Use np.histogram to get the counts in each bin
                 if self._spec.features.pred_arr is not None:
                     categories = np.sort(np.unique(self._spec.features.pred_arr))
+                    legend_scatter = []
+
                     for category in categories:
                         if category != 0:
+
+                            # Get category properties
                             feature_name = self._spec.features.model.number_feature_dict[category]
                             feature_color = theme.components[feature_name]
-                            idcs_comp =  self._spec.features.pred_arr == category
-                            in_ax.scatter(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, color=feature_color)
+                            idcs_feature = self._spec.features.pred_arr == category
+                            legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
+                                                                markerfacecolor=feature_color, markersize=8, label=feature_name))
+
+                            # Count the pixels for each category
+                            counts, _ = np.histogram(self._spec.features.conf_arr[idcs_feature], bins=bins)
+                            for idx_conf, count_conf in enumerate(counts):
+                                if count_conf > 0:
+
+                                    # Get indeces matching the detections
+                                    idcs_count = np.where((bins[idx_conf] < self._spec.features.conf_arr[idcs_feature]) &
+                                                          (self._spec.features.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
+                                    idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True
+
+                                    # Generate nan arrays with the data to avoid filling non detections
+                                    wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
+                                    wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
+                                    flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
+
+                                    # Plot with the corresponding colors and linestyle
+                                    in_ax.step(wave_nan, flux_nan, label=feature_name, where='mid', color=feature_color,
+                                               linestyle=category_conf_styles[idx_conf])
+
+                    # Legend category
+                    legend_category = in_ax.legend(handles=legend_scatter, edgecolor=theme.colors['fg'])
+                    legend_category.get_frame().set_linewidth(0.5)
+                    in_ax.add_artist(legend_category)
+
+                    # Create the extra legend with the confidence
+                    line1 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle=':', label="> 40% conf.")
+                    line2 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle='--', label="> 60% conf.")
+                    line3 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle='-', label="> 80% conf.")
+                    legend_conf = in_ax.legend(handles=[line1, line2, line3], loc="lower center", ncol=3, edgecolor=theme.colors['fg'])
+                    legend_conf.get_frame().set_linewidth(0.5)
+
+                    legend_check = False
+
+                            # idcs_comp =  self._spec.features.pred_arr == category
+                            # in_ax.scatter(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, color=feature_color)
 
                             # in_ax.step(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, where='mid',
                             #            color=feature_color, linewidth=theme.colors['spectrum_width'])

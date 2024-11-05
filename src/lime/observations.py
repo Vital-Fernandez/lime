@@ -5,6 +5,8 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
+from openpyxl.styles.builtins import output
+
 from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header
 
 from .recognition import LineFinder, DetectionInference
@@ -85,7 +87,7 @@ def mask_bad_entries(name_arr, value_arr, mask_check, pixel_mask, pixel_target_v
             raise LiMe_Error(message)
         else:
             message += f' not included on the input pixel_mask array' if mask_check else  ' a pixel_mask will be generated automatically'
-            _logger.warning(message)
+            _logger.info(message)
 
         # Create the mask
         if mask_check is False:
@@ -153,7 +155,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
     return output_pixel_mask
 
 
-def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1):
+def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1, min_flux_scale=0.001):
 
     if redshift is None: # TODO add case nan or inf
         _logger.warning(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
@@ -164,14 +166,15 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
 
     if norm_flux is None:
         if units_flux.scale == 1:
-            median_flux = np.nanmedian(flux_array)
-            if median_flux < 0.001:
-                if median_flux <= 0:
-                    norm_flux = 1
-                    _logger.info(f'Mediam normflux is 0 {norm_flux}.')
+            mean_flux = np.nanmean(flux_array)
+            if mean_flux < min_flux_scale:
+                if mean_flux <= 0:
+                    norm_flux = np.power(10, np.floor(np.log10(mean_flux-np.nanmin(flux_array))) - norm_factor)
                 else:
-                    norm_flux = np.power(10, np.floor(np.log10(median_flux)) - norm_factor)
-                    _logger.info(f'No input flux normalization,dividing flux by {norm_flux}.')
+                    norm_flux = np.power(10, np.floor(np.log10(mean_flux)) - norm_factor)
+
+                _logger.info(f'The observation does not include a normalization but the mean flux value is '
+                             f'below {min_flux_scale}. The flux will be automatically normalized by {norm_flux}.')
             else:
                 norm_flux = 1
         else:
@@ -684,66 +687,47 @@ class Spectrum(LineFinder):
 
         """
 
+        # Recover the pixel mask
+        pixel_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
+
         # Remove existing normalization
-        if (self.norm_flux != 1) and (self.norm_flux is not None):
+        old_norm = self.norm_flux if ((self.norm_flux != 1) and (self.norm_flux is not None)) else 1
+        input_wave = self.wave if pixel_mask is None else self.wave.data
+        input_flux = self.flux * old_norm if pixel_mask is None else self.flux.data * old_norm
 
-            # Remove mask and normalization
-            input_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
-            flux_arr = self.flux.data * self.norm_flux if input_mask is None else self.flux * self.norm_flux
-            err_arr = self.err_flux.data * self.norm_flux if input_mask is None else self.err_flux * self.norm_flux
+        if self.err_flux is not None:
+            input_err = self.err_flux * old_norm if pixel_mask is None else self.err_flux * old_norm
+        else:
+            input_err = None
 
-            # Re-apply mask
-            self.flux = flux_arr if input_mask is None else np.ma.masked_array(flux_arr, self.flux.mask)
-            self.err_flux = err_arr if input_mask is None else np.ma.masked_array(err_arr, self.err_flux.mask)
-            self.norm_flux = None
+        # Get the new units or use old
+        wave_units_out = self.units_wave if wave_units_out is None else wave_units_out
+        flux_units_out = self.units_flux if flux_units_out is None else flux_units_out
 
-        # Convert the requested units to astropy unit object
-        wave_units_out = au.Unit(wave_units_out) if wave_units_out is not None else None
-        flux_units_out = au.Unit(flux_units_out) if flux_units_out is not None else None
-
-        # Dispersion axes conversion
-        if wave_units_out is not None:
-
-            # Convert the data
-            output_wave = unit_conversion(self.units_wave, wave_units_out, wave_array=self.wave)
-
-            # Assign the new values
-            self.wave = output_wave
-            self.wave_rest =  np.ma.masked_array(self.wave.data / (1+self.redshift), self.wave.mask)
-            self.units_wave = wave_units_out
-
-        # Flux axis conversion
-        if flux_units_out is not None:
+        # Flux conversion
+        if flux_units_out != self.units_flux:
 
             # Flux conversion
-            output_flux = unit_conversion(self.units_flux, flux_units_out, wave_array=self.wave,
-                                          flux_array=self.flux, dispersion_units=self.units_wave)
+            output_flux = unit_conversion(self.units_flux, flux_units_out, wave_array=input_wave,
+                                          flux_array=input_flux, dispersion_units=self.units_wave)
 
             # Flux uncertainty conversion
-            output_err = None if self.err_flux is None else unit_conversion(self.units_flux, flux_units_out,
-                                                                            wave_array=self.wave,
-                                                                            flux_array=self.err_flux,
+            output_err = None if input_err is None else unit_conversion(self.units_flux, flux_units_out,
+                                                                            wave_array=input_wave,
+                                                                            flux_array=input_err,
                                                                             dispersion_units=self.units_wave)
+        # Wavelength conversion
+        if wave_units_out != self.units_wave:
+            output_wave = unit_conversion(self.units_wave, wave_units_out, wave_array=input_wave)
+        else:
+            output_wave = input_wave
 
-            # Assign new values
-            self.flux = output_flux
-            self.err_flux = None if self.err_flux is None else output_err
-            self.units_flux = flux_units_out
-
-        # Switch the normalization
-        if norm_flux is not None:
-
-            # Remove mask and then re-apply normalization
-            input_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
-            old_norm = 1 if self.norm_flux is None else self.norm_flux
-
-            flux_arr = self.flux * (old_norm/norm_flux) if input_mask is None else self.flux.data * (old_norm/norm_flux)
-            err_arr = self.err_flux* (old_norm/norm_flux) if input_mask is None else self.err_flux.data * (old_norm/norm_flux)
-
-            # Re-apply mask
-            self.flux = flux_arr if input_mask is None else np.ma.masked_array(flux_arr, self.flux.mask)
-            self.err_flux = err_arr if input_mask is None else np.ma.masked_array(err_arr, self.err_flux.mask)
-            self.norm_flux = norm_flux
+        # Reassign the units and normalization
+        self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
+        self.redshift, self.norm_flux = check_redshift_norm(self.redshift, norm_flux, output_flux, self.units_flux)
+        self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(output_wave, output_flux,
+                                                                                         output_err, pixel_mask,
+                                                                                         self.redshift, self.norm_flux)
 
         return
 
