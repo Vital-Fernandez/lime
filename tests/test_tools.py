@@ -2,9 +2,10 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, refraction_index_air_vacuum, join_fits_files
+from lime.tools import int_to_roman, refraction_index_air_vacuum, join_fits_files, au
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
 from astropy.io import fits
+import astropy.units as u
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
@@ -224,15 +225,67 @@ def test_redshift_calculation():
 
 def test_unit_conversion():
 
-    spec.unit_conversion(wave_units_out='nm', flux_units_out='Jy', norm_flux=1e-8)
-    assert np.allclose(spec.wave.data, wave_array/10, equal_nan=True)
-    assert np.allclose(spec.flux.data[:3], np.array([457.8036672 , 493.54866591, 493.17681153]), equal_nan=True)
-    assert spec.norm_flux == 1e-8
+    input_wavelength = 5000
+    input_unit = input_wavelength * u.Angstrom
+    astropy_conversion = input_unit.to(u.nm)
+    lime_conversion = lime.unit_conversion('Angstrom', 'nm', wave_array=input_wavelength)
+    assert np.allclose(astropy_conversion.value, lime_conversion, equal_nan=True)
+    assert np.allclose(lime_conversion, 500)
 
-    spec.unit_conversion(wave_units_out='AA', flux_units_out='FLAM', norm_flux=1)
-    assert np.allclose(spec.wave.data, wave_array, equal_nan=True)
-    assert np.allclose(spec.flux.data, flux_array, equal_nan=True)
-    assert spec.norm_flux == 1
+    input_flux = 1e-16
+    input_unit = input_flux * u.erg / (u.s * u.cm**2 * u.Angstrom)
+    astropy_conversion = input_unit.to(u.Jy, equivalencies=u.spectral_density(input_wavelength*u.Angstrom))
+    lime_conversion = lime.unit_conversion('FLAM', 'Jy', flux_array=input_flux, wave_array=input_wavelength,
+                                           dispersion_units='Angstrom')
+    assert np.allclose(astropy_conversion.value, lime_conversion, equal_nan=True)
+    assert np.allclose(lime_conversion, 8.339102379953801e-05)
+
+    input_wavelength = 1
+    input_unit = input_wavelength * u.keV
+    astropy_conversion = input_unit.to(u.Angstrom, equivalencies=u.spectral())
+    lime_conversion = lime.unit_conversion('keV', 'Angstrom', wave_array=input_wavelength)
+    assert np.allclose(astropy_conversion.value, lime_conversion, equal_nan=True)
+    assert np.allclose(lime_conversion, 12.3984)
+
+    input_wavelength = 6e14
+    input_unit = input_wavelength * u.Hz
+    astropy_conversion = input_unit.to(u.Angstrom, equivalencies=u.spectral())
+    lime_conversion = lime.unit_conversion('Hz', 'Angstrom', wave_array=input_wavelength)
+    assert np.allclose(astropy_conversion.value, lime_conversion, equal_nan=True)
+    assert np.allclose(lime_conversion, 4996.540)
+
+    return
+
+def test_spectra_unit_conversion():
+
+    # Astropy conversion
+    wave_astropy_in =  wave_array * au.Unit('Angstrom')
+    flux_astropy_in = flux_array * (au.erg / (au.s * au.cm**2 * au.Angstrom))
+
+    wave_astropy_out = wave_astropy_in.to(au.nm)
+    flux_astropy_out = flux_astropy_in.to(au.Jy, au.spectral_density(wave_array * au.Unit('Angstrom')))
+
+    # Own conversion
+    spec_lime = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=None, pixel_mask=pixel_mask)
+    spec_lime.unit_conversion(wave_units_out='nm', flux_units_out='Jy', norm_flux=None)
+
+    # Test conversion
+    assert np.allclose(spec_lime.wave.data, wave_astropy_out.value, equal_nan=True)
+    assert np.allclose(spec_lime.flux.data*spec_lime.norm_flux, flux_astropy_out.value, equal_nan=True)
+    assert spec_lime.norm_flux == 1e-7
+
+    # Test reconversion
+    wave_astropy_out = wave_astropy_out.to(au.Angstrom)
+    flux_astropy_out = flux_astropy_in.to(au.erg / (au.s * au.cm**2 * au.Angstrom), au.spectral_density(wave_array * au.Unit('nm')))
+    spec_lime.unit_conversion(wave_units_out='AA', flux_units_out='FLAM', norm_flux=None)
+
+    assert np.allclose(spec_lime.wave.data, wave_astropy_out.value, equal_nan=True)
+    assert np.allclose(spec_lime.flux.data*spec_lime.norm_flux, flux_astropy_out.value, equal_nan=True)
+    assert spec_lime.norm_flux == 1e-19
+
+    # Compare with original
+    assert np.allclose(spec_lime.wave.data, wave_array, equal_nan=True)
+    assert np.allclose(spec_lime.flux.data*spec_lime.norm_flux, flux_array, equal_nan=True)
 
     return
 

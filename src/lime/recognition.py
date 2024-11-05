@@ -339,8 +339,15 @@ class LineFinder:
         if len(idcsLinePeak) == 0:
             return pd.DataFrame(columns=mask_df.columns)
 
+        # Exclude bands not withing the regime:
+        if np.ma.isMaskedArray(self.wave_rest):
+            w0, wf = self.wave_rest.data[~self.wave_rest.mask][0],  self.wave_rest.data[~self.wave_rest.mask][-1]
+        else:
+            w0, wf = self.wave_rest[0], self.wave_rest[-1]
+        idcs_selection = (mask_df.w3 > w0) & (mask_df.w4 < wf)
+
         # Prepare dataframe to stored the matched lines
-        matched_DF = pd.DataFrame.copy(mask_df)
+        matched_DF = mask_df.loc[idcs_selection].copy()
         matched_DF['signal_peak'] = np.nan
 
         # Theoretical wave values
@@ -396,6 +403,11 @@ class LineFinder:
         # Sort by wavelength
         matched_DF.sort_values('wavelength', inplace=True)
         matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
+
+        # Security check all bands are within selection
+        wave_peak_matched = self.wave_rest[matched_DF.signal_peak.to_numpy().astype(int)]
+        idcs_valid = (matched_DF.w3 < wave_peak_matched) & (matched_DF.w4 > wave_peak_matched)
+        matched_DF = matched_DF.loc[idcs_valid]
 
         return matched_DF
 

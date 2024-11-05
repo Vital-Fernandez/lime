@@ -52,3 +52,12 @@ LiMe minor update - 1.1.1 - 10/29/2024
     - Bug fix to normalize by 1 if nanmedian flux is <= 0
     - Added security fix for re-normalization in the units_conversion function
     - The review_bands function now checks if all the line_band pixels flux and all the continuum_band pixels flux sum is zero. This is done to avoid all zero line or continuum entries.
+
+LiMe medium update - 1.2.0 - 11/05/2024
+    - The unit_conversion functions have been updated to avoid bugs on betwen certain units
+    - The unit_conversion functions now review the normalization and masking the same way as in the spectrum creation
+    - The line detection function has been updated to account for masked data within the input line bands
+    - The automatic normalization function now using the mean instead of median as the scale_flux
+    - If the scale flux is negative the normalization will remove the lowest pixel value from the mean flux for the automatic normalization.
+    - Initial introduction for aspect functions for thea automatic detection of spectral features.
+    - New checks to avoid the measurements of bands where all the entries are masked.

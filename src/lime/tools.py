@@ -446,24 +446,41 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
 
     # Converting the wavelength array
     if flux_array is None:
-        input_mask = wave_array.mask if np.ma.isMaskedArray(wave_array) else None
-        input_array = wave_array * in_units if input_mask is None else wave_array.data * in_units
-        output_array = input_array.to(au.Unit(out_units))
-        output_array = output_array.value  # Remove the units
+        input_array = wave_array * au.Unit(in_units)
+        output_array = input_array.to(au.Unit(out_units), equivalencies=au.spectral())
 
     # Converting the flux array
     else:
-        input_mask = flux_array.mask if np.ma.isMaskedArray(flux_array) else None
-        input_array = flux_array * in_units if input_mask is None else flux_array.data * in_units
-        w_array = wave_array.data * dispersion_units if np.ma.isMaskedArray(wave_array) else wave_array * dispersion_units
-        output_array = input_array.to(au.Unit(out_units), au.spectral_density(w_array))
-        output_array = output_array.value  # Remove the units
+        input_array = flux_array * au.Unit(in_units)
+        dispersion_array = wave_array * au.Unit(dispersion_units)
+        output_array = input_array.to(au.Unit(out_units), au.spectral_density(dispersion_array))
 
-    # Reapply the mask
-    output_array = output_array if input_mask is None else np.ma.masked_array(output_array, input_mask)
+    # Remove the units
+    output_array = output_array.value
 
     # Round to decimal places
     output_array = output_array if decimals is None else np.round(output_array, decimals)
+
+    # # Converting the wavelength array
+    # if flux_array is None:
+    #     input_mask = wave_array.mask if np.ma.isMaskedArray(wave_array) else None
+    #     input_array = wave_array * in_units if input_mask is None else wave_array.data * in_units
+    #     output_array = input_array.to(au.Unit(out_units))
+    #     output_array = output_array.value  # Remove the units
+    #
+    # # Converting the flux array
+    # else:
+    #     input_mask = flux_array.mask if np.ma.isMaskedArray(flux_array) else None
+    #     input_array = flux_array * in_units if input_mask is None else flux_array.data * in_units
+    #     w_array = wave_array.data * dispersion_units if np.ma.isMaskedArray(wave_array) else wave_array * au.Unit(dispersion_units)
+    #     output_array = input_array.to(au.Unit(out_units), au.spectral_density(w_array))
+    #     output_array = output_array.value  # Remove the units
+    #
+    # # Reapply the mask
+    # output_array = output_array if input_mask is None else np.ma.masked_array(output_array, input_mask)
+    #
+    # # Round to decimal places
+    # output_array = output_array if decimals is None else np.round(output_array, decimals)
 
     return output_array
 
