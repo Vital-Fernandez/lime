@@ -98,6 +98,7 @@ def particle_notation(particle, transition):
         try:
 
             # Get ionization numeral
+            particle = particle if not isinstance(particle, str) else Particle.from_label(particle)
             ionization_roman = int_to_roman(particle.ionization)
             part_label = f'{particle.symbol}{ionization_roman}'
 

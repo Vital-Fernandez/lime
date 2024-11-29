@@ -922,7 +922,7 @@ class SpectrumFigures(Plotter):
 
         return
 
-    def spectrum(self, output_address=None, label=None, line_bands=None, rest_frame=False, log_scale=False,
+    def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
                  include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
                  detection_band=None, show_masks=True, show_categories=False):
 
@@ -953,8 +953,8 @@ class SpectrumFigures(Plotter):
         :param label: Label for the spectrum plot legend. The default label is 'Observed spectrum'.
         :type label: str, optional
 
-        :param line_bands: Bands Dataframe (or path to dataframe).
-        :type line_bands: pd.Dataframe, str, path, optional
+        :param bands: Bands Dataframe (or path to dataframe).
+        :type bands: pd.Dataframe, str, path, optional
 
         :param rest_frame: Set to True for a display in rest frame. The default value is False
         :type rest_frame: bool, optional
@@ -1015,9 +1015,13 @@ class SpectrumFigures(Plotter):
                        linewidth=theme.colors['spectrum_width'])
 
             # Plot peaks and troughs if provided
-            if line_bands is not None:
-                line_bands = check_file_dataframe(line_bands, pd.DataFrame)
-                self._line_matching_plot(in_ax, line_bands, wave_plot, flux_plot, z_corr, self._spec.redshift,
+            if bands is not None:
+                bands = check_file_dataframe(bands, pd.DataFrame)
+
+                # Crop the selection for the observation wavelength range
+                idcs_valid = (bands.w3 > wave_plot[0] / z_corr) & (bands.w4 < wave_plot[-1] / z_corr)
+
+                self._line_matching_plot(in_ax, bands.loc[idcs_valid], wave_plot, flux_plot, z_corr, self._spec.redshift,
                                          self._spec.units_wave)
 
             # Plot the fittings
@@ -1802,6 +1806,10 @@ class CubeFigures(Plotter):
         # Prepare the foreground image data
         line_fg, fg_image, fg_levels, fg_norm = determine_cube_images(self._cube, line_fg, bands,
                                                                       cont_pctls_fg, fg_norm, contours_check=True)
+        # fig, ax = plt.subplots()
+        # ax.imshow(bg_image)
+        # plt.show()
+
 
         # Mesh for the countours
         if line_fg is not None:

@@ -485,6 +485,69 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
     return output_array
 
 
+def observation_unit_convertion(observation, wave_units_out, flux_units_out):
+
+    # Recover the pixel mask
+    pixel_mask = observation.flux.mask if np.ma.isMaskedArray(observation.flux) else None
+
+    # Remove existing normalization
+    old_norm = observation.norm_flux if ((observation.norm_flux != 1) and (observation.norm_flux is not None)) else 1
+    input_wave = observation.wave if pixel_mask is None else observation.wave.data
+    input_flux = observation.flux * old_norm if pixel_mask is None else observation.flux.data * old_norm
+
+    if observation.err_flux is not None:
+        input_err = observation.err_flux * old_norm if pixel_mask is None else observation.err_flux * old_norm
+    else:
+        input_err = None
+
+    # Get the new units or use old
+    wave_units_out = observation.units_wave if wave_units_out is None else wave_units_out
+    flux_units_out = observation.units_flux if flux_units_out is None else flux_units_out
+
+    # Flux conversion
+    if flux_units_out != observation.units_flux:
+
+        # Spectrum
+        if len(input_flux.shape) == 1:
+            # Flux conversion
+            output_flux = unit_conversion(observation.units_flux, flux_units_out, wave_array=input_wave,
+                                          flux_array=input_flux, dispersion_units=observation.units_wave)
+
+            # Flux uncertainty conversion
+            output_err = None if input_err is None else unit_conversion(observation.units_flux, flux_units_out,
+                                                                        wave_array=input_wave,
+                                                                        flux_array=input_err,
+                                                                        dispersion_units=observation.units_wave)
+        # Cube
+        elif len(input_flux.shape) == 3:
+            output_flux = np.empty_like(input_flux)
+            output_err = np.empty_like(input_err) if input_err is not None else None
+            for i in np.arange(input_flux.shape[0]):
+                output_flux[i, :, :] = unit_conversion(observation.units_flux, flux_units_out, wave_array=input_wave[i],
+                                                       flux_array=input_flux[i, :, :], dispersion_units=observation.units_wave)
+
+                if input_err is not None:
+                    output_err[i, :, :] = unit_conversion(observation.units_flux, flux_units_out, wave_array=input_wave[i],
+                                                          flux_array=input_err[i, :, :],
+                                                          dispersion_units=observation.units_wave)
+
+        # Not recognized
+        else:
+            raise LiMe_Error(f'Input flux for unit conversion array size is not recognized:\n'
+                             f'-- Please use 1-dimension array for lime.Spectrum and 3-dimension array for lime.Cube')
+
+    else:
+        output_flux, output_err = input_flux, input_err
+
+    # Wavelength conversion
+    if wave_units_out != observation.units_wave:
+        output_wave = unit_conversion(observation.units_wave, wave_units_out, wave_array=input_wave)
+    else:
+        output_wave = input_wave
+
+    return wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask
+
+
 def refraction_index_air_vacuum(wavelength_array, units='A'):
 
     # TODO add warnings issues with units

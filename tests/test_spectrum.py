@@ -132,7 +132,7 @@ class TestSpectrumClass:
         match_bands = spec.line_detection(bands_file_address)
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, line_bands=match_bands)
+        spec.plot.spectrum(in_fig=fig, bands=match_bands)
 
         return fig
 
@@ -172,7 +172,7 @@ class TestSpectrumClass:
     def test_plot_spectrum_with_bands(self):
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, line_bands=bands_file_address)
+        spec.plot.spectrum(in_fig=fig, bands=bands_file_address)
 
         return fig
 

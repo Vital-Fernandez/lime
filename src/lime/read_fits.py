@@ -41,7 +41,12 @@ CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': 
                               'units_flux': '1e-20*FLAM', 'pixel_mask': "nan", 'id_label': None},
 
                     'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
-                               'units_flux': 'Jy', 'pixel_mask': "nan", 'id_label': None}}
+                               'units_flux': 'Jy', 'pixel_mask': "nan", 'id_label': None},
+
+                    'miri': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'um',
+                             'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
+
+                    }
 
 
 def show_instrument_cfg():
@@ -728,6 +733,51 @@ class OpenFits:
         fits_params = {**CUBE_FITS_PARAMS['megara'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
+
+    @staticmethod
+    def miri(fits_address, data_ext_list=(1,2), hdr_ext_list=(1), pixel_mask=None):
+
+        """
+
+        This method returns the spectrum array data and headers from a MUSE observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Cube. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        w_min, dw, pixels = header_list[0]['CRVAL3'], header_list[0]['CDELT3'], header_list[0]['NAXIS3']
+        w_max = w_min + dw * pixels
+        wave_array = np.linspace(w_min, w_max, pixels, endpoint=False)
+
+        flux_cube = data_list[0]
+        err_cube = data_list[1]
+        pixel_mask_cube = None
+
+        wcs = WCS(header_list[0])
+
+        # Fits properties
+        fits_params = {**CUBE_FITS_PARAMS['miri'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
+
+        return wave_array, flux_cube, err_cube, header_list, fits_params
+
 
     @staticmethod
     def desi(target_id, root_url='https://data.desi.lbl.gov/public/edr/spectro/redux', **kwargs):

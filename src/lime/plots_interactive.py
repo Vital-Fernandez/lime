@@ -23,7 +23,7 @@ _logger = logging.getLogger('LiMe')
 def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
 
     # Review the dataframe
-    parent_mask = check_file_dataframe(parent_mask, pd.DataFrame)
+    parent_mask = check_file_dataframe(parent_mask, pd.DataFrame) # TODO stop here
     user_mask = check_file_dataframe(user_mask, pd.DataFrame)
 
     # Add the lines from the input mask to the user mask and treat them as inactive
@@ -1168,14 +1168,16 @@ class CubeInspection:
         self.marker = None
         self.rest_frame = None
         self.log_scale = None
+        self.restore_zoom = False
+        self.maintain_y_zoom = False
 
         return
 
     def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
-             lines_file=None, ext_frame_suffix='_LINELOG', wcs=None, spaxel_selection_button=1, add_remove_button=3,
-             maximize=False):
+             lines_file=None, ext_frame_suffix='_LINELOG', maintain_y_zoom=True, wcs=None, spaxel_selection_button=1,
+             add_remove_button=3, maximize=False):
 
         """
 
@@ -1286,6 +1288,7 @@ class CubeInspection:
         self.mask_file = masks_file
         self.spaxel_button = spaxel_selection_button
         self.add_remove_button = add_remove_button
+        self.maintain_y_zoom = maintain_y_zoom
 
         # Prepare the background image data
         line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, bands,
@@ -1376,16 +1379,21 @@ class CubeInspection:
                 for r in radio.labels:
                     r.set_fontsize(5)
 
-                # for circle in radio.circles:  # Make the buttons a bit rounder
-                #     # circle.set_height(0.025)
-                #     circle.set_width(0.04)
-
             # Plot the data
             self.data_plots()
 
+            # Connect to the toolbar
+            self.toolbar = plt.get_current_fig_manager().toolbar
+
+            # For pytests on figure
+            if self.toolbar is not None:
+                self.toolbar._actions['home'].triggered.connect(self.click_home)
+
             # Connect the widgets
-            self._fig.canvas.mpl_connect('button_press_event', self.on_click)
             self._fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+            self._fig.canvas.mpl_connect('button_press_event', self.on_click)
+            self._fig.canvas.mpl_connect('button_release_event', self.click_zoom)
+
             if len(self.masks_dict) > 0:
                 radio.on_clicked(self.mask_selection)
 
@@ -1511,6 +1519,7 @@ class CubeInspection:
         return
 
     def spaxel_selection(self):
+
         for mask, mask_data in self.masks_dict.items():
             mask_matrix = mask_data[0]
             if mask == self.mask_ext:
@@ -1525,6 +1534,8 @@ class CubeInspection:
     def on_enter_axes(self, event):
         self.in_ax = event.inaxes
 
+        return
+
     def save_zoom(self):
         self.axlim_dict['image_xlim'] = self._ax0.get_xlim()
         self.axlim_dict['image_ylim'] = self._ax0.get_ylim()
@@ -1535,12 +1546,35 @@ class CubeInspection:
 
     def reset_zoom(self):
 
-        self._ax0.set_xlim(self.axlim_dict['image_xlim'])
-        self._ax0.set_ylim(self.axlim_dict['image_ylim'])
-        self._ax1.set_xlim(self.axlim_dict['spec_xlim'])
-        self._ax1.set_ylim(self.axlim_dict['spec_ylim'])
+        if self.restore_zoom:
+            self._ax0.set_xlim(self.axlim_dict['image_xlim'])
+            self._ax0.set_ylim(self.axlim_dict['image_ylim'])
+            self._ax1.set_xlim(self.axlim_dict['spec_xlim'])
+
+            if not self.maintain_y_zoom:
+                self._ax1.set_ylim(self.axlim_dict['spec_ylim'])
+
+        else:
+            self._ax1.relim()
+            self._ax1.autoscale_view()
 
         return
+
+    def click_home(self):
+        self.restore_zoom = False
+        self._ax1.relim()
+        self._ax1.autoscale_view()
+
+        return
+
+    def click_zoom(self, event):
+
+        if self.in_ax == self._ax1:
+            if self.toolbar.mode == 'zoom rect' or self.toolbar.mode == 'pan/zoom':
+                self.restore_zoom = True
+
+        return
+
 
 
 class MaskInspection:

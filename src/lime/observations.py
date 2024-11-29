@@ -7,7 +7,8 @@ from collections import UserDict
 
 from openpyxl.styles.builtins import output
 
-from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header
+from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header, \
+    observation_unit_convertion
 
 from .recognition import LineFinder, DetectionInference
 from .plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -668,18 +669,20 @@ class Spectrum(LineFinder):
 
         """
 
-        This function converts spectrum wavelength array, the flux array or both arrays units.
+        This function converts spectrum dispersion and/or flux array units.
 
-        The user can also provide a flux normalization for the spectrum flux array.
+        The user can specify the desired units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
+        or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_.
 
-        The wavelength units available are AA (angstroms), um, nm, Hz, cm, mm
+        Additionally, the user can use FLAM (erg/s/cm^2/AA), FNU (erg/s/cm^2/Hz,), PHOTLAM (photon/s/cm^2/AA), PHOTNU (photon/s/cm^2/Hz)
+        or in lowercase (flam, fun, photlam, photnu)
 
-        The flux units available are Flam (erg s^-1 cm^-2 Å^-1), Fnu (erg s^-1 cm^-2 Hz^-1), Jy, mJy, nJy
+        The user can also provide a flux normalization for the new flux units.
 
-        :param wave_units_out: Wavelength array units
+        :param wave_units_out: Output wavelength array units
         :type wave_units_out: str, optional
 
-        :param flux_units_out: Flux array units
+        :param flux_units_out: Output flux array units
         :type flux_units_out: str, optional
 
         :param norm_flux: Flux normalization
@@ -687,40 +690,9 @@ class Spectrum(LineFinder):
 
         """
 
-        # Recover the pixel mask
-        pixel_mask = self.flux.mask if np.ma.isMaskedArray(self.flux) else None
-
-        # Remove existing normalization
-        old_norm = self.norm_flux if ((self.norm_flux != 1) and (self.norm_flux is not None)) else 1
-        input_wave = self.wave if pixel_mask is None else self.wave.data
-        input_flux = self.flux * old_norm if pixel_mask is None else self.flux.data * old_norm
-
-        if self.err_flux is not None:
-            input_err = self.err_flux * old_norm if pixel_mask is None else self.err_flux * old_norm
-        else:
-            input_err = None
-
-        # Get the new units or use old
-        wave_units_out = self.units_wave if wave_units_out is None else wave_units_out
-        flux_units_out = self.units_flux if flux_units_out is None else flux_units_out
-
-        # Flux conversion
-        if flux_units_out != self.units_flux:
-
-            # Flux conversion
-            output_flux = unit_conversion(self.units_flux, flux_units_out, wave_array=input_wave,
-                                          flux_array=input_flux, dispersion_units=self.units_wave)
-
-            # Flux uncertainty conversion
-            output_err = None if input_err is None else unit_conversion(self.units_flux, flux_units_out,
-                                                                            wave_array=input_wave,
-                                                                            flux_array=input_err,
-                                                                            dispersion_units=self.units_wave)
-        # Wavelength conversion
-        if wave_units_out != self.units_wave:
-            output_wave = unit_conversion(self.units_wave, wave_units_out, wave_array=input_wave)
-        else:
-            output_wave = input_wave
+        # Extract the new values
+        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = observation_unit_convertion(self,
+                                                                                         wave_units_out, flux_units_out)
 
         # Reassign the units and normalization
         self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
@@ -1175,96 +1147,39 @@ class Cube:
 
         return output_func
 
-    def unit_conversion(self, units_wave=None, units_flux=None, norm_flux=None):
+    def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None):
 
         """
 
-        This function converts cube wavelength array and/or the flux array units.
+        This function converts spectrum wavelength array, the flux array or both arrays units.
 
         The user can also provide a flux normalization for the spectrum flux array.
 
-        The wavelength units available are A (angstroms), um, nm, Hz, cm, mm
+        The wavelength units available are AA (angstroms), um, nm, Hz, cm, mm
 
         The flux units available are Flam (erg s^-1 cm^-2 Å^-1), Fnu (erg s^-1 cm^-2 Hz^-1), Jy, mJy, nJy
 
-        :param units_wave: Wavelength array units
-        :type units_wave: str, optional
+        :param wave_units_out: Wavelength array units
+        :type wave_units_out: str, optional
 
-        :param units_flux: Flux array units
-        :type units_flux: str, optional
+        :param flux_units_out: Flux array units
+        :type flux_units_out: str, optional
 
         :param norm_flux: Flux normalization
         :type norm_flux: float, optional
 
         """
 
-        # Dispersion axes conversion
-        if units_wave is not None:
+        # Extract the new values
+        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = observation_unit_convertion(self,
+                                                                                         wave_units_out, flux_units_out)
 
-            # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.isMaskedArray(self.wave) else self.wave
-
-            output_wave = unit_conversion(self.units_wave, units_wave, wave_array=input_wave)
-
-            # Reflect the new units
-            if np.ma.isMaskedArray(self.wave):
-                self.wave = np.ma.masked_array(output_wave, self.wave.mask)
-                self.wave_rest = np.ma.masked_array(output_wave/(1+self.redshift), self.wave.mask)
-            else:
-                self.wave = output_wave
-                self.wave_rest = output_wave/(1+self.redshift)
-            self.units_wave = au.Unit(units_wave)
-
-        # Flux axis conversion
-        if units_flux is not None:
-
-            # Remove the masks for the conversion
-            input_wave = self.wave.data if np.ma.isMaskedArray(self.wave) else self.wave
-            input_flux = self.flux.data if np.ma.isMaskedArray(self.flux) else self.flux
-            input_err = self.err_flux.data if np.ma.isMaskedArray(self.err_flux) else self.err_flux
-
-            # TODO this is slow
-            flux_shape = input_flux.shape
-            y_range, x_range = np.arange(flux_shape[1]), np.arange(flux_shape[2])
-            if len(flux_shape) == 3:
-                output_flux = np.empty(flux_shape)
-                for j in y_range:
-                    for i in x_range:
-                        output_flux[:, j, i] = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
-                                              flux_array=input_flux[:, j, i], dispersion_units=self.units_wave)
-            else:
-                output_flux = unit_conversion(self.units_flux, units_flux, wave_array=self.wave,
-                                              flux_array=input_flux, dispersion_units=self.units_wave)
-
-            if input_err is not None:
-                output_err = unit_conversion(self.units_flux, units_flux, wave_array=input_wave,
-                                             flux_array=input_err, dispersion_units=self.units_wave)
-
-            # Reflect the new units
-            if np.ma.isMaskedArray(self.flux):
-                self.flux = np.ma.masked_array(output_flux, self.flux.mask)
-            else:
-                self.flux = output_flux
-            if input_err is not None:
-                self.err_flux = np.ma.masked_array(output_err, self.err_flux.mask) if np.ma.isMaskedArray(self.err_flux) else output_err
-            self.units_flux = au.Unit(units_flux)
-
-        # Switch the normalization
-        if norm_flux is not None:
-
-            mask_check = np.ma.isMaskedArray(self.flux)
-
-            # Remove old
-            if mask_check:
-                new_flux = self.flux.data * self.norm_flux / norm_flux
-                new_err = None if self.err_flux is None else self.err_flux.data * self.norm_flux / norm_flux
-
-                self.flux = np.ma.masked_array(new_flux, self.flux.mask)
-                self.err_flux = None if self.err_flux is None else np.ma.masked_array(new_err, self.err_flux.mask)
-            else:
-                self.flux = self.flux * self.norm_flux / norm_flux
-                self.err_flux = None if self.err_flux is None else self.err_flux * self.norm_flux / norm_flux
-            self.norm_flux = norm_flux
+        # Reassign the units and normalization
+        self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
+        self.redshift, self.norm_flux = check_redshift_norm(self.redshift, norm_flux, output_flux, self.units_flux)
+        self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(output_wave, output_flux,
+                                                                                         output_err, pixel_mask,
+                                                                                         self.redshift, self.norm_flux)
 
         return
 
@@ -1634,7 +1549,7 @@ class Sample(UserDict, OpenFits):
 
         return output
 
-    def get_spectrum(self, idx):
+    def get_spectrum(self, idx, **kwargs):
 
         # TODO add trick to convert tupple to multi-index MultiIndex.from_tuples([idx_obs], names=sample_files.frame.index.names)
         if isinstance(idx, pd.Series):
@@ -1648,7 +1563,10 @@ class Sample(UserDict, OpenFits):
         else:
             idx_in = idx
 
-        return self.load_function(self.frame, idx_in, self.file_address, **self.load_params)
+        # Combine local configuration with new one
+        load_params = {**self.load_params, **kwargs}
+
+        return self.load_function(self.frame, idx_in, self.file_address, **load_params)
 
     @property
     def index(self):
