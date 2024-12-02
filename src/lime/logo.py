@@ -32,7 +32,7 @@ flux_dict_g = {}
 for curve, params in curve_dict.items():
         flux_dict_g[curve] = gaussian_model(wave_g, **params)
 
-theme.set_style('dark')
+# theme.set_style('dark')
 fig_cfg = theme.fig_defaults()
 fig_cfg['font.family'] = ['MTF Saxy']
 fig_cfg['figure.dpi'] = 200
@@ -86,7 +86,7 @@ with rc_context(fig_cfg):
 
         plt.tight_layout()
         doc_images_folder = Path('../../docs/source/_static/')
-        plt.savefig(doc_images_folder/'logo_dark_transparent.svg', bbox_inches='tight', transparent=True)
+        plt.savefig(doc_images_folder/'logo_white_transparent.png', bbox_inches='tight', transparent=True)
         # plt.show()
 
 # plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)

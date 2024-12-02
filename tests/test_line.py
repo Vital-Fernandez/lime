@@ -158,29 +158,29 @@ class TestLineClass:
         assert line.group_label is None
         assert line.mask is None
 
-        line = Line('C3_1909A')
-        assert line.particle[0].label == 'C3'
-        assert np.all(line.wavelength == np.array([1908.0803]))
-        assert np.all(line.kinem == np.array([0]))
-        assert np.all(line.transition_comp == ['sem'])
-        assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array(['$CIII]1909\\mathring{A}$']))
-        assert np.all(line.list_comps == ['C3_1909A'])
-
-        assert line.label == 'C3_1909A'
-        assert line.group_label is None
-        assert line.mask is not None
-
-        line = Line('C3_1909A_t-sem', band=None)
+        line = Line('C3_1908A')
         assert line.particle[0].label == 'C3'
         assert np.all(line.wavelength == np.array([1908.0803]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == ['sem'])
         assert np.all(line.profile_comp == np.array(['g-emi']))
         assert np.all(line.latex_label == np.array(['$CIII]1908\\mathring{A}$']))
-        assert np.all(line.list_comps == ['C3_1909A_t-sem'])
+        assert np.all(line.list_comps == ['C3_1908A'])
 
-        assert line.label == 'C3_1909A_t-sem'
+        assert line.label == 'C3_1908A'
+        assert line.group_label is None
+        assert line.mask is not None
+
+        line = Line('C3_1908A_t-sem', band=None)
+        assert line.particle[0].label == 'C3'
+        assert np.all(line.wavelength == np.array([1908.0803]))
+        assert np.all(line.kinem == np.array([0]))
+        assert np.all(line.transition_comp == ['sem'])
+        assert np.all(line.profile_comp == np.array(['g-emi']))
+        assert np.all(line.latex_label == np.array(['$CIII]1908\\mathring{A}$']))
+        assert np.all(line.list_comps == ['C3_1908A_t-sem'])
+
+        assert line.label == 'C3_1908A_t-sem'
         assert line.group_label is None
         assert np.all(line.mask == np.array([1870., 1895., 1898.18782, 1912.243544, 1930., 1950.]))
 

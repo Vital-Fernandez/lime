@@ -1,6 +1,6 @@
 [metadata]
 name = 'lime-stable'
-version = '1.2.0'
+version = '1.2.1'
 
 [colors] #Default theme
 default.bg = '#FFFFFF'

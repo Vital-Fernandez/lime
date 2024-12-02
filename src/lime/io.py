@@ -149,16 +149,15 @@ def parse_lime_cfg(toml_cfg, fit_cfg_suffix='_line_fitting'):
     return toml_cfg
 
 
-# Function to load SpecSyzer configuration file
+# Function to load configuration file
 def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
     """
 
-    This function reads a configuration file with the `toml format <https://toml.io/en/>`_. The text file extension
-    must adhere to this format specifications to be successfully read.
+    This function reads a configuration file with the `toml format <https://toml.io/en/>`_.
 
-    If one of the file sections has the suffix specified by the ``fit_cfg_suffix`` this function will query its items and
-    convert the entries to the format expected by `LiMe functions <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+    If one of the file sections has the suffix specified by the ``fit_cfg_suffix`` argument, the function will query its items and
+    convert their values to the format expected by `LiMe functions <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
     The default suffix is "_line_fitting".
 
     The function will show a critical warning if it fails to convert an item in a ``fit_cfg_suffix`` section.

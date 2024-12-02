@@ -10,6 +10,7 @@ import astropy.units as u
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / 'outputs'
+spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
 
 file_address = baseline_folder/'manga_spaxel.txt'
 lines_log_address = baseline_folder/'manga_lines_log.txt'
@@ -253,6 +254,24 @@ def test_unit_conversion():
     lime_conversion = lime.unit_conversion('Hz', 'Angstrom', wave_array=input_wavelength)
     assert np.allclose(astropy_conversion.value, lime_conversion, equal_nan=True)
     assert np.allclose(lime_conversion, 4996.540)
+
+    return
+
+
+def test_cube_spectrum_unit_conversion(file_name='jw01039-o003_t001_miri_ch4-medium_s3d.fits'):
+
+    NGC6552 = lime.Cube.from_file(spectra_folder / file_name, instrument='miri', redshift=0.0266)
+
+    spaxel_A = NGC6552.get_spectrum(19, 20)
+    spaxel_A.unit_conversion(wave_units_out='Angstrom', flux_units_out='FLAM')
+
+    NGC6552.unit_conversion(wave_units_out='Angstrom', flux_units_out='FLAM')
+    spaxel_B = NGC6552.get_spectrum(19, 20)
+
+    assert np.allclose(spaxel_B.wave, spaxel_A.wave)
+    assert np.allclose(spaxel_B.wave_rest, spaxel_A.wave_rest)
+    assert np.allclose(spaxel_B.flux, spaxel_A.flux)
+    assert np.allclose(spaxel_B.err_flux, spaxel_A.err_flux)
 
     return
 

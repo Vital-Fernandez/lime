@@ -16,7 +16,7 @@ outputs_folder = Path(__file__).parent / 'outputs'
 spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
 
 # Fitting example for text fil
-redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189}
+redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189, 'NGC6552':0.0266}
 
 
 class TestOpenFits:
@@ -73,6 +73,17 @@ class TestOpenFits:
         assert np.all(SHOC579.flux == SHOC579_manual.flux)
         assert np.all(SHOC579.wave == SHOC579_manual.wave)
         assert np.all(SHOC579.flux.mask == SHOC579_manual.flux.mask)
+
+        return
+
+    def test_read_miri_params(self, file_name='jw01039-o003_t001_miri_ch4-medium_s3d.fits'):
+
+        NGC6552 = lime.Cube.from_file(spectra_folder/file_name, instrument='miri', redshift=redshift_dict['NGC6552'])
+
+        assert np.isclose(NGC6552.redshift, 0.0266)
+        assert NGC6552.units_wave == 'um'
+        assert NGC6552.units_flux == 'MJy'
+        assert NGC6552.norm_flux == 1
 
         return
 
@@ -249,4 +260,5 @@ class TestOpenFits:
         shoc579.check.cube('H1_6563A', in_fig=fig, rest_frame=True)
 
         return fig
+
 
