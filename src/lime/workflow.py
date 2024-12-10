@@ -1,15 +1,25 @@
 import logging
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from astropy.io import fits
 from time import time
 
-from .model import LineFitting, signal_to_noise_rola
-from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get
-from .transitions import Line
-from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
+from .model import LineFitting, signal_to_noise_rola, gaussian_model, sigma_corrections, c_KMpS
+from .plots import redshift_fit_evaluation
+from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
+from .transitions import Line, air_to_vacuum_function
+from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lmfit.models import PolynomialModel
+
+try:
+    import aspect
+    aspect_check = True
+except ImportError:
+    aspect_check = False
+
 
 _logger = logging.getLogger('LiMe')
 
@@ -233,6 +243,213 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
+def compute_z_key(redshift, lines_lambda, wave_matrix, amp_arr, sigma_arr):
+
+    # Compute the observed line wavelengths
+    obs_lambda = lines_lambda * (1 + redshift)
+    obs_lambda = obs_lambda[(obs_lambda > wave_matrix[0, 0]) & (obs_lambda < wave_matrix[0, -1])]
+
+    if obs_lambda.size > 0:
+
+        # Compute indexes ion array
+        idcs_obs = np.searchsorted(wave_matrix[0, :], obs_lambda)
+
+        # Compute lambda arrays:
+        sigma_lines = sigma_arr[idcs_obs]
+        mu_lines = wave_matrix[0, :][idcs_obs]
+
+        # Compute the Gaussian bands
+        x_matrix = wave_matrix[:idcs_obs.size, :]
+        gauss_matrix = gaussian_model(x_matrix, amp_arr, mu_lines[:, None], sigma_lines[:, None])
+        gauss_arr = gauss_matrix.sum(axis=0)
+
+        # Set maximum to 1:
+        idcs_one = gauss_arr > 1
+        gauss_arr[idcs_one] = 1
+
+    else:
+        gauss_arr = None
+
+    return gauss_arr
+
+
+def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=None,
+               vacuum_waves=False, ref_bands=None, update_labels=True, update_latex=True):
+    """
+
+    This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
+    as a pandas dataframe.
+
+    If the user provides a wavelength array (``wave_inter``) the output dataframe will be limited to the lines within
+    this wavelength interval.
+
+    Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
+    lists. These inputs must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+
+    If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
+    limited to the transitions at that observed range.
+
+    The user can specify the desired wavelength units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
+    or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_. The default value
+    unit is angstroms.
+
+    The argument ``sig_digits`` determines the number of decimal figures for the line labels.
+
+    The user can request the output line labels and bands wavelengths in vacuum setting ``vacuum=True``. This conversion
+    is done using the relation from `Greisen et al. (2006) <https://www.aanda.org/articles/aa/abs/2006/05/aa3818-05/aa3818-05.html>`_.
+
+    Instead of the default LiMe database, the user can provide a ``ref_bands`` dataframe (or the dataframe file address)
+    to use as the reference database.
+
+    :param wave_intvl: Wavelength interval for output line transitions.
+    :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
+
+    :param lines_list: Line list for output line bands.
+    :type lines_list: list, numpy.array, optional
+
+    :param particle_list: Particle list for output line bands.
+    :type particle_list: list, numpy.array, optional
+
+    :param redshift: Redshift interval for output line bands.
+    :type redshift: list, numpy.array, optional
+
+    :param units_wave: Labels and bands wavelength units. The default value is "A".
+    :type units_wave: str, optional
+
+    :param sig_digits: Number of decimal figures for the line labels.
+    :type sig_digits: int, optional
+
+    :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
+    :type vacuum_waves: bool, optional
+
+    :param ref_bands: Reference bands dataframe. The default value is None.
+    :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
+
+    :return:
+    """
+
+    # Use the default lime mask if none provided
+    if ref_bands is None:
+        ref_bands = _PARENT_BANDS
+
+    # Load the reference bands
+    bands_df = check_file_dataframe(ref_bands, pd.DataFrame)
+
+    # Check for modifications on labels units or wavelengths
+    new_format = False
+
+    # Convert to vacuum wavelengths if requested
+    if vacuum_waves:
+        bands_df['wavelength'] = bands_df['wave_vac']
+        bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+        bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
+        new_format = True
+
+    # Convert to requested units
+    if units_wave != 'Angstrom':
+        wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+        conversion_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
+        bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * conversion_factor
+        bands_df['units_wave'] = units_wave
+        new_format = True
+
+    # First slice by wavelength and redshift
+    idcs_rows = np.ones(bands_df.index.size).astype(bool)
+    if wave_intvl is not None:
+
+        # Establish the lower and upper wavelength limits
+        w_min, w_max = wave_intvl[0], wave_intvl[-1]
+
+        # Account for redshift
+        redshift = redshift if redshift is not None else 0
+        wavelength_array = bands_df['wavelength'].to_numpy() * (1 + redshift)
+
+        # Compare with wavelength values
+        idcs_rows = idcs_rows & (wavelength_array >= w_min) & (wavelength_array <= w_max)
+
+    # Second slice by particle
+    if particle_list is not None:
+        idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
+
+    # Finally slice by the name of the lines
+    if lines_list is not None:
+        idcs_rows = idcs_rows & bands_df.index.isin(lines_list)
+
+    # Final table
+    bands_df = bands_df.loc[idcs_rows]
+
+    # Update the labels to reflect new wavelengths and units if necessary and user requests it
+    if new_format and update_labels:
+        for label in bands_df.index:
+            line = Line(label, band=bands_df)
+            line.update_label(sig_digits=sig_digits, update_latex=update_latex)
+            bands_df.rename(index={label: line.label}, inplace=True)
+
+    return bands_df
+
+
+class SpecRetriever:
+
+    def __init__(self, spectrum):
+
+        self._spec = spectrum
+
+        return
+
+    def line_bands(self, lines_list=None, particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
+                   update_latex=False, components_detection=False, bands_kinematic_width=None):
+
+        # Remove the mask from the wavelength array if necessary
+        wave_intvl = self._spec.wave.data if np.ma.isMaskedArray(self._spec.wave) else self._spec.wave
+
+        # Compute the bands to match the observation
+        bands = line_bands(wave_intvl, lines_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
+                           sig_digits=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+                           update_latex=update_latex)
+
+        # Adjust the middle bands to the core
+        if bands_kinematic_width is not None:
+
+            w_central = bands.wavelength.to_numpy() * (1 + self._spec.redshift)
+            idcs_central = (w_central > self._spec.wave.data[0]) & (w_central < self._spec.wave.data[-1])
+
+            HalfBox_pixels = np.round(3 * (bands_kinematic_width / c_KMpS) * 800)
+            HalfBox_pixels = np.int64(np.maximum(HalfBox_pixels, 3))
+
+            idcs = np.searchsorted(wave_intvl, w_central)
+            idcsW3 = idcs + HalfBox_pixels
+            idcsW4 = idcs - HalfBox_pixels
+
+            bands.loc[idcs_central, 'w3'] = self._spec.wave.data[idcsW3]
+            bands.loc[idcs_central, 'w4'] = self._spec.wave.data[idcsW4]
+
+        # Filter the table to match the line detections
+        if components_detection:
+            if self._spec.features.pred_arr is not None:
+
+                # Create masks for all intervals
+                starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
+                ends = bands.w4.to_numpy()[:, None] * (1 + self._spec.redshift)
+
+                # Check if x values fall within each interval
+                in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
+
+                # Check where y equals the target category
+                is_target_category = np.isin(self._spec.features.pred_arr, (3, 7, 9))
+
+                # Combine the masks to count target_category occurrences in each interval
+                counts = np.sum(in_intervals & is_target_category, axis=1)
+
+                # Check which intervals satisfy the minimum count condition
+                idcs = counts >= 3
+                bands = bands.loc[idcs]
+
+            else:
+                raise(LiMe_Error(f'The aspect line detection algorithm needs to be run before matching the bands'))
+
+        return bands
+
+
 class SpecTreatment(LineFitting):
 
     def __init__(self, spectrum):
@@ -352,8 +569,10 @@ class SpecTreatment(LineFitting):
                 emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
 
                 # Gaussian fitting
-                self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, input_conf, min_method, temp,
-                                     self._spec.inst_FWHM)
+                self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, input_conf, min_method)
+
+                # Instrumental and thermal corrections for the lines
+                sigma_corrections(self.line, idcsEmis, emisWave, self._spec.res_power, temp)
 
                 # Recalculate the SNR with the gaussian parameters
                 err_cont = self.line.cont_err if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
@@ -585,6 +804,85 @@ class SpecTreatment(LineFitting):
 
         return
 
+    def redshift(self, bands, z_nsteps=10000, z_min=0, z_max=10, only_detection=True, sig_digits=2, plot_results=False):
+
+        if not aspect_check:
+            _logger.info("ASPECT has not been installed the redshift measurements won't be constrained to line features")
+
+        # Get the features array
+        if aspect_check:
+            if self._spec.features.pred_arr is None:
+                _logger.warning("The observations does not have a components dectection array please run ASPECT")
+                pred_arr, conf_arr = None, None
+            else:
+                pred_arr, conf_arr = self._spec.features.pred_arr, self._spec.features.conf_arr
+
+        # Use the dectection bands if provided
+        if pred_arr is not None:
+            idcs_lines = (pred_arr == 3) | (pred_arr == 7) #TODO add "emission" and "doublet" number checks
+        else:
+            idcs_lines = None
+
+        # Decide if proceed
+        if only_detection is False:
+            measure_check = True
+            idcs_lines = np.ones(idcs_lines.shape).astype(bool)
+        else:
+            measure_check = True if np.any(idcs_lines) else False
+
+        # Continue with measurement
+        if measure_check:
+
+            # Extract the data
+            pixel_mask = None if not np.ma.isMaskedArray(self._spec.flux) else self._spec.flux.mask
+            wave_arr = self._spec.wave.data if pixel_mask is not None else self._spec.wave
+            flux_arr = self._spec.flux.data if pixel_mask is not None else self._spec.flux
+            data_mask = ~pixel_mask
+
+            # Compute the resolution params
+            deltalamb_arr = np.diff(wave_arr)
+            R_arr = wave_arr[1:] / deltalamb_arr
+            FWHM_arr = wave_arr[1:] / R_arr
+            sigma_arr = np.zeros(wave_arr.size)
+            sigma_arr[:-1] = FWHM_arr / (2 * np.sqrt(2 * np.log(2))) * 1.5
+            sigma_arr[-1] = sigma_arr[-2]
+
+            # Lines selection
+            theo_lambda = bands.wavelength.to_numpy()
+
+            # Parameters for the brute analysis
+            z_arr = np.linspace(z_min, z_max, z_nsteps)
+            wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
+            flux_sum = np.zeros(z_arr.size)
+
+            # Combine line and pixel_mask
+            mask = data_mask & idcs_lines
+
+            # Loop throught the redshift steps
+            if not np.all(~mask):
+                for i, z_i in enumerate(z_arr):
+
+                    # Generate the redshift key
+                    gauss_arr = compute_z_key(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
+
+                    # Compute flux cumulative sum
+                    flux_sum[i] = 0 if gauss_arr is None else np.sum(flux_arr[mask] * gauss_arr[mask])
+
+                z_infer = np.round(z_arr[np.argmax(flux_sum)], decimals=sig_digits)
+
+            # No lines or all masked
+            else:
+                z_infer = None
+
+            if plot_results and (z_infer is not None):
+                gauss_arr_max = compute_z_key(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
+                redshift_fit_evaluation(self._spec, z_infer, mask, gauss_arr_max, z_arr, flux_sum)
+
+        # Do not attempt measurement
+        else:
+            z_infer = None
+
+        return z_infer
 
 
 class CubeTreatment(LineFitting):

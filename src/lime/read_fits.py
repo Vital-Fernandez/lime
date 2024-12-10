@@ -19,31 +19,31 @@ _logger = logging.getLogger('LiMe')
 
 DESI_SPECTRA_BANDS = ('B', 'R', 'Z')
 
-SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None,
+SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'res_power': None,
                                     'units_wave': 'um', 'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
 
-                        'isis': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None,
+                        'isis': {'redshift': None, 'norm_flux': None, 'res_power': None,
                                  'units_wave': 'Angstrom', 'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                        'osiris': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                        'osiris': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                    'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                        'sdss': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                        'sdss': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': 'nan', 'id_label': None},
 
-                        'desi': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                        'desi': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None}}
 
-CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                               'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                    'muse':  {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                    'muse':  {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                               'units_flux': '1e-20*FLAM', 'pixel_mask': "nan", 'id_label': None},
 
-                    'megara': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'Angstrom',
+                    'megara': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                'units_flux': 'Jy', 'pixel_mask': "nan", 'id_label': None},
 
-                    'miri': {'redshift': None, 'norm_flux': None, 'inst_FWHM': None, 'units_wave': 'um',
+                    'miri': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'um',
                              'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
 
                     }
@@ -55,15 +55,13 @@ def show_instrument_cfg():
     for i, items in enumerate(SPECTRUM_FITS_PARAMS.items()):
         key, value = items
         print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]}, '
-              f'pixel_mask: {value["pixel_mask"]}, inst_FWHM: {value["inst_FWHM"]}')
-        # print(f'\t\t pixel mask: {value["pixel_mask"]}, instrumental FWHM: {value["inst_FWHM"]}')
+              f'pixel_mask: {value["pixel_mask"]}, res_power: {value["res_power"]}')
 
     print(f'\nCube ".fits" spectra files configuration:')
     for i, items in enumerate(CUBE_FITS_PARAMS.items()):
         key, value = items
         print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]},'
-              f'pixel_mask: {value["pixel_mask"]}, inst_FWHM: {value["inst_FWHM"]}')
-        # print(f'\t\t pixel mask: {value["pixel_mask"]}, instrumental FWHM: {value["inst_FWHM"]}')
+              f'pixel_mask: {value["pixel_mask"]}, res_power: {value["res_power"]}')
 
     return
 

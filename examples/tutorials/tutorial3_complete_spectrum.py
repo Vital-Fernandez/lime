@@ -16,11 +16,11 @@ gp_spec.plot.spectrum()
 gp_spec.unit_conversion()
 
 # Fit the continuum
-gp_spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5], plot_steps=True)
+gp_spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5], plot_steps=False)
 
 # Find lines
-match_bands = gp_spec.line_detection(lineBandsFile, sigma_threshold=3, plot_steps=True)
-gp_spec.plot.spectrum(label='GP121903 matched lines', bands=match_bands, log_scale=True)
+match_bands = gp_spec.line_detection(lineBandsFile, sigma_threshold=3, plot_steps=False)
+# gp_spec.plot.spectrum(label='GP121903 matched lines', bands=match_bands, log_scale=True)
 
 # Saving GP121903 bands
 obj_bands_file = '../sample_data/gp121903_bands.txt'

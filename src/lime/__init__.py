@@ -40,10 +40,11 @@ _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 class Error(Exception):
     """LiMe exception function"""
 
-from .observations import Spectrum, Sample, Cube, line_bands
+from .observations import Spectrum, Sample, Cube
 from .io import *
 from .tools import *
 from .transitions import Line, label_decomposition, bands_from_frame
 from .read_fits import OpenFits, show_instrument_cfg
 from .recognition import detection_function
 from .plots import theme
+from .workflow import line_bands
