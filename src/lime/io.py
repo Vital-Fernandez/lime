@@ -578,6 +578,7 @@ def results_to_log(line, log, norm_flux):
                 if param_value is None:
                     param_value = 'none'
 
+            # print(comp, param, param_value)
             log.at[comp, param] = param_value
 
     return

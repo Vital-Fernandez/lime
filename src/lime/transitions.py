@@ -123,28 +123,31 @@ def particle_notation(particle, transition):
     return part_label
 
 
-def air_to_vacuum_function(input_array, sig_fig=None):
+def air_to_vacuum_function(wave_array, sig_fig=None):
 
-    input_array = np.array(input_array, ndmin=1)
+    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(wave_array*0.0001, 2) + 0.01360/np.power(wave_array*0.0001, 4)))
+    output_array = (wave_array * 0.0001 * refraction_index) * 10000
 
-    if 'U' in str(input_array.dtype): #TODO finde better way
-
-        ion_array, wave_array, latex_array = label_decomposition(input_array)
-        air_wave = wave_array
-    else:
-        air_wave = input_array
-
-    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
-    output_array = (air_wave * 0.0001 * refraction_index) * 10000
-
-    if sig_fig is not None:
-        output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
-
-    if 'U' in str(input_array.dtype):
-        vacuum_wave = output_array.astype(str)
-        output_array = np.core.defchararray.add(ion_array, '_')
-        output_array = np.core.defchararray.add(output_array, vacuum_wave)
-        output_array = np.core.defchararray.add(output_array, 'A')
+    # input_array = np.array(input_array, ndmin=1)
+    #
+    # if 'U' in str(input_array.dtype): #TODO finde better way
+    #
+    #     ion_array, wave_array, latex_array = label_decomposition(input_array)
+    #     air_wave = wave_array
+    # else:
+    #     air_wave = input_array
+    #
+    # refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
+    # output_array = (air_wave * 0.0001 * refraction_index) * 10000
+    #
+    # if sig_fig is not None:
+    #     output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
+    #
+    # if 'U' in str(input_array.dtype):
+    #     vacuum_wave = output_array.astype(str)
+    #     output_array = np.core.defchararray.add(ion_array, '_')
+    #     output_array = np.core.defchararray.add(output_array, vacuum_wave)
+    #     output_array = np.core.defchararray.add(output_array, 'A')
 
     return output_array
 
@@ -594,12 +597,16 @@ class Particle:
     def __eq__(self, other):
         """Overrides the default implementation"""
 
-        _equality = False
+        # Compare with strings
+        if isinstance(other, str):
+            return self.label == other
+
+        # Compare with other particles
         if isinstance(other, Particle):
             if (other.label == self.label) and (other.symbol == self.symbol) and (other.ionization == self.ionization):
-                _equality = True
-
-        return _equality
+               return True
+            else:
+                return False
 
     def __ne__(self, other):
 
@@ -678,6 +685,14 @@ class Line:
             self._from_label(label, band, fit_conf)
 
         return
+
+    def __str__(self):
+
+        return self.label
+
+    def __repr__(self):
+
+        return self.label
 
     def _from_label(self, label, band=None, fit_conf=None):
 
@@ -820,7 +835,7 @@ class Line:
 
         return
 
-    def _review_latex_label(self, bands_df):
+    def _review_latex_label(self, bands_df, update_latex=False):
 
         # Check if there is a latex label on the database
         latex_exists = False
@@ -832,7 +847,7 @@ class Line:
 
         # Merged
         if self.merged_check:
-            if latex_exists:
+            if latex_exists and (update_latex is False):
                 latex_list = list(bands_df.loc[self.list_comps, 'latex_label'].to_numpy())
             else:
                 latex_list = list(latex_from_label(self.group_label.split('+')))
@@ -840,21 +855,13 @@ class Line:
 
         # Blended and single
         else:
-            if latex_exists:
+            if latex_exists and (update_latex is False):
                 self.latex_label = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
             else:
                 self.latex_label = latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
                                                     self.transition_comp)
 
         return
-
-    def __str__(self):
-
-        return self.label
-
-    def __repr__(self):
-
-        return self.label
 
     def index_bands(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
 
@@ -922,3 +929,25 @@ class Line:
                 outputs = idcsLineRegion, idcsContLeft, idcsContRight
 
         return outputs
+
+    def update_label(self, sig_digits=None, update_latex=True, bands_df=None):
+
+        # TODO update components notation?
+
+        # Convert core transition particle
+        part_str = self.particle[self._ref_idx]
+        wave_str = np.round(self.wavelength[self._ref_idx], 0).astype(int) if sig_digits is None else np.round(self.wavelength[self._ref_idx], sig_digits)
+        units_str = f'{self.units_wave[self._ref_idx]}' if self.units_wave[self._ref_idx] != 'Angstrom' else 'A'
+        module_str = "_b" if self.blended_check else "_m" if self.merged_check else ""
+        kinem_str = f'_k-{self.kinem[self._ref_idx]}' if self.kinem[self._ref_idx] != 0 else ''
+        profile_str = f'_p-{self.profile_comp[self._ref_idx]}' if self.profile_comp[self._ref_idx] != 'g-emi' else ''
+        trans_str = f'_t-{self.kinem[self._ref_idx]}' if not self.profile_comp[self._ref_idx] not in ['rec', 'col'] else ''
+
+        # New label
+        self.label = f'{part_str}_{wave_str}{units_str}{module_str}{kinem_str}{profile_str}{trans_str}'
+
+        # Update latex notation
+        if update_latex:
+            self._review_latex_label(bands_df, update_latex)
+
+        return

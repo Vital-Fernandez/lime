@@ -862,22 +862,23 @@ class RedshiftInspection:
         self._sample_object = None
 
     def redshift(self, obj_idcs, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
-                 none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
+                 initial_z=None, none_value=np.nan, unknown_value=0.0,  legend_handle='levels', maximize=False, title=None,
                  output_address=None, n_pixels=10, fig_cfg={}, ax_cfg={}, in_fig=None):
+
 
         # Assign the attributes
         self._obj_idcs = obj_idcs if isinstance(obj_idcs, pd.MultiIndex) else self._sample.loc[obj_idcs].index
         self._column_log = redshift_column
         self._none_value = none_value
         self._unknown_value = unknown_value
-        self._spec_label = "" if title_label is None else title_label
+        self._spec_label = "" if title is None else title
         self._legend_handle = legend_handle
         self._user_point = None
 
         # Output Log params
         self._log_address = output_file_log
 
-        # Only save new redshift in input obj_idcs if None provided
+        # Only save new redshift in input idx if None provided
         if output_idcs is None:
             self._output_idcs = self._obj_idcs
         else:
@@ -887,9 +888,12 @@ class RedshiftInspection:
         if self._column_log not in self._sample.frame.columns:
             raise LiMe_Error(f'Redshift column "{redshift_column}" does not exist in the current sample log.')
 
-        # Read initial value for the redshift
-        redshift_pred = self._sample.loc[self._obj_idcs, self._column_log].to_numpy()
-        redshift_pred = None if np.all(pd.isnull(redshift_pred)) else np.nanmean(redshift_pred)
+        # Use provided redshift value
+        if initial_z is not None:
+            redshift_pred = initial_z
+        else:
+            redshift_pred = self._sample.loc[self._obj_idcs, self._column_log].to_numpy()
+            redshift_pred = None if np.all(pd.isnull(redshift_pred)) else np.nanmean(redshift_pred)
 
         # Create initial entry
         self._compute_redshift(redshift_output=redshift_pred)
@@ -906,7 +910,6 @@ class RedshiftInspection:
         _waves_array, _latex_array = label_decomposition(reference_lines, params_list=('wavelength', 'latex_label'))
         idcs_sorted = np.argsort(_waves_array)
         self._waves_array, self._latex_array = _waves_array[idcs_sorted], _latex_array[idcs_sorted]
-
 
         # Set the plot format where the user's overwrites the default
         size_conf = {'figure.figsize': (10, 6), 'axes.labelsize': 12, 'xtick.labelsize': 10, 'ytick.labelsize': 10}
@@ -985,11 +988,12 @@ class RedshiftInspection:
         # Loop through the objects
         for i, obj_idx in enumerate(self._obj_idcs):
 
-            # Load the spectrum
-            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
+            # Load the spectrum with a zero redshift
+            load_params = {**self._sample.load_params, **{'redshift': 0}}
+            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **load_params)
 
             # Plot on the observed frame with reshift = 0
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, 0, 'observed')
+            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, spec.redshift, 'observed')
 
             # Plot the spectrum
             ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid',
@@ -1007,7 +1011,8 @@ class RedshiftInspection:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._sample.load_params)
+                load_params = {**self._sample.load_params, **{'redshift': 0}}
+                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **load_params)
 
                 wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
                 wavelength = wavelength[~np.isnan(wavelength)]

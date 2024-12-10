@@ -398,6 +398,24 @@ def is_digit(x):
         return False
 
 
+def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
+
+    # Thermal correction
+    line.sigma_thermal = np.full(len(line.list_comps), np.nan)
+    for i, comp in enumerate(line.sigma_thermal):
+        atom_mass = ATOMIC_MASS.get(line.particle[i].symbol, np.nan)
+        line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temperature / atom_mass) / 1000
+
+    # Instrumental correction
+    if not np.isnan(R_arr):
+        if np.isscalar(R_arr):
+            line.sigma_instr = np.mean(wave_arr / (R_arr * k_gFWHM))
+        else:
+            line.sigma_instr = np.mean(wave_arr / (R_arr[idcs_line] * k_gFWHM))
+
+    return
+
+
 class ProfileModelCompiler:
 
     def __init__(self, line, redshift, user_conf, y):
@@ -514,7 +532,6 @@ class ProfileModelCompiler:
             weights = 1.0/err
             weights_in = weights if not np.ma.isMaskedArray(weights) else weights.data[idcs_good]
 
-
         # Fit the line
         self.params = self.model.make_params()
 
@@ -527,7 +544,7 @@ class ProfileModelCompiler:
 
         return
 
-    def measurements_calc(self, line, user_conf, inst_FWHM, temp):
+    def measurements_calc(self, line, user_conf):
 
         # Loop through the line components
         for i, comp_label in enumerate(line.list_comps):
@@ -562,7 +579,7 @@ class ProfileModelCompiler:
                 line.eqw = np.full(self.n_comps, np.nan)
                 line.eqw_err = np.full(self.n_comps, np.nan)
                 line.FWHM_p = np.full(self.n_comps, np.nan)
-                line.sigma_thermal = np.full(self.n_comps, np.nan)
+                # line.sigma_thermal = np.full(self.n_comps, np.nan)
 
             # Check for negative -0.0 # TODO this needs a better place # FIXME -0.0 error
             if np.signbit(line.sigma_err[i]):
@@ -577,10 +594,6 @@ class ProfileModelCompiler:
 
             # Compute FWHM_p (Profile Full Width Half Maximum)
             line.FWHM_p[i] = FWHM_FUNCTIONS[line._p_shape[i]](line, i)
-
-            # Compute thermal correction
-            atom_mass = ATOMIC_MASS.get(line.particle[i].symbol, np.nan)
-            line.sigma_thermal[i] = np.sqrt(k_Boltzmann * temp / atom_mass) / 1000
 
             # Check parameters error propagation
             self.review_err_propagation(line, i, comp_label)
@@ -598,9 +611,6 @@ class ProfileModelCompiler:
         line.v_r_err = c_KMpS * line.center_err / self.ref_wave
         line.sigma_vel = c_KMpS * line.sigma / self.ref_wave
         line.sigma_vel_err = c_KMpS * line.sigma_err / self.ref_wave
-
-        # Compute instrumental correction
-        line.sigma_instr = k_gFWHM / line.inst_FWHM if not np.isnan(inst_FWHM) else None
 
         # Fitting diagnostics
         line.chisqr, line.redchi = self.output.chisqr, self.output.redchi
@@ -852,7 +862,7 @@ class LineFitting:
 
         return
 
-    def profile_fitting(self, line, x, y, err, z_obj, user_conf, fit_method='leastsq', temp=10000.0, inst_FWHM=np.nan):
+    def profile_fitting(self, line, x, y, err, z_obj, user_conf, fit_method='leastsq'):
 
         # Compile the Lmfit component models
         self.profile = ProfileModelCompiler(line, z_obj, user_conf, y)
@@ -861,7 +871,7 @@ class LineFitting:
         self.profile.fit(line, x, y, err, fit_method)
 
         # Store the results into the line attributes
-        self.profile.measurements_calc(line, user_conf, inst_FWHM, temp)
+        self.profile.measurements_calc(line, user_conf)
 
         return
 

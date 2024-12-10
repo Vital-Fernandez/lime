@@ -18,7 +18,7 @@ from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe
 
 from .read_fits import OpenFits, SPECTRUM_FITS_PARAMS
 from .transitions import Line, latex_from_label, air_to_vacuum_function
-from .workflow import SpecTreatment, CubeTreatment
+from .workflow import SpecTreatment, CubeTreatment, SpecRetriever
 from . import Error, __version__
 
 # Log variable
@@ -291,134 +291,6 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     return wave, wave_rest, flux, err_flux
 
 
-def line_bands(wave_intvl=None, lines_list=None, particle_list=None, z_intvl=None, units_wave='Angstrom', decimals=None,
-               vacuum=False, ref_bands=None):
-    """
-
-    This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
-    as a pandas dataframe.
-
-    If the user provides a wavelength array (``wave_inter``), a lime.Spectrum or lime.Cube the output dataframe will be
-    limited to the lines within this wavelength interval.
-
-    Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-    lists. These inputs must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
-
-    If the user provides a redshift interval (``z_intvl``) alongside the wavelength interval (``wave_intvl``) the output
-    bands will be limited to the transitions which can be observed given the two parameters.
-
-    The default line labels and bands ``units_wave`` are angstroms (A), additional options are: um, nm, Hz, cm, mm.
-
-    The argument ``decimals`` determines the number of decimal figures for the line labels.
-
-    The user can request the output line labels and bands wavelengths in vacuum setting ``vacuum=True``. This conversion
-    is done using the relation from `Greisen et al. (2006) <https://www.aanda.org/articles/aa/abs/2006/05/aa3818-05/aa3818-05.html>`_.
-
-    Instead of the default LiMe database, the user can provide a ``ref_bands`` dataframe (or the dataframe file address)
-    to use as the reference database.
-
-    :param wave_intvl: Wavelength interval for output line transitions.
-    :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
-
-    :param lines_list: Line list for output line bands.
-    :type lines_list: list, numpy.array, optional
-
-    :param particle_list: Particle list for output line bands.
-    :type particle_list: list, numpy.array, optional
-
-    :param z_intvl: Redshift interval for output line bands.
-    :type z_intvl: list, numpy.array, optional
-
-    :param units_wave: Labels and bands wavelength units. The default value is "A".
-    :type units_wave: str, optional
-
-    :param decimals: Number of decimal figures for the line labels.
-    :type decimals: int, optional
-
-    :param vacuum: Set to True for vacuum wavelength values. The default value is False.
-    :type vacuum: bool, optional
-
-    :param ref_bands: Reference bands dataframe. The default value is None.
-    :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
-
-    :return:
-    """
-
-    # Use the default lime mask if none provided
-    if ref_bands is None:
-        ref_bands = _PARENT_BANDS
-
-    # Load the reference bands
-    mask_df = check_file_dataframe(ref_bands, pd.DataFrame)
-
-    # Recover line label components
-    idcs_rows = np.ones(mask_df.index.size).astype(bool)
-
-    # Convert to vacuum wavelengths if requested
-    if vacuum:
-
-        # First the table data
-        air_columns = ['wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        mask_df[air_columns] = mask_df[air_columns].apply(air_to_vacuum_function, raw=True)
-
-    # Convert to requested units
-    units_wave = au.Unit(units_wave)
-    if units_wave != 'Angstrom':
-        conversion_factor = unit_conversion(au.Unit('Angstrom'), units_wave, wave_array=1, dispersion_units='dispersion axis')
-        mask_df.loc[:, 'wavelength':'w6'] = mask_df.loc[:, 'wavelength':'w6'] * conversion_factor
-
-    # Reconstruct the latex label
-    n_bands = mask_df.index.size
-    mask_df['latex_label'] = latex_from_label(None, mask_df['particle'], mask_df['wavelength'],
-                                              np.array([units_wave] * n_bands), np.zeros(n_bands),
-                                              mask_df['transition'], decimals=decimals)
-
-    # Re-write the line band
-    particle_array = mask_df['particle'].to_numpy().astype(str)
-
-    wave_array = mask_df['wavelength'].to_numpy()
-    wave_array = np.round(wave_array, decimals) if decimals is not None else np.round(wave_array, 0).astype(int)
-    wave_array = wave_array.astype(str)
-
-    unit_string = 'A' if units_wave == 'Angstrom' else str(units_wave)
-
-    labels_array = np.core.defchararray.add(particle_array, '_')
-    labels_array = np.core.defchararray.add(labels_array, wave_array)
-    labels_array = np.core.defchararray.add(labels_array, unit_string)
-
-    mask_df.rename(index=dict(zip(mask_df.index.values, labels_array)), inplace=True)
-
-    # First slice by wavelength and redshift
-    if wave_intvl is not None:
-
-        # In case the input is a spectrum
-        if isinstance(wave_intvl, (Spectrum, Cube)):
-            wave_intvl = wave_intvl.wave_rest
-
-        # Establish the lower and upper wavelength limits
-        if np.ma.isMaskedArray(wave_intvl):
-            w_min, w_max = wave_intvl.data[0], wave_intvl.data[-1]
-        else:
-            w_min, w_max = wave_intvl[0], wave_intvl[-1]
-
-        if z_intvl is not None:
-            z_intvl = np.array(z_intvl, ndmin=1)
-            w_min, w_max = w_min * (1 + z_intvl[0]), w_max * (1 + z_intvl[-1])
-
-        wavelength_array = mask_df['wavelength']
-        idcs_rows = idcs_rows & (wavelength_array >= w_min) & (wavelength_array <= w_max)
-
-    # Second slice by particle
-    if particle_list is not None:
-        idcs_rows = idcs_rows & mask_df.particle.isin(particle_list)
-
-    # Finally slice by the name of the lines
-    if lines_list is not None:
-        idcs_rows = idcs_rows & mask_df.index.isin(lines_list)
-
-    return mask_df.loc[idcs_rows]
-
-
 class Spectrum(LineFinder):
 
     """
@@ -437,7 +309,7 @@ class Spectrum(LineFinder):
 
     The default ``units_flux`` are Flam (erg s^-1 cm^-2 Å^-1), additional options are: Fnu, Jy, mJy, nJy
 
-    The user can also specify an instrument FWHM (``inst_FWHM``), so it can be taken into account during the measurements.
+    The user can also specify an instrument resolving power (``res_power``), so it can be used to compute a sigma correction (sigma_instr) on the results.
 
     The user can provide a ``pixel_mask`` boolean array with the pixels **to be excluded** from the measurements.
 
@@ -463,8 +335,8 @@ class Spectrum(LineFinder):
     :param crop_waves: spectrum (minimum, maximum) values
     :type crop_waves: np.array, tuple, optional
 
-    :param inst_FWHM: Instrumental FWHM.
-    :type inst_FWHM: float, optional
+    :param res_power: Instrument resolving power.
+    :type res_power: float, np.array, optional
 
     :param units_wave: Wavelength array units. The default value is "A".
     :type units_wave: str, optional
@@ -484,7 +356,7 @@ class Spectrum(LineFinder):
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 inst_FWHM=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
+                 res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
 
         # Load parent classes
         LineFinder.__init__(self)
@@ -502,13 +374,13 @@ class Spectrum(LineFinder):
 
         self.redshift = None
         self.norm_flux = None
-        self.inst_FWHM = None
+        self.res_power = None
         self.units_wave = None
         self.units_flux = None
 
         # Treatments objects
         self.fit = SpecTreatment(self)
-        self.infer = DetectionInference(self)
+        self.retrieve = SpecRetriever(self)
 
         if aspect_check:
             self.features = SpectrumDetector(self)
@@ -519,7 +391,7 @@ class Spectrum(LineFinder):
 
         # Review and assign the attibutes data
         if review_inputs:
-            self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM,
+            self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, res_power,
                                  units_wave, units_flux, pixel_mask, id_label)
 
         return
@@ -539,7 +411,7 @@ class Spectrum(LineFinder):
         spec.norm_flux = cube.norm_flux
         spec.redshift = cube.redshift
         spec.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
-        spec.inst_FWHM = cube.inst_FWHM
+        spec.res_power = cube.res_power
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
 
@@ -635,12 +507,11 @@ class Spectrum(LineFinder):
         # Create the LiMe object
         return cls(**fits_args)
 
-    def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, inst_FWHM, units_wave,
+    def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, res_power, units_wave,
                         units_flux, pixel_mask, label):
 
         # Class attributes
         self.label = label
-        self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
 
         # Review the inputs
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
@@ -662,6 +533,10 @@ class Spectrum(LineFinder):
 
         # Generate empty dataframe to store measurement use cwd as default storing folder # TODO we are not using this
         self.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
+
+        # Set the instrumental sigma correction
+        self.res_power = np.nan if res_power is None else res_power
+
 
         return
 
@@ -843,7 +718,7 @@ class Cube:
 
     The default ``units_flux`` are Flam (erg s^-1 cm^-2 Å^-1), additional options are: Fnu, Jy, mJy, nJy
 
-    The user can also specify an instrument FWHM (``inst_FWHM``), so it can be taken into account during the measurements.
+    The user can also specify an instrument revolving power (``res_power``),  so it can be used to compute a sigma correction (sigma_instr) on the results.
 
     The user can provide a ``pixel_mask`` boolean 3D array with the pixels **to be excluded** from the measurements.
 
@@ -868,8 +743,8 @@ class Cube:
     :param crop_waves: spectrum (minimum, maximum) values
     :type crop_waves: np.array, tuple, optional
 
-    :param inst_FWHM: Instrumental FWHM.
-    :type inst_FWHM: float, optional
+    :param res_power: Instrument resolving power power.
+    :type res_power: float, np.array, optional
 
     :param units_wave: Wavelength units. The default value is "A"
     :type units_wave: str, optional
@@ -892,7 +767,7 @@ class Cube:
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 inst_FWHM=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
+                 res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
         # Review the inputs
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
@@ -903,7 +778,7 @@ class Cube:
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.inst_FWHM = np.nan if inst_FWHM is None else inst_FWHM
+        self.res_power = np.nan if res_power is None else res_power
         self.wcs = wcs
 
         # Treatments objects
@@ -1563,7 +1438,7 @@ class Sample(UserDict, OpenFits):
         else:
             idx_in = idx
 
-        # Combine local configuration with new one
+        # Combine local load_params with the current ones if provided
         load_params = {**self.load_params, **kwargs}
 
         return self.load_function(self.frame, idx_in, self.file_address, **load_params)
@@ -1667,70 +1542,70 @@ class Sample(UserDict, OpenFits):
         return check
 
 
-class ObsManager(OpenFits):
-
-    def __init__(self, file_address, file_source, lime_object, load_function=None, **kwargs):
-
-        # Initialize the .fits reading class
-        OpenFits.__init__(self, file_address, file_source, lime_object, load_function)
-
-        # Define attribute
-        self.spectrum_check = False
-        self.load_function = None
-        self.user_params = None
-
-        # Store the user arguments for the spectra
-        self.user_params = kwargs
-
-        # State the type of spectra
-        if file_source is None:
-            self.spectrum_check = True
-        else:
-            self.spectrum_check = True if self.source in list(SPECTRUM_FITS_PARAMS.keys()) else False
-
-        # Assign input load function
-        if load_function is not None:
-            self.load_function = load_function
-
-        # Assign the
-        elif (file_source is not None) and (self.fits_reader is not None):
-            self.load_function = self.default_file_parser
-
-        # No load function nor instrument
-        else:
-            raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
-                             f'supported by LiMe')
-
-        return
-
-    def load_function(self, file_spec, log_df=None, id_spec=None, **kwargs):
-
-        default_args = self.fits_reader(file_spec) if self.fits_reader is not None else {}
-        user_args = self.user_params if self.user_params is not None else {}
-
-        # Recover the user params
-        user_args = user_args if user_args is not None else self.user_params
-
-        # Update with the default arguments
-        default_args = {**default_args, **user_args}
-
-        # Run the load function
-        load_function_output = self.load_function(file_spec, log_df, id_spec, **default_args)
-
-        # Proceed to create LiMe object if necessary
-        if isinstance(load_function_output, dict):
-            obs_args = {**default_args, **load_function_output}
-            obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-        else:
-            obs = load_function_output
-
-        return obs
-
-    def default_file_parser(self, log_df=None, id_spec=None, **kwargs):
-
-        file_spec = self.id_spec[log_df.index.names.index('file')]
-
-        fits_args = self.fits_reader(file_spec)
-
-        return fits_args
+# class ObsManager(OpenFits):
+#
+#     def __init__(self, file_address, file_source, lime_object, load_function=None, **kwargs):
+#
+#         # Initialize the .fits reading class
+#         OpenFits.__init__(self, file_address, file_source, lime_object, load_function)
+#
+#         # Define attribute
+#         self.spectrum_check = False
+#         self.load_function = None
+#         self.user_params = None
+#
+#         # Store the user arguments for the spectra
+#         self.user_params = kwargs
+#
+#         # State the type of spectra
+#         if file_source is None:
+#             self.spectrum_check = True
+#         else:
+#             self.spectrum_check = True if self.source in list(SPECTRUM_FITS_PARAMS.keys()) else False
+#
+#         # Assign input load function
+#         if load_function is not None:
+#             self.load_function = load_function
+#
+#         # Assign the
+#         elif (file_source is not None) and (self.fits_reader is not None):
+#             self.load_function = self.default_file_parser
+#
+#         # No load function nor instrument
+#         else:
+#             raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
+#                              f'supported by LiMe')
+#
+#         return
+#
+#     def load_function(self, file_spec, log_df=None, id_spec=None, **kwargs):
+#
+#         default_args = self.fits_reader(file_spec) if self.fits_reader is not None else {}
+#         user_args = self.user_params if self.user_params is not None else {}
+#
+#         # Recover the user params
+#         user_args = user_args if user_args is not None else self.user_params
+#
+#         # Update with the default arguments
+#         default_args = {**default_args, **user_args}
+#
+#         # Run the load function
+#         load_function_output = self.load_function(file_spec, log_df, id_spec, **default_args)
+#
+#         # Proceed to create LiMe object if necessary
+#         if isinstance(load_function_output, dict):
+#             obs_args = {**default_args, **load_function_output}
+#             obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+#         else:
+#             obs = load_function_output
+#
+#         return obs
+#
+#     def default_file_parser(self, log_df=None, id_spec=None, **kwargs):
+#
+#         file_spec = self.id_spec[log_df.index.names.index('file')]
+#
+#         fits_args = self.fits_reader(file_spec)
+#
+#         return fits_args
 

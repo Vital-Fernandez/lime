@@ -68,3 +68,20 @@ LiMe minor update - 1.2.1 - 10/29/2024
     - Added support for reading MIRI IFU observations with MJy/str and um units
     - Corrected bug on the latex label generation in the lime.line_bands command not reproducing the expected format
     - The unit_conversion function for Cube observations now uses the format from the previous update.
+
+LiMe medium update - 1.3.0 - 10/29/2024
+    - This update includes ASPECT as an optional dependency and has adapted several functions to include the possibility to use its predictions
+    - Added the Spectrum.retrieve attribute to group tasks which return data for the user related to the spectrum
+    - Added the Spectrum.retrieve.line_bands to return the line bands which match the observation redshift, wave interval and components detection.
+    - The lime.line_bands and Spectrum.retrieve.line_bands now use the argument "redshift" to adjust the output bands which are within a "wave_intvl" for that redshift (for the Spectrum.retrieve.line_bands this is always the case)
+    - The lime.line_bands has been moved to the workflow.py file
+    - The ".line_bands" have now use the new unit conversion function and includes more functionality via new update_labels=True, update_latex=True.
+    - The inst_FWHM at the creation of observations has been replaced by res_power (resolving power) and now can be a float or an array (same length as the observation wavelength). This provides a more robust computation of the sigma_instr
+    - The sigma_instr and sigma_thermal corrections are not computed within the sigma_corrections function
+    - During the lime.Sample.get_spectrum the user can now specify kwargs arguments to update the creation kwargs for that object.
+    - Several bugs were corrected on the lime.redshift_calculation to avoid very large errors when weak lines were present.
+    - Bug correction on the previous update lime.Spectrum.plot.spectrum to plot bands within the observation wavelength range.
+    - The lime.Sample.check.redshift function now has a new "initial_z" argument for the initial guess of the redshift measurement.
+    - The lime.Sample.check.redshift "title_label" argument has been renamed -> "title" for consistency
+    - The air_to_vacuum_function now only applies the theoretical relation, its inputs and outputs are wavelength arrays.
+    - The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.

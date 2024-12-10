@@ -732,6 +732,75 @@ def label_generator(idx_sample, log, legend_handle):
     return spec_label
 
 
+def redshift_fit_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None, ax_cfg=None, label=None, rest_frame=True):
+
+    # Display check for the user figures
+    display_check = True if in_fig is None else False
+
+    # Set figure format with the user inputs overwriting the default conf
+    legend_check = True if label is not None else False
+
+    # Adjust the default theme
+    PLT_CONF = theme.fig_defaults(fig_cfg)
+    AXES_CONF = theme.ax_defaults(ax_cfg, spectrum.units_wave, spectrum.units_flux, spectrum.norm_flux)
+
+    # Create and fill the figure
+    with (rc_context(PLT_CONF)):
+
+        # Generate the figure object and figures
+        # if in_fig is None:
+        #     in_fig, in_ax = plt.subplots()
+        # else:
+        #     in_ax = in_fig.add_subplot()
+        # ax2 = in_ax.twinx()
+
+        # Generate the figure object and figures
+        if in_fig is None:
+            in_fig = plt.figure()
+
+        grid_ax = in_fig.add_gridspec(nrows=2, ncols=1, height_ratios=[2, 1])
+        ax1 = plt.subplot(grid_ax[0])
+        ax2 = ax1.twinx()
+        ax3 = plt.subplot(grid_ax[1])
+        # in_ax = (spec_ax, resid_ax)
+
+        ax1.set(**AXES_CONF)
+
+        # Reference _frame for the plot
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spectrum.wave, spectrum.flux,
+                                                                    z_infered, rest_frame)
+
+        # Plot spectrum
+        ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
+                   linewidth=theme.colors['spectrum_width'])
+
+        # Plot the data used for the masks
+        y_arr = np.full(flux_plot.size, np.nan)
+        y_arr[data_mask] = flux_plot[data_mask]
+        ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red',
+                   linewidth=theme.colors['spectrum_width'])
+
+        # Plot the bands
+        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.colors['spectrum_width'])
+        ax2.set_ylim(0, 1)
+
+
+        # Plot the spectrum sum
+        title = r'$z_{prediction} = $' + f'{z_infered:0.3f}'
+        ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), color=theme.colors['fg'], where='mid', linewidth=theme.colors['spectrum_width'])
+        ax3.update({'xlabel': 'Redshift range', 'ylabel':r'$\frac{F_{sum, bands}}{max(F_{sum, bands})}$', 'title':title})
+        ax3.set_yticks([0, 1])
+
+        # Plot peack
+        ax3.scatter(z_infered, 1, marker='o', color='red')
+
+        # By default, plot on screen unless an output address is provided
+        output_address, maximize = None, False
+        in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
+
+    return
+
+
 class Plotter:
 
     def __init__(self):
@@ -1019,7 +1088,8 @@ class SpectrumFigures(Plotter):
                 bands = check_file_dataframe(bands, pd.DataFrame)
 
                 # Crop the selection for the observation wavelength range
-                idcs_valid = (bands.w3 > wave_plot[0] / z_corr) & (bands.w4 < wave_plot[-1] / z_corr)
+                w3_obs, w4_obs = bands.w3.to_numpy() * (1 + self._spec.redshift), bands.w4.to_numpy() * (1 + self._spec.redshift)
+                idcs_valid = (w3_obs  > wave_plot[0]) & (w4_obs < wave_plot[-1])
 
                 self._line_matching_plot(in_ax, bands.loc[idcs_valid], wave_plot, flux_plot, z_corr, self._spec.redshift,
                                          self._spec.units_wave)

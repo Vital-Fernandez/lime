@@ -274,9 +274,13 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
 
 
 # Get Weighted redshift from lines
-def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_label='spec_0'):
+def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_err_pct=None, obj_label='spec_0'):
 
-    #TODO accept LiME objects as imput log
+    if str(type(input_log)) in ["<class 'lime.observations.Spectrum'>", "<class 'lime.observations.Cube'>", "<class 'lime.observations.Sample'>"]:
+        input_log = input_log.frame
+
+    # Check if single or multi-index
+    sample_check = isinstance(input_log.index, pd.MultiIndex)
 
     # Check the weighted parameter presence
     if weight_parameter is not None:
@@ -285,9 +289,6 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_l
 
     # Check input line is not a string
     line_list = np.array(line_list, ndmin=1) if isinstance(line_list, str) else line_list
-
-    # Check if single or multi-index
-    sample_check = isinstance(input_log.index, pd.MultiIndex)
 
     if sample_check:
         levels = input_log.index.names
@@ -314,19 +315,23 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_l
         if line_list is not None:
             idcs_slice = df_slice.index.isin(line_list)
             df_slice = df_slice.loc[idcs_slice]
-        else:
-            df_slice = df_slice
+
+        # Exclude error lines:
+        if min_err_pct is not None:
+            idcs_slice = df_slice.center_err.to_numpy() / df_slice.center.to_numpy() <= min_err_pct
+            df_slice = df_slice.loc[idcs_slice]
 
         # Check the line has lines
         n_lines = len(df_slice.index)
         if n_lines > 0:
             z_array = (df_slice['center']/df_slice['wavelength'] - 1).to_numpy()
-            obsLineList = ','.join(df_slice.index.values)
+            z_err_array = df_slice.center_err.to_numpy() / df_slice.center.to_numpy()
+            line_array = df_slice.index.to_numpy()
 
             # Just one line
             if n_lines == 1:
                 z_mean = z_array[0]
-                z_std = df_slice.center_err.to_numpy()[0]/df_slice.wavelength.to_numpy()[0]
+                z_std = df_slice.center_err.to_numpy()[0]/df_slice.center.to_numpy()[0]
 
             # Multiple lines
             else:
@@ -338,11 +343,19 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, obj_l
 
                 # With a weighted parameter
                 else:
-                    w_array = df_slice[weight_parameter]
-                    z_err_array = df_slice.center_err.to_numpy()/df_slice.wavelength.to_numpy()
+
+                    # Get normalized errors weight values which are positive...
+                    w_array = df_slice[weight_parameter].to_numpy()
+                    idcs_pos = w_array > 0
+                    w_array = w_array[idcs_pos]/np.sum(w_array[idcs_pos])
+
+                    # Only use possitive values
+                    z_array, z_err_array, line_array = z_array[idcs_pos], z_err_array[idcs_pos], line_array[idcs_pos]
 
                     z_mean = np.sum(w_array * z_array)/np.sum(w_array)
-                    z_std = np.sqrt(np.sum(np.power(w_array, 2) * np.power(z_err_array, 2)) / np.sum(np.power(w_array, 2)))
+                    z_std = np.sqrt(np.sum(w_array * np.square(z_err_array)) / np.square(np.sum(w_array)))
+
+            obsLineList = ','.join(list(line_array))
 
         else:
             z_mean, z_std, obsLineList = np.nan, np.nan, None
@@ -460,27 +473,6 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
 
     # Round to decimal places
     output_array = output_array if decimals is None else np.round(output_array, decimals)
-
-    # # Converting the wavelength array
-    # if flux_array is None:
-    #     input_mask = wave_array.mask if np.ma.isMaskedArray(wave_array) else None
-    #     input_array = wave_array * in_units if input_mask is None else wave_array.data * in_units
-    #     output_array = input_array.to(au.Unit(out_units))
-    #     output_array = output_array.value  # Remove the units
-    #
-    # # Converting the flux array
-    # else:
-    #     input_mask = flux_array.mask if np.ma.isMaskedArray(flux_array) else None
-    #     input_array = flux_array * in_units if input_mask is None else flux_array.data * in_units
-    #     w_array = wave_array.data * dispersion_units if np.ma.isMaskedArray(wave_array) else wave_array * au.Unit(dispersion_units)
-    #     output_array = input_array.to(au.Unit(out_units), au.spectral_density(w_array))
-    #     output_array = output_array.value  # Remove the units
-    #
-    # # Reapply the mask
-    # output_array = output_array if input_mask is None else np.ma.masked_array(output_array, input_mask)
-    #
-    # # Round to decimal places
-    # output_array = output_array if decimals is None else np.round(output_array, decimals)
 
     return output_array
 
