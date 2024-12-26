@@ -30,24 +30,6 @@ dict_units = {'flam': au.erg/au.s/au.cm**2/au.AA, 'FLAM': au.erg/au.s/au.cm**2/a
               'photnu': au.photon/au.s/au.cm**2/au.Hz, 'PHOTNU': au.photon/au.s/au.cm**2/au.Hz}
 au.set_enabled_aliases(dict_units)
 
-# flam = au.def_unit(['flam', 'FLAM'], au.erg/au.s/au.cm**2/au.AA,
-#                     format={"latex": r"erg\,cm^{-2}s^{-1}\AA^{-1}",
-#                             "generic": "FLAM", "console": "FLAM"})
-#
-# fnu = au.def_unit(['fnu', 'FNU'], au.erg/au.s/au.cm**2/au.Hz,
-#                     format={"latex": r"erg\,cm^{-2}s^{-1}Hz^{-1}",
-#                             "generic": "FNU", "console": "FNU"})
-#
-# photlam = au.def_unit(['photlam', 'PHOTLAM'], au.photon/au.s/au.cm**2/au.AA,
-#                         format={"latex": r"photon\,cm^{-2}s^{-1}\AA^{-1}",
-#                         "generic": "PHOTLAM", "console": "PHOTLAM"})
-#
-# photnu = au.def_unit(['photnu', 'PHOTNU'], au.photon/au.s/au.cm**2/au.Hz,
-#                         format={"latex": r"photon\,cm^{-2}s^{-1}Hz^{-1}",
-#                         "generic": "PHOTNU", "console": "PHOTNU"})
-#
-# au.add_enabled_units([flam, fnu, photlam, photnu])
-
 
 PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'Fnu': r'$F_{\nu}$',
@@ -190,7 +172,6 @@ def check_lines_normalization(input_lines, norm_line, log):
     return line_list, norm_list
 
 
-# Compute the fluxes
 def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_flux', column_name='line_flux',
                      column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line']):
 
@@ -273,7 +254,6 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
     return
 
 
-# Get Weighted redshift from lines
 def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_err_pct=None, obj_label='spec_0'):
 
     if str(type(input_log)) in ["<class 'lime.observations.Spectrum'>", "<class 'lime.observations.Cube'>", "<class 'lime.observations.Sample'>"]:
@@ -540,74 +520,13 @@ def observation_unit_convertion(observation, wave_units_out, flux_units_out):
     return wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask
 
 
-def refraction_index_air_vacuum(wavelength_array, units='A'):
-
-    # TODO add warnings issues with units
-
-    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887 / np.power(wavelength_array * 0.0001, 2) + 0.01360 / np.power(wavelength_array * 0.0001, 4)))
-
-    return refraction_index
-
-
-
-
-
-# def define_masks(wavelength_array, masks_array, merge_continua=True, line_mask_entry='no', line=None):
+# def refraction_index_air_vacuum(wavelength_array, units='A'):
 #
-#     # TODO we might delete this one and leave the transitions one
-#     if masks_array is None:
-#         raise LiMe_Error()
+#     # TODO add warnings issues with units
 #
-#     # Make sure it is a matrix
-#     masks_array = np.atleast_2d(masks_array)
+#     refraction_index = (1 + 1e-6 * (287.6155 + 1.62887 / np.power(wavelength_array * 0.0001, 2) + 0.01360 / np.power(wavelength_array * 0.0001, 4)))
 #
-#     if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
-#         _logger.warning(f'The {line} bands do not match the spectrum wavelength range (observed):')
-#         _logger.warning(f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
-#         _logger.warning(f'-- The {line} bands are: {masks_array} (rest frame * (1 + z))')
-#
-#     # Check if it is a masked array
-#     if np.ma.isMaskedArray(wavelength_array):
-#         wave_arr = wavelength_array.data
-#     else:
-#         wave_arr = wavelength_array
-#
-#     # Remove masked pixels from this function wavelength array
-#     if line_mask_entry != 'no':
-#
-#         # Convert cfg mask string to limits
-#         line_mask_limits = format_line_mask_option(line_mask_entry, wave_arr)
-#
-#         # Get masked indeces
-#         idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
-#         idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
-#
-#     else:
-#         idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
-#
-#     # Find indeces for six points in spectrum
-#     idcsW = np.searchsorted(wave_arr, masks_array)
-#
-#     # Emission region
-#     idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
-#
-#     # Return left and right continua merged in one array
-#     if merge_continua:
-#         idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
-#                           (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
-#                           ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-#                            wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
-#
-#         outputs = idcsLineRegion, idcsContRegion
-#
-#     # Return left and right continua in separated arrays
-#     else:
-#         idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
-#         idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
-#
-#         outputs = idcsLineRegion, idcsContLeft, idcsContRight
-#
-#     return outputs
+#     return refraction_index
 
 
 def join_fits_files(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):

@@ -130,7 +130,7 @@ def air_to_vacuum_function(wave_array, sig_fig=None):
 
     # input_array = np.array(input_array, ndmin=1)
     #
-    # if 'U' in str(input_array.dtype): #TODO finde better way
+    # if 'U' in str(input_array.dtype):
     #
     #     ion_array, wave_array, latex_array = label_decomposition(input_array)
     #     air_wave = wave_array

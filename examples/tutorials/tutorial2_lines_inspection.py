@@ -13,7 +13,7 @@ norm_flux = 1e-18
 gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
 
 # Import the default lines database:
-bands_df = lime.line_bands(wave_intvl=gp_spec)
+bands_df = gp_spec.retrieve.line_bands()
 
 # Save to a file (if it does not exist already)
 bands_df_file = Path('../sample_data/gp121903_bands.txt')

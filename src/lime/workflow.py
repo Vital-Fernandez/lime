@@ -7,7 +7,7 @@ from pathlib import Path
 from astropy.io import fits
 from time import time
 
-from .model import LineFitting, signal_to_noise_rola, gaussian_model, sigma_corrections, c_KMpS
+from .model import LineFitting, signal_to_noise_rola, gaussian_model, sigma_corrections, c_KMpS, compute_inst_sigma_array
 from .plots import redshift_fit_evaluation
 from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
 from .transitions import Line, air_to_vacuum_function
@@ -804,7 +804,8 @@ class SpecTreatment(LineFitting):
 
         return
 
-    def redshift(self, bands, z_nsteps=10000, z_min=0, z_max=10, only_detection=True, sig_digits=2, plot_results=False):
+    def redshift(self, bands, z_nsteps=2000, z_min=0, z_max=10, detection_only=True, sig_digits=2, sigma_factor=None,
+                 res_power=None, plot_results=False):
 
         if not aspect_check:
             _logger.info("ASPECT has not been installed the redshift measurements won't be constrained to line features")
@@ -824,7 +825,7 @@ class SpecTreatment(LineFitting):
             idcs_lines = None
 
         # Decide if proceed
-        if only_detection is False:
+        if detection_only is False:
             measure_check = True
             idcs_lines = np.ones(idcs_lines.shape).astype(bool)
         else:
@@ -840,12 +841,8 @@ class SpecTreatment(LineFitting):
             data_mask = ~pixel_mask
 
             # Compute the resolution params
-            deltalamb_arr = np.diff(wave_arr)
-            R_arr = wave_arr[1:] / deltalamb_arr
-            FWHM_arr = wave_arr[1:] / R_arr
-            sigma_arr = np.zeros(wave_arr.size)
-            sigma_arr[:-1] = FWHM_arr / (2 * np.sqrt(2 * np.log(2))) * 1.5
-            sigma_arr[-1] = sigma_arr[-2]
+            sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
+            sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
 
             # Lines selection
             theo_lambda = bands.wavelength.to_numpy()

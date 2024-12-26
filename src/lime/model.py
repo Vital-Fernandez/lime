@@ -416,6 +416,28 @@ def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
     return
 
 
+def compute_inst_sigma_array(wave_arr, res_power=None):
+
+    # Aproximation using the wavelength array
+    if res_power is None:
+        deltalamb_arr = np.diff(wave_arr)
+        R_arr = wave_arr[1:] / deltalamb_arr
+        FWHM_arr = wave_arr[1:] / R_arr
+
+        sigma_arr = np.zeros(wave_arr.size)
+        sigma_arr[:-1] = FWHM_arr / k_gFWHM
+        sigma_arr[-1] = sigma_arr[-2]
+
+    # Use the true R_arr
+    else:
+        if wave_arr.size != res_power.size:
+            raise LiMe_Error(f'The size fo the spectrum array and the resolving power array must have the same size')
+        FWHM_arr = wave_arr / res_power
+        sigma_arr = FWHM_arr / k_gFWHM
+
+    return sigma_arr
+
+
 class ProfileModelCompiler:
 
     def __init__(self, line, redshift, user_conf, y):

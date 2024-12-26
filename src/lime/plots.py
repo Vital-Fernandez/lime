@@ -732,7 +732,8 @@ def label_generator(idx_sample, log, legend_handle):
     return spec_label
 
 
-def redshift_fit_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None, ax_cfg=None, label=None, rest_frame=True):
+def redshift_fit_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None,
+                            ax_cfg=None, label=None, rest_frame=True):
 
     # Display check for the user figures
     display_check = True if in_fig is None else False
@@ -774,16 +775,15 @@ def redshift_fit_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
         ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
                    linewidth=theme.colors['spectrum_width'])
 
+        # Plot the bands
+        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.colors['spectrum_width'])
+        ax2.set_ylim(0, 1)
+
         # Plot the data used for the masks
         y_arr = np.full(flux_plot.size, np.nan)
         y_arr[data_mask] = flux_plot[data_mask]
         ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red',
                    linewidth=theme.colors['spectrum_width'])
-
-        # Plot the bands
-        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.colors['spectrum_width'])
-        ax2.set_ylim(0, 1)
-
 
         # Plot the spectrum sum
         title = r'$z_{prediction} = $' + f'{z_infered:0.3f}'
