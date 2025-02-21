@@ -21,7 +21,7 @@ from pathlib import Path
 from collections.abc import Sequence
 
 from astropy.io import fits
-from .tables import table_fluxes
+from lime.archives.tables import table_fluxes
 from . import Error
 
 try:
@@ -55,10 +55,10 @@ _logger = logging.getLogger('LiMe')
 # Reading file with the format and export status for the measurements
 _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
-_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep='\s+', header=0, index_col=0)
+_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep=r'\s+', header=0, index_col=0)
 
 _LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
-# _CONF_FILE = _LIME_FOLDER/'config.toml'
+# _CONF_FILE = _LIME_FOLDER/'lime.toml'
 
 # # Read lime configuration file
 # with open(_CONF_FILE, mode="rb") as fp:
@@ -335,18 +335,18 @@ def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
 
         # Text file
         elif file_type == '.txt':
-            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0, comment='#')
+            log = pd.read_csv(log_path, sep=r'\s+', header=0, index_col=0, comment='#')
 
         # Uploaded file from streamlit
         elif file_type == 'UploadedFile':
-            log = pd.read_csv(file_name, sep='\s+', header=0, index_col=0, comment='#')
+            log = pd.read_csv(file_name, sep=r'\s+', header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
             log = pd.read_csv(log_path, sep=',', header=0, index_col=0, comment='#')
 
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
-            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0)
+            log = pd.read_csv(log_path, sep=r'\s+', header=0, index_col=0)
 
     except ValueError as e:
         exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
@@ -556,7 +556,6 @@ def results_to_log(line, log, norm_flux):
 
         # Treat every line
         for j in _RANGE_ATTRIBUTES_FIT:
-
             param = _ATTRIBUTES_FIT[j]
             param_value = line.__getattribute__(param)
 

@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, refraction_index_air_vacuum, join_fits_files, au
+from lime.tools import int_to_roman, join_fits_files, au
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
+from lime.transitions import air_to_vacuum_function
 from astropy.io import fits
 import astropy.units as u
 
@@ -311,8 +312,13 @@ def test_spectra_unit_conversion():
 
 def test_refraction_index_air_vacuum():
 
-    array1 = refraction_index_air_vacuum(wave_array)
-    assert np.allclose(array1[:3], np.array([1.00030083, 1.00030082, 1.00030081]))
+    from specutils.utils.wcs_utils import vac_to_air, refraction_index
+    from astropy.units import Unit
+
+    input_vac_arr = np.array([3621.59598486, 3622.42998417, 3623.26417553])
+    specutils_air_arr = np.array([3620.50684567, 3621.34061749, 3622.17458132])
+
+    assert np.allclose(air_to_vacuum_function(input_vac_arr), specutils_air_arr)
 
     return
 

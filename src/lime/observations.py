@@ -5,19 +5,17 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from openpyxl.styles.builtins import output
-
-from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header, \
+from .tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
     observation_unit_convertion
 
-from .recognition import LineFinder, DetectionInference
-from .plots import SpectrumFigures, SampleFigures, CubeFigures
-from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, _PARENT_BANDS, \
-    check_file_array_mask, load_frame
+from lime.retrieve.peaks import LineFinder
+from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures
+from lime.plotting.plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
+from lime.plotting.bokeh_plots import BokehFigures
+from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame
 
-from .read_fits import OpenFits, SPECTRUM_FITS_PARAMS
-from .transitions import Line, latex_from_label, air_to_vacuum_function
+from lime.archives.read_fits import OpenFits
+from .transitions import Line
 from .workflow import SpecTreatment, CubeTreatment, SpecRetriever
 from . import Error, __version__
 
@@ -173,7 +171,7 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux-np.nanmin(flux_array))) - norm_factor)
                 else:
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux)) - norm_factor)
-
+                # TODO add note for unit_conversion
                 _logger.info(f'The observation does not include a normalization but the mean flux value is '
                              f'below {min_flux_scale}. The flux will be automatically normalized by {norm_flux}.')
             else:
@@ -273,20 +271,23 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     flux = flux if flux is None else flux/norm_flux
     err_flux = err_flux if err_flux is None else err_flux/norm_flux
 
-    # Mask the data
-    if pixel_mask is not None:
+    # Add all False mask if none provided
+    pixel_mask = pixel_mask if pixel_mask is not None else np.zeros(flux.shape).astype(bool)
 
-        # Confirm boolean mask
-        bool_mask = pixel_mask.astype(bool)
+    # Wavelength masking 1D arrays
+    if len(pixel_mask.shape) == 1:
+        wave = np.ma.masked_array(wave, pixel_mask)
+        wave_rest = np.ma.masked_array(wave_rest, pixel_mask)
 
-        # Check for non-1D arrays
-        if len(pixel_mask.shape) == 1:
-            wave = np.ma.masked_array(wave, bool_mask)
-            wave_rest = np.ma.masked_array(wave_rest, bool_mask)
+    # Cube wavelength masking (all flux entries in one plane must be masked)
+    else:
+        wave_mask = np.all(pixel_mask, axis=(1, 2))
+        wave = np.ma.masked_array(wave, wave_mask)
+        wave_rest = np.ma.masked_array(wave_rest, wave_mask)
 
-        # Spectrum or Cube spectral masking
-        flux = np.ma.masked_array(flux, bool_mask)
-        err_flux = None if err_flux is None else np.ma.masked_array(err_flux, bool_mask)
+    # Spectrum or Cube spectral masking
+    flux = np.ma.masked_array(flux, pixel_mask)
+    err_flux = None if err_flux is None else np.ma.masked_array(err_flux, pixel_mask)
 
     return wave, wave_rest, flux, err_flux
 
@@ -388,6 +389,7 @@ class Spectrum(LineFinder):
         # Plotting objects
         self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
+        self.bokeh = BokehFigures(self)
 
         # Review and assign the attibutes data
         if review_inputs:
@@ -404,8 +406,6 @@ class Spectrum(LineFinder):
 
         # Class attributes
         spec.label = label
-        spec.wave = cube.wave
-        spec.wave_rest = cube.wave_rest
         spec.flux = cube.flux[:, idx_j, idx_i]
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
@@ -415,10 +415,9 @@ class Spectrum(LineFinder):
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
 
-        # Check if masked array
-        if np.ma.isMaskedArray(spec.flux):
-            spec.wave = np.ma.masked_array(spec.wave, cube.flux[:, idx_j, idx_i].mask)
-            spec.wave_rest = np.ma.masked_array(cube.wave_rest, cube.flux[:, idx_j, idx_i].mask)
+        # Use the flux mask for the wavelength
+        spec.wave = np.ma.MaskedArray(cube.wave.data, spec.flux.mask)
+        spec.wave_rest = np.ma.MaskedArray(cube.wave_rest.data, spec.flux.mask)
 
         return spec
 
@@ -535,8 +534,7 @@ class Spectrum(LineFinder):
         self.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
 
         # Set the instrumental sigma correction
-        self.res_power = np.nan if res_power is None else res_power
-
+        self.res_power = res_power
 
         return
 
@@ -681,16 +679,10 @@ class Spectrum(LineFinder):
     def update_redshift(self, redshift):
 
         # Check if it is a masked array
-        if np.ma.isMaskedArray(self.wave):
-            input_wave = self.wave.data
-            input_flux = self.flux.data
-            input_err = self.err_flux.data
-            pixel_mask = self.wave.mask
-        else:
-            input_wave = self.wave
-            input_flux = self.flux
-            input_err = self.err_flux
-            pixel_mask = None
+        input_wave = self.wave.data
+        input_flux = self.flux.data
+        input_err = self.err_flux.data
+        pixel_mask = self.flux.mask
 
         # Normalization and masking
         self.redshift = redshift
@@ -913,7 +905,7 @@ class Cube:
         # Get the band indexes
         idcsEmis, idcsCont = line_bg.index_bands(self.wave, self.redshift)
         signal_slice = self.flux[idcsEmis, :, :]
-        signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
+        signal_slice = signal_slice.data
 
         # Get indeces all nan entries to exclude them from the analysis
         idcs_all_nan = np.all(np.isnan(signal_slice.data), axis=0)
@@ -930,8 +922,8 @@ class Cube:
         # S/N line
         elif param == 'SN_line':
             n_pixels = np.sum(idcsCont)
-            cont_slice = self.flux[idcsCont, :, :]
-            cont_slice = cont_slice if not np.ma.isMaskedArray(cont_slice) else cont_slice.data
+            cont_slice = self.flux[idcsCont, :, :].data
+            cont_slice = cont_slice.data
 
             Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
             std_image = np.nanstd(cont_slice, axis=0)
@@ -981,8 +973,6 @@ class Cube:
             region_label, region_mask = region_items
 
             # Metadata for the fits page
-            signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
-
             hdr_i = fits.Header({'PARAM': param,
                                  'PARAMIDX': boundary_dict[region_label],
                                  'PARAMVAL': param_level[region_label],
@@ -1088,7 +1078,7 @@ class Cube:
 
         # Checks for the data type
         err_check = False if self.err_flux is None else True
-        masked_check = False if np.ma.isMaskedArray(self.flux) is False else True
+        # masked_check = False if np.ma.isMaskedArray(self.flux) is False else True
 
         # Check if the output log folder exists
         output_address = Path(output_address)
@@ -1142,9 +1132,8 @@ class Cube:
                 spec_err_flux = self.err_flux[:, idx_j, idx_i] * self.norm_flux if err_check else None
 
                 # Remove mask
-                if masked_check:
-                    spec_flux = spec_flux.data
-                    spec_err_flux = spec_err_flux.data if err_check else None
+                spec_flux = spec_flux.data
+                spec_err_flux = spec_err_flux.data if err_check else None
 
                 # Convert to table-HDU format
                 if err_check:

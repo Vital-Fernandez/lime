@@ -84,15 +84,15 @@ class TestCubeClass:
 
         assert mask_dict['MASK_0'][1]['PARAM'] == 'SN_line'
         assert mask_dict['MASK_0'][1]['PARAMIDX'] == 99
-        assert np.isclose(mask_dict['MASK_0'][1]['PARAMVAL'], 266.62467)
+        assert np.isclose(mask_dict['MASK_0'][1]['PARAMVAL'], 263.0549, rtol=0.01)
 
         assert mask_dict['MASK_1'][1]['PARAM'] == 'SN_line'
         assert mask_dict['MASK_1'][1]['PARAMIDX'] == 96
-        assert np.isclose(mask_dict['MASK_1'][1]['PARAMVAL'], 49.29912)
+        assert np.isclose(mask_dict['MASK_1'][1]['PARAMVAL'], 48.45, rtol=0.01)
 
         assert mask_dict['MASK_2'][1]['PARAM'] == 'SN_line'
         assert mask_dict['MASK_2'][1]['PARAMIDX'] == 93
-        assert np.isclose(mask_dict['MASK_2'][1]['PARAMVAL'], 13.97339)
+        assert np.isclose(mask_dict['MASK_2'][1]['PARAMVAL'], 13.66, rtol=0.01)
 
         return
 

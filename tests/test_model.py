@@ -1,8 +1,6 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import lime
-from lmfit.models import gaussian, lorentzian, voigt, pvoigt
-from lime.model import AREA_FUNCTIONS, FWHM_FUNCTIONS, PROFILE_FUNCTIONS
+from lmfit.models import gaussian, lorentzian
 
 # Profile parameters
 amp = 125.0

@@ -69,7 +69,6 @@ def pd_get(df, row, column, default=None, transform=None):
     return cell
 
 
-# Favoured method to get line fluxes according to resolution
 def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='line_flux', column_positions=None):
 
     if flux_type not in ('mixture', 'intg', 'profile'):
@@ -396,15 +395,6 @@ def blended_label_from_log(line, log):
     return blended_check, group_label
 
 
-def latex_science_float(f, dec=2):
-    float_str = f'{f:.{dec}g}'
-    if "e" in float_str:
-        base, exponent = float_str.split("e")
-        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
-    else:
-        return float_str
-
-
 def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, decimals=None):
 
     """
@@ -460,7 +450,7 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
 def observation_unit_convertion(observation, wave_units_out, flux_units_out):
 
     # Recover the pixel mask
-    pixel_mask = observation.flux.mask if np.ma.isMaskedArray(observation.flux) else None
+    pixel_mask = observation.flux.mask
 
     # Remove existing normalization
     old_norm = observation.norm_flux if ((observation.norm_flux != 1) and (observation.norm_flux is not None)) else 1
@@ -518,15 +508,6 @@ def observation_unit_convertion(observation, wave_units_out, flux_units_out):
         output_wave = input_wave
 
     return wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask
-
-
-# def refraction_index_air_vacuum(wavelength_array, units='A'):
-#
-#     # TODO add warnings issues with units
-#
-#     refraction_index = (1 + 1e-6 * (287.6155 + 1.62887 / np.power(wavelength_array * 0.0001, 2) + 0.01360 / np.power(wavelength_array * 0.0001, 4)))
-#
-#     return refraction_index
 
 
 def join_fits_files(log_file_list, output_address, delete_after_join=False, levels=['id', 'line']):

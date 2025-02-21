@@ -26,7 +26,7 @@ __python_version__ = sys.version_info
 
 # Read lime configuration .toml
 _inst_dir = Path(__file__).parent
-_conf_path = _inst_dir/'config.toml'
+_conf_path = _inst_dir/'lime.toml'
 with open(_conf_path, mode="rb") as fp:
     _setup_cfg = tomllib.load(fp)
 
@@ -44,7 +44,6 @@ from .observations import Spectrum, Sample, Cube
 from .io import *
 from .tools import *
 from .transitions import Line, label_decomposition, bands_from_frame
-from .read_fits import OpenFits, show_instrument_cfg
-from .recognition import detection_function
-from .plots import theme
+from lime.archives.read_fits import OpenFits, show_instrument_cfg
+from .plotting.plots import theme
 from .workflow import line_bands

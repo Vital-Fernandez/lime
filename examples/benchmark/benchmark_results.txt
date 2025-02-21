@@ -131,3 +131,29 @@ Spatial mask 5/6) MASK_4 (2073 spaxels)
 Spatial mask 6/6) MASK_5 (3109 spaxels)
 [==========] 100% of mask (spaxel coordinate. 228-169)
 12498 lines measured in 3.89 minutes.
+
+Test 4) LiMe 1.4.0 Python 3.10
+
+Spatial mask 1/6) MASK_0 (12 spaxels)
+[==========] 100% of mask (spaxel coordinate. 169-170)
+531 lines measured in 0.11 minutes.
+
+Spatial mask 2/6) MASK_1 (89 spaxels)
+[==========] 100% of mask (spaxel coordinate. 173-168)
+3427 lines measured in 0.79 minutes.
+
+Spatial mask 3/6) MASK_2 (383 spaxels)
+[==========] 100% of mask (spaxel coordinate. 208-186)
+3446 lines measured in 1.04 minutes.
+
+Spatial mask 4/6) MASK_3 (2108 spaxels)
+[==========] 100% of mask (spaxel coordinate. 213-191)
+17590 lines measured in 5.46 minutes.
+
+Spatial mask 5/6) MASK_4 (2073 spaxels)
+[==========] 100% of mask (spaxel coordinate. 215-192)
+9839 lines measured in 4.00 minutes.
+
+Spatial mask 6/6) MASK_5 (3109 spaxels)
+[==========] 100% of mask (spaxel coordinate. 228-169)
+12758 lines measured in 5.93 minutes.

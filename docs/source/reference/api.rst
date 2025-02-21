@@ -3,16 +3,16 @@
 API
 ===
 
-:math:`\textsc{LiMe}` features a composite software design, utilizing instances of other classes to implement the target
+:math:`\mathrm{LiMe}` features a composite software design, utilizing instances of other classes to implement the target
 functionality. This approach is akin to that of IRAF: Functions are organized into multi-level packages, which users
 access to perform the corresponding task. The diagram below outlines this workflow:
 
 .. image:: ../../../examples/images/LiMe_structure.png
     :align: center
 
-At the highest level, :math:`\textsc{LiMe}` provides of observational classes: spectrum, cube, and sample. The first two are essentially
+At the highest level, :math:`\mathrm{LiMe}` provides of observational classes: spectrum, cube, and sample. The first two are essentially
 2D and 3D data containers, respectively. The third class functions as a dictionary-like container for multiple spectrum
-or cube objects. Moreover, as illustrated in the figure above, various tools can be invoked via the :math:`\textsc{LiMe}`
+or cube objects. Moreover, as illustrated in the figure above, various tools can be invoked via the :math:`\mathrm{LiMe}`
 import for tasks, such as loading and saving data. Many of these functions are also within the observations.
 
 At an intermediate level, each observational class includes the *.fit*, *.plot*, and *.check* objects.
@@ -40,7 +40,7 @@ Inputs/outputs
     .. figure:: ../../../examples/images/conf_file_osiris.png
        :align: center
 
-       Example of :math:`\textsc{LiMe}` configuration file
+       Example of :math:`\mathrm{LiMe}` configuration file
 
 
 .. autofunction:: lime.load_frame
@@ -96,21 +96,21 @@ Fitting
 Plotting
 --------
 
-.. autofunction:: lime.plots.SpectrumFigures.spectrum
+.. autofunction:: lime.plotting.plots.SpectrumFigures.spectrum
 
-.. autofunction:: lime.plots.SpectrumFigures.bands
+.. autofunction:: lime.plotting.plots.SpectrumFigures.bands
 
-.. autofunction:: lime.plots.SpectrumFigures.grid
+.. autofunction:: lime.plotting.plots.SpectrumFigures.grid
 
-.. autofunction:: lime.plots.CubeFigures.cube
+.. autofunction:: lime.plotting.plots.CubeFigures.cube
 
 
 Interactive plotting
 --------------------
 
-.. autofunction:: lime.plots_interactive.BandsInspection.bands
+.. autofunction:: lime.plotting.plots_interactive.BandsInspection.bands
 
-.. autofunction:: lime.plots_interactive.CubeInspection.cube
+.. autofunction:: lime.plotting.plots_interactive.CubeInspection.cube
 
 
 

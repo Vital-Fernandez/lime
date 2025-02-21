@@ -45,17 +45,18 @@ These are some of the features currently available:
 
 .. toctree::
    :maxdepth: 1
-   :caption: Reference
+   :caption: Introduction
    :name: doc-tree
 
    introduction/installation
-   introduction/api
-   introduction/changelog
-
+   introduction/observations
+   introduction/line_labels
+   introduction/Line_bands
+   introduction/Profile_fitting
 
 .. toctree::
    :maxdepth: 1
-   :caption: Inputs
+   :caption: Guides
    :name: input-tree
 
    inputs/n_inputs1_spectra.ipynb
@@ -65,11 +66,19 @@ These are some of the features currently available:
 
 .. toctree::
    :maxdepth: 1
-   :caption: Outputs
+   :caption: Explanations
    :name: output-tree
 
    outputs/outputs1_measurements.rst
    outputs/n_outputs2_plots.ipynb
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reference
+   :name: tutorial-tree
+
+   introduction/api
+   introduction/changelog
 
 .. toctree::
    :maxdepth: 1

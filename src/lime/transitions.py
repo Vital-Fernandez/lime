@@ -123,33 +123,66 @@ def particle_notation(particle, transition):
     return part_label
 
 
-def air_to_vacuum_function(wave_array, sig_fig=None):
+def air_to_vacuum_function(wave_array, units_wave='AA'):
 
-    refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(wave_array*0.0001, 2) + 0.01360/np.power(wave_array*0.0001, 4)))
-    output_array = (wave_array * 0.0001 * refraction_index) * 10000
+    """
+    Converts air wavelengths to vacuum wavelengths using the method of `Greisen et al. (2006, A&A 446, 747) <https://ui.adsabs.harvard.edu/abs/2006A%26A...446..747G/abstract>`_.
 
-    # input_array = np.array(input_array, ndmin=1)
-    #
-    # if 'U' in str(input_array.dtype):
-    #
-    #     ion_array, wave_array, latex_array = label_decomposition(input_array)
-    #     air_wave = wave_array
-    # else:
-    #     air_wave = input_array
-    #
-    # refraction_index = (1 + 1e-6 * (287.6155 + 1.62887/np.power(air_wave*0.0001, 2) + 0.01360/np.power(air_wave*0.0001, 4)))
-    # output_array = (air_wave * 0.0001 * refraction_index) * 10000
-    #
-    # if sig_fig is not None:
-    #     output_array = np.round(output_array, sig_fig) if sig_fig != 0 else np.round(output_array, sig_fig).astype(int)
-    #
-    # if 'U' in str(input_array.dtype):
-    #     vacuum_wave = output_array.astype(str)
-    #     output_array = np.core.defchararray.add(ion_array, '_')
-    #     output_array = np.core.defchararray.add(output_array, vacuum_wave)
-    #     output_array = np.core.defchararray.add(output_array, 'A')
+    This function applies a wavelength correction to account for the refractive index of air. The input wavelengths are assumed to be measured in air, and
+    the output values correspond to vacuum wavelengths. The conversion follows the formula:
 
-    return output_array
+    .. math::
+
+        \lambda_{\text{vac}} = \lambda_{\text{air}} \times \left( 1 + 10^{-6} \times
+        \left( 287.6155 + 1.62887 \sigma^2 + 0.01360 \sigma^4 \right) \right)
+
+    where:
+
+    .. math::
+
+        \sigma = \frac{1}{\lambda_{\text{air}}^2} \quad \text{(in microns)}.
+
+    :param wave_array: Input array of wavelengths in air.
+    :type wave_array: numpy.ndarray or astropy.units.Quantity
+
+    :param units_wave: The wavelength unit (default: ``'AA'`` for Angstroms). If `wave_array` is an `astropy.Quantity`, this parameter is ignored.
+    :type units_wave: str, optional
+
+    :return: The converted vacuum wavelengths, in the same unit as the input.
+    :rtype: numpy.ndarray or astropy.units.Quantity
+
+    :raises ValueError: If the input wavelength array is not valid.
+
+    **Example Usage:**
+
+    Converting an array of air wavelengths to vacuum wavelengths:
+
+    .. code-block:: python
+
+        import numpy as np
+        import astropy.units as u
+        from your_module import air_to_vacuum_function
+
+        air_waves = np.array([5000, 6000, 7000])  # Angstroms
+        vac_waves = air_to_vacuum_function(air_waves)
+
+        print(vac_waves)  # Output: Vacuum wavelengths in the same unit
+
+    Using Astropy units:
+
+    .. code-block:: python
+
+        air_waves = np.array([5000, 6000, 7000]) * u.AA
+        vac_waves = air_to_vacuum_function(air_waves)
+
+        print(vac_waves.to(u.nm))  # Convert output to nanometers
+
+    """
+
+    wave_arr_um = wave_array * au.Unit(units_wave)
+    sigma2 = 1/np.square(wave_arr_um.to(au.um).value)
+
+    return wave_array / (1 + 1e-6 * (287.6155 + 1.62887 * sigma2 + 0.01360 * np.square(sigma2)))
 
 
 def check_units_from_wave(line, str_ion, str_wave, lines_df):
@@ -835,7 +868,7 @@ class Line:
 
         return
 
-    def _review_latex_label(self, bands_df, update_latex=False):
+    def _review_latex_label(self, bands_df, update_latex=False, decimals=None):
 
         # Check if there is a latex label on the database
         latex_exists = False
@@ -859,29 +892,73 @@ class Line:
                 self.latex_label = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
             else:
                 self.latex_label = latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
-                                                    self.transition_comp)
+                                                    self.transition_comp, decimals=decimals)
 
         return
 
     def index_bands(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
 
+        # Check the line has associated bands
         if self.mask is None:
-            raise KeyError(f'The line {self.label} does not have bands. Please select another line or update the database.')
+            raise LiMe_Error(f'The line {self.label} does include bands. Please select another line or update the database.')
+
+        # Transform the bands into the observed frame
+        bands_obs_arr = np.atleast_1d(self.mask) * (1 + redshift)
+
+        # Get the wavelength array and mask
+        wave_arr = wavelength_array.data
+
+        # Find the indeces of the bands
+        idcs_bands = np.searchsorted(wave_arr, bands_obs_arr)
+
+        # Return the boolean arrays
+        if not just_band_edges:
+            idcs_line = np.zeros(wave_arr.size, dtype=bool)
+            idcs_line[idcs_bands[2]:idcs_bands[3]] = True
+
+            idcs_blue = np.zeros(wave_arr.size, dtype=bool)
+            idcs_blue[idcs_bands[0]:idcs_bands[1]] = True
+
+            idcs_red = np.zeros(wave_arr.size, dtype=bool)
+            idcs_red[idcs_bands[4]:idcs_bands[5]] = True
+
+            # Check for line pixel masking
+            if self.pixel_mask != 'no':
+                line_mask_limits = format_line_mask_option(self.pixel_mask, wave_arr)
+                idcs_mask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+                idcs_valid = ~idcs_mask.sum(axis=1).astype(bool)#[:, None]
+
+                idcs_line = idcs_line & idcs_valid
+                idcs_blue = idcs_blue & idcs_valid
+                idcs_red = idcs_red & idcs_valid
+
+            # Output as merged continua bands
+            if merge_continua:
+                return idcs_line, idcs_blue | idcs_red
+
+            # Output as independent continua bands
+            else:
+                return idcs_line, idcs_blue, idcs_red
+
+        # Return just the edges of the bands
+        else:
+            return idcs_bands
+
+    def index_bands_orig(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
+
+        if self.mask is None:
+            raise LiMe_Error(f'The line {self.label} does include bands. Please select another line or update the database.')
 
         # Make sure it is a matrix
-        masks_array = np.atleast_2d(self.mask) * (1 + redshift)
+        bands_arr = np.atleast_2d(self.mask) * (1 + redshift)
 
-        if np.any(masks_array[:, 0] < wavelength_array[0]) or np.any(masks_array[:, 5] > wavelength_array[-1]):
-            _logger.warning(f'The {self.label} bands do not match the spectrum wavelength range (observed):')
-            _logger.warning(
-                f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
-            _logger.warning(f'-- The {self.label} bands are: {masks_array} (rest frame * (1 + z))')
+        # if np.any(bands_arr[:, 0] < wavelength_array[0]) or np.any(bands_arr[:, 5] > wavelength_array[-1]):
+        #     _logger.warning(f'The {self.label} bands do not match the spectrum wavelength range (observed):')
+        #     _logger.warning(                f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
+        #     _logger.warning(f'-- The {self.label} bands are: {bands_arr} (rest frame * (1 + z))')
 
         # Check if it is a masked array
-        if np.ma.isMaskedArray(wavelength_array):
-            wave_arr = wavelength_array.data
-        else:
-            wave_arr = wavelength_array
+        wave_arr = wavelength_array.data
 
         # Remove masked pixels from this function wavelength array
         if self.pixel_mask != 'no':
@@ -897,7 +974,7 @@ class Line:
             idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
 
         # Find indeces for six points in spectrum
-        idcsW = np.searchsorted(wave_arr, masks_array)
+        idcsW = np.searchsorted(wave_arr, bands_arr)
 
         # Return just the edges of the bands
         if just_band_edges:
@@ -930,13 +1007,13 @@ class Line:
 
         return outputs
 
-    def update_label(self, sig_digits=None, update_latex=True, bands_df=None):
+    def update_label(self, decimals=None, update_latex=True, bands_df=None):
 
         # TODO update components notation?
 
         # Convert core transition particle
         part_str = self.particle[self._ref_idx]
-        wave_str = np.round(self.wavelength[self._ref_idx], 0).astype(int) if sig_digits is None else np.round(self.wavelength[self._ref_idx], sig_digits)
+        wave_str = np.round(self.wavelength[self._ref_idx], 0).astype(int) if decimals is None else np.round(self.wavelength[self._ref_idx], decimals)
         units_str = f'{self.units_wave[self._ref_idx]}' if self.units_wave[self._ref_idx] != 'Angstrom' else 'A'
         module_str = "_b" if self.blended_check else "_m" if self.merged_check else ""
         kinem_str = f'_k-{self.kinem[self._ref_idx]}' if self.kinem[self._ref_idx] != 0 else ''
@@ -948,6 +1025,6 @@ class Line:
 
         # Update latex notation
         if update_latex:
-            self._review_latex_label(bands_df, update_latex)
+            self._review_latex_label(bands_df, update_latex, decimals=decimals)
 
         return

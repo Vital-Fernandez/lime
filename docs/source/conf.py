@@ -20,6 +20,26 @@ import os
 import shutil
 from pathlib import Path
 
+# mathjax3_config = {
+#     "tex": {
+#         "inlineMath": [["$", "$"], ["\\(", "\\)"]],
+#         "displayMath": [["$$", "$$"], ["\\[", "\\]"]],
+#         "processEscapes": True,
+#     },
+#     "options": {
+#         "enableMenu": False
+#     }
+# }
+
+mathjax3_config = {
+    "tex": {
+        "macros": {
+            "textsc": ["{\\small \\uppercase{#1}}", 1]
+        }
+    }
+}
+
+
 
 def all_but_ipynb(dir, contents):
     result = []
@@ -76,7 +96,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '1.4.0'
+release = '2.0.0'
 
 # -- General configuration ---------------------------------------------------
 
@@ -90,9 +110,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.imgmath',
+    'sphinx.ext.mathjax',
     'matplotlib.sphinxext.plot_directive',
-    'sphinx.ext.imgmath',
     'nbsphinx']
 
 # Add any paths that contain templates here, relative to this directory.
@@ -108,6 +127,9 @@ exclude_patterns = []
 
 
 # -- Options for HTML output -------------------------------------------------
+nbsphinx_markdown = True
+nbsphinx_allow_errors = True
+nbsphinx_execute = 'always'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
@@ -131,5 +153,5 @@ shutil.copytree(_examples_path, _doc_folder, dirs_exist_ok=True)
 
 # Compile the changelog page
 input_txt_changelog = _lib_path/'lime/changelog.txt'  # Path to the uploaded changelog file
-output_rst_changelog = _doc_folder/'introduction/changelog.rst'  # Output rst file
+output_rst_changelog = _doc_folder/'reference/changelog.rst'  # Output rst file
 create_rst_from_changelog(input_txt_changelog, output_rst_changelog)

@@ -5,7 +5,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 import logging
 
-from .io import LiMe_Error
+from lime.io import LiMe_Error
 from urllib.parse import urlparse
 
 try:
@@ -51,13 +51,13 @@ CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'res_power': 
 
 def show_instrument_cfg():
 
-    print(f'\nSingle ".fits" spectra files configuration:')
+    print(f'\nLong-slit ".fits" observation instrument configuration:')
     for i, items in enumerate(SPECTRUM_FITS_PARAMS.items()):
         key, value = items
         print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]}, '
               f'pixel_mask: {value["pixel_mask"]}, res_power: {value["res_power"]}')
 
-    print(f'\nCube ".fits" spectra files configuration:')
+    print(f'\nCube ".fits" observation instrument configuration:')
     for i, items in enumerate(CUBE_FITS_PARAMS.items()):
         key, value = items
         print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]},'
@@ -347,9 +347,9 @@ class OpenFits:
         # Mask requested entries
         if pixel_mask is not None:
             pixel_mask = np.atleast_1d(pixel_mask)
-            mask_array = np.zeros(flux_array.shape).astype(bool)
+            mask_bool_array = np.zeros(flux_array.shape).astype(bool)
 
-            # String array:
+            # String array: TODO Lime2.0 make this a method and add it to the spectrum and flux entries and add inf
             if pixel_mask.dtype.kind in ['U', 'S']:
                 for entry in pixel_mask:
                     if entry == 'negative':
@@ -361,24 +361,24 @@ class OpenFits:
                     else:
                         raise LiMe_Error(f'Pixel entry "{entry}" is not recognized. Only boolean masks for the masked '
                                          f'data or these strings are supported: "nan", "negative", "zero"')
-                    mask_array[idcs] = True
+                    mask_bool_array[idcs] = True
 
             # Boolean mask
             else:
                 assert flux_array.shape == pixel_mask.shape, LiMe_Error(f'- Input pixel mask shape {pixel_mask.shape}'
                                                                         f'is different from data array shape {flux_array.shape}')
-                mask_array = pixel_mask
+                mask_bool_array = pixel_mask
 
         else:
-            mask_array = None
+            mask_bool_array = None
 
         # Construct attributes for LiMe object
-        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}#'pixel_mask': mask_array}
+        fits_args = {'input_wave': wave_array, 'input_flux': flux_array, 'input_err': err_array}
         fits_args.update(fits_params)
 
         # Add mask entry
-        if mask_array is not None:
-            fits_args['pixel_mask'] = mask_array
+        if mask_bool_array is not None:
+            fits_args['pixel_mask'] = mask_bool_array
 
         return fits_args
 

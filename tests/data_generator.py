@@ -53,12 +53,15 @@ np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, id_conf_prefix='38-35', progress_output=None)
 spax.save_frame(lines_log_file)
+spax.plot.spectrum()
+# spax.plot.bands('O3_5007A')
 
-spax.plot.velocity_profile('H1_4861A')
-
-# Plots
-spax.plot.spectrum(include_fits=True)
-spax.plot.bands('Fe3_4658A_p-g-emi')
+# spax.plot.velocity_profile('H1_4861A')
+#
+# # Plots
+# spax.plot.spectrum(rest_frame=True)
+# spax.plot.bands('O2_3726A')
+# spax.plot.bands('Fe3_4658A_p-g-emi')
 
 # Cube fitting
 # shoc579.fit.spatial_mask(spatial_mask_address, cube_log_address, fit_conf=fit_cfg, line_detection=True, mask_list=['MASK_0'])

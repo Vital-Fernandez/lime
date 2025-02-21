@@ -1,7 +1,5 @@
-import numpy as np
-from astropy.io import fits
-import lime
 from pathlib import Path
+import lime
 
 # State the data files
 obsFitsFile = '../sample_data/spectra/gp121903_osiris.fits'
@@ -22,11 +20,11 @@ if bands_df_file.is_file() is not True:
     lime.save_frame(bands_df_file, bands_df)
 
 # Review the bands file
-gp_spec.check.bands(bands_df_file, maximize=True)
+gp_spec.check.bands(bands_df_file, maximize=False)
 
 # Adding a redshift file address to store the variations in redshift
 redshift_file = '../sample_data/redshift_log.txt'
 redshift_file_header, object_ref = 'redshift', 'GP121903'
-gp_spec.check.bands(bands_df_file, maximize=True, z_log_address=redshift_file, z_column=redshift_file_header,
-                    object_label='gp121903')
+gp_spec.check.bands(bands_df_file, maximize=False, z_log_address=redshift_file, z_column=redshift_file_header,
+                    object_label='gp121903', exclude_continua=True)
 

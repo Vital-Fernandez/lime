@@ -7,14 +7,14 @@ from matplotlib import pyplot as plt, gridspec, rc_context
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from astropy.io import fits
 
-from .io import load_frame, save_frame, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
+from ..io import load_frame, save_frame, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
 from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, _auto_flux_scale,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
-                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme
+                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, _bands_plot, theme
 
 
-from .tools import blended_label_from_log
-from .transitions import label_decomposition, Line
+from ..tools import blended_label_from_log
+from ..transitions import label_decomposition, Line
 
 
 _logger = logging.getLogger('LiMe')
@@ -52,7 +52,7 @@ def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
         active_lines = np.zeros(len(user_mask.index)).astype(bool)
 
     # Establish the lower and upper wavelength limits
-    wave_interval = wave_rest.data if np.ma.isMaskedArray(wave_rest) else wave_rest
+    wave_interval = wave_rest.data
     wave_interval = wave_interval[~np.isnan(wave_interval)]
     w_min, w_max = wave_interval[0], wave_interval[-1]
 
@@ -178,6 +178,8 @@ class BandsInspection:
         self._sweep_mask = 0
         self._inter_mask = None
 
+        self.exclude_continua = None
+
         self.line = None
         self.mask = None
         self.log = None
@@ -188,11 +190,10 @@ class BandsInspection:
 
         return
 
-    def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
-              z_log_address=None, object_label=None, z_column='redshift',  n_pixels=10, fig_cfg=None, ax_cfg=None,
+    def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
+              z_log_address=None, exclude_continua=False, object_label=None, z_column='redshift',  n_pixels=10, fig_cfg=None, ax_cfg=None,
               in_fig=None, maximize=False):
 
-        # TODO the selection should be None
 
         """
 
@@ -269,6 +270,7 @@ class BandsInspection:
         self._redshift_log_path = None if z_log_address is None else Path(z_log_address)
         self._obj_ref = object_label
         self._redshift_column = z_column
+        self.exclude_continua = exclude_continua
 
         # Input is a mask is address and it will be also used to save the file
         if self._log_address is None:
@@ -304,14 +306,14 @@ class BandsInspection:
             size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
 
             PLT_CONF = theme.fig_defaults(size_conf, fig_type='grid')
-            AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
-                                          fig_type=None)
+            # AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
+            #                               fig_type=None)
 
             # Launch the interative figure
             with rc_context(PLT_CONF):
 
                 # Main structure
-                self._fig = plt.figure() if in_fig is None else in_fig
+                self._fig = plt.figure(layout='tight') if in_fig is None else in_fig
                 gs0 = self._fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
                 gs_lines = gs0[0].subgridspec(n_rows, n_cols, hspace=0.5)
 
@@ -362,7 +364,7 @@ class BandsInspection:
 
                     self._z_orig = self._spec.redshift
                     self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
-                    z_slider = Slider(ax_sliders[1], 'Redshift\n($\Delta z$)', -n_pixels, n_pixels, valinit=0, valstep=1)
+                    z_slider = Slider(ax_sliders[1], r'Redshift\n($\Delta z$)', -n_pixels, n_pixels, valinit=0, valstep=1)
                     z_slider.on_changed(self._on_z_slider_MI)
 
                 # Connecting the figure to the interactive widgets
@@ -370,7 +372,7 @@ class BandsInspection:
                 self._fig.canvas.mpl_connect('axes_enter_event', self._on_enter_axes_MI)
 
                 # Show the image
-                save_close_fig_swicth(None, 'tight', self._fig, maximise=maximize,
+                save_close_fig_swicth(None, None, self._fig, maximise=maximize,
                                       plot_check=True if in_fig is None else False)
 
         else:
@@ -380,7 +382,7 @@ class BandsInspection:
 
         return
 
-    def _plot_line_BI(self, ax, line, frame, y_scale='auto'):
+    def _plot_line_BI(self, ax, line, frame, y_scale='auto', scale_dict=theme.plt):
 
         if self.mask.size == 6:
 
@@ -399,15 +401,23 @@ class BandsInspection:
             # Establish the limits for the line spectrum plot
             mask = self.log.loc[list_comps[0], 'w1':'w6'] * z_corr
             idcsM = np.searchsorted(wave_plot, mask)
-            idxL = idcsM[0] - 5 if idcsM[0] > 5 else idcsM[0]
-            idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
+
+            # Just the center region is adjusted
+            if self.exclude_continua:
+                idxL = idcsM[2] - 10 if idcsM[2] - 10 > 0 else 0
+                idxH = idcsM[3] + 10 if idcsM[3] + 10 < wave_plot.size - 1 else - 1
+
+            # Center + continua
+            else:
+                idxL = idcsM[0] - 5 if idcsM[0] > 5 else idcsM[0]
+                idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
 
             # Plot the spectrum
             ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'],
-                    linewidth=theme.colors['spectrum_width'])
+                    linewidth=scale_dict['spectrum_width'])
 
             # Continuum bands
-            self._bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line)
+            _bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line, self.exclude_continua, theme.colors)
 
             # Plot the masked pixels
             _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH],
@@ -433,12 +443,13 @@ class BandsInspection:
         # Check we are not just clicking on the plot
         if w_low != w_high:
 
-            # Convert the wavelengths to the rest frame if necessary
-            if self._rest_frame is False:
-                w_low, w_high = w_low/(1 + self._spec.redshift), w_high/(1 +  self._spec.redshift)
+            # Just the central bands             # TODO Add JUSTCENTER new action maybe just move the continua bands automatically
+            if self.exclude_continua:
+                self.mask[2] = w_low #if w_low > self._spec.wave_rest.data[0] else self._spec.wave_rest.data[0]
+                self.mask[3] = w_high #if w_high < self._spec.wave_rest.data[-1] else self._spec.wave_rest.data[-1]
 
-            # Case we have all selections
-            if self.mask.size == 6:
+            # Central and adjacent bands
+            else:
 
                 # Correcting line band
                 if w_low > self.mask[1] and w_high < self.mask[4]:
@@ -462,6 +473,7 @@ class BandsInspection:
                 # Weird case
                 else:
                     _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
+
 
             # Save the new selection to the lines log
             self.log.loc[self.line, 'w1':'w6'] = self.mask
@@ -716,7 +728,7 @@ class RedshiftInspectionSingle:
                 # Load the spectrum
                 spec = self._sample.load_function(self._sample.frame, obj_idx, **self._sample.load_params)
 
-                wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
+                wavelength = spec.wave.data
                 wavelength = wavelength[~np.isnan(wavelength)]
 
                 if wave_min is None:
@@ -997,7 +1009,7 @@ class RedshiftInspection:
 
             # Plot the spectrum
             ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid',
-                    linewidth=theme.colors['spectrum_width'])
+                    linewidth=theme.plt['spectrum_width'])
 
             # Plot the masked pixels
             _masks_plot(ax, None, wave_plot, flux_plot, z_corr, spec.frame, idcs_mask, color_dict=theme.colors)
@@ -1014,7 +1026,7 @@ class RedshiftInspection:
                 load_params = {**self._sample.load_params, **{'redshift': 0}}
                 spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **load_params)
 
-                wavelength = spec.wave.data if np.ma.isMaskedArray(spec.wave) else spec.wave
+                wavelength = spec.wave.data
                 wavelength = wavelength[~np.isnan(wavelength)]
 
                 if wave_min is None:
@@ -1391,8 +1403,8 @@ class CubeInspection:
             self.toolbar = plt.get_current_fig_manager().toolbar
 
             # For pytests on figure
-            if self.toolbar is not None:
-                self.toolbar._actions['home'].triggered.connect(self.click_home)
+            # if self.toolbar is not None:
+            #     self.toolbar._actions['home'].triggered.connect(self.click_home)
 
             # Connect the widgets
             self._fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
@@ -1579,7 +1591,6 @@ class CubeInspection:
                 self.restore_zoom = True
 
         return
-
 
 
 class MaskInspection:

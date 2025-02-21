@@ -1,7 +1,7 @@
 import lime
 from time import time
 import numpy as np
-
+lime.theme.set_style('dark')
 # State the data files
 obsFitsFile = '../sample_data/spectra/sdss_dr18_0358-51818-0504.fits'
 lineBandsFile = '../sample_data/osiris_bands.txt'
@@ -42,7 +42,8 @@ spec.features.detection(show_steps=False)
 # fit_time = np.round((time()-start_time), 3)
 # print(f'- completed ({fit_time} seconds)')
 obj_bands = spec.retrieve.line_bands(ref_bands=capers_bands, bands_kinematic_width=100)
-spec.plot.spectrum(bands=obj_bands, show_categories=True, rest_frame=True)
+# spec.plot.spectrum(bands=obj_bands, show_categories=True, rest_frame=True)
+spec.plot.spectrum(show_categories=True, rest_frame=True, ax_cfg={'title': 'CEERs MSA1586, z=4.29'})
 
 
 # obj_bands = spec.retrieve.line_bands(ref_bands=capers_bands, components_detection=True)

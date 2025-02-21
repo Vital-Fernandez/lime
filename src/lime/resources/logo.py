@@ -1,6 +1,6 @@
 import numpy as np
-from lime.model import gaussian_model
-from lime.plots import theme
+from lime.fitting.lines import gaussian_model
+from lime.plotting.plots import theme
 from matplotlib import pyplot as plt, rc_context
 from matplotlib import font_manager
 from pathlib import Path
@@ -85,9 +85,9 @@ with rc_context(fig_cfg):
         ax.axes.yaxis.set_visible(False)
 
         plt.tight_layout()
-        doc_images_folder = Path('../../docs/source/_static/')
-        plt.savefig(doc_images_folder/'logo_white_transparent.png', bbox_inches='tight', transparent=True)
-        # plt.show()
+        doc_images_folder = Path('../../../docs/source/_static/')
+        # plt.savefig(doc_images_folder/'logo_white_transparent.png', bbox_inches='tight', transparent=True)
+        plt.show()
 
 # plt.savefig(doc_images_folder/'logo_transparent.png', bbox_inches='tight', transparent=True)
 # plt.savefig(doc_images_folder/'logo_white.png', bbox_inches='tight')

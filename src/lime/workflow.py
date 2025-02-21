@@ -1,18 +1,17 @@
 import logging
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from astropy.io import fits
 from time import time
 
-from .model import LineFitting, signal_to_noise_rola, gaussian_model, sigma_corrections, c_KMpS, compute_inst_sigma_array
-from .plots import redshift_fit_evaluation
+from .fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band
 from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
 from .transitions import Line, air_to_vacuum_function
 from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lmfit.models import PolynomialModel
+from lime.fitting.redshift import RedshiftFitting
 
 try:
     import aspect
@@ -24,59 +23,62 @@ except ImportError:
 _logger = logging.getLogger('LiMe')
 
 
-def review_bands(line, emis_wave, cont_wave, emis_flux, cont_flux, limit_narrow=7):
+def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_from_bands=True, user_err_from_bands=False):
 
-    # Default value
-    proceed = True
+    # Check if the line bands are provided
+    if line.mask is None:
+        _logger.warning(f"Line {line} was not found on the input bands database. It won't be measured")
+        return None
 
-    # Mask check
-    mask_check = np.ma.isMaskedArray(emis_flux)
 
-    # Confirm is not all the pixels are masked
-    if mask_check:
-        if np.all(emis_flux.mask) or np.all(cont_flux.mask):
-            proceed = False
+    # Check if the line is within the w3, w4 limits
+    limit_blue, limit_red = spec.wave.compressed()[0], spec.wave.compressed()[-1]
+    if ((line.mask[2] * (1 + spec.redshift)) < limit_blue) or ((line.mask[3] * (1 + spec.redshift)) > limit_red):
+        _logger.warning(f"Line {line} bands are outside spectrum wavelengh range: w3 < w_min_rest ({line.mask[2]} < {limit_blue}) or"
+                                                                               f" w4 > w_max_rest ({line.mask[3]} > {limit_red})"
+                                                                               f" it won't be measured")
 
-    # Review the number and type of pixel values
-    if proceed:
+        return None
 
-        # Review the transition bands before
-        emis_band_lengh = emis_wave.size if not mask_check else np.sum(~emis_wave.mask)
-        cont_band_length = cont_wave.size if not mask_check else np.sum(~cont_wave.mask)
+    # Check if the spectrum does not have the error arr but the user has requested it
+    if spec.err_flux is None and user_err_from_bands is False:
+        _logger.warning(f'The observation does not have an error spectrum but the fit command has requested not to use '
+                        f'the adjacent bands to compute the uncertainty. Please set the "user_err_from_bands=True" to perform'
+                        f' a measurement.')
 
-        if emis_band_lengh / emis_wave.size < 0.5:
-            _logger.warning(f'The line band for {line.label} has very few valid pixels')
+        return None
 
-        if cont_band_length / cont_wave.size < 0.5:
-            if cont_band_length > 0:
-                _logger.warning(f'The continuum band for {line.label} has very few valid pixels)')
-            else:
-                _logger.warning(f"The continuum bands for {line.label} have 0 pixels. It won't be measured")
-                proceed = False
+    # Compute the line and adjacent continua indeces:
+    idcsEmis, idcsCont = line.index_bands(spec.wave, spec.redshift)
 
-        # Store error very small mask
-        if emis_band_lengh <= 1:
-            if line.observations == 'no':
-                line.observations = 'Small_line_band'
-            else:
-                line.observations += '-Small_line_band'
+    # Check if all the flux entries are masked
+    emis_flux, cont_flux = spec.flux[idcsEmis], spec.flux[idcsCont]
+    if np.all(emis_flux.mask):
+        _logger.warning(f"Line {line} flux is fully masked. It won't be measured")
+        return None
+    if np.all(cont_flux.mask) and user_cont_from_bands:
+        _logger.warning(f"Line {line} adjacent continua flux is fully masked. It won't be measured")
+        return None
 
-            if np.ma.isMaskedArray(emis_wave):
-                length = np.sum(~emis_wave.mask)
-            else:
-                length = emis_band_lengh
-            _logger.warning(f'The  {line.label} band is too small ({length} length array): {emis_wave}')
+    # Check if all the flux entries are zero
+    if not np.any(emis_flux):
+        _logger.warning(f"Line {line} flux entries are all 0. It won't be measured")
+        return None
+    if not np.any(cont_flux) and user_cont_from_bands:
+        _logger.warning(f"Line {line} continuum flux entries are all 0. It won't be measured")
+        return None
 
-        # Security check not all the pixels are zero
-        if emis_flux.sum() == 0:
-            _logger.warning(f'The {line.label} line pixels sum is zero, it has been excluded from the analysis')
-            proceed = False
+    # Check if the line selection is too narrow
+    if np.sum(~emis_flux.mask) < min_line_pixels:
+        _logger.warning(f"Line {line} has only {np.sum(~emis_flux.mask)} pixels. It won't be measured")
+        return None
 
-        if cont_flux.sum() == 0:
-            _logger.warning(f'The {line.label} continuum pixels sum is zero, it has been excluded from the analysi')
-            proceed = False
+    # Check if the continua selection is too narrow
+    if (np.sum(~cont_flux.mask) < min_cont_pixels) and user_cont_from_bands:
+        _logger.warning(f"Line {line} continuum bands have only {np.sum(~cont_flux.mask)} pixels. It won't be measured")
+        return None
 
-    return proceed
+    return idcsEmis, idcsCont
 
 
 def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
@@ -120,8 +122,8 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
 
                     # Case we want to copy from previously measured line
                     else:
-                        mu_parent = log.loc[parent_label, ['center', 'center_err']].values
-                        sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].values
+                        mu_parent = log.loc[parent_label, ['center', 'center_err']].to_numpy()
+                        sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].to_numpy()
 
                         if param_ext == 'center':
                             param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
@@ -132,25 +134,6 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
                         fit_conf[f'{param_label_child}_err'] = param_value[1]
 
     return
-
-
-def check_spectrum_bands(line, wave_rest_array):
-
-    valid_check = True
-    wave_rest_array = wave_rest_array.data if np.ma.isMaskedArray(wave_rest_array) else wave_rest_array
-
-    if line.mask is not None:
-        if (wave_rest_array[0] <= line.mask[0]) and (line.mask[-1] <= wave_rest_array[-1]):
-            pass
-        else:
-            _logger.warning(f'Line {line} limits (w1={line.mask[0]}, w6={line.mask[-1]}) outside spectrum wavelength '
-                            f'range (wmin={wave_rest_array[0]}, wmax={wave_rest_array[-1]}) (rest frame values)')
-            valid_check = False
-    else:
-        _logger.warning(f'Line {line} was not found on the input bands database.')
-        valid_check = False
-
-    return valid_check
 
 
 def check_cube_bands(input_bands, mask_list, fit_cfg):
@@ -243,36 +226,6 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-def compute_z_key(redshift, lines_lambda, wave_matrix, amp_arr, sigma_arr):
-
-    # Compute the observed line wavelengths
-    obs_lambda = lines_lambda * (1 + redshift)
-    obs_lambda = obs_lambda[(obs_lambda > wave_matrix[0, 0]) & (obs_lambda < wave_matrix[0, -1])]
-
-    if obs_lambda.size > 0:
-
-        # Compute indexes ion array
-        idcs_obs = np.searchsorted(wave_matrix[0, :], obs_lambda)
-
-        # Compute lambda arrays:
-        sigma_lines = sigma_arr[idcs_obs]
-        mu_lines = wave_matrix[0, :][idcs_obs]
-
-        # Compute the Gaussian bands
-        x_matrix = wave_matrix[:idcs_obs.size, :]
-        gauss_matrix = gaussian_model(x_matrix, amp_arr, mu_lines[:, None], sigma_lines[:, None])
-        gauss_arr = gauss_matrix.sum(axis=0)
-
-        # Set maximum to 1:
-        idcs_one = gauss_arr > 1
-        gauss_arr[idcs_one] = 1
-
-    else:
-        gauss_arr = None
-
-    return gauss_arr
-
-
 def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=None,
                vacuum_waves=False, ref_bands=None, update_labels=True, update_latex=True):
     """
@@ -362,7 +315,7 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
 
         # Account for redshift
         redshift = redshift if redshift is not None else 0
-        wavelength_array = bands_df['wavelength'].to_numpy() * (1 + redshift)
+        wavelength_array = bands_df['wavelength'] * (1 + redshift)
 
         # Compare with wavelength values
         idcs_rows = idcs_rows & (wavelength_array >= w_min) & (wavelength_array <= w_max)
@@ -382,10 +335,23 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
     if new_format and update_labels:
         for label in bands_df.index:
             line = Line(label, band=bands_df)
-            line.update_label(sig_digits=sig_digits, update_latex=update_latex)
+            line.update_label(decimals=sig_digits, update_latex=update_latex)
             bands_df.rename(index={label: line.label}, inplace=True)
 
     return bands_df
+
+def res_power_approx(wavelength_arr):
+    #     # obs_delta_lambda = np.ediff1d(wave_intvl, to_end=0)
+    #     # obs_delta_lambda[-1] = obs_delta_lambda[-2]
+    #     # res_power = wave_intvl / obs_delta_lambda
+    #     res_power = res_power_approximation(wave_intvl)
+    #     delta_lambda_inst = lambda_obs / (res_power[idcs] * k_gFWHM)
+    #
+    delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
+    delta_lambda[-1] = delta_lambda[-2]
+
+    return delta_lambda
+
 
 
 class SpecRetriever:
@@ -397,31 +363,43 @@ class SpecRetriever:
         return
 
     def line_bands(self, lines_list=None, particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
-                   update_latex=False, components_detection=False, bands_kinematic_width=None):
+                   update_latex=False, components_detection=False, adjust_central_bands=True, instrumental_correction=True,
+                   band_velocity_sigma=70, n_sigma=4):
 
         # Remove the mask from the wavelength array if necessary
-        wave_intvl = self._spec.wave.data if np.ma.isMaskedArray(self._spec.wave) else self._spec.wave
+        wave_intvl = self._spec.wave.data
 
         # Compute the bands to match the observation
         bands = line_bands(wave_intvl, lines_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
                            sig_digits=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
                            update_latex=update_latex)
 
-        # Adjust the middle bands to the core
-        if bands_kinematic_width is not None:
+        # Adjust the middle bands to match the line width
+        if adjust_central_bands:
 
-            w_central = bands.wavelength.to_numpy() * (1 + self._spec.redshift)
-            idcs_central = (w_central > self._spec.wave.data[0]) & (w_central < self._spec.wave.data[-1])
+            # Expected transitions in the observed frame
+            lambda_obs = bands.wavelength.to_numpy() * (1 + self._spec.redshift)
 
-            HalfBox_pixels = np.round(3 * (bands_kinematic_width / c_KMpS) * 800)
-            HalfBox_pixels = np.int64(np.maximum(HalfBox_pixels, 3))
+            # Add correction for the instrumental broadening
+            if instrumental_correction:
 
-            idcs = np.searchsorted(wave_intvl, w_central)
-            idcsW3 = idcs + HalfBox_pixels
-            idcsW4 = idcs - HalfBox_pixels
+                # Indexes for the lines emission peak
+                idcs = np.searchsorted(wave_intvl, lambda_obs)
 
-            bands.loc[idcs_central, 'w3'] = self._spec.wave.data[idcsW3]
-            bands.loc[idcs_central, 'w4'] = self._spec.wave.data[idcsW4]
+                # Use the instrumental resolution if available
+                res_power = res_power_approx(wave_intvl) if self._spec.res_power is None else self._spec.res_power
+                delta_lambda_inst = lambda_obs / (res_power[idcs] * k_gFWHM)
+
+            # Constant velocity width
+            else:
+                delta_lambda_inst = 0
+
+            # Convert to spectral width
+            delta_lambda = velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_lambda_inst)
+
+            # Add new values to database in the rest frame
+            bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
+            bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
 
         # Filter the table to match the line detections
         if components_detection:
@@ -450,7 +428,7 @@ class SpecRetriever:
         return bands
 
 
-class SpecTreatment(LineFitting):
+class SpecTreatment(LineFitting, RedshiftFitting):
 
     def __init__(self, spectrum):
 
@@ -464,7 +442,7 @@ class SpecTreatment(LineFitting):
         self._n_lines = 0
 
     def bands(self, label, bands=None, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              temp=10000.0, id_conf_prefix=None, default_conf_prefix='default'):
+              err_from_bands=None, temp=10000.0, id_conf_prefix=None, default_conf_prefix='default'):
 
         """
 
@@ -528,62 +506,55 @@ class SpecTreatment(LineFitting):
 
         """
 
-        # Make a copy of the fitting configuartion
-        # fit_conf = {} if fit_conf is None else fit_conf.copy()
+        # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
+
+        # User inputs override default behaviour for the pixel error and the continuum calculation
+        err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
+        cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
         self.line = Line(label, bands, input_conf, profile, cont_from_bands)
 
-        # Check if the line location is provided
-        bands_integrity = check_spectrum_bands(self.line, self._spec.wave_rest)
+        # Check the line selection is valid
+        idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
+        if idcs_selection is not None:
 
-        if bands_integrity:
+            # Unpack the line selections
+            idcs_line, idcs_continua = idcs_selection
 
-            # Get the bands regions
-            idcsEmis, idcsCont = self.line.index_bands(self._spec.wave, self._spec.redshift)
+            # Compute line continuum
+            self.continuum_calculation(idcs_line, idcs_continua, cont_from_bands)
 
-            emisWave, emisFlux = self._spec.wave[idcsEmis], self._spec.flux[idcsEmis]
-            emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsEmis]
+            # Compute line flux error
+            pixel_err_arr = self.pixel_error_calculation(idcs_continua, err_from_bands)
 
-            contWave, contFlux = self._spec.wave[idcsCont], self._spec.flux[idcsCont]
-            contErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsCont]
+            # Non-parametric measurements
+            self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line], pixel_err_arr[idcs_line])
 
-            # Check the bands size
-            proceed = review_bands(self.line, emisWave, contWave, emisFlux, contFlux)
+            # Import kinematics if requested
+            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, self._spec.units_wave, input_conf)
 
-            if proceed:
+            # Profile fitting measurements
+            idcs_fitting = idcs_selection[0] + idcs_selection[1] if cont_from_bands else idcs_selection[0]
+            self.profile_fitting(self.line,
+                                 x_arr=self._spec.wave[idcs_fitting],
+                                 y_arr=self._spec.flux[idcs_fitting],
+                                 err_arr= pixel_err_arr[idcs_fitting],
+                                 user_conf=input_conf, fit_method=min_method)
 
-                # Default line type is in emission unless all are absorption
-                emission_check = False if np.all(~self.line._p_type) else True
+            # Instrumental and thermal corrections for the lines # TODO make res_power array length of wave
+            sigma_corrections(self.line, idcs_line, self._spec.wave[idcs_line], self._spec.res_power, temp)
 
-                # Non-parametric measurements
-                self.integrated_properties(self.line, emisWave, emisFlux, emisErr, contWave, contFlux, contErr, emission_check)
+            # Recalculate the SNR with the profile parameters
+            self.line.snr_line = signal_to_noise_rola(self.line.amp, self.line.cont_err, self.line.n_pixels)
 
-                # Import kinematics if requested
-                import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, self._spec.units_wave, input_conf)
-
-                # Combine bands
-                idcsLine = idcsEmis + idcsCont
-                x_array, y_array = self._spec.wave[idcsLine], self._spec.flux[idcsLine]
-                emisErr = None if self._spec.err_flux is None else self._spec.err_flux[idcsLine]
-
-                # Gaussian fitting
-                self.profile_fitting(self.line, x_array, y_array, emisErr, self._spec.redshift, input_conf, min_method)
-
-                # Instrumental and thermal corrections for the lines
-                sigma_corrections(self.line, idcsEmis, emisWave, self._spec.res_power, temp)
-
-                # Recalculate the SNR with the gaussian parameters
-                err_cont = self.line.cont_err if self._spec.err_flux is None else np.mean(self._spec.err_flux[idcsEmis])
-                self.line.snr_line = signal_to_noise_rola(self.line.amp, err_cont, self.line.n_pixels)
-
-                # Save the line parameters to the dataframe
-                results_to_log(self.line, self._spec.frame, self._spec.norm_flux)
+            # Save the line parameters
+            results_to_log(self.line, self._spec.frame, self._spec.norm_flux)
 
         return
 
-    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
+    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None , err_from_bands=None,
               temp=10000.0, line_list=None, default_conf_prefix='default', id_conf_prefix=None, line_detection=False,
               plot_fit=False, progress_output='bar'):
 
@@ -711,7 +682,9 @@ class SpecTreatment(LineFitting):
                         pbar.output_message(self._i_line, self._n_lines, pre_text="", post_text=f'({line})')
 
                         # Fit the lines
-                        self.bands(line, bands, input_conf, min_method, profile, cont_from_bands, temp,
+                        self.bands(line, bands, input_conf, min_method, profile,
+                                   cont_from_bands=cont_from_bands, err_from_bands=err_from_bands,
+                                   temp=temp,
                                    id_conf_prefix=None, default_conf_prefix=None)
 
                         if plot_fit:
@@ -756,13 +729,9 @@ class SpecTreatment(LineFitting):
 
         """
 
-        # Create a pre-Mask based on the original mask if available # TODO np.ma.is_masked es malo quitalo
-        if np.ma.isMaskedArray(self._spec.flux):
-            mask_cont = ~self._spec.flux.mask
-            input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
-        else:
-            mask_cont = np.ones(self._spec.flux.size).astype(bool)
-            input_wave, input_flux = self._spec.wave, self._spec.flux
+        # Create a pre-Mask based on the original mask if available
+        mask_cont = ~self._spec.flux.mask
+        input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
 
         # Smooth the spectrum
         if smooth_length is not None:
@@ -798,88 +767,10 @@ class SpecTreatment(LineFitting):
                                                      high_lim, emis_threshold[i], ax_cfg)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
-        self._spec.cont = cont_fit if not np.ma.isMaskedArray(self._spec.flux) else np.ma.masked_array(cont_fit,
-                                                                                                       self._spec.flux.mask)
+        self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)
         self._spec.cont_std = np.std((input_flux_s - cont_fit)[mask_cont])
 
         return
-
-    def redshift(self, bands, z_nsteps=2000, z_min=0, z_max=10, detection_only=True, sig_digits=2, sigma_factor=None,
-                 res_power=None, plot_results=False):
-
-        if not aspect_check:
-            _logger.info("ASPECT has not been installed the redshift measurements won't be constrained to line features")
-
-        # Get the features array
-        if aspect_check:
-            if self._spec.features.pred_arr is None:
-                _logger.warning("The observations does not have a components dectection array please run ASPECT")
-                pred_arr, conf_arr = None, None
-            else:
-                pred_arr, conf_arr = self._spec.features.pred_arr, self._spec.features.conf_arr
-
-        # Use the dectection bands if provided
-        if pred_arr is not None:
-            idcs_lines = (pred_arr == 3) | (pred_arr == 7) #TODO add "emission" and "doublet" number checks
-        else:
-            idcs_lines = None
-
-        # Decide if proceed
-        if detection_only is False:
-            measure_check = True
-            idcs_lines = np.ones(idcs_lines.shape).astype(bool)
-        else:
-            measure_check = True if np.any(idcs_lines) else False
-
-        # Continue with measurement
-        if measure_check:
-
-            # Extract the data
-            pixel_mask = None if not np.ma.isMaskedArray(self._spec.flux) else self._spec.flux.mask
-            wave_arr = self._spec.wave.data if pixel_mask is not None else self._spec.wave
-            flux_arr = self._spec.flux.data if pixel_mask is not None else self._spec.flux
-            data_mask = ~pixel_mask
-
-            # Compute the resolution params
-            sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
-            sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
-
-            # Lines selection
-            theo_lambda = bands.wavelength.to_numpy()
-
-            # Parameters for the brute analysis
-            z_arr = np.linspace(z_min, z_max, z_nsteps)
-            wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
-            flux_sum = np.zeros(z_arr.size)
-
-            # Combine line and pixel_mask
-            mask = data_mask & idcs_lines
-
-            # Loop throught the redshift steps
-            if not np.all(~mask):
-                for i, z_i in enumerate(z_arr):
-
-                    # Generate the redshift key
-                    gauss_arr = compute_z_key(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
-
-                    # Compute flux cumulative sum
-                    flux_sum[i] = 0 if gauss_arr is None else np.sum(flux_arr[mask] * gauss_arr[mask])
-
-                z_infer = np.round(z_arr[np.argmax(flux_sum)], decimals=sig_digits)
-
-            # No lines or all masked
-            else:
-                z_infer = None
-
-            if plot_results and (z_infer is not None):
-                gauss_arr_max = compute_z_key(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
-                redshift_fit_evaluation(self._spec, z_infer, mask, gauss_arr_max, z_arr, flux_sum)
-
-        # Do not attempt measurement
-        else:
-            z_infer = None
-
-        return z_infer
 
 
 class CubeTreatment(LineFitting):

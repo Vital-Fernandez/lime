@@ -7,7 +7,7 @@ Measurements description
   .. image:: ../images/measurements_table.PNG
     :align: center
 
-This section describes the parameters measured by :math:`\textsc{LiMe}`. Unless otherwise noted, these parameters have the same notation
+This section describes the parameters measured by :math:`\mathrm{LiMe}`. Unless otherwise noted, these parameters have the same notation
 in the output measurements log as the attributes in the programing objects generated with the ``lime.Spectrum`` class.
 These parameter references are also the column names of the ``pandas.DataFrame`` lines log (``lime.Spectrum.log``).
 
@@ -17,7 +17,7 @@ Inputs
 This section includes 3 parameters which are actually provided by the user inputs. However, they are also included in
 the output log for consistency.
 
-* **line** (``.line``, ``str``): This attribute is name of the line the measurements belong to. It has the :math:`\textsc{LiMe}` line notation:
+* **line** (``.line``, ``str``): This attribute is name of the line the measurements belong to. It has the :math:`\mathrm{LiMe}` line notation:
   format.
 
 * **band** (``.band``, ``np.array()``): This attribute consists in a six-value vector with the line bands:
@@ -25,7 +25,7 @@ the output log for consistency.
   the wavelengths are stored in individual columns with the headers: ``w1``, ``w2``, ``w3``, ``w4``, ``w5`` and ``w6``.
 
 * **profile_label** (``.profile_label``, ``str``): This attribute consists in a string with the line components separated
-  by dashes (-). The individual components labels have the :math:`\textsc{LiMe}` line notation and they may also have a
+  by dashes (-). The individual components labels have the :math:`\mathrm{LiMe}` line notation and they may also have a
   suffix for the kinematic component. In single lines, the default value for this attribute is ``None`` (string variable).
   As an example, two profile labels are included below:
 
@@ -66,10 +66,10 @@ assumption on the emission line profile shape.
 
 * **peak_flux** (``.peak_flux``, ``float``): This variable is the flux of the highest pixel value in the line region.
 
-* **m_cont**  (``.m_cont``, ``float``): Using the line adjacent continua regions :math:`\textsc{LiMe}` fits a linear continuum.
+* **m_cont**  (``.m_cont``, ``float``): Using the line adjacent continua regions :math:`\mathrm{LiMe}` fits a linear continuum.
   This variable represents is the gradient. :code:`y = m*x + n`
 
-* **n_cont** (``.n_cont``, ``float``): Using the line adjacent continua regions :math:`\textsc{LiMe}` fits a linear continuum.
+* **n_cont** (``.n_cont``, ``float``): Using the line adjacent continua regions :math:`\mathrm{LiMe}` fits a linear continuum.
   This variable represents is the interception. :code:`y = m*x + n`
 
 * **cont** (``.cont``, ``float``): This variable is the flux of the linear continuum at the ``.peak_wave``.
@@ -203,7 +203,7 @@ This is the standard error which increases the magnitude of the :math:`\chi^2` c
 
 .. note::
    The Gaussian built-in model in `LmFit <https://lmfit.github.io/lmfit-py/builtin_models.html#lmfit.models.GaussianModel>`__
-   defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. :math:`\textsc{LiMe}` defines its own model where the
+   defines the amplitude :math:`(A_{i})` as the flux under the gaussian profile. :math:`\mathrm{LiMe}` defines its own model where the
    amplitude is defined as the height of the line with respect to the adjacent continuum.
 
 * **amp** (``.amp``, ``np.array()``): This array contains the amplitude of the Gaussian profiles. The parameter units

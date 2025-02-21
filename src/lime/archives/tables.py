@@ -111,7 +111,7 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         pdf.addTableRow(row_raw, last_row=lastRow_check)
 
     for key, value in kwargs.items():
-        text_line = r'{}:{}'.format(key.replace('_', '\_'), value)
+        text_line = r'{}:{}'.format(key.replace('_', r'\_'), value)
         pdf.table.add_row([pylatex.NoEscape(r'\footnotesize{{{}}}'.format(text_line))],
                           escape=False, strict=False)
 
@@ -139,7 +139,7 @@ class PdfMaker:
         self.table = None
         self.theme_table = None
 
-        # TODO add dictionary with numeric formats for tables depending on the variable
+        # TODO add dictionary with numeric formats for archives depending on the variable
 
     def create_pdfDoc(self, pdf_type=None, geometry_options=None, document_class=u'article', theme='white'):
         """
@@ -176,8 +176,8 @@ class PdfMaker:
             self.pdfDoc = pylatex.Document(documentclass=document_class, geometry_options=self.pdf_geometry_options)
 
             if theme == 'dark':
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{background}{rgb}{0.169, 0.169, 0.169}'))
-                self.pdfDoc.append(pylatex.NoEscape('\definecolor{foreground}{rgb}{0.702, 0.780, 0.847}'))
+                self.pdfDoc.append(pylatex.NoEscape(r'\definecolor{background}{rgb}{0.169, 0.169, 0.169}'))
+                self.pdfDoc.append(pylatex.NoEscape(r'\definecolor{foreground}{rgb}{0.702, 0.780, 0.847}'))
                 self.pdfDoc.append(pylatex.NoEscape(r'\arrayrulecolor{foreground}'))
 
             if pdf_type == 'table':
