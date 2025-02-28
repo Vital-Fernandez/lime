@@ -697,6 +697,51 @@ def _bands_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, co
     return
 
 
+def plot_peaks_troughs(spec, peak_idcs, detect_limit, continuum, match_bands, log_scale=False):
+
+    norm_flux = spec.norm_flux
+    wave = spec.wave
+    flux = spec.flux
+    units_wave = spec.units_wave
+    units_flux = spec.units_flux
+    redshift = spec.redshift
+
+    PLOT_CONF = theme.fig_defaults(None)
+    AXES_CONF = theme.ax_defaults(None, units_wave, units_flux, norm_flux)
+
+    wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, 'observed')
+
+    continuum = continuum if continuum is not None else np.zeros(flux.size)
+
+    idcs_detect = match_bands['signal_peak'].to_numpy(dtype=int)
+
+    with rc_context(PLOT_CONF):
+
+        fig, ax = plt.subplots()
+        ax.step(wave_plot, flux_plot, color=theme.colors['fg'], label='Object spectrum', where='mid')
+
+        ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=theme.colors['fade_fg'], facecolors='none')
+        ax.fill_between(wave_plot, continuum, detect_limit, facecolor=theme.colors['line_band'], label='Noise_region', alpha=0.5)
+        ax.scatter(wave_plot[idcs_detect], flux_plot[idcs_detect], marker='o', label='Matched lines',
+                   color=theme.colors['peak'], facecolors='none')
+
+        if continuum is not None:
+            ax.plot(wave_plot, continuum, label='Continuum')
+
+        ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], label='Masked pixels', marker='x',
+                   color=theme.colors['mask_marker'])
+
+        if log_scale:
+            ax.set_yscale('log')
+
+        ax.legend()
+        ax.update(AXES_CONF)
+        plt.tight_layout()
+        plt.show()
+
+    return
+
+
 class Plotter:
 
     def __init__(self):
@@ -754,22 +799,6 @@ class Plotter:
 
         return
 
-    # def _bands_plot(self, axis, x, y, z_corr, idcs_mask, label):
-    #
-    #     cont_dict = {'facecolor': theme.colors['cont_band'], 'step': 'mid', 'alpha': 0.25}
-    #     line_dict = {'facecolor': theme.colors['line_band'], 'step': 'mid', 'alpha': 0.25}
-    #
-    #     # Plot
-    #     if len(y[idcs_mask[0]:idcs_mask[5]]) > 1:
-    #         low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
-    #         low_lim = 0 if np.isnan(low_lim) else low_lim
-    #         axis.fill_between(x[idcs_mask[0]:idcs_mask[1]]/z_corr, low_lim*z_corr, y[idcs_mask[0]:idcs_mask[1]]*z_corr, **cont_dict)
-    #         axis.fill_between(x[idcs_mask[2]:idcs_mask[3]]/z_corr, low_lim*z_corr, y[idcs_mask[2]:idcs_mask[3]]*z_corr, **line_dict)
-    #         axis.fill_between(x[idcs_mask[4]:idcs_mask[5]]/z_corr, low_lim*z_corr, y[idcs_mask[4]:idcs_mask[5]]*z_corr, **cont_dict)
-    #     else:
-    #         _logger.warning(f'The {label} band plot interval contains less than 1 pixel')
-    #
-    #     return
 
     def _peak_plot(self, axis, log, list_comps, z_corr, norm_flux):
 
@@ -829,47 +858,7 @@ class Plotter:
 
         return
 
-    def _plot_peak_detection(self, peak_idcs, detect_limit, continuum, match_bands):
 
-
-        norm_flux = self._spec.norm_flux
-        wave = self._spec.wave
-        flux = self._spec.flux
-        units_wave = self._spec.units_wave
-        units_flux = self._spec.units_flux
-        redshift = self._spec.redshift
-
-        PLOT_CONF = theme.fig_defaults(None)
-        AXES_CONF = theme.ax_defaults(None, units_wave, units_flux, norm_flux)
-
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, 'observed')
-
-        continuum = continuum if continuum is not None else np.zeros(flux.size)
-
-        idcs_detect = match_bands['signal_peak'].to_numpy(dtype=int)
-
-        with rc_context(PLOT_CONF):
-
-            fig, ax = plt.subplots()
-            ax.step(wave_plot, flux_plot, color=theme.colors['fg'], label='Object spectrum', where='mid')
-
-            ax.scatter(wave_plot[peak_idcs], flux_plot[peak_idcs], marker='o', label='Peaks', color=theme.colors['fade_fg'], facecolors='none')
-            ax.fill_between(wave_plot, continuum, detect_limit, facecolor=theme.colors['line_band'], label='Noise_region', alpha=0.5)
-            ax.scatter(wave_plot[idcs_detect], flux_plot[idcs_detect], marker='o', label='Matched lines',
-                       color=theme.colors['peak'], facecolors='none')
-
-            if continuum is not None:
-                ax.plot(wave_plot, continuum, label='Continuum')
-
-            ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], label='Masked pixels', marker='x',
-                       color=theme.colors['mask_marker'])
-
-            ax.legend()
-            ax.update(AXES_CONF)
-            plt.tight_layout()
-            plt.show()
-
-        return
 
 
 class SpectrumFigures(Plotter):
@@ -1621,7 +1610,7 @@ class SpectrumFigures(Plotter):
         return
 
     def _continuum_iteration(self, wave, flux, continuum_fit, smooth_flux, idcs_cont, low_lim, high_lim, threshold_factor,
-                             user_ax):
+                              user_ax, log_scale=False):
 
         PLT_CONF = theme.fig_defaults(None)
         AXES_CONF = theme.ax_defaults(user_ax, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux)
@@ -1635,7 +1624,7 @@ class SpectrumFigures(Plotter):
 
             # Object spectrum
             label_spec = 'Smoothed spectrum' if smooth_check else 'Object spectrum'
-            ax.step(wave, smooth_flux, label=label_spec, color=theme.colors['fg'], where='mid', linewidth=theme.colors['spectrum_width'])
+            ax.step(wave, smooth_flux, label=label_spec, color=theme.colors['fg'], where='mid', linewidth=theme.plt['spectrum_width'])
 
             # Unsmooth
             if smooth_check:
@@ -1655,6 +1644,10 @@ class SpectrumFigures(Plotter):
 
             # Output continuum
             ax.plot(wave, continuum_fit, label='Continuum')
+
+            # Log scale
+            if log_scale:
+                ax.set_yscale('log')
 
             ax.update(AXES_CONF)
             ax.legend()

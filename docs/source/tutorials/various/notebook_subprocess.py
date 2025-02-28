@@ -1,7 +1,7 @@
 import subprocess
 import os
 
-os.chdir('../../../')
+os.chdir('../../../../')
 
 # Command to start Jupyter Notebook
 command = ["jupyter", "notebook"]

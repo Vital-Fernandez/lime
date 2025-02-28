@@ -18,7 +18,7 @@ def test_line_bands():
     log2 = lime.line_bands(wave_intvl=(3000, 7000), redshift=22)
     assert np.all((3000 * 2 <= log2.wavelength.to_numpy()) & (log2.wavelength.to_numpy() <= 7000 * 2))
 
-    log3 = lime.line_bands(lines_list=['O3_4363A', 'O3_4959A', 'O3_5007A'])
+    log3 = lime.line_bands(line_list=['O3_4363A', 'O3_4959A', 'O3_5007A'])
     assert log3.index.isin(['O3_4363A', 'O3_4959A', 'O3_5007A']).sum() == log3.index.size
 
     log4 = lime.line_bands(particle_list=['O3', 'S2'])

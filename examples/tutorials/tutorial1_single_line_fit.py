@@ -62,7 +62,6 @@ gp_spec.save_frame('../sample_data/example1_linelog.txt')
 gp_spec.save_frame('../sample_data/example1_linelog.pdf', param_list=['eqw', 'profile_flux', 'profile_flux_err'])
 gp_spec.save_frame('../sample_data/example1_linelog.fits', page='GP121903')
 gp_spec.save_frame('../sample_data/example1_linelog.xlsx', page='GP121903')
-gp_spec.save_frame('../sample_data/example1_linelog.asdf', page='GP121903')
 
 # A lines log can also be saved/loaded using the lime functions:
 log_address = '../sample_data/example1_linelog.fits'

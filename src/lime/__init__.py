@@ -31,14 +31,13 @@ with open(_conf_path, mode="rb") as fp:
     _setup_cfg = tomllib.load(fp)
 
 __version__ = _setup_cfg['metadata']['version']
-_lines_database_path = (os.path.join(_inst_dir, 'resources/parent_bands.txt'))
 
 # Logging configuration
 _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 
 
-class Error(Exception):
-    """LiMe exception function"""
+# class Error(Exception):
+#     """LiMe exception function"""
 
 from .observations import Spectrum, Sample, Cube
 from .io import *

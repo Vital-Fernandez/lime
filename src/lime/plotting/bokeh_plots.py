@@ -206,7 +206,7 @@ class BokehFigures:
 #
 #     # Show detection bands (if requested)
 #     if detection_band is not None:
-#         detec_obj = getattr(self._spec.infer, detection_band)
+#         detec_obj = getattr(self._spec.inference, detection_band)
 #         if detec_obj.confidence is not None:
 #             for conf_level in np.arange(0.3, 1.1, 0.1):
 #                 idcs = detec_obj(conf_level * 100)

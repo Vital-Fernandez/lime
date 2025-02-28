@@ -304,7 +304,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
         part_label = particle_notation(particle[i], transition_comp[i])
 
         # Wavelength and units label
-        units_latex = f'{units_wave[i]:latex}'[9:-2]
+        units_latex = f'{units_wave[i]:latex}'[9:-2].replace(' ',r'\,')
 
         # Kinematic label
         kinetic_comp = '' if kinem[i] == 0 else f'-k_{kinem[i]}'

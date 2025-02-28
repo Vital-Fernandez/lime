@@ -22,7 +22,6 @@ from collections.abc import Sequence
 
 from astropy.io import fits
 from lime.archives.tables import table_fluxes
-from . import Error
 
 try:
     import openpyxl
@@ -57,12 +56,7 @@ _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep=r'\s+', header=0, index_col=0)
 
-_LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
-# _CONF_FILE = _LIME_FOLDER/'lime.toml'
-
-# # Read lime configuration file
-# with open(_CONF_FILE, mode="rb") as fp:
-#     _cfg_lime = tomllib.load(fp)
+_LINES_DATABASE_FILE = _LIME_FOLDER/'resources/lines_database_v2.0.0.txt'
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -683,19 +677,7 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
             _logger.critical(f'Automatic line detection but the input configuration does not include a '
                              f'"continuum" entry with a "degree_list" and "emis_threshold" keys')
 
-        # if output_cfg.get('line_detection') is not None: # TODO need to rethink if we need this one... masks are always provided
-        #     if output_cfg['line_detection'].get('bands') is None:
-        #         _logger.critical(f'Automatic line detection but the input configuration does not include a '
-        #                          f'"bands" entry')
-        # else:
-        #     _logger.critical(f'The fitting requires automatic line detection but the input configuration does not include a '
-        #                      f' a "line_detection" entry with a "bands" key')
-
     return output_cfg
-
-
-_parent_bands_file = Path(__file__).parent/'resources/parent_bands.txt'
-_PARENT_BANDS = load_frame(_parent_bands_file)
 
 
 def check_numeric_value(s):
@@ -845,21 +827,6 @@ def formatStringOutput(value, key, section_label=None, float_format=None, nan_fo
     return formatted_value
 
 
-# def progress_bar(i, i_max, post_text, n_bar=10):
-#
-#     # Size of progress bar
-#     j = i/i_max
-#     stdout.write('\r')
-#     message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
-#     stdout.write(message)
-#     stdout.flush()
-#
-#     return
-
-
-
-
-
 def load_spatial_mask(mask_file, mask_list=None, return_coords=False):
 
     # Masks array container
@@ -953,6 +920,6 @@ def check_file_array_mask(var, mask_list=None):
 
     return mask_dict
 
-
+_PARENT_BANDS = load_frame(_LINES_DATABASE_FILE)
 
 

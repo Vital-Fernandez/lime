@@ -91,10 +91,16 @@ LiMe Mayor update - 2.0.0 - XX/XX/XXXX
     - Change installer convention from "setup.py + requirements.txt" to pyproject.toml
     - Updated dependencies to current version of packages and for python 3.12
     - Renamed cfg.toml to lime.toml
-    - Arrange library .py files into folder structure reproducing the .fit, .retrieve, .plot functions. The functions related to file types are are located in archives folder.
+    - Arrange library .py files into folder structure reproducing the .fit, .infer, .retrieve, .plot functions. The functions related to file types are are located in archives folder.
     - Added new mechanic to compute the lines continuum from the line band edges or the continua bands.
     - Added new mechanic to compute the pixel uncertainty from the provided uncertainty flux or the adjacent continua bands.
     - Fix error where the error from the line profile center and sigma parameters was uncertainty was 0 if the line kinematics were imported from a previously measured line.
     - Added support for bokeh plots.
     - The theme configuration parameters are stored now in the src/plotting/theme_lime.toml.
-    -
+    - The .fit.report function now formats the output report to include the component label name and has the argument return_text=False to give the option to return the report message as a variable instead of printing on the terminal.
+    - Fix a bug where the kinematics export function was not applying the correct rest frame wavelength length on the radial velocity calculation.
+    - New ".infer" to host high level functions to predict spectroscopic features
+    - The "Spectrum.line_detection()" has been moved to "Spectrum.infer.peaks_troughs()". The old function now raises and error moving to the new function.
+    - Now the observations wave, flux, err_flux and wave_rest arrays are always masked arrays
+    - The lines database name has been changed from parent_bands.txt to "lines_database_v2.0.0.txt". The wavelength are based on van Hoof, P.A.M., 2018, Galaxies, 6, 63 and Roueff+ (2019).
+    - The central wavelenght bands are now calculated assuming a bands_vsigma=70 and n_sigma=4

@@ -48,10 +48,10 @@ These are some of the features currently available:
    :caption: Introduction
    :name: doc-tree
 
-   introduction/installation
-   introduction/observations
-   introduction/line_labels
-   introduction/Line_bands
+   introduction/0_installation
+   introduction/1_observations
+   introduction/2_line_labels
+   introduction/3_line_bands
    introduction/Profile_fitting
 
 .. toctree::

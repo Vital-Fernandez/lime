@@ -81,13 +81,14 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
     return idcsEmis, idcsCont
 
 
-def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
+def import_line_kinematics_backUp(line, z_cor, log, units_wave, fit_conf):
 
     # Check if imported kinematics come from blended component
     if line.group_label is not None:
         childs_list = line.group_label.split('+')
     else:
         childs_list = np.array(line.label, ndmin=1)
+
 
     for child_label in childs_list:
 
@@ -100,7 +101,6 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
                 _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
             else:
-
                 line_parent = Line(parent_label)
                 line_child = Line(child_label)
                 wtheo_parent, wtheo_child = line_parent.wavelength[0], line_child.wavelength[0]
@@ -114,11 +114,14 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
                         _logger.warning(f'{param_label_child} overwritten by {parent_label} kinematics in configuration input')
 
                     # Case where parent and child are in blended group
-                    if parent_label in childs_list:
-                        param_label_parent = f'{parent_label}_{param_ext}'
-                        param_expr_parent = f'{wtheo_child/wtheo_parent:0.8f}*{param_label_parent}'
+                    if parent_label in line.list_comps:
+                        # param_label_parent = f'{parent_label}_{param_ext}'
+                        # param_expr_parent = f'{wtheo_child/wtheo_parent:0.8f}*{param_label_parent}'
+                        # fit_conf[param_label_child] = {'expr': param_expr_parent}
 
-                        fit_conf[param_label_child] = {'expr': param_expr_parent}
+                        # param_label_parent = f'{parent_label}_{param_ext}'
+                        factor = wtheo_child/wtheo_parent if param_ext == 'center' else wtheo_child/wtheo_parent
+                        fit_conf[param_label_child] = {'expr': f'{factor:0.8f}*{parent_label}_{param_ext}'}
 
                     # Case we want to copy from previously measured line
                     else:
@@ -134,6 +137,48 @@ def import_line_kinematics(line, z_cor, log, units_wave, fit_conf):
                         fit_conf[f'{param_label_child}_err'] = param_value[1]
 
     return
+
+
+
+def import_line_kinematics(line, z_cor, log, fit_conf):
+
+    # Check if imported kinematics come from blended component
+    for idx_child, child_label in enumerate(line.list_comps):
+
+        # Check for kinem order
+        parent_label = fit_conf.get(f'{child_label}_kinem')
+        if parent_label is not None:
+
+            # Tied kinematics in blended profile
+            if line.blended_check:
+                idx_parent = line.list_comps.index(parent_label)
+                factor = f'{line.wavelength[idx_child] / line.wavelength[idx_parent]:0.8f}'
+                fit_conf[f'{child_label}_center'] = {'expr': f'{factor}*{parent_label}_center'}
+                fit_conf[f'{child_label}_sigma'] = {'expr': f'{factor}*{parent_label}_sigma'}
+
+            # Import kinematics from previously measured
+            elif parent_label in log.index:
+                mu_parent = log.loc[parent_label, ['center', 'center_err']].to_numpy()
+                sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].to_numpy()
+                wave_ratio = log.loc[child_label, 'wavelength'] / log.loc[parent_label, 'wavelength']
+
+                center_child_arr = wave_ratio * (mu_parent / z_cor)
+                sigma_child_arr = wave_ratio * sigma_parent
+
+                # Store the value on the dictionary
+                fit_conf[f'{child_label}_center'] = {'value': center_child_arr[0], 'vary': False}
+                fit_conf[f'{child_label}_sigma'] = {'value': sigma_child_arr[0], 'vary': False}
+
+                # Error for the propagation
+                fit_conf[f'{child_label}_center_err'] = center_child_arr[1]
+                fit_conf[f'{child_label}_sigma_err'] = sigma_child_arr[1]
+
+            # Line has not been measured before found
+            else:
+                _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
+
+    return
+
 
 
 def check_cube_bands(input_bands, mask_list, fit_cfg):
@@ -226,7 +271,7 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=None,
+def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
                vacuum_waves=False, ref_bands=None, update_labels=True, update_latex=True):
     """
 
@@ -257,8 +302,8 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
     :param wave_intvl: Wavelength interval for output line transitions.
     :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
 
-    :param lines_list: Line list for output line bands.
-    :type lines_list: list, numpy.array, optional
+    :param line_list: Line list for output line bands.
+    :type line_list: list, numpy.array, optional
 
     :param particle_list: Particle list for output line bands.
     :type particle_list: list, numpy.array, optional
@@ -269,8 +314,8 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
     :param units_wave: Labels and bands wavelength units. The default value is "A".
     :type units_wave: str, optional
 
-    :param sig_digits: Number of decimal figures for the line labels.
-    :type sig_digits: int, optional
+    :param decimals: Number of decimal figures for the line labels.
+    :type decimals: int, optional
 
     :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
     :type vacuum_waves: bool, optional
@@ -325,8 +370,8 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
         idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
 
     # Finally slice by the name of the lines
-    if lines_list is not None:
-        idcs_rows = idcs_rows & bands_df.index.isin(lines_list)
+    if line_list is not None:
+        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
 
     # Final table
     bands_df = bands_df.loc[idcs_rows]
@@ -335,22 +380,19 @@ def line_bands(wave_intvl=None, lines_list=None, particle_list=None, redshift=No
     if new_format and update_labels:
         for label in bands_df.index:
             line = Line(label, band=bands_df)
-            line.update_label(decimals=sig_digits, update_latex=update_latex)
+            line.update_label(decimals=decimals, update_latex=update_latex)
+            if update_latex:
+                bands_df['latex_label'] = line.latex_label[0]
             bands_df.rename(index={label: line.label}, inplace=True)
 
     return bands_df
 
 def res_power_approx(wavelength_arr):
-    #     # obs_delta_lambda = np.ediff1d(wave_intvl, to_end=0)
-    #     # obs_delta_lambda[-1] = obs_delta_lambda[-2]
-    #     # res_power = wave_intvl / obs_delta_lambda
-    #     res_power = res_power_approximation(wave_intvl)
-    #     delta_lambda_inst = lambda_obs / (res_power[idcs] * k_gFWHM)
-    #
+
     delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
     delta_lambda[-1] = delta_lambda[-2]
 
-    return delta_lambda
+    return wavelength_arr/delta_lambda
 
 
 
@@ -362,16 +404,16 @@ class SpecRetriever:
 
         return
 
-    def line_bands(self, lines_list=None, particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
+    def line_bands(self, line_list=None, particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
                    update_latex=False, components_detection=False, adjust_central_bands=True, instrumental_correction=True,
-                   band_velocity_sigma=70, n_sigma=4):
+                   band_vsigma=70, n_sigma=4):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.data
 
         # Compute the bands to match the observation
-        bands = line_bands(wave_intvl, lines_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
-                           sig_digits=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+        bands = line_bands(wave_intvl, line_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
+                           decimals=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
                            update_latex=update_latex)
 
         # Adjust the middle bands to match the line width
@@ -395,7 +437,7 @@ class SpecRetriever:
                 delta_lambda_inst = 0
 
             # Convert to spectral width
-            delta_lambda = velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_lambda_inst)
+            delta_lambda = velocity_to_wavelength_band(n_sigma, band_vsigma, lambda_obs, delta_lambda_inst)
 
             # Add new values to database in the rest frame
             bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
@@ -533,7 +575,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line], pixel_err_arr[idcs_line])
 
             # Import kinematics if requested
-            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, self._spec.units_wave, input_conf)
+            import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, input_conf)
 
             # Profile fitting measurements
             idcs_fitting = idcs_selection[0] + idcs_selection[1] if cont_from_bands else idcs_selection[0]
@@ -554,7 +596,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None , err_from_bands=None,
+    def  frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None , err_from_bands=None,
               temp=10000.0, line_list=None, default_conf_prefix='default', id_conf_prefix=None, line_detection=False,
               plot_fit=False, progress_output='bar'):
 
@@ -652,11 +694,11 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
                 # Review the configuration entries
                 cont_fit_conf = input_conf.get('continuum', {})
-                detect_conf = input_conf.get('line_detection', {})
+                detect_conf = input_conf.get('peaks_troughs', {})
 
                 # Perform the line detection
                 self._spec.fit.continuum(**cont_fit_conf)
-                bands = self._spec.line_detection(bands, **detect_conf)
+                bands = self._spec.infer.peaks_troughs(bands, **detect_conf)
 
             # Define lines to treat through the lines
             label_list = bands.index.to_numpy()
@@ -699,7 +741,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_length=None, plot_steps=False):
+    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_length=None, plot_steps=False,
+                  log_scale=False):
 
         """
 
@@ -764,7 +807,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             if plot_steps:
                 ax_cfg = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
                 self._spec.plot._continuum_iteration(input_wave, input_flux, cont_fit, input_flux_s, mask_cont, low_lim,
-                                                     high_lim, emis_threshold[i], ax_cfg)
+                                                     high_lim, emis_threshold[i], ax_cfg, log_scale=log_scale)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)

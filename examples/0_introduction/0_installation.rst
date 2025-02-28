@@ -1,15 +1,15 @@
 Installation
 ============
 
-:math:`\mathrm{LiMe}` can be installed from pip_. The following commands let the user choose the number of dependencies
-installed along side it:
+:math:`\mathrm{LiMe}` can be installed from pip_. The following commands install :math:`\mathrm{LiMe}` along the
+essential dependencies or all the dependencies.:
 
 .. code-block:: console
 
    pip install lime-stable
    pip install lime-stable[full]
 
-The first command only installs the core dependencies:
+The core dependencies:
 
 * Numpy_
 * Pandas_
@@ -19,7 +19,7 @@ The first command only installs the core dependencies:
 * scipy_ (:math:`\mathrm{LmFit}` and :math:`\mathrm{AstroPy}` dependency)
 * tomli_ (read configuration files with toml_ files for python < 3.11)
 
-The second command also installs the optional dependencies:
+The optional dependencies installed with the full command are:
 
 * asdf_ (Saving the measurements as *.asdf* files)
 * bokeh_ (Plots using the bokeh libraryy)

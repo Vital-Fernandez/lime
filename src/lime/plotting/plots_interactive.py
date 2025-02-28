@@ -143,7 +143,11 @@ def circle_band_label(current_label):
     return new_label
 
 
-def save_or_clear_log(log, log_address, activeLines, log_parameters=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'], input_log=None):
+def save_or_clear_log(log, log_address, activeLines, log_parameters=None, input_log=None):
+
+    if log_parameters is None:
+        log_parameters = ['wavelength', 'wave_vac', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label',
+                          'units_wave', 'particle', 'transition',  'rel_int']
 
     if np.sum(activeLines) == 0:
         if log_address.is_file():

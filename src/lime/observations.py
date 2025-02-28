@@ -5,19 +5,19 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from .tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
+from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
     observation_unit_convertion
 
-from lime.retrieve.peaks import LineFinder
+from lime.inference.detection import FeatureDetection
 from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures
 from lime.plotting.plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from lime.plotting.bokeh_plots import BokehFigures
-from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame
+from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame
 
 from lime.archives.read_fits import OpenFits
-from .transitions import Line
-from .workflow import SpecTreatment, CubeTreatment, SpecRetriever
-from . import Error, __version__
+from lime.transitions import Line
+from lime.workflow import SpecTreatment, CubeTreatment, SpecRetriever
+from . import __version__
 
 # Log variable
 _logger = logging.getLogger('LiMe')
@@ -292,7 +292,7 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     return wave, wave_rest, flux, err_flux
 
 
-class Spectrum(LineFinder):
+class Spectrum:
 
     """
     This class creates a long-slit spectroscopic observation.
@@ -359,8 +359,8 @@ class Spectrum(LineFinder):
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
 
-        # Load parent classes
-        LineFinder.__init__(self)
+        # # Load parent classes
+        # LineFinder.__init__(self)
 
         # Class attributes
         self.label = None
@@ -381,6 +381,7 @@ class Spectrum(LineFinder):
 
         # Treatments objects
         self.fit = SpecTreatment(self)
+        self.infer = FeatureDetection(self)
         self.retrieve = SpecRetriever(self)
 
         if aspect_check:
@@ -691,6 +692,11 @@ class Spectrum(LineFinder):
                                                                                          self.redshift, 1)
 
         return
+
+    def line_detection(self, *args, **kwargs):
+
+        raise LiMe_Error(f'The line_detection functionality has been moved an rebranded. Please use:\n'
+                         f'Spectrum.infer.peaks_troughs()')
 
 
 class Cube:

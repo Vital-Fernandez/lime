@@ -9,6 +9,7 @@ from scipy.optimize import curve_fit
 from lime.io import LiMe_Error
 from lime.tools import compute_FWHM0, mult_err_propagation
 import warnings
+import re
 
 _logger = logging.getLogger('LiMe')
 _VERBOSE_WARNINGS = 'ignore'
@@ -984,9 +985,22 @@ class LineFitting:
 
         return
 
-    def report(self):
+    def report(self, return_text=False):
 
-        print(fit_report(self.profile.output))
+        # Get the Lmfit report
+        report = fit_report(self.profile.output)
 
-        return
+        # Dictionary with the generic entries to line components mapping
+        map_dict = dict(zip([f'line{i}' for i in range(len(self.line.list_comps))], self.line.list_comps))
+
+        # Replace the generic names
+        pattern = re.compile(r'(' + '|'.join(map(re.escape, map_dict.keys())) + r')')
+        report = pattern.sub(lambda match: map_dict[match.group()], report)
+
+        # Print by default, otherwise return the report string
+        if return_text:
+            return report
+        else:
+            print(report)
+
 

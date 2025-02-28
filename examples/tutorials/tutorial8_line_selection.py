@@ -15,7 +15,7 @@ z_obj = 0.00044
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, units_flux='1e20*FLAM')
 
 # Bands for Hbeta from the default database
-Hbeta_bands = gp_spec.retrieve.line_bands(lines_list=['H1_4861A'], bands_kinematic_width=None)
+Hbeta_bands = gp_spec.retrieve.line_bands(line_list=['H1_4861A'], bands_kinematic_width=None)
 gp_spec.fit.bands('H1_4861A', bands=Hbeta_bands, cont_from_bands=cont_from_bands, err_from_bands=err_from_bands)
 gp_spec.plot.bands(rest_frame=True)
 
@@ -31,7 +31,7 @@ gp_spec.plot.bands()
 
 # Second attempt including the fit configuration
 fit_conf = {'H1_4861A_b': 'H1_4861A+H1_4861A_p-g-abs'}
-Hbeta_bands = gp_spec.retrieve.line_bands(lines_list=['H1_4861A'], bands_kinematic_width=None)
+Hbeta_bands = gp_spec.retrieve.line_bands(line_list=['H1_4861A'], bands_kinematic_width=None)
 gp_spec.fit.bands('H1_4861A_b', bands=Hbeta_bands, fit_conf=fit_conf, cont_from_bands=cont_from_bands, err_from_bands=err_from_bands)
 print(f'\ncont_from_bands = {cont_from_bands}; err_from_bands = {err_from_bands}; continuum level = {gp_spec.fit.line.cont:0.3f} +/- {gp_spec.fit.line.cont_err:0.3f}')
 gp_spec.plot.bands()

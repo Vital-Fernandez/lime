@@ -27,7 +27,13 @@ for i, idx in enumerate(index_arr):
     wave_vac = df_lines.loc[idx, 'wave_vac']
     decimals = abs(decimal.Decimal(str(wave_vac)).as_tuple().exponent)
     wave_air = np.around(air_to_vacuum_function(wave_vac), decimals)
-    line.wavelength = np.array([wave_air]) if (2000 <= wave_vac <= 10000) else np.array([wave_vac])
+
+    if 2000 <= wave_vac <= 10000:
+        air_trans = True
+    else:
+        air_trans = False
+
+    line.wavelength = np.array([wave_air]) if air_trans else np.array([wave_vac])
     line.update_label()
 
     # Add a decimal if the line is already there
@@ -40,11 +46,9 @@ for i, idx in enumerate(index_arr):
         message += updated_labels[i]
 
     # Update dataframe values
-    df_lines.loc[idx, 'wavelength'] = wave_air
+    df_lines.loc[idx, 'wavelength'] = wave_air if air_trans else wave_vac
     df_lines.loc[idx, 'particle'] = line.particle[0]
     df_lines.loc[idx, 'latex_label'] = line.latex_label
-
-
 
 # Update the new names
 df_lines['new_index'] = updated_labels
@@ -52,9 +56,7 @@ df_lines.set_index('new_index', inplace=True)
 df_lines.index.name = None
 
 # Convert to spectral width
-lambda_obs = df_lines['wave_vac'].to_numpy()
-idcs_air = (2000 <= lambda_obs) & (lambda_obs <= 10000)
-lambda_obs[idcs_air] = df_lines.loc[idcs_air, 'wavelength'].to_numpy()
+lambda_obs = df_lines['wavelength'].to_numpy()
 delta_lambda = velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_lambda_inst)
 
 # Exclude lines which you dont want to update
@@ -103,4 +105,3 @@ df_lines.drop('wave_vac.1', axis=1, inplace=True)
 # Save the results
 output_file = 'lines_database_v2.0.0.txt'
 lime.save_frame(output_file, df_lines)
-
