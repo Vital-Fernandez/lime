@@ -32,7 +32,10 @@ SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'res_po
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': 'nan', 'id_label': None},
 
                         'desi': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                 'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None}}
+                                 'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
+
+                        'text': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
+                                 'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None}}
 
 CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                               'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
@@ -264,6 +267,26 @@ def check_fits_instructions(fits_source, online_provider=False):
 
     return fits_reader
 
+def load_txt(text_address):
+
+    # Columns
+    out_array = np.loadtxt(text_address)
+
+    # Transform foot comments as dictionary data
+    params_dict = {}
+    with open(text_address, "r") as f:
+
+        # Reverse loop while the lines start by a "#"
+        for line in reversed(f.readlines()):
+            line = line.strip()
+            if not line.startswith("#") or (line.startswith("# LiMe")):
+                break
+
+            # Extract key-value pairs
+            key, value = line[1:].split(":", 1)  # Split at the first ':'
+            params_dict[key.strip()] = value.strip()
+
+    return out_array, params_dict
 
 def load_fits(fits_address, data_ext_list=None, hdr_ext_list=None, url_check=False):
 
@@ -415,6 +438,30 @@ class OpenFits:
         fits_args = self.fits_reader(file_spec)
 
         return fits_args
+
+    @staticmethod
+    def text(file_address):
+
+        # Read text file dividing the columns into the spectrum axis and the comments as its parameters
+        data_arr, params_dict = load_txt(file_address)
+
+        # Unpack the columns into the spectrum axes
+        wave_array, flux_array = data_arr[:, 0], data_arr[:, 1]
+
+        # Check if pixel error and masks are included
+        err_array = data_arr[:, 2] if data_arr.shape[1] > 2 else None
+        mask_array = data_arr[:, 3] if data_arr.shape[1] > 3 else None
+
+        # Convert strings to expected format
+        params_dict['redshift'] = float(params_dict['redshift']) if 'redshift' in params_dict else None
+        params_dict['norm_flux'] = float(params_dict['norm_flux']) if 'norm_flux' in params_dict else None
+        params_dict['id_label'] = params_dict['id_label'] if 'norm_flux' in params_dict else None
+        params_dict['pixel_mask'] = mask_array
+
+        # metadata['units_wave'] = au.Unit(metadata['units_wave']) if 'units_wave' in metadata else au.Unit('AA')
+        # metadata['units_flux'] = au.Unit(metadata['units_flux']) if 'units_flux' in metadata else au.Unit('FLAM')
+
+        return wave_array, flux_array, err_array, None, params_dict
 
     @staticmethod
     def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), pixel_mask=None):
@@ -775,7 +822,6 @@ class OpenFits:
         fits_params = {**CUBE_FITS_PARAMS['miri'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
-
 
     @staticmethod
     def desi(target_id, root_url='https://data.desi.lbl.gov/public/edr/spectro/redux', **kwargs):

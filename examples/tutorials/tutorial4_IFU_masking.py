@@ -45,9 +45,7 @@ shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wc
 
 spec = shoc579.get_spectrum(37, 37)
 spec.plot.spectrum(rest_frame=True)
-# shoc579.plot.cube(6563, line_fg=4363)
-
-
+shoc579.plot.cube(6563, line_fg=4363)
 
 # Check the spaxels interactively
 shoc579.check.cube(6563, line_fg=6563, min_pctl_bg=80, cont_pctls_fg=[80, 90, 95, 99])

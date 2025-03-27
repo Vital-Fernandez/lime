@@ -33,13 +33,13 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
-gp_spec.plot.spectrum(label='GP121903')
-
-# Run the fit
-gp_spec.fit.bands(line, band_edges)
-
-# Plot the results from the last fitting
-gp_spec.plot.bands()
+gp_spec.plot.spectrum(label='GP121903', show_categories=True)
+#
+# # Run the fit
+# gp_spec.fit.bands(line, band_edges)
+#
+# # Plot the results from the last fitting
+# gp_spec.plot.bands()
 
 # Fit configuration
 line = 'H1_6563A_b'

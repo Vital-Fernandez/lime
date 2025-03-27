@@ -24,6 +24,8 @@ assert np.any(df_lines.index.duplicated()) is np.False_
 
 for i, idx in enumerate(index_arr):
     line = lime.Line(idx)
+    if pd.notnull(df_lines.loc[idx, 'transition']):
+        line.transition_comp = df_lines.loc[idx, 'transition']
     wave_vac = df_lines.loc[idx, 'wave_vac']
     decimals = abs(decimal.Decimal(str(wave_vac)).as_tuple().exponent)
     wave_air = np.around(air_to_vacuum_function(wave_vac), decimals)
@@ -48,6 +50,8 @@ for i, idx in enumerate(index_arr):
     # Update dataframe values
     df_lines.loc[idx, 'wavelength'] = wave_air if air_trans else wave_vac
     df_lines.loc[idx, 'particle'] = line.particle[0]
+
+    line.update_label(update_latex=True)
     df_lines.loc[idx, 'latex_label'] = line.latex_label
 
 # Update the new names
@@ -101,6 +105,8 @@ for i, idx in enumerate(df_lines.index):
 # Remove columns
 df_lines.drop('wavelength.1', axis=1, inplace=True)
 df_lines.drop('wave_vac.1', axis=1, inplace=True)
+df_lines.drop('w3_backup', axis=1, inplace=True)
+df_lines.drop('w4_backup', axis=1, inplace=True)
 
 # Save the results
 output_file = 'lines_database_v2.0.0.txt'

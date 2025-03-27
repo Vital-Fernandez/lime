@@ -55,9 +55,11 @@ default."textsize_notes" = 4
 "ytick.labelsize" = 4
 
 [bokeh]
-default."width" = 450
-default."height" = 250
-default."tools" = 'pan,wheel_zoom,box_zoom,reset,save'
+default."width" = 600
+default."height" = 300
+default."tools" = 'fullscreen,pan,wheel_zoom,box_zoom,xzoom_in,yzoom_in,reset,save'
+#default."tools" = 'zoom_in,xzoom_in,yzoom_in,xwheel_zoom,ywheel_zoom,reset'
+
 
 [bokeh.size] # Figure elements size
 default."single_width" = '1'
@@ -66,7 +68,6 @@ default."err_width" = '2'
 default."cont_width" = '0.5'
 default."spectrum_width" = '0.75'
 default."textsize_notes" = 4
-
 
 [bokeh.colors]
 background_fill_color = "bg"
@@ -107,7 +108,7 @@ comps_map = 'Dark2'
 mask_marker = '#FF0000'
 inspection_positive = '#FFFFFF'
 inspection_negative = '#ff796c' # 'xkcd:salmon'
-fade_fg = "#CCCCCC"
+fade_fg = "#FFE5B4"
 
 [colors.dark] # Dark theme
 bg = "#2B2B2B"

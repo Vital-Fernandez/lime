@@ -5,82 +5,80 @@ import pandas as pd
 from pathlib import Path
 from matplotlib import pyplot as plt, gridspec, rc_context
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
+from matplotlib.ticker import NullLocator
 from astropy.io import fits
+from re import sub
 
-from ..io import load_frame, save_frame, LiMe_Error, check_file_dataframe, _LINES_DATABASE_FILE
+from ..io import load_frame, save_frame, LiMe_Error, check_file_dataframe
 from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, _auto_flux_scale,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
-                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, _bands_plot, theme
+                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, bands_filling_plot, theme
+from ..tools import pd_get
 
-
-from ..tools import blended_label_from_log
 from ..transitions import label_decomposition, Line
-
 
 _logger = logging.getLogger('LiMe')
 
 
-def check_previous_mask(parent_mask, user_mask=None, wave_rest=None):
+def establish_selection_lines(spec, input_log, band_vsigma=70, n_sigma=4, fit_conf=None,
+                             default_conf_prefix='default', obj_conf_prefix=None, adjust_central_bands=True,
+                             instrumental_correction=True, components_detection=False, line_list=None,
+                             particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
+                             update_latex=False):
 
-    # Review the dataframe
-    parent_mask = check_file_dataframe(parent_mask, pd.DataFrame) # TODO stop here
-    user_mask = check_file_dataframe(user_mask, pd.DataFrame)
+    # Use the default database crop for the observation if none provided
+    ref_bands = spec.retrieve.line_bands(band_vsigma, n_sigma, None, None, None,
+                   adjust_central_bands, instrumental_correction, False, line_list,
+                   particle_list, sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
 
-    # Add the lines from the input mask to the user mask and treat them as inactive
-    if user_mask is not None:
-
-        # Crop the input mask to exclude blended/merged lines in the previous mask
-        idcs_comb = user_mask.index.str.endswith('_b') | user_mask.index.str.endswith('_m')
-        comb_lines = user_mask.loc[idcs_comb].index.str[:-2]
-        input_mask_crop = parent_mask.loc[~parent_mask.index.isin(comb_lines)]
-
-        # Define for line status
-        idcsNoMatch = ~input_mask_crop.index.isin(user_mask.index)
-        active_lines = np.zeros(user_mask.index.size + np.sum(idcsNoMatch)).astype(bool)
-        active_lines[:user_mask.index.size] = True
-
-        # Join the lists and sort by wavelength
-        user_mask = pd.concat([user_mask, input_mask_crop.loc[idcsNoMatch]])
-        wave_array = label_decomposition(user_mask.index.to_numpy(), params_list=['wavelength'])[0]
-        idx_array = np.argsort(wave_array)
-        user_mask = user_mask.iloc[idx_array]
-        active_lines = active_lines[idx_array]
-
-    # Use all mask and treat them as active
+    # Load input log or copy the reference one
+    in_bands = check_file_dataframe(input_log, verbose=False)
+    if in_bands is None:
+        in_bands = spec.retrieve.line_bands(band_vsigma, n_sigma, fit_conf, default_conf_prefix, obj_conf_prefix,
+                               adjust_central_bands, instrumental_correction, components_detection, line_list,
+                               particle_list, sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
+        default_status = 1 if components_detection else 0
     else:
-        user_mask = parent_mask.copy()
-        active_lines = np.zeros(len(user_mask.index)).astype(bool)
+        default_status = 1
 
-    # Establish the lower and upper wavelength limits
-    wave_interval = wave_rest.data
-    wave_interval = wave_interval[~np.isnan(wave_interval)]
-    w_min, w_max = wave_interval[0], wave_interval[-1]
+    # Extract the lines from each dataframe and only get the ones in common (without suffixes)
+    in_lines = in_bands.index.to_numpy()
+    ref_lines = ref_bands.index.to_numpy()
 
-    # idx_rows_cont = (user_mask.w2 > w_min) & (user_mask.w5 < w_max)
-    idx_rows_cont = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
+    in_core = np.array([sub(r'_(b|m)$', '', line) for line in in_lines])
+    ref_core = np.array([sub(r'_(b|m)$', '', line) for line in ref_lines])
 
-    # # Inform if one or more lines have been excluded from the interface
-    # idx_row_line = (user_mask.w3 > w_min) & (user_mask.w4 < w_max)
-    # if np.sum(idx_rows_cont) != np.sum(idx_row_line):
-    #
-    #     output_message = ''
-    #     range_lines = user_mask.loc[idx_row_line].index.values
-    #     if user_mask.loc[range_lines[0]].w3 > w_min:
-    #         output_message += f'\n-Transition {range_lines[0]} has been excluded from the inspection because its ' \
-    #                           f'continuum is below the spectrum lower wavelength '
-    #     if user_mask.loc[range_lines[1]].w4 < w_min:
-    #         output_message += f'\n-Transition {range_lines[1]} has been excluded from the inspection because its ' \
-    #                           f'continuum is above the spectrum higher wavelength '
+    # Give priority to those in the input log
+    comb_lines, idx = np.unique(np.concatenate((in_core, ref_core)), return_index=True)
+    idx_in = idx[idx < in_core.size]
+    idx_ref = idx[idx >= in_core.size] - in_core.size
 
-    # Trim to the output lines
-    user_mask = user_mask.loc[idx_rows_cont]
-    active_lines = active_lines[idx_rows_cont]
+    # Create empty log
+    labels_arr = np.concatenate((in_lines[idx_in], ref_lines[idx_ref]))
+    log = pd.DataFrame(index=labels_arr, columns=in_bands.columns)
 
-    # Add wavelength to mask
-    wave_array = label_decomposition(user_mask.index.to_numpy(), params_list=['wavelength'])[0]
-    user_mask['wavelength'] = wave_array
+    # Fill the values
+    ref_columns = np.intersect1d(log.columns, ref_bands.columns)
+    log.loc[in_lines[idx_in], in_bands.columns] = in_bands.loc[in_lines[idx_in], in_bands.columns].to_numpy()
+    log.loc[ref_lines[idx_ref], ref_columns] = ref_bands.loc[ref_lines[idx_ref], ref_columns].to_numpy()
 
-    return user_mask, active_lines
+    # Generate array with reference for reference
+    active_lines = np.zeros(comb_lines.size).astype(int)
+    active_lines[idx_in] = default_status
+
+    # Sort to restore the order lost with unique
+    if 'wavelength' in log.columns:
+        sorted_indexes = log['wavelength'].values.argsort()
+    else:
+        wave_arr = label_decomposition(log.index.to_numpy(), params_list=['wavelength'])
+        sorted_indexes = np.argsort(wave_arr[0])
+
+    # Use the sorted index to reorder the DataFrame
+    log = log.iloc[sorted_indexes]
+    active_lines = active_lines[sorted_indexes].astype(bool)
+    labels_arr = labels_arr[sorted_indexes]
+
+    return log, labels_arr,  active_lines
 
 
 def load_redshift_table(file_address, column_name):
@@ -131,36 +129,29 @@ def save_redshift_table(object, redshift, file_address):
 
 
 def circle_band_label(current_label):
-    line_suffix = current_label[-2:]
-
-    if line_suffix == '_b':
-        new_label = f'{current_label[:-2]}_m'
-    elif line_suffix == '_m':
-        new_label = current_label[:-2]
-    else:
-        new_label = f'{current_label}_b'
-
-    return new_label
+    match current_label[-2:]:
+        case '_b':
+            return f'{current_label[:-2]}_m'
+        case '_m':
+            return current_label[:-2]
+        case _:
+            return f'{current_label}_b'
 
 
-def save_or_clear_log(log, log_address, activeLines, log_parameters=None, input_log=None):
+def save_or_clear_log(log, log_address, active_lines, log_parameters='all'):
 
     if log_parameters is None:
         log_parameters = ['wavelength', 'wave_vac', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label',
                           'units_wave', 'particle', 'transition',  'rel_int']
 
-    if np.sum(activeLines) == 0:
+    if np.sum(active_lines) == 0:
         if log_address.is_file():
             log_address.unlink()
     else:
         if log_address is not None:
-            save_frame(log_address, log.loc[activeLines], parameters=log_parameters)
+            save_frame(log_address, log.loc[active_lines], parameters=log_parameters)
         else:
             _logger.warning(r"Not output redshift log provided, the selection won't be stored")
-
-    # Update the user input log to the new selection
-    if input_log is not None:
-        input_log = log.loc[activeLines]
 
     return
 
@@ -171,16 +162,14 @@ class BandsInspection:
 
         self._fig = None
         self.ax_list = None
-        self._ax = None
         self._y_scale = None
         self._log_address = None
         self._rest_frame = None
-        self._activeLines = None
-        self._lineList = None
         self._z_slider = None
         self._z_orig = None
         self._sweep_mask = 0
         self._inter_mask = None
+        self._rest_frame = True
 
         self.exclude_continua = None
 
@@ -188,15 +177,16 @@ class BandsInspection:
         self.mask = None
         self.log = None
 
-        self._idx_ax = None
         self._color_bg = {True: theme.colors['inspection_positive'],
                           False: theme.colors['inspection_negative']}
 
         return
 
-    def bands(self, bands_file, ref_bands=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
-              z_log_address=None, exclude_continua=False, object_label=None, z_column='redshift',  n_pixels=10, fig_cfg=None, ax_cfg=None,
-              in_fig=None, maximize=False):
+    def bands(self, bands_file, band_vsigma=70, n_sigma=4, fit_conf=None, default_conf_prefix='default', obj_conf_prefix=None,
+              adjust_central_bands=True, instrumental_correction=True, components_detection=False, line_list=None,
+              particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
+              update_latex=False, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
+              exclude_continua=False,  n_pixels=10, fig_cfg=None, in_fig=None, maximize=False):
 
 
         """
@@ -264,16 +254,8 @@ class BandsInspection:
 
         """
 
-        # TODO add a function just to switch the spectrum redshift
-        # TODO are the bands plotted well from the bases
-
         # Assign the attribute values
         self._y_scale = y_scale
-        self._log_address = None
-        self._rest_frame = True
-        self._redshift_log_path = None if z_log_address is None else Path(z_log_address)
-        self._obj_ref = object_label
-        self._redshift_column = z_column
         self.exclude_continua = exclude_continua
 
         # Input is a mask is address and it will be also used to save the file
@@ -281,21 +263,19 @@ class BandsInspection:
             if isinstance(bands_file, (str, Path)):
                 self._log_address = Path(bands_file)
                 if not self._log_address.parent.is_dir():
-                    _logger.warning(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
-
-        # If not parent mask use the default database
-        if ref_bands is None:
-            ref_bands = _LINES_DATABASE_FILE
+                    raise LiMe_Error(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
         # Establish the reference lines log to inspect the mask
-        self.log, self._activeLines = check_previous_mask(ref_bands, bands_file, self._spec.wave_rest)
+        self.log, self.line_list, self.active_lines = establish_selection_lines(self._spec, self._log_address,  band_vsigma, n_sigma, fit_conf,
+                                                        default_conf_prefix, obj_conf_prefix, adjust_central_bands,
+                                                        instrumental_correction, components_detection, line_list, particle_list,
+                                                        sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
 
             # Establish the initial list of lines
-            self._lineList = self.log.index.values
-            n_lines = self._lineList.size
+            n_lines = self.log.index.size
 
             # Compute the number of rows configuration
             if n_lines > n_cols:
@@ -310,8 +290,6 @@ class BandsInspection:
             size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
 
             PLT_CONF = theme.fig_defaults(size_conf, fig_type='grid')
-            # AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
-            #                               fig_type=None)
 
             # Launch the interative figure
             with rc_context(PLT_CONF):
@@ -327,8 +305,7 @@ class BandsInspection:
                 spanSelectDict = {}
                 for i in range(n_grid):
                     if i < n_lines:
-                        self.line = self._lineList[i]
-                        self.mask = self.log.loc[self.line, 'w1':'w6'].values
+                        self.line = self.line_list[i] # log.sort_values(by=['wavelength'], inplace=True)#Line(self._lineList[i], band=self.log)
                         self._plot_line_BI(self.ax_list[i], self.line, self._rest_frame, self._y_scale)
                         spanSelectDict[f'spanner_{i}'] = SpanSelector(self.ax_list[i],
                                                                       self._on_select_MI,
@@ -341,35 +318,13 @@ class BandsInspection:
                         self._fig.delaxes(self.ax_list[i])
 
                 # Create sliders grid
-                n_sliders = 1 if self._redshift_log_path is None else 2
-                gs_slicers = gs0[1].subgridspec(1, n_sliders)
-                ax_sliders = gs_slicers.subplots().flatten() if n_sliders > 1 else [gs_slicers.subplots()]
+                gs_slicers = gs0[1].subgridspec(1, 1)
+                ax_sliders = [gs_slicers.subplots()]
 
                 # Mask sweep slider configuration
-                self._inter_mask = np.median(np.diff(self._spec.wave_rest))
+                self._inter_mask = np.median(np.diff(self._spec.wave_rest.data))
                 mask_slider = Slider(ax_sliders[0], 'Band\n(pixels)', -n_pixels, n_pixels, valinit=0.0, valstep=1)
                 mask_slider.on_changed(self._on_mask_slider_MI)
-
-                # Redshift sweep slider configuration
-                if self._redshift_log_path is not None:
-                    if self._obj_ref is None:
-                        raise LiMe_Error(f'No object reference was provided for the redshift log.')
-
-                    self.z_df = check_file_dataframe(self._redshift_log_path, pd.DataFrame)
-                    if self.z_df is None:
-                        self.z_df = pd.DataFrame(index=[self._obj_ref], columns=[self._redshift_column])
-
-                    if self._redshift_column not in self.z_df.columns:
-                        raise LiMe_Error(f'Input redshift log file does not have a {z_column} column.')
-
-                    # Add the current value
-                    self.z_df.loc[self._obj_ref, self._redshift_column] = self._spec.redshift
-                    save_frame(self._redshift_log_path, self.z_df)
-
-                    self._z_orig = self._spec.redshift
-                    self._inter_z = np.abs(self._spec.redshift - (self._spec.wave/(self._spec.wave_rest + self._inter_mask) - 1).mean())
-                    z_slider = Slider(ax_sliders[1], r'Redshift\n($\Delta z$)', -n_pixels, n_pixels, valinit=0, valstep=1)
-                    z_slider.on_changed(self._on_z_slider_MI)
 
                 # Connecting the figure to the interactive widgets
                 self._fig.canvas.mpl_connect('button_press_event', self._on_click_MI)
@@ -382,65 +337,61 @@ class BandsInspection:
         else:
             _logger.warning(f'No lines found in the lines mask for the object wavelentgh range')
 
-            return
-
         return
 
     def _plot_line_BI(self, ax, line, frame, y_scale='auto', scale_dict=theme.plt):
 
-        if self.mask.size == 6:
 
-            # Background for selective line for selected lines
-            active_check = self._activeLines[self._lineList == line][0]
-            ax.set_facecolor(self._color_bg[active_check])
+        # Reference _frame for the plot
+        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
+                                                                    self._spec.redshift, frame)
 
-            # Check components
-            blended_check, profile_label = blended_label_from_log(line, self.log)
-            list_comps = profile_label.split('+') if blended_check else [line]
+        # Establish the limits for the line spectrum plot
+        mask = self.log.loc[line, 'w1':'w6'].to_numpy() * z_corr
+        idcsM = np.searchsorted(wave_plot, mask)
 
-            # Reference _frame for the plot
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
-                                                                        self._spec.redshift, frame)
+        # Just the center region is adjusted
+        if self.exclude_continua:
+            idxL = idcsM[2] - 10 if idcsM[2] - 10 > 0 else 0
+            idxH = idcsM[3] + 10 if idcsM[3] + 10 < wave_plot.size - 1 else wave_plot.size - 1
 
-            # Establish the limits for the line spectrum plot
-            mask = self.log.loc[list_comps[0], 'w1':'w6'] * z_corr
-            idcsM = np.searchsorted(wave_plot, mask)
+        # Center + continua
+        else:
+            idxL = idcsM[0] - 5 if idcsM[0] - 5 > 0 else 0
+            idxH = idcsM[5] + 5 if idcsM[5] + 5 < wave_plot.size - 1 else  wave_plot.size - 1
 
-            # Just the center region is adjusted
-            if self.exclude_continua:
-                idxL = idcsM[2] - 10 if idcsM[2] - 10 > 0 else 0
-                idxH = idcsM[3] + 10 if idcsM[3] + 10 < wave_plot.size - 1 else - 1
+        # Plot the spectrum
+        ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'],
+                linewidth=scale_dict['spectrum_width'])
 
-            # Center + continua
-            else:
-                idxL = idcsM[0] - 5 if idcsM[0] > 5 else idcsM[0]
-                idxH = idcsM[-1] + 5 if idcsM[-1] < idcsM[-1] + 5 else idcsM[-1]
+        # Continuum bands
+        bands_filling_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line, self.exclude_continua, theme.colors)
 
-            # Plot the spectrum
-            ax.step(wave_plot[idxL:idxH]/z_corr, flux_plot[idxL:idxH]*z_corr, where='mid', color=theme.colors['fg'],
-                    linewidth=scale_dict['spectrum_width'])
+        # Plot the masked pixels
+        _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH],
+                    color_dict=theme.colors)
 
-            # Continuum bands
-            _bands_plot(ax, wave_plot, flux_plot, z_corr, idcsM, line, self.exclude_continua, theme.colors)
+        # Plot line location
+        wave_line = pd_get(self.log, line, 'wavelength')
+        if wave_line is not None:
+            ax.axvline(wave_line, linestyle='--', color='grey', linewidth=0.5)
 
-            # Plot the masked pixels
-            _masks_plot(ax, [line], wave_plot[idxL:idxH], flux_plot[idxL:idxH], z_corr, self.log, idcs_mask[idxL:idxH],
-                        color_dict=theme.colors)
+        # Background for selective line for selected lines
+        ax.set_facecolor(self._color_bg[self.active_lines[self.line_list == line][0]])
 
-            ax.axvline(self.log.loc[line, 'wavelength'], linestyle='--', color='grey', linewidth=0.5)
+        # Scale each
+        _auto_flux_scale(ax, flux_plot[idxL:idxH]*z_corr, y_scale)
 
-            # Formatting the figure
-            ax.yaxis.set_major_locator(plt.NullLocator())
-            ax.xaxis.set_major_locator(plt.NullLocator())
+        # Formatting the figure
+        ax.set_title(line, pad=3)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.yaxis.set_minor_locator(NullLocator())
+        ax.get_xlim() # TODO without this one there is no plot
 
-            ax.set_title(line, pad=3)
-            ax.yaxis.set_ticklabels([])
-            ax.axes.yaxis.set_visible(False)
-
-            # Scale each
-            _auto_flux_scale(ax, flux_plot[idxL:idxH]*z_corr, y_scale)
-
-            return
+        return
 
     def _on_select_MI(self, w_low, w_high):
 
@@ -449,41 +400,37 @@ class BandsInspection:
 
             # Just the central bands             # TODO Add JUSTCENTER new action maybe just move the continua bands automatically
             if self.exclude_continua:
-                self.mask[2] = w_low #if w_low > self._spec.wave_rest.data[0] else self._spec.wave_rest.data[0]
-                self.mask[3] = w_high #if w_high < self._spec.wave_rest.data[-1] else self._spec.wave_rest.data[-1]
+                self.log.at[self.line, 'w3'] = w_low
+                self.log.at[self.line, 'w4'] = w_high
 
             # Central and adjacent bands
             else:
 
                 # Correcting line band
-                if w_low > self.mask[1] and w_high < self.mask[4]:
-                    self.mask[2] = w_low
-                    self.mask[3] = w_high
+                if w_low > self.log.at[self.line, 'w2'] and w_high <self.log.at[self.line, 'w5']:
+                    self.log.at[self.line, 'w3'] = w_low
+                    self.log.at[self.line, 'w4'] = w_high
 
                 # Correcting blue band
-                elif w_low < self.mask[2] and w_high < self.mask[2]:
-                    self.mask[0] = w_low
-                    self.mask[1] = w_high
+                elif w_low < self.log.at[self.line, 'w3'] and w_high < self.log.at[self.line, 'w3']:
+                    self.log.at[self.line, 'w1'] = w_low
+                    self.log.at[self.line, 'w2'] = w_high
 
                 # Correcting Red
-                elif w_low > self.mask[3] and w_high > self.mask[3]:
-                    self.mask[4] = w_low
-                    self.mask[5] = w_high
+                elif w_low > self.log.at[self.line, 'w4'] and w_high >  self.log.at[self.line, 'w4']:
+                    self.log.at[self.line, 'w5'] = w_low
+                    self.log.at[self.line, 'w6'] = w_high
 
                 # Removing line
-                elif w_low < self.mask[0] and w_high > self.mask[5]:
+                elif w_low < self.log.at[self.line, 'w1'] and w_high > self.log.at[self.line, 'w6']:
                     print(f'\n-- The line {self.line} mask has been removed')
 
                 # Weird case
                 else:
                     _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
 
-
-            # Save the new selection to the lines log
-            self.log.loc[self.line, 'w1':'w6'] = self.mask
-
             # Save the log to the file
-            save_or_clear_log(self.log, self._log_address, self._activeLines)
+            save_or_clear_log(self.log, self._log_address, self.active_lines)
 
             # Redraw the line measurement
             self._ax.clear()
@@ -499,8 +446,6 @@ class BandsInspection:
         title = self._ax.get_title()
         if title != '':
             self.line = title
-            self._idx_ax = np.where(self._lineList == self.line)
-            self.mask = self.log.loc[self.line, 'w1':'w6'].values
 
     def _on_click_MI(self, event):
 
@@ -508,21 +453,24 @@ class BandsInspection:
 
             # Update the line label
             if event.button == 2:
+                idx = self.line_list == self.line
+                new_name = circle_band_label(self.line)
+                self.log.rename(index={self.line: new_name}, inplace=True)
+                self.line = new_name
+                self.line_list[idx] = new_name
 
-                # Update the new line name
-                current_label = self._lineList[self._idx_ax][0]
-                self.line = circle_band_label(current_label)
-                self.log.rename(index={current_label: self.line}, inplace=True)
-                self._lineList = self.log.index.values
+                # Remove group label and latex label since it cannot be restored
+                for entry in ['group_label', 'latex_label']:
+                    if entry in self.log.columns:
+                        self.log.loc[self.line, entry] = 'none'
 
             # Update the line active status
-            else:
-
-                # Invert the line type
-                self._activeLines[self._idx_ax] = np.invert(self._activeLines[self._idx_ax])
+            if event.button == 3:
+                idx = self.line == self.line_list
+                self.active_lines[idx] = np.invert(self.active_lines[idx])
 
             # Save the log to the file
-            save_or_clear_log(self.log, self._log_address, self._activeLines)
+            save_or_clear_log(self.log, self._log_address, self.active_lines)
 
             # Plot the line selection with the new Background
             self._ax.clear()
@@ -560,14 +508,15 @@ class BandsInspection:
         self.log.loc[:, 'w1':'w6'] = mask_matrix
 
         # Replot the lines
-        for i, line in enumerate(self._lineList):
+        for i, line in enumerate(self.line_list):
+            print(line, self.log.loc[line, 'w1':'w6'].to_numpy())
             self.ax_list[i].clear()
             self._plot_line_BI(self.ax_list[i], line, self._rest_frame, self._y_scale)
 
         self._fig.canvas.draw()
 
         # Save the log to the file
-        save_or_clear_log(self.log, self._log_address, self._activeLines)
+        save_or_clear_log(self.log, self._log_address, self.active_lines)
 
         return
 
@@ -620,7 +569,7 @@ class RedshiftInspectionSingle:
         self._compute_redshift(redshift_output=redshift_pred)
 
         # Get the lines transitions and latex labels
-        reference_bands_df = check_file_dataframe(reference_lines, pd.DataFrame)
+        reference_bands_df = check_file_dataframe(reference_lines)
         if reference_bands_df is None:
             raise LiMe_Error(f'Reference line log could not be read ({reference_lines})')
         else:
@@ -915,7 +864,7 @@ class RedshiftInspection:
         self._compute_redshift(redshift_output=redshift_pred)
 
         # Get the lines transitions and latex labels
-        reference_bands_df = check_file_dataframe(reference_lines, pd.DataFrame)
+        reference_bands_df = check_file_dataframe(reference_lines)
         if reference_bands_df is None:
             raise LiMe_Error(f'Reference line log could not be read ({reference_lines})')
         else:
@@ -952,6 +901,7 @@ class RedshiftInspection:
             for circle in radio.circles:  # Make the buttons a bit rounder
                 circle.set_height(0.025)
                 circle.set_width(0.075)
+                circle.set_edgecolor(theme.colors['fg'])  # or any color like 'black', '#333333', etc.
             for r in radio.labels:
                 r.set_fontsize(6)
 
@@ -1064,7 +1014,11 @@ class RedshiftInspection:
                             backgroundcolor='w',
                             size=6,
                             xycoords='data', xytext=(lineWave * (1 + redshift_pred), 0.85), textcoords=("data",
-                                                                                                        "axes fraction"))
+                                                                                                        "axes fraction"),
+                            bbox=dict(
+                                facecolor=theme.colors['bg'],  # Background color
+                                edgecolor='none',  # Border color
+                            ))
 
         return
 

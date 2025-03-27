@@ -28,12 +28,6 @@ try:
 except ImportError:
     mplcursors_check = False
 
-try:
-    from aspect import SpectrumDetector
-    aspect_check = True
-except ImportError:
-    aspect_check = False
-
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
@@ -359,9 +353,6 @@ class Spectrum:
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
 
-        # # Load parent classes
-        # LineFinder.__init__(self)
-
         # Class attributes
         self.label = None
         self.wave = None
@@ -383,9 +374,6 @@ class Spectrum:
         self.fit = SpecTreatment(self)
         self.infer = FeatureDetection(self)
         self.retrieve = SpecRetriever(self)
-
-        if aspect_check:
-            self.features = SpectrumDetector(self)
 
         # Plotting objects
         self.plot = SpectrumFigures(self)
@@ -649,7 +637,7 @@ class Spectrum:
         """
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(fname, pd.DataFrame, ext=page)
+        log_df = check_file_dataframe(fname, ext=page)
 
         # Security checks:
         if log_df.index.size > 0:
@@ -1229,7 +1217,7 @@ class Sample(UserDict, OpenFits):
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
-        self.frame = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
+        self.frame = check_file_dataframe(sample_log, sample_levels=self.levels)
         self._load_function = load_function
         self.load_params = kwargs
 
@@ -1465,7 +1453,7 @@ class Sample(UserDict, OpenFits):
     def load_frame(self, dataframe, ext='LINESFRAME', sample_levels=['id', 'line']):
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(dataframe, pd.DataFrame, ext=ext, sample_levels=sample_levels)
+        log_df = check_file_dataframe(dataframe, ext=ext, sample_levels=sample_levels)
 
         # Security checks:
         if log_df.index.size > 0:

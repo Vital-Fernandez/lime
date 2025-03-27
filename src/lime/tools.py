@@ -855,6 +855,9 @@ class ProgressBar:
         if message_type == 'bar':
             self.output_message = self.progress_bar
 
+        if message_type == 'counter':
+            self.output_message = self.counter
+
         return
 
     def progress_bar(self, i, i_max, pre_text, post_text, n_bar=10):
@@ -870,5 +873,11 @@ class ProgressBar:
         return
 
     def no_output(self, i, i_max, pre_text, post_text, n_bar=10):
+
+        return
+
+    def counter(self, i, i_max, pre_text, post_text, n_bar=10):
+
+        print(post_text)
 
         return

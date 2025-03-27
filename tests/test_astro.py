@@ -1,11 +1,11 @@
 import numpy as np
 import lime
-
+from lime.io import _LINES_DATABASE_FILE
 
 def test_line_bands():
 
     log0 = lime.line_bands()
-    parent_bands = lime.load_frame(lime._lines_database_path)
+    parent_bands = lime.load_frame(_LINES_DATABASE_FILE)
 
     # TODO rework on the master database
     # assert np.all(log0.index == parent_bands.index)

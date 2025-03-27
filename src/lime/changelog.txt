@@ -104,3 +104,7 @@ LiMe Mayor update - 2.0.0 - XX/XX/XXXX
     - Now the observations wave, flux, err_flux and wave_rest arrays are always masked arrays
     - The lines database name has been changed from parent_bands.txt to "lines_database_v2.0.0.txt". The wavelength are based on van Hoof, P.A.M., 2018, Galaxies, 6, 63 and Roueff+ (2019).
     - The central wavelenght bands are now calculated assuming a bands_vsigma=70 and n_sigma=4
+    - The function lime.Spectrum.retrieve.spectrum() returns the spectrum axes as a recarray or saves it into a text file if the user provides a file address.
+    - lime.Spectrum.from_file("fname", instrument='text') can now read the file from a text file following the format from the lime.Spectrum.retrieve.spectrum() function.
+
+#  The .plot.spectrum(include_fittings) does not show the combined profile

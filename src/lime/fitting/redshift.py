@@ -44,6 +44,63 @@ def compute_gaussian_ridges(redshift, lines_lambda, wave_matrix, amp_arr, sigma_
 
     return gauss_arr
 
+def redshift_xor_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
+                        sig_digits=2, plot_results=False):
+
+    # Use the detection bands if provided
+    if (pred_arr is not None) and (components_number is not None):
+        idcs_lines = np.isin(pred_arr, components_number)
+    else:
+        idcs_lines = None
+
+    # Continue with measurement
+    if idcs_lines is not None:
+
+        # Extract the data
+        pixel_mask = spec.flux.mask
+        wave_arr = spec.wave.data
+        flux_arr = spec.flux.data
+
+        # Loop throught the redshift steps
+        if not np.all(pixel_mask):
+
+            # Compute the resolution params
+            sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
+            sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
+
+            # Lines selection
+            theo_lambda = bands.wavelength.to_numpy()
+
+            # Parameters for the brute analysis
+            z_arr = np.linspace(z_min, z_max, z_nsteps)
+            wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
+            xor_sum = np.zeros(z_arr.size)
+
+            # Invert the mask
+            data_mask = ~pixel_mask
+
+            # Revert the data
+            for i, z_i in enumerate(z_arr):
+                gauss_arr = compute_gaussian_ridges(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
+                xor_sum[i] = 0 if gauss_arr is None else np.sum(idcs_lines[data_mask] * gauss_arr[data_mask])
+
+            z_infer = np.round(z_arr[np.argmax(xor_sum)], decimals=sig_digits)
+
+        # No lines or all masked
+        else:
+            z_infer = None
+
+        if plot_results and (z_infer is not None):
+            gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
+            redshift_key_evaluation(spec, z_infer, data_mask, gauss_arr_max, z_arr, xor_sum)
+
+    # Do not attempt measurement
+    else:
+        z_infer = None
+
+    return z_infer
+
+
 def redshift_key_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
                         sig_digits=2, detection_only=True, plot_results=False):
 
@@ -109,7 +166,6 @@ def redshift_key_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, component
 
     return z_infer
 
-
 def permutation_objective_function(redshift, obs_arr, theo_arr):
 
     adjusted_observed = obs_arr / (1 + redshift)
@@ -172,12 +228,11 @@ def redshift_permutation_method(spec, bands, z_min, z_max, pred_arr, components_
 
         # Calculate theo wavelengths
         wave_theo = bands.wavelength.to_numpy()
-        print(bands)
 
         # Run the permutation
-        print(f'Input theo wavelengths: {wave_theo}')
         # result = minimize(permutation_residual, x0=5, bounds=[(z_min, z_max)])
-        result = minimize(lambda Z: compute_residual(Z, wave_obs, wave_theo), x0=1, bounds=[(z_min, z_max)])
+        result = minimize(lambda Z: compute_residual(Z, wave_obs, wave_theo), x0=1, bounds=[(z_min, z_max)],
+                          method='dogleg')
         z_infer = result.x[0]
 
         # Recompute cost matrix and find the best matching subset
@@ -212,6 +267,10 @@ class RedshiftFitting:
                                 detection_only=True, plot_results=False
         '''
 
+        # Limits
+        z_min = 0 if z_min is None else z_min
+        z_max = 12 if z_max is None else z_max
+
         # Check that ASPECT is available
         if not aspect_check:
             _logger.info("ASPECT has not been installed the redshift measurements won't be constrained to lines")
@@ -219,10 +278,10 @@ class RedshiftFitting:
         # Get the features array
         pred_arr, conf_arr = None, None
         if aspect_check:
-            if self._spec.features.pred_arr is None:
+            if self._spec.infer.pred_arr is None:
                 _logger.warning("The observation does not have a components detection array please run ASPECT")
             else:
-                pred_arr, conf_arr = self._spec.features.pred_arr, self._spec.features.conf_arr
+                pred_arr, conf_arr = self._spec.infer.pred_arr, self._spec.infer.conf_arr
 
         # Set the type of fitting and the components to use
         if mode == 'key':
@@ -236,6 +295,12 @@ class RedshiftFitting:
             components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
             z_infer = redshift_permutation_method(self._spec, bands, z_min, z_max, pred_arr, components_number,
                                                   plot_results=plot_results)
+
+        elif mode == 'xor':
+            components = components if components is not None else ['emission', 'doublet', 'absorption']
+            components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
+            z_infer = redshift_xor_method(self._spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
+                                          sig_digits=sig_digits, plot_results=plot_results)
 
         else:
             _logger.critical(f'Input redshift technique "{mode}" is not recognized, please use: "key" or "permute"')

@@ -5,7 +5,6 @@ import pytest
 from matplotlib import pyplot as plt
 from lime.io import _LOG_EXPORT_DICT
 from os import remove
-import pandas as pd
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
@@ -27,7 +26,7 @@ pixel_mask = np.isnan(err_array)
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
 
-spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+spec.fit.frame(bands_file_address, cfg, obj_conf_prefix='38-35')
 
 
 def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
@@ -51,9 +50,8 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
                     param_exp_err = true_log.loc[line, f'{param}_err']
                     diag = np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
                     if not diag:
-                        print(param)
-                    print(line, param, param_value, param_exp_value, diag, param_exp_err, abs_factor)
-                    assert np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                        print(line, param, param_value, param_exp_value, diag, param_exp_err, abs_factor)
+                    assert diag
                 else:
                     if param.endswith('_err'):
                         # assert np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
@@ -61,10 +59,10 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
 
                     else:
                         if param == 'FWZI':
-                            print(line, param, param_value, param_exp_value)
+                            # print(line, param, param_value, param_exp_value)
                             assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
                         else:
-                            print(line, param, param_value, param_exp_value, np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True))
+                            # print(line, param, param_value, param_exp_value, np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True))
                             assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
 
     return
@@ -132,7 +130,7 @@ class TestSpectrumClass:
     def test_line_detection_plot(self):
 
         spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[5, 3, 2])
-        match_bands = spec.line_detection(bands_file_address)
+        match_bands = spec.infer.peaks_troughs(bands_file_address)
 
         fig = plt.figure()
         spec.plot.spectrum(in_fig=fig, bands=match_bands)
@@ -325,14 +323,14 @@ class TestSpectrumClass:
         # Measure lines explicit
         cfg_file, bands_file = baseline_folder/'sample_cfg.toml', baseline_folder/'SHOC579_bands.txt'
         sample_cfg, shoc549_df = lime.load_cfg(cfg_file),  lime.load_frame(bands_file)
-        SHOC579_a.fit.frame(shoc549_df, sample_cfg, id_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(shoc549_df, sample_cfg, obj_conf_prefix='SHOC579', line_detection=True)
         df_a = SHOC579_a.frame.copy()
 
         # Clear measurements
         SHOC579_a.frame = SHOC579_a.frame[0:0]
 
         # Measure lines implicit
-        SHOC579_a.fit.frame(bands_file, cfg_file, id_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(bands_file, cfg_file, obj_conf_prefix='SHOC579', line_detection=True)
         df_b = SHOC579_a.frame.copy()
 
         assert np.all(df_a.index == df_b.index)

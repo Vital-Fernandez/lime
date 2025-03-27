@@ -68,7 +68,7 @@ class LineFinder:
 
         By default the algorithm seeks for emission lines, set ``emission_type`` equal to False for absorption lines.
 
-        The additional arguments provide additional tools to adjust the line detection and show the steps/results.
+        The additional arguments provide additional utils to adjust the line detection and show the steps/results.
 
         :param bands: Input bands dataframe or the address to its file.
         :type bands: pandas.Dataframe, str, pathlib.Path
@@ -104,7 +104,7 @@ class LineFinder:
         idcs_peaks, _ = signal.find_peaks(self._spec.flux, height=limit_threshold, distance=width_tol)
 
         # Match peaks with theoretical lines
-        bands = check_file_dataframe(bands, pd.DataFrame)
+        bands = check_file_dataframe(bands)
         matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, band_modification=band_modification,
                                       line_type=emission_type)
 

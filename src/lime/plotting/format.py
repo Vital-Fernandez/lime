@@ -6,6 +6,17 @@ from copy import deepcopy
 _logger = logging.getLogger('LiMe')
 
 
+def nested_dict(d, formatting_d):
+
+    for key, value in d.items():
+        if isinstance(value, dict):  # If the value is another dictionary, recurse
+            nested_dict(value, formatting_d)
+        else:
+            d[key] = formatting_d.get(value, value)  # Otherwise, just print the value
+
+    return d
+
+
 def latex_science_float(f, dec=2):
     float_str = f'{f:.{dec}g}'
     if "e" in float_str:
@@ -35,16 +46,6 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library='
     return x_label, y_label
 
 
-def nested_dict(d, formatting_d):
-
-    for key, value in d.items():
-        if isinstance(value, dict):  # If the value is another dictionary, recurse
-            nested_dict(value, formatting_d)
-        else:
-            d[key] = formatting_d.get(value, value)  # Otherwise, just print the value
-
-    return d
-
 class Themer:
 
     def __init__(self, conf, style=None):
@@ -68,12 +69,14 @@ class Themer:
 
         return
 
+
     @classmethod
     def from_toml(cls, fname, style=None):
 
         conf = load_cfg(fname, fit_cfg_suffix=None)
 
         return cls(conf, style)
+
 
     def fig_defaults(self, user_fig=None, fig_type=None, plot_lib='matplotlib'):
 
@@ -87,6 +90,7 @@ class Themer:
         fig_conf = fig_conf if user_fig is None else {**fig_conf, **user_fig}
 
         return fig_conf
+
 
     def ax_defaults(self, user_ax, units_wave, units_flux, norm_flux, fig_type='default', plotting_library='matplotlib',
                     **kwargs):

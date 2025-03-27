@@ -45,4 +45,4 @@ pythonpath = ["src"]
 mpl-baseline-path = 'tests/baseline'
 mpl-results-path = 'tests/outputs'
 mpl-results-always = false
-addopts = "--cov-report term --cov-report xml"
+addopts = "-p no:asdf_schema_tester"

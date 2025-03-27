@@ -22,5 +22,5 @@ norm_flux = 1e-17
 cfg = lime.load_cfg(cfg_file)
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux, pixel_mask=pixel_mask)
 # spec.plot.spectrum()
-spec.fit.frame(line_bands_file, cfg, id_conf_prefix='38-35')
+spec.fit.frame(line_bands_file, cfg, obj_conf_prefix='38-35')
 spec.plot.spectrum(include_fits=True)

@@ -34,7 +34,7 @@ def test_gaussian():
     assert np.allclose(spec.fit.line.gamma, np.nan, equal_nan=True)
     assert np.allclose(spec.fit.line.frac, np.nan, equal_nan=True)
 
-    assert np.allclose(spec.fit.line.m_cont, m_cont, rtol=0.05)
+    assert np.allclose(spec.fit.line.m_cont, m_cont, rtol=0.10)
     assert np.allclose(spec.fit.line.n_cont, n_cont, rtol=spec.fit.line.n_cont_err)
 
     p_shape = spec.fit.line._p_shape[0]

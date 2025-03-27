@@ -409,13 +409,14 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
             log = dataframe
 
         # Slice the log if the user provides a list of columns
-        if parameters != 'all':
+        if parameters != 'all': # TODO change this to None
             if isinstance(dataframe.index, pd.MultiIndex):
                 parameters_list = np.atleast_1d(list(dataframe.index.names) + list(parameters))
             else:
                 parameters_list = np.atleast_1d(parameters)
 
-            lines_log = log[parameters_list]
+            # lines_log = log[parameters_list]
+            lines_log = log[log.columns.intersection(parameters_list)]
 
         else:
             lines_log = log
@@ -577,7 +578,8 @@ def results_to_log(line, log, norm_flux):
     return
 
 
-def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=['id', 'line'], copy_input=True):
+def check_file_dataframe(df_variable, variable_type=pd.DataFrame, ext='FRAME', sample_levels=['id', 'line'],
+                         copy_input=True, verbose=True):
 
     if isinstance(df_variable, variable_type):
         if copy_input:
@@ -590,9 +592,9 @@ def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=
         if input_path.is_file():
             output = load_frame(df_variable, page=ext, levels=sample_levels)
         else:
-            _logger.warning(f'Lines bands file not found at {df_variable}')
+            if verbose:
+                _logger.warning(f'Lines bands file not found at {df_variable}')
             output = None
-
     else:
         output = df_variable
 

@@ -320,6 +320,86 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
     return latex_array
 
 
+# def review_latex_label(line, bands_df, update_latex=False, decimals=None):
+    #
+    # # Check if there is a latex label on the database
+    # latex_label = pd_get(bands_df, line.label, 'latex_label')
+    #
+    # # Use existent label
+    # if latex_label is not None and update_latex is False:
+    #     return latex_label
+    #
+    # # Make a new one
+    # else:
+    #
+    #     # Single line
+    #     if not line.merged_check and not line.blended_check:
+    #         return latex_from_label(None, line.particle, line.wavelength, line.units_wave, line.kinem,
+    #                                 line.transition_comp, decimals=decimals)
+    #
+    #     # Merged or blended (try to combine from table)
+    #     list_comps = line.group_label.split('+') if line.merged_check else line.list_comps
+    #     list_latex = [pd_get(bands_df, line.label, 'latex_label') for comp in list_comps]
+    #     if np.all(pd.notnull(list_latex)):
+    #         return np.array('+'.join(list_latex)) if line.merged_check else np.array(list_latex)
+    #
+    #     else:
+    #         # Merged reconstruct
+    #         if line.merged_check:
+    #             return np.array('+'.join(latex_from_label(list_comps)), ndmin=1)
+    #         # Blended reconstruct
+    #         else:
+    #             return latex_from_label(None, line.particle, line.wavelength, line.units_wave, line.kinem,
+    #                                     line.transition_comp, decimals=decimals)
+
+
+        #     if latex_exists and (update_latex is False):
+        #         latex_list = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
+        #     else:
+        #         latex_list = latex_from_label(self.group_label.split('+'))
+        #         latex_list =  np.array('+'.join(latex_list), ndmin=1)
+        #     self.latex_label = latex_list
+        #
+        # # Blended and single
+        # else:
+        #     if latex_exists and (update_latex is False):
+        #         self.latex_label = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
+        #     else:
+        #         self.latex_label = latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
+        #                                             self.transition_comp, decimals=decimals)
+
+    # def _review_latex_label(self, bands_df, update_latex=False, decimals=None):
+    #
+    #     # Check if there is a latex label on the database
+    #     latex_label = pd_get(bands_df, 'latex_label')
+    #
+    #     # Use existent label
+    #     if latex_label is not None and update_latex is False:
+    #         return latex_label
+    #
+    #     # Make a new one
+    #     else:
+    #
+    #         # Single line
+    #         if not self.merged_check and not self.blended_check:
+    #             return latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
+    #                                     self.transition_comp, decimals=decimals)
+    #
+    #         # Try to reconstruct from existing labels
+    #         latex_check = True if 'latex_label' in bands_df.columns else False
+    #         list_comps = self.group_label.split('+') if self.merged_check else self.list_comps
+    #         list_latex = [_review_latex_label(self, bands_df, bands_df=bands_df, decimals=decimals]
+    #         for comp in list_comps:
+    #
+    #         # Merged line
+    #         if self.merged_check:
+    #
+    #             # Try to reconstruct from components
+    #             if latex_check:
+    #                 for comp in
+    #
+
+
 def label_composition(line_list, ref_df=None, default_profile=None):
 
     # Empty containers for the label componentes
@@ -654,7 +734,7 @@ class Particle:
 class Line:
 
     def __init__(self, label, band=None, fit_conf=None, profile=None, cont_from_bands=True, z_line=None,
-                 interpret=True):
+                 update_latex=False, interpret=True):
 
         # Label attributes
         self.label = label
@@ -715,7 +795,7 @@ class Line:
 
         # Interpret the line from the user reference
         if interpret:
-            self._from_label(label, band, fit_conf)
+            self._from_label(label, band, fit_conf, update_latex)
 
         return
 
@@ -727,12 +807,12 @@ class Line:
 
         return self.label
 
-    def _from_label(self, label, band=None, fit_conf=None):
+    def _from_label(self, label, band=None, fit_conf=None, update_latex=False):
 
         # If band is not provided use default database
         if band is None:
             band = _PARENT_BANDS
-        band = check_file_dataframe(band, DataFrame, copy_input=False)
+        band = check_file_dataframe(band, copy_input=False)
 
         # Infer label from log if input line is a wavelength
         self.label = check_line_in_log(label, band)
@@ -774,7 +854,8 @@ class Line:
         self._decimal_wave = True if '.' in self.label else False
 
         # Compute latex entry if necessary
-        self._review_latex_label(band)
+        self.latex_label = np.atleast_1d(self._review_science_notation(band if isinstance(band, DataFrame) else None,
+                                                                       update_latex=update_latex))
 
         return
 
@@ -834,7 +915,7 @@ class Line:
         # Restore the group label if provided (Configuration file over rules log)
         group_label_cfg = None if fit_conf is None else fit_conf.get(self.label, None)
         group_label_frame = None if not isinstance(bands_log, pd.DataFrame) else pd_get(bands_log, self.label,
-                                                                                        'group_label', transform='none')
+                                                                                        column='group_label', transform='none')
 
         self.group_label = group_label_cfg if group_label_cfg is not None else group_label_frame
 
@@ -868,33 +949,47 @@ class Line:
 
         return
 
-    def _review_latex_label(self, bands_df, update_latex=False, decimals=None):
+    def _review_science_notation(self, bands, update_latex=False, decimals=None):
 
         # Check if there is a latex label on the database
-        latex_exists = False
-        if isinstance(bands_df, DataFrame):
-            if 'latex_label' in bands_df.columns:
-                if np.sum(bands_df.index.isin(self.list_comps)) == len(self.list_comps):
-                    if not np.all(pd.isnull(bands_df.loc[self.list_comps, 'latex_label'])):
-                        latex_exists = True
-
-        # Merged
-        if self.merged_check:
-            if latex_exists and (update_latex is False):
-                latex_list = list(bands_df.loc[self.list_comps, 'latex_label'].to_numpy())
-            else:
-                latex_list = list(latex_from_label(self.group_label.split('+')))
-            self.latex_label = np.array('+'.join(latex_list), ndmin=1)
-
-        # Blended and single
+        if bands is not None:
+            latex_label = pd_get(bands, self.label, 'latex_label', None, transform='none')
+            if latex_label is not None:
+                latex_label = latex_label.split('+') if self.blended_check else [latex_label]
         else:
-            if latex_exists and (update_latex is False):
-                self.latex_label = bands_df.loc[self.list_comps, 'latex_label'].to_numpy()
-            else:
-                self.latex_label = latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
-                                                    self.transition_comp, decimals=decimals)
+            latex_label = None
 
-        return
+        # Use existent label
+        if latex_label is not None and update_latex is False:
+            return latex_label
+
+        # Make a new one
+        else:
+
+            # Single line
+            if not self.merged_check and not self.blended_check:
+                return latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
+                                        self.transition_comp, decimals=decimals)
+
+            # Merged or blended (try to combine from table)
+            list_comps = self.group_label.split('+') if self.merged_check else self.list_comps
+            if bands is not None:
+                list_latex = [pd_get(bands, comp, 'latex_label') for comp in list_comps]
+            else:
+                list_latex = [None] * len(list_comps)
+
+            if np.all(pd.notnull(list_latex)):
+                return '+'.join(list_latex) if self.merged_check else list_latex
+
+            else:
+                # Merged reconstruct
+                if self.merged_check:
+                    return '+'.join(latex_from_label(list_comps))
+
+                # Blended reconstruct
+                else:
+                    return latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
+                                            self.transition_comp, decimals=decimals)
 
     def index_bands(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
 
@@ -1009,8 +1104,6 @@ class Line:
 
     def update_label(self, decimals=None, update_latex=True, bands_df=None):
 
-        # TODO update components notation?
-
         # Convert core transition particle
         part_str = self.particle[self._ref_idx]
         wave_str = np.round(self.wavelength[self._ref_idx], 0).astype(int) if decimals is None else np.round(self.wavelength[self._ref_idx], decimals)
@@ -1025,6 +1118,10 @@ class Line:
 
         # Update latex notation
         if update_latex:
-            self._review_latex_label(bands_df, update_latex, decimals=decimals)
+            self.latex_label = self._review_science_notation(bands_df, update_latex, decimals=decimals)
+
+        return
+
+    def get_latex_label(self):
 
         return

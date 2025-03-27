@@ -20,17 +20,17 @@ def test_label_decomposition():
 
     particle, wavelength, latex = label_decomposition('O3_5007A', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5006.7664
+    assert wavelength[0] == 5006.77
     assert latex[0] == '$[OIII]5007\\mathring{A}$'
 
     particle, wavelength, latex = label_decomposition('O3_5007A_b', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5006.7664
+    assert wavelength[0] == 5006.77
     assert latex[0] == '$[OIII]5007\\mathring{A}$'
 
     particle, wavelength, latex = label_decomposition('O3_5007A_m', fit_conf=fit_conf)
     assert particle[0] == 'O3'
-    assert wavelength[0] == 5006.7664
+    assert wavelength[0] == 5006.77
     assert latex[0] == '$[OIII]5007\\mathring{A}$+$[OIII]5007\\mathring{A}-k_1$'
 
     return
@@ -57,12 +57,12 @@ class TestLineClass:
                     'O3_5007A_m': 'O3_5007A+O3_5007A_k-1'}
 
         # Default band O3_5007A
-        O3_band = np.array([4971.796688, 4984.514249, 4995.348943, 5024.303156, 5027.74326, 5043.797081])
+        O3_band = np.array([4971.796688, 4984.514249, 5000.089685, 5013.450315, 5027.743260, 5043.797081])
 
         line = Line('O3_5007A', fit_conf=fit_conf)
         assert line.particle[0].label == 'O3'
         assert line.particle[0].symbol == 'O', line.particle[0].ionization == 3
-        assert np.all(line.wavelength == np.array([5006.7664]))
+        assert np.all(line.wavelength == np.array([5006.77]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == np.array(['col']))
         assert np.all(line.profile_comp == np.array(['g-emi']))
@@ -75,7 +75,7 @@ class TestLineClass:
 
         line = Line('O3_5007A_b', band=None, fit_conf=fit_conf)
         assert np.all(line.particle == [Particle.from_label('O3'), Particle.from_label('O3'), Particle.from_label('He1')])
-        assert np.all(line.wavelength == np.array([5006.7664, 5006.7664, 5016.]))
+        assert np.allclose(line.wavelength, np.array([5006.77, 5006.77, 5015.6]))
         assert np.all(line.kinem == np.array([0, 1, 0]))
         assert np.all(line.transition_comp == np.array(['col', 'col', 'rec']))
         assert np.all(line.profile_comp == np.array(['g-emi', 'g-emi', 'g-emi']))
@@ -158,31 +158,32 @@ class TestLineClass:
         assert line.group_label is None
         assert line.mask is None
 
-        line = Line('C3_1908A')
+        line = Line('C3_1909A')
         assert line.particle[0].label == 'C3'
-        assert np.all(line.wavelength == np.array([1908.0803]))
+        assert np.all(line.wavelength == np.array([1908.734]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == ['sem'])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array(['$CIII]1908\\mathring{A}$']))
-        assert np.all(line.list_comps == ['C3_1908A'])
+        assert np.all(line.latex_label == np.array(['$CIII]1909\\mathring{A}$']))
+        assert np.all(line.list_comps == ['C3_1909A'])
 
-        assert line.label == 'C3_1908A'
+        assert line.label == 'C3_1909A'
         assert line.group_label is None
         assert line.mask is not None
 
-        line = Line('C3_1908A_t-sem', band=None)
+        line = Line('C3_1909A_t-sem', band=None)
         assert line.particle[0].label == 'C3'
-        assert np.all(line.wavelength == np.array([1908.0803]))
+        assert np.all(line.wavelength == np.array([1908.734]))
         assert np.all(line.kinem == np.array([0]))
         assert np.all(line.transition_comp == ['sem'])
         assert np.all(line.profile_comp == np.array(['g-emi']))
-        assert np.all(line.latex_label == np.array(['$CIII]1908\\mathring{A}$']))
-        assert np.all(line.list_comps == ['C3_1908A_t-sem'])
+        assert np.all(line.latex_label == np.array(['$CIII]1909\\mathring{A}$']))
+        assert np.all(line.list_comps == ['C3_1909A_t-sem'])
 
-        assert line.label == 'C3_1908A_t-sem'
+        assert line.label == 'C3_1909A_t-sem'
         assert line.group_label is None
-        assert np.all(line.mask == np.array([1870., 1895., 1898.18782, 1912.243544, 1930., 1950.]))
+
+        assert np.allclose(line.mask, np.array([1870.000000, 1895.000000, 1906.187259, 1911.280741, 1930.000000, 1950.000000]))
 
         return
 

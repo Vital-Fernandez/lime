@@ -5,13 +5,14 @@ import pandas as pd
 from pathlib import Path
 from astropy.io import fits
 from time import time
-
-from .fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band
-from .tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from .transitions import Line, air_to_vacuum_function
-from .io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lmfit.models import PolynomialModel
+
+from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
+from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
+from lime.transitions import Line, air_to_vacuum_function, label_decomposition
+from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lime.fitting.redshift import RedshiftFitting
+from lime import __version__
 
 try:
     import aspect
@@ -139,7 +140,6 @@ def import_line_kinematics_backUp(line, z_cor, log, units_wave, fit_conf):
     return
 
 
-
 def import_line_kinematics(line, z_cor, log, fit_conf):
 
     # Check if imported kinematics come from blended component
@@ -147,10 +147,10 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
 
         # Check for kinem order
         parent_label = fit_conf.get(f'{child_label}_kinem')
-        if parent_label is not None:
+        if (parent_label is not None) and line.blended_check:
 
             # Tied kinematics in blended profile
-            if line.blended_check:
+            if parent_label in line.list_comps:
                 idx_parent = line.list_comps.index(parent_label)
                 factor = f'{line.wavelength[idx_child] / line.wavelength[idx_parent]:0.8f}'
                 fit_conf[f'{child_label}_center'] = {'expr': f'{factor}*{parent_label}_center'}
@@ -160,7 +160,7 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
             elif parent_label in log.index:
                 mu_parent = log.loc[parent_label, ['center', 'center_err']].to_numpy()
                 sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].to_numpy()
-                wave_ratio = log.loc[child_label, 'wavelength'] / log.loc[parent_label, 'wavelength']
+                wave_ratio = line.wavelength[idx_child]/log.loc[parent_label, 'wavelength']
 
                 center_child_arr = wave_ratio * (mu_parent / z_cor)
                 sigma_child_arr = wave_ratio * sigma_parent
@@ -178,7 +178,6 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
                 _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
 
     return
-
 
 
 def check_cube_bands(input_bands, mask_list, fit_cfg):
@@ -331,7 +330,7 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
         ref_bands = _PARENT_BANDS
 
     # Load the reference bands
-    bands_df = check_file_dataframe(ref_bands, pd.DataFrame)
+    bands_df = check_file_dataframe(ref_bands)
 
     # Check for modifications on labels units or wavelengths
     new_format = False
@@ -350,20 +349,24 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
         bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * conversion_factor
         bands_df['units_wave'] = units_wave
         new_format = True
+    else:
+        conversion_factor = 1
 
     # First slice by wavelength and redshift
     idcs_rows = np.ones(bands_df.index.size).astype(bool)
     if wave_intvl is not None:
 
-        # Establish the lower and upper wavelength limits
         w_min, w_max = wave_intvl[0], wave_intvl[-1]
 
         # Account for redshift
         redshift = redshift if redshift is not None else 0
-        wavelength_array = bands_df['wavelength'] * (1 + redshift)
+        if 'wavelength' in bands_df.columns:
+            wave_arr = bands_df['wavelength'] * (1 + redshift)
+        else:
+            wave_arr = label_decomposition(bands_df.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
 
         # Compare with wavelength values
-        idcs_rows = idcs_rows & (wavelength_array >= w_min) & (wavelength_array <= w_max)
+        idcs_rows = idcs_rows & (wave_arr >= w_min) & (wave_arr <= w_max)
 
     # Second slice by particle
     if particle_list is not None:
@@ -378,12 +381,14 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
 
     # Update the labels to reflect new wavelengths and units if necessary and user requests it
     if new_format and update_labels:
-        for label in bands_df.index:
+        list_labels = [None] * bands_df.index.size
+        for i, label in enumerate(bands_df.index):
             line = Line(label, band=bands_df)
             line.update_label(decimals=decimals, update_latex=update_latex)
             if update_latex:
-                bands_df['latex_label'] = line.latex_label[0]
-            bands_df.rename(index={label: line.label}, inplace=True)
+                bands_df.loc[label, 'latex_label'] = line.latex_label[0]
+            list_labels[i] = line.label
+        bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
 
     return bands_df
 
@@ -395,6 +400,149 @@ def res_power_approx(wavelength_arr):
     return wavelength_arr/delta_lambda
 
 
+def get_merged_blended_lines(spec, bands, fit_conf, default_prefix, obj_prefix):
+
+    # Get the the grouped lines
+    in_cfg = check_fit_conf(fit_conf, None, None)
+
+
+    key_cfg = f'{default_prefix}_line_fitting'
+    default_dict = {} if key_cfg not in in_cfg else {comp: group_label
+                                                    for comp, group_label in in_cfg[key_cfg].items()
+                                                    if comp.endswith(('_b', '_m'))}
+
+    key_cfg = f'{obj_prefix}_line_fitting'
+    obj_dict =  {} if key_cfg not in in_cfg else{comp: group_label
+                                                 for comp, group_label in in_cfg[key_cfg].items()
+                                                 if comp.endswith(('_b', '_m'))}
+    if len(default_dict) == 0 and len(default_dict) == 0:
+        output_dict = fit_conf.copy()
+    else:
+        output_dict = {**default_dict, **obj_dict}
+
+    # b_m_arr = np.array(list(default_dict) + list(obj_dict))
+    b_m_arr = np.array(list(output_dict.keys()))
+    core_arr = np.array([s[:-2] for s in b_m_arr])
+    unique_elements, counts = np.unique(core_arr, return_counts=True)
+    repeated_lines = unique_elements[counts > 1]
+
+    # Check each case individually
+    for line in repeated_lines:
+        line_blended, line_merged = line + '_b', line + '_m'
+        default_b, default_m = line_blended in default_dict, line_merged in default_dict
+        obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
+
+        # Object configuration has priority
+        if not (obj_b == obj_m):
+            output_dict.pop(line_blended if obj_b else line_merged)
+
+        # Try default configuration
+        elif not (default_b == default_m):
+            output_dict.pop(line_blended if default_b else line_merged)
+
+        # Solve the kinematics
+        else:
+
+            # Get components
+            comps = output_dict[line_blended].split('+')
+
+            # Check if more than one component is on the bands
+            df_comps = bands.loc[bands.index.isin(comps)]
+            if df_comps.index.size > 1:
+
+                # Set minimum number of pixels for the model solution in the bands
+                central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
+                idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
+                blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
+
+                # Print warning
+                _logger.info(f'The input configuration has merged and blended entries for {line}. '
+                             f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
+                             f'={output_dict[line_blended if blended_check else line_blended]})')
+                output_dict.pop(line_blended if blended_check else line_blended)
+
+
+    return output_dict
+
+    # # Check for merge_blended_
+    # core_arr = np.array([s[:-2] for s in b_m_arr])
+    # unique_elements, counts = np.unique(core_arr, return_counts=True)
+    # repeated_elements = unique_elements[counts > 1]
+    #
+    # return np.array(b_m_arr), np.array(core_arr), default_dict.update(obj_dict)
+
+def pars_bands_conf(spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix, ref_bands):
+
+    # Get the the grouped lines
+    comps_dict = get_merged_blended_lines(spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix)
+
+    # Loop through the lines on the list and check which corrections are necessary
+    rename_dict, exclude_list, group_dict, w3_dict, w4_dict = {}, [], {}, {}, {}
+    for new_label, group_label in comps_dict.items():
+
+        component_list = [x for x in group_label.split('+') if '_k-' not in x]
+        old_label = component_list[0]
+
+        # Only apply corrections if components are present
+        idcs_comps = bands.index.isin(component_list)
+        if np.sum(idcs_comps) == len(component_list):
+
+            # Save the modifications
+            rename_dict[old_label] = new_label
+            exclude_list += component_list
+            w3_dict[new_label] = bands.loc[idcs_comps, 'w3'].min()
+            w4_dict[new_label] = bands.loc[idcs_comps, 'w4'].max()
+            group_dict[new_label] = group_label
+
+        # Check the line or the same group is already there
+        else:
+            low, high = spec.wave_rest.compressed()[[0, -1]]
+            check_arr = np.array([(low < Line(label).wavelength < high)[0] for label in component_list])
+
+            # Lines outside wavelength range
+            if np.all(~check_arr):
+                continue
+
+            # Check if lines outside range
+            else:
+                if 'group_label' in bands.columns:
+                    if not np.any(comps_dict[new_label] == bands.group_label):
+                        _logger.info(f'Line component "{old_label}" for configuration entry: '
+                                     f'"{new_label}={comps_dict[new_label]}" not found in lines table')
+                else:
+                    _logger.info(f'Missing line(s) "{np.setxor1d(bands.loc[idcs_comps].index.to_numpy(), component_list)}" '
+                                 f'for configuration entry: '
+                                 f'"{new_label}={comps_dict[new_label]}" in reference lines table')
+
+
+    # Warn in case some of the bands dont match the database:
+    if not set(exclude_list).issubset(bands.index):
+        _logger.info(f' The following blended or merged lines were not found on the input lines database:\n'
+                     f' - {list(set(exclude_list) - set(bands.index))}\n'
+                     f' - It is recommended that the merged/blended components follow the reference transitions labels.\n')
+
+    # Change the latex labels
+    for old_label, new_label in rename_dict.items():
+        line = Line(new_label, band=bands, fit_conf=comps_dict, update_latex=True)
+        bands.loc[old_label, 'latex_label'] = line.latex_label[0] if line.merged_check else '+'.join(line.latex_label)
+
+    # Change the indexes
+    bands.rename(index=dict(rename_dict), inplace=True)
+
+    # Remove components columns
+    bands.drop(exclude_list, errors='ignore', inplace=True)
+
+    # Add the group_label values
+    if 'group_label' not in bands.columns:
+        bands['group_label'] = 'none'
+    bands['group_label'] = pd.Series(bands.index.map(group_dict), index=bands.index).fillna(bands['group_label'])
+
+    # Change velocity limits
+    bands['w3'] = pd.Series(bands.index.map(w3_dict), index=bands.index).fillna(bands['w3'])
+    bands['w4'] = pd.Series(bands.index.map(w4_dict), index=bands.index).fillna(bands['w4'])
+
+    return
+
 
 class SpecRetriever:
 
@@ -404,14 +552,15 @@ class SpecRetriever:
 
         return
 
-    def line_bands(self, line_list=None, particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
-                   update_latex=False, components_detection=False, adjust_central_bands=True, instrumental_correction=True,
-                   band_vsigma=70, n_sigma=4):
+    def line_bands(self, band_vsigma=70, n_sigma=4, fit_conf=None, default_conf_prefix='default', obj_conf_prefix=None,
+                   adjust_central_bands=True, instrumental_correction=True, components_detection=False, line_list=None,
+                   particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
+                   update_latex=False):
 
         # Remove the mask from the wavelength array if necessary
-        wave_intvl = self._spec.wave.data
+        wave_intvl = self._spec.wave.compressed()
 
-        # Compute the bands to match the observation
+        # Crop the bands to match the observation
         bands = line_bands(wave_intvl, line_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
                            decimals=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
                            update_latex=update_latex)
@@ -443,9 +592,13 @@ class SpecRetriever:
             bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
             bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
 
+        # Combine the blended/merged lines
+        if fit_conf is not None:
+            pars_bands_conf(self._spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix, ref_bands)
+
         # Filter the table to match the line detections
         if components_detection:
-            if self._spec.features.pred_arr is not None:
+            if self._spec.infer.pred_arr is not None:
 
                 # Create masks for all intervals
                 starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
@@ -455,7 +608,7 @@ class SpecRetriever:
                 in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
 
                 # Check where y equals the target category
-                is_target_category = np.isin(self._spec.features.pred_arr, (3, 7, 9))
+                is_target_category = np.isin(self._spec.infer.pred_arr, (3, 7, 9))
 
                 # Combine the masks to count target_category occurrences in each interval
                 counts = np.sum(in_intervals & is_target_category, axis=1)
@@ -468,6 +621,113 @@ class SpecRetriever:
                 raise(LiMe_Error(f'The aspect line detection algorithm needs to be run before matching the bands'))
 
         return bands
+
+    def spectrum(self, line_label=None, output_address=None, ref_frame=None, split_components=False, **kwargs):
+
+        # Headers for the default list
+        headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
+
+        # Use the observation frame if none is provided
+        frame = self._spec.frame if ref_frame is None else ref_frame
+
+        # By default report complete spectrum
+        idcs = (0, -1)
+
+        # If a line is provided get indexes for the bands limits
+        line_measured = False
+        if line_label is not None:
+            if frame is not None:
+                if line_label in frame.index:
+                    bands_limits = frame.loc[line_label, 'w1':'w6']
+                    idcs_bands = np.searchsorted(self._spec.wave.data, bands_limits * (1 + self._spec.redshift))
+                    idcs = (idcs_bands[0], idcs_bands[5])
+                    line_measured = True
+                else:
+                    _logger.warning(f'Line {line_label} not found on observation frame')
+            else:
+                _logger.warning(f'No lines measured on object')
+
+        # Compute the bands
+        if line_measured:
+
+            # Declare line object and the components and its components from the frame
+            line = Line(line_label, frame)
+            line_list = line.list_comps
+
+            # Compute the linear components
+            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line._p_shape,
+                                 x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+            linear_arr = linear_continuum_computation(line_list, frame, 1 + self._spec.redshift, x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+
+            # Determine which component you want to extract:
+            if split_components is False:
+                gaussian_arr = gaussian_arr.sum(axis=1) + linear_arr[:, 0]
+                gaussian_arr = gaussian_arr.reshape(-1, 1)
+                line_hdrs = [line_label]
+            else:
+                gaussian_arr = gaussian_arr + linear_arr[:, 0][:, np.newaxis]
+                line_hdrs = line_list
+
+            # Add the line list to the headers
+            headers = np.append(headers, line_hdrs)
+
+        # Container for the data
+        out_arr = np.full((self._spec.wave.data[idcs[0]: idcs[1]].size, len(headers)), np.nan)
+
+        # Fill the array:
+        out_arr[:, 0] = self._spec.wave.data[idcs[0]: idcs[1]]
+        out_arr[:, 1] = self._spec.flux.data[idcs[0]: idcs[1]] * self._spec.norm_flux
+
+        # Err array if it exists
+        if self._spec.err_flux is not None:
+            out_arr[:, 2] = self._spec.err_flux[idcs[0]: idcs[1]].data * self._spec.norm_flux
+
+        # Pixel mask if any is invalid
+        if np.any(self._spec.wave.mask):
+            out_arr[:, 3] = self._spec.wave[idcs[0]: idcs[1]].mask
+
+        # Add the components
+        if line_measured:
+            for i, line_comp in enumerate(line_hdrs):
+                out_arr[:, 4 + i] = gaussian_arr[:, i]
+
+        # Crop array if some columns are missing
+        nan_columns = np.zeros(out_arr.shape[1]).astype(bool)
+        nan_columns[:4] = np.all(np.isnan(out_arr[:, :4]), axis=0)
+        out_arr = out_arr[:, ~nan_columns]
+
+        # Headers
+        headers = headers[~nan_columns]
+
+        # Formatting for the data
+        spec_hdrs_list = ['%.18e', '%.18e', '%.18e', '%d']
+        spec_hdrs_list = spec_hdrs_list + ['%.18e'] * len(line_hdrs) if line_measured else spec_hdrs_list
+        array_fmt = np.array(spec_hdrs_list)
+        array_fmt = list(array_fmt[~nan_columns])
+
+        # Update defaults with user-provided values
+        default_kwargs = {"fmt": array_fmt, "delimiter": ' '}
+        default_kwargs.update(kwargs)
+
+        # Create header
+        if default_kwargs.get('header') is None:
+            default_kwargs['header'] = default_kwargs['delimiter'].join(headers)
+
+        # Dictionary with parameters
+        if 'footer' not in default_kwargs:
+            footer_dict = {'LiMe': f'v{__version__}',
+                            'units_wave': self._spec.units_wave, 'units_flux':  self._spec.units_flux,
+                           'redshift': self._spec.redshift, 'norm_flux': self._spec.norm_flux, 'id_label': self._spec.label}
+            footer_str = "\n".join(f"{key}:{value}" for key, value in footer_dict.items())
+            default_kwargs['footer'] = footer_str
+
+        # Return a recarray with the spectrum data
+        if output_address is None:
+            return np.core.records.fromarrays([out_arr[:, i] for i in range(out_arr.shape[1])], names=list(headers))
+
+        # Save to a file
+        else:
+            return np.savetxt(output_address, out_arr, **default_kwargs)
 
 
 class SpecTreatment(LineFitting, RedshiftFitting):
@@ -596,8 +856,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def  frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None , err_from_bands=None,
-              temp=10000.0, line_list=None, default_conf_prefix='default', id_conf_prefix=None, line_detection=False,
+    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
+              temp=10000.0, line_list=None, default_conf_prefix='default', obj_conf_prefix=None, line_detection=False,
               plot_fit=False, progress_output='bar'):
 
         """
@@ -662,8 +922,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
         :type default_conf_prefix: str, optional
 
-        :param id_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
-        :type id_conf_prefix: str, optional
+        :param obj_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
+        :type obj_conf_prefix: str, optional
 
         :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
         :type line_detection: bool, optional
@@ -677,7 +937,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         """
 
         # Check if the lines log is a dataframe or a file address
-        bands = check_file_dataframe(bands, pd.DataFrame)
+        bands = check_file_dataframe(bands)
 
         if bands is not None:
 
@@ -687,7 +947,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix, line_detection=line_detection)
+            input_conf = check_fit_conf(fit_conf, default_conf_prefix, obj_conf_prefix, line_detection=line_detection)
 
             # Line detection if requested
             if line_detection:
@@ -923,7 +1183,7 @@ class CubeTreatment(LineFitting):
 
         """
         if bands is not None:
-            bands = check_file_dataframe(bands, pd.DataFrame)
+            bands = check_file_dataframe(bands)
 
         # Check if the mask variable is a file or an array
         mask_maps = check_file_array_mask(mask_file, mask_list)
@@ -1005,7 +1265,7 @@ class CubeTreatment(LineFitting):
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
-                                 temp=temp, progress_output=None, plot_fit=None, id_conf_prefix=None,
+                                 temp=temp, progress_output=None, plot_fit=None, obj_conf_prefix=None,
                                  default_conf_prefix=None)
 
                 # Count the number of measurements

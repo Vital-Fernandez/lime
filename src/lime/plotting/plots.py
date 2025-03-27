@@ -5,11 +5,13 @@ import pandas as pd
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines
 
-from ..fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation
-from ..tools import PARAMETER_LATEX_DICT
-from ..io import check_file_dataframe, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
-from ..transitions import check_line_in_log, Line, label_decomposition, format_line_mask_option
-from .format import theme, latex_science_float
+from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation
+from lime.tools import PARAMETER_LATEX_DICT
+from lime.io import check_file_dataframe, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
+from lime.transitions import check_line_in_log, Line, label_decomposition, format_line_mask_option
+from lime.plotting.format import theme, latex_science_float
+from lime.plotting.utils import parse_bands_arguments, color_selector
+
 
 _logger = logging.getLogger('LiMe')
 
@@ -23,6 +25,12 @@ try:
     mplcursors_check = True
 except ImportError:
     mplcursors_check = False
+
+try:
+    import aspect
+    aspect_check = True
+except ImportError:
+    aspect_check = False
 
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
@@ -148,26 +156,22 @@ def _auto_flux_scale(axis, y, y_scale, scale_dict=theme.plt):
         with np.errstate(divide='ignore', invalid='ignore'):
             neg_check = np.any(y < 0)
             y_max, y_min = np.nanmax(y), np.nanmin(y)
-            # cont, std = np.nanmedian(y), np.nanstd(y)
-            # high_limit = y_max + 2 * std
-            # low_limit = y_min if (y_min - std < 0) and (y_min > 0) else y_min - 2 * std
-            # axis.set_ylim(ymin=low_limit, ymax=high_limit)
             ratio = np.abs(y_max/y_min)
             if (ratio > 25) or (ratio < 0.06):
                 if neg_check:
-                    y_scale = 'symlog'
+                    y_scale = {'value': 'symlog', 'linthresh': min(np.ceil(np.abs(y_min)), np.min(y[y>0]))}
                 else:
-                    y_scale = 'log'
+                    y_scale = {'value': 'log'}
             else:
-                y_scale = 'linear'
+                y_scale = {'value': 'linear'}
 
-            # Add note on the scale:
+        axis.set_yscale(**y_scale)
 
-    axis.set_yscale(y_scale)
-
-    if y_scale != 'linear':
-        axis.text(0.12, 0.8, f'${y_scale}$', fontsize=scale_dict['textsize_notes'], ha='center', va='center',
-                  transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
+        if y_scale["value"] != 'linear':
+            axis.text(0.12, 0.8, f'${y_scale["value"]}$', fontsize=scale_dict['textsize_notes'], ha='center', va='center',
+                      transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
+    else:
+        axis.set_yscale(y_scale)
 
     return
 
@@ -393,37 +397,14 @@ def _profile_plot(axis, x, y, label, idx_line=0, n_comps=1, observations_list='y
     return line_g
 
 
-def color_selector(label, observations, idx_line, n_comps, scale_dict=theme.plt):
-
-    # Color and thickness
-    if observations == 'no':
-
-        # If only one component or combined
-        if n_comps == 1:
-            width_i, style, color = scale_dict['single_width'], '-', theme.colors['profile']
-
-        # Component
-        else:
-            cmap = plt.get_cmap(theme.colors['comps_map'])
-            width_i, style, color = scale_dict['comp_width'], ':', cmap(idx_line/n_comps)
-
-    # Case where the line has an error
-    else:
-        width_i, style, color = scale_dict['err_width'], '-', 'red'
-
-    # Make dictionary with the params
-    cont_format = dict(label=label, color=color, linestyle=style, linewidth=width_i)
-
-    return cont_format
-
-
 def _profile_plt(axis, line, z_cor, log, redshift, norm_flux):
 
     # Check if blended line or Single/merged
     if line.blended_check:
-        if line.list_comps:
-            idx_line = line.list_comps.index(line.label)
-            n_comps = len(line.list_comps)
+        # if line.list_comps:
+        idx_line = line.list_comps.index(line.label)
+        n_comps = len(line.list_comps)
+
     else:
         idx_line = 0
         n_comps = 1
@@ -444,12 +425,14 @@ def _profile_plt(axis, line, z_cor, log, redshift, norm_flux):
     # Plot combined gaussian profile if blended
     if (idx_line == 0) and (n_comps > 1):
         comb_array = (flux_array.sum(axis=1) + cont_i) * z_cor / norm_flux
-        line_format = color_selector(None, line.observations, 0, 1)
+        line_format = color_selector(line.label, line.observations, 0, n_comps=n_comps, scale_dict=theme.plt,
+                                     colors_dict=theme.colors)
         axis.plot(wave_i / z_cor, comb_array, **line_format)
 
     # Gaussian component plot
     single_array = (flux_i + cont_i) * z_cor / norm_flux
-    line_format = color_selector(line.label, line.observations, idx_line, n_comps)
+    line_format = color_selector(line.label, line.observations, idx_line, n_comps, scale_dict=theme.plt,
+                                     colors_dict=theme.colors)
     line_single = axis.plot(wave_i/z_cor, single_array, **line_format)
 
     return line_single
@@ -474,7 +457,7 @@ def _gaussian_line_profiler(axis, line_list, wave_array, gaussian_array, cont_ar
                 n_comps = len(profile_comps)
                 if profile_comps.index(line) == 0:
                     idcs_comp = (log['group_label'] == log.loc[line, 'group_label']).values
-            else: # TODO remove if profile_comps not "no"
+            else:
                 idx_line = 0
                 n_comps = 1
         else:
@@ -598,21 +581,21 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
 
         # Plot spectrum
         ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
-                   linewidth=theme.colors['spectrum_width'])
+                   linewidth=theme.plt['spectrum_width'])
 
         # Plot the bands
-        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.colors['spectrum_width'])
+        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.plt['spectrum_width'])
         ax2.set_ylim(0, 1)
 
         # Plot the data used for the masks
         y_arr = np.full(flux_plot.size, np.nan)
         y_arr[data_mask] = flux_plot[data_mask]
         ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red',
-                   linewidth=theme.colors['spectrum_width'])
+                   linewidth=theme.plt['spectrum_width'])
 
         # Plot the spectrum sum
         title = r'$z_{prediction} = $' + f'{z_infered:0.3f}'
-        ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), color=theme.colors['fg'], where='mid', linewidth=theme.colors['spectrum_width'])
+        ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), color=theme.colors['fg'], where='mid', linewidth=theme.plt['spectrum_width'])
         ax3.update({'xlabel': 'Redshift range', 'ylabel':r'$\frac{F_{sum, bands}}{max(F_{sum, bands})}$', 'title':title})
         ax3.set_yticks([0, 1])
 
@@ -656,7 +639,7 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
 
         # Plot spectrum
         in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
-                   linewidth=theme.colors['spectrum_width'])
+                   linewidth=theme.plt['spectrum_width'])
 
         for i, obs_wave in enumerate(obs_wave_arr):
             in_ax.axvline(obs_wave, linestyle='--')
@@ -671,17 +654,26 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
     return
 
 
-def _bands_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, color_dict=theme.colors):
+def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, color_dict=theme.colors):
 
     # Security check for low selection
-    if len(y[idcs_mask[0]:idcs_mask[5]]) > 1:
+    if len(x[idcs_mask[2]:idcs_mask[3]]) > 1:
 
         # Lower limit for the filled region
-        low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
-        low_lim = 0 if np.isnan(low_lim) else low_lim
+        if exclude_continua is False:
+            low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
+            low_lim = 0 if np.isnan(low_lim) else low_lim
+            x_interval = x[idcs_mask[2]:idcs_mask[3]]
+            y_interval = y[idcs_mask[2]:idcs_mask[3]]
+        else:
+            m = (y[idcs_mask[3]] - y[idcs_mask[2]])/(x[idcs_mask[3]] - x[idcs_mask[2]])
+            n = y[idcs_mask[2]] - m * x[idcs_mask[2]]
+            x_interval = x[idcs_mask[2]:idcs_mask[3]]
+            y_interval = y[idcs_mask[2]:idcs_mask[3]]
+            low_lim = m * x_interval + n
 
         # Central bands
-        axis.fill_between(x[idcs_mask[2]:idcs_mask[3]]/z_corr, low_lim*z_corr, y[idcs_mask[2]:idcs_mask[3]]*z_corr,
+        axis.fill_between(x_interval/z_corr, low_lim*z_corr, y_interval*z_corr,
                           facecolor=color_dict['line_band'], step='mid', alpha=0.25)
 
         # Continua bands exclusion
@@ -771,31 +763,38 @@ class Plotter:
 
         return fig, ax
 
-    def _line_matching_plot(self, axis, match_log, x, y, z_corr, redshift, units_wave):
+
+    def _line_matching_plot(self, axis, bands, x, y, z_corr, redshift):
+
+        # Open the bands file the bands
+        match_log = self._spec.retrieve.line_bands(ref_bands=bands, fit_conf=None, instrumental_correction=False,
+                                                   adjust_central_bands=False)
+        # Compute bands limits
+        w3 = match_log.w3.values * (1 + redshift)
+        w4 = match_log.w4.values * (1 + redshift)
+        idcs_bands = np.searchsorted(x, np.array([w3, w4]))
 
         # Plot the detected line peaks
         if 'signal_peak' in match_log.columns:
-            idcs_linePeaks = match_log['signal_peak'].values.astype(int)
-            axis.scatter(x[idcs_linePeaks]/z_corr, y[idcs_linePeaks]*z_corr, label='Peaks',
+            idcs_peaks = match_log['signal_peak'].values.astype(int)
+            axis.scatter(x[idcs_peaks]/z_corr, y[idcs_peaks]*z_corr, label='Peaks',
                          facecolors='none', edgecolors=theme.colors['peak'])
 
-        # Get the line labels and the bands labels for the lines
-        wave_array, latex = label_decomposition(match_log.index.values, params_list=('wavelength', 'latex_label'))
-
-        w3 = match_log.w3.values * (1 + redshift)
-        w4 = match_log.w4.values * (1 + redshift)
-        idcsLineBand = np.searchsorted(x, np.array([w3, w4]))
-
         # Loop through the detections and plot the names
-        for i in np.arange(latex.size):
-            if idcsLineBand[0, i] != idcsLineBand[0, i]: # Y limit for the label check if same pixel
-                max_region = np.max(y[idcsLineBand[0, i]:idcsLineBand[0, i]])
-            else:
-                max_region = y[idcsLineBand[0, i]]
+        for i, line_label in enumerate(match_log.index):
+            line = Line(line_label, match_log)
 
-            label = 'Matched line' if i == 0 else '_'
-            axis.axvspan(w3[i]/z_corr, w4[i]/z_corr, label=label, alpha=0.30, color=theme.colors['match_line'])
-            axis.text(wave_array[i] * (1 + redshift) / z_corr, max_region * 0.9 * z_corr, latex[i], rotation=270)
+            # Get the max flux on the region making the exception for 1 pixel bands
+            idx_w3, idx_w4 = idcs_bands[:, i]
+            max_region = np.max(y[idx_w3:idx_w4]) if idx_w3 != idx_w4 else y[idx_w3]
+
+            x_text = line.wavelength * (1 + redshift)/z_corr if not line.blended_check else line.wavelength[0] * (1 + redshift)/z_corr
+            y_text = max_region * 0.9 * z_corr
+            text = line.latex_label[0]
+
+            axis.text(x_text, y_text, text, rotation=270)
+            axis.axvspan(x[idx_w3]/z_corr, x[idx_w4]/z_corr, label='Matched line' if i == 0 else '_', alpha=0.30,
+                         color=theme.colors['match_line'])
 
         return
 
@@ -877,7 +876,7 @@ class SpectrumFigures(Plotter):
         return
 
     def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
-                 include_fits=True, include_cont=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
+                 include_fits=True, include_cont=False, include_err=False, in_fig=None, fig_cfg={}, ax_cfg={}, maximize=False,
                  detection_band=None, show_masks=True, show_categories=False):
 
         """
@@ -968,39 +967,33 @@ class SpectrumFigures(Plotter):
             in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
                        linewidth=theme.plt['spectrum_width'])
 
-            # Plot peaks and troughs if provided
+            # Add the uncertainty
+            if include_err and self._spec.err_flux is not None:
+                err_plot = self._spec.err_flux.data
+                in_ax.fill_between(x=wave_plot/z_corr, y1=(flux_plot-err_plot)* z_corr, y2=(flux_plot+err_plot) * z_corr,
+                                        step='mid', alpha=0.2, color='lime', ec=None)
+
+            # Plot bands if provided
             if bands is not None:
-                bands = check_file_dataframe(bands, pd.DataFrame)
-
-                # Crop the selection for the observation wavelength range
-                w3_obs, w4_obs = bands.w3.to_numpy() * (1 + self._spec.redshift), bands.w4.to_numpy() * (1 + self._spec.redshift)
-                idcs_valid = (w3_obs  > wave_plot[0]) & (w4_obs < wave_plot[-1])
-
-                self._line_matching_plot(in_ax, bands.loc[idcs_valid], wave_plot, flux_plot, z_corr, self._spec.redshift,
-                                         self._spec.units_wave)
+                self._line_matching_plot(in_ax, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
 
             # Plot the fittings
-            if include_fits and self._spec.frame is not None:
-
-                # List of lines in the log
-                line_list = self._spec.frame.index.values
+            if include_fits and self._spec.frame.size > 0:
 
                 # Do not include the legend as the labels are necessary for mplcursors # TODO improve mechanics
                 legend_check = False
 
-                if line_list.size > 0:
+                # Loop through the lines and plot them
+                line_list = self._spec.frame.index.values
+                profile_list = [None] * line_list.size
+                for i, line_label in enumerate(line_list):
+                    line_i = Line.from_log(line_label, self._spec.frame)
+                    profile_list[i] = _profile_plt(in_ax, line_i, z_corr, self._spec.frame, self._spec.redshift,
+                                                   self._spec.norm_flux)
 
-                    # Loop through the lines and plot them
-                    profile_list = [None] * line_list.size
-                    for i, line_label in enumerate(line_list):
-
-                        line_i = Line.from_log(line_label, self._spec.frame)
-                        profile_list[i] = _profile_plt(in_ax, line_i, z_corr, self._spec.frame, self._spec.redshift,
-                                                       self._spec.norm_flux)
-
-                    # Add the interactive pop-ups
-                    _mplcursor_parser(profile_list, line_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave,
-                                      self._spec.units_flux)
+                # Add the interactive pop-ups
+                _mplcursor_parser(profile_list, line_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave,
+                                  self._spec.units_flux)
 
                 # Plot the masked pixels
                 if show_masks:
@@ -1056,38 +1049,42 @@ class SpectrumFigures(Plotter):
                 bins = [40, 60, 80, 100]
 
                 # Use np.histogram to get the counts in each bin
-                if self._spec.features.pred_arr is not None:
-                    categories = np.sort(np.unique(self._spec.features.pred_arr))
-                    legend_scatter = []
+                if self._spec.infer.pred_arr is not None:
+                    if aspect_check:
+                        categories = np.sort(np.unique(self._spec.infer.pred_arr))
+                        legend_scatter = []
 
-                    for category in categories:
-                        if category != 0:
+                        for category in categories:
+                            if category != 0:
 
-                            # Get category properties
-                            feature_name = self._spec.features.model.number_feature_dict[category]
-                            feature_color = theme.components[feature_name]
-                            idcs_feature = self._spec.features.pred_arr == category
-                            legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
-                                                                markerfacecolor=feature_color, markersize=8, label=feature_name))
+                                # Get category properties
+                                feature_name = self._spec.infer.model_mgr.medium.number_feature_dict[category]
+                                feature_color = aspect.cfg['colors'][feature_name]
+                                idcs_feature = self._spec.infer.pred_arr == category
+                                legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
+                                                                    markerfacecolor=feature_color, markersize=8, label=feature_name))
 
-                            # Count the pixels for each category
-                            counts, _ = np.histogram(self._spec.features.conf_arr[idcs_feature], bins=bins)
-                            for idx_conf, count_conf in enumerate(counts):
-                                if count_conf > 0:
+                                # Count the pixels for each category
+                                counts, _ = np.histogram(self._spec.infer.conf_arr[idcs_feature], bins=bins)
+                                for idx_conf, count_conf in enumerate(counts):
+                                    if count_conf > 0:
 
-                                    # Get indeces matching the detections
-                                    idcs_count = np.where((bins[idx_conf] < self._spec.features.conf_arr[idcs_feature]) &
-                                                          (self._spec.features.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
-                                    idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True
+                                        # Get indeces matching the detections
+                                        idcs_count = np.where((bins[idx_conf] < self._spec.infer.conf_arr[idcs_feature]) &
+                                                              (self._spec.infer.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
+                                        idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True
 
-                                    # Generate nan arrays with the data to avoid filling non detections
-                                    wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
-                                    wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
-                                    flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
+                                        # Generate nan arrays with the data to avoid filling non detections
+                                        wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
+                                        wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
+                                        flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
 
-                                    # Plot with the corresponding colors and linestyle
-                                    in_ax.step(wave_nan, flux_nan, label=feature_name, where='mid', color=feature_color,
-                                               linestyle=category_conf_styles[idx_conf])
+                                        # Plot with the corresponding colors and linestyle
+                                        in_ax.step(wave_nan, flux_nan, label=feature_name, where='mid', color=feature_color,
+                                                   linestyle=category_conf_styles[idx_conf])
+
+                    else:
+                        _logger.warning('Aspect needs to be installed to display the spectrum components')
 
                     # Legend category
                     legend_category = in_ax.legend(handles=legend_scatter, edgecolor=theme.colors['fg'])
@@ -1102,13 +1099,6 @@ class SpectrumFigures(Plotter):
                     legend_conf.get_frame().set_linewidth(0.5)
 
                     legend_check = False
-
-                            # idcs_comp =  self._spec.features.pred_arr == category
-                            # in_ax.scatter(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, color=feature_color)
-
-                            # in_ax.step(wave_plot[idcs_comp] / z_corr, flux_plot[idcs_comp] * z_corr, label=feature_name, where='mid',
-                            #            color=feature_color, linewidth=theme.colors['spectrum_width'])
-
 
 
                 # Switch y_axis to logarithmic scale if requested
@@ -1241,7 +1231,7 @@ class SpectrumFigures(Plotter):
                                    where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
 
                         # Continuum bands
-                        _bands_plot(in_ax, wave_plot, flux_plot, z_corr, idcs_m, line_i, color_dict=theme.colors)
+                        bands_filling_plot(in_ax, wave_plot, flux_plot, z_corr, idcs_m, line_i, color_dict=theme.colors)
 
                         # Plot the masked pixels
                         _masks_plot(in_ax, [line_i], wave_plot[idx_blue:idx_red], flux_plot[idx_blue:idx_red],
@@ -1283,7 +1273,7 @@ class SpectrumFigures(Plotter):
 
         return in_fig
 
-    def bands(self, line=None, output_address=None, include_fits=True, rest_frame=False, y_scale='auto', fig_cfg=None,
+    def bands(self, label=None, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, y_scale='auto', fig_cfg=None,
               ax_cfg=None, in_fig=None, maximize=False):
 
         """
@@ -1333,7 +1323,6 @@ class SpectrumFigures(Plotter):
         :return:
         """
 
-        # TODO check plot without fit
         # Unpack variables
         log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
@@ -1341,20 +1330,14 @@ class SpectrumFigures(Plotter):
         # Display check for the user figures
         display_check = True if in_fig is None else False
 
-        # If not line is provided use the last one
-        if line is None:
-            if log.index.size > 0:
-                line = log.index[-1]
-
-        # Reconstruct the line for the analysis
-        if line is not None:
-            line = Line.from_log(line, log, norm_flux)
+        # Check which line should be plotted
+        line = parse_bands_arguments(label, log, ref_bands, norm_flux)
 
         # Proceed to plot
         if line is not None:
 
             # Guess whether we need both lines
-            include_fits = include_fits and (line.intg_flux is not None)
+            include_fits = include_fits and (line.profile_flux is not None)
 
             # Adjust the default theme
             PLT_CONF = theme.fig_defaults(fig_cfg, fig_type='bands')
@@ -1387,9 +1370,12 @@ class SpectrumFigures(Plotter):
                 idcs_bands = line.index_bands(self._spec.wave, self._spec.redshift, just_band_edges=True)
 
                 # Plot the spectrum
-                label = '' if include_fits else line
+                label_leg = line.latex_label if (line.latex_label is not None and include_fits is False) else None
                 in_ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
-                              where='mid', color=theme.colors['fg'], label=label, linewidth=theme.plt['spectrum_width'])
+                              where='mid', color=theme.colors['fg'], label=label_leg, linewidth=theme.plt['spectrum_width'])
+
+                # Continuum bands
+                bands_filling_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors)
 
                 # Add the fitting results
                 if include_fits:
@@ -1399,9 +1385,6 @@ class SpectrumFigures(Plotter):
 
                     wave_array, gaussian_array = profiles_computation(list_comps, log, (1 + redshift), line._p_shape)
                     wave_array, cont_array = linear_continuum_computation(list_comps, log, (1 + redshift))
-
-                    # Continuum bands
-                    _bands_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors)
 
                     # Gaussian profiles
                     idcs_lines = self._spec.frame.index.isin(list_comps)
@@ -1846,7 +1829,7 @@ class SampleFigures(Plotter):
         return
 
     def spectra(self, obj_idcs=None, log_scale=False, output_address=None, rest_frame=False, include_fits=False,
-                legend_handle='levels', in_fig=None, in_axis=None, fig_cfg=None, ax_cfg=None, maximize=False):
+                include_err=False, legend_handle='levels', in_fig=None, in_axis=None, fig_cfg=None, ax_cfg=None, maximize=False):
 
         if self._sample.load_function is not None:
 
@@ -1892,8 +1875,14 @@ class SampleFigures(Plotter):
                                                                                     rest_frame)
 
                         # Plot the spectrum
-                        self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=legend_label, where='mid',
-                                      linewidth=theme.colors['spectrum_width'])
+                        step = self._ax.step(wave_plot / z_corr, flux_plot * z_corr, label=legend_label, where='mid',
+                                      linewidth=theme.plt['spectrum_width'])
+
+                        if include_err and spec.err_flux is not None:
+                            err_plot = spec.err_flux.data
+                            self._ax.fill_between(x=wave_plot / z_corr, y1=(flux_plot - err_plot) * z_corr,
+                                                  y2=(flux_plot + err_plot) * z_corr,
+                                                  step='mid', alpha=0.1, color=step[0].get_color())
 
                         # List of lines in the log
                         line_list = spec.frame.index.values

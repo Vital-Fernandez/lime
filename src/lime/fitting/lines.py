@@ -885,7 +885,7 @@ class LineFitting:
                                            xdata=self._spec.wave[idcs_cont].compressed(),
                                            ydata=self._spec.flux[idcs_cont].compressed(),
                                            sigma=self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else None,
-                                           absolute_sigma=True, nan_policy='raise', check_finite=False)
+                                           absolute_sigma=True, check_finite=False)
 
             self.line.m_cont, self.line.n_cont = params
             self.line.m_cont_err_intg, self.line.n_cont_err_intg = np.sqrt(np.diag(covariance))

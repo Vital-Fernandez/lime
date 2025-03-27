@@ -35,7 +35,7 @@ pixel_mask = np.isnan(err_array)
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
 
-spec.fit.frame(bands_file_address, cfg, id_conf_prefix=spaxel_label)
+spec.fit.frame(bands_file_address, cfg, obj_conf_prefix=spaxel_label)
 
 # MANGA cube web link and save file location
 cube_url = 'https://data.sdss.org/sas/dr17/manga/spectro/redux/v3_1_1/8626/stack/manga-8626-12704-LOGCUBE.fits.gz'

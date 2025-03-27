@@ -1,7 +1,7 @@
 import numpy as np
 from astropy.io import fits
 import lime
-
+from pathlib import Path
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -17,9 +17,9 @@ def import_osiris_fits(file_address, ext=0):
 
 
 # State the data files
-obsFitsFile = './sample_data/gp121903_osiris.fits'
-lineMaskFile = './sample_data/osiris_bands.txt'
-cfgFile = './sample_data/config_file.cfg'
+obsFitsFile = Path('../../sample_data/spectra/gp121903_osiris.fits')
+lineMaskFile = '../../sample_data/osiris_bands.txt'
+cfgFile = '../../sample_data/config_file.toml'
 
 # Load spectrum
 wave, flux, header = import_osiris_fits(obsFitsFile)

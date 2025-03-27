@@ -15,7 +15,6 @@ SHOC579.z = 0.0475 # SHOC579 data
 
 # Merged lines
 O2_3726A_m = 'O2_3726A+O2_3729A'
-H1_3970A_m = 'Ne3_3968A+H1_3970A'
 H1_3889A_m = "H1_3889A+He1_3889A"
 Ar4_4711A_m = "Ar4_4711A+He1_4713A"
 O2_7319A_m = "O2_7319A+O2_7330A"
@@ -24,7 +23,6 @@ N1_5198A_m = "N1_5198A+N1_5200A"
 
 # Blended lines
 O2_3726A_b = 'O2_3726A+O2_3729A'
-Ne3_3968A_b = "Ne3_3968A+H1_3970A"
 S2_6716A_b = "S2_6716A+S2_6731A"
 O2_7319A_b = "O2_7319A+O2_7330A"
 
@@ -42,9 +40,9 @@ O3_5007A_b = 'O3_5007A+O3_5007A_k-1'
 O3_5007A_k-1_amp = "expr:<100.0*O3_5007A_amp,min:0"
 O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
 
-H1_6563A_b = "H1_6563A+N2_6584A+N2_6548A"
-N2_6548A_amp = "expr:N2_6584A_amp/2.94"
-N2_6548A_kinem = "N2_6584A"
+H1_6563A_b = "H1_6563A+N2_6583A+N2_6548A"
+N2_6548A_amp = "expr:N2_6583A_amp/2.94"
+N2_6548A_kinem = "N2_6583A"
 
 S2_6716A_b = "S2_6716A+S2_6731A"
 S2_6731A_kinem = "S2_6716A"
@@ -52,10 +50,10 @@ S2_6731A_kinem = "S2_6716A"
 [Izw18_isis_line_fitting]
 O3_5007A_b = 'O3_5007A+He1_5016A'
 
-H1_6563A_b = 'H1_6563A+H1_6563A_k-1+N2_6584A+N2_6548A'
+H1_6563A_b = 'H1_6563A+H1_6563A_k-1+N2_6583A+N2_6548A'
 H1_6563A_k-1_sigma = 'expr:>1.1*H1_6563A_sigma'
-N2_6548A_amp = 'expr:N2_6584A_amp/2.94'
-N2_6584A_kinem = 'H1_6563A'
+N2_6548A_amp = 'expr:N2_6583A_amp/2.94'
+N2_6583A_kinem = 'H1_6563A'
 N2_6548A_kinem = 'H1_6563A'
 
 
@@ -65,7 +63,7 @@ O2_3726A_kinem = "O2_3729A"
 H1_3712A_kinem = "H1_3734A"
 
 H1_4861A_b = 'H1_4861A+H1_4861A_k-1'
-H1_4861A_k-1_sigma = 'expr:>1.0*H1_4861A_sigma'
+H1_4861A_k-1_sigma = 'min:0,expr:>1.0*H1_4861A_sigma'
 
 O3_4959A_b = 'O3_4959A+O3_4959A_k-1'
 O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
@@ -73,8 +71,8 @@ O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
 O3_5007A_b = 'O3_5007A+O3_5007A_k-1+He1_5016A'
 O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
 
-H1_6563A_b = 'H1_6563A+H1_6563A_k-1+N2_6584A+N2_6548A'
-N2_6548A_amp = 'expr:N2_6584A_amp/2.94'
-N2_6548A_kinem = 'N2_6584A'
+H1_6563A_b = 'H1_6563A+H1_6563A_k-1+N2_6583A+N2_6548A'
+N2_6548A_amp = 'expr:N2_6583A_amp/2.94'
+N2_6548A_kinem = 'N2_6583A'
 H1_6563A_k-1_center = 'value:6562,min:6561,max:6563'
 H1_6563A_k-1_sigma = 'expr:>1.0*H1_6563A_sigma'
