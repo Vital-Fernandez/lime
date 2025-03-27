@@ -24,7 +24,7 @@ classifiers = ["Programming Language :: Python :: 3",
 
 [project.optional-dependencies]
 full = ["asdf~=4.1",
-        "aspect-stable~=0.1.0",
+        "aspect-stable~=0.3.0",
         "bokeh~=3.6",
         "mplcursors~=0.6",
         "openpyxl~=3.1",
