@@ -87,7 +87,6 @@ LiMe medium update - 1.3.0 - 10/29/2024
     - The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.
 
 LiMe Mayor update - 2.0.0 - XX/XX/XXXX
-
     - Change installer convention from "setup.py + requirements.txt" to pyproject.toml
     - Updated dependencies to current version of packages and for python 3.12
     - Renamed cfg.toml to lime.toml
