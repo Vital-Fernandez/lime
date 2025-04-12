@@ -549,7 +549,7 @@ class RedshiftInspectionSingle:
 
     def redshift(self, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
                  none_value=np.nan, unknown_value=0.0, legend_handle='levels', maximize=False, title_label=None,
-                 output_address=None, plt_cfg={}, ax_cfg={}, in_fig=None):
+                 output_address=None, fig_cfg={}, ax_cfg={}, in_fig=None):
 
         # Assign the attributes
         self._obj_idcs = None
@@ -581,16 +581,12 @@ class RedshiftInspectionSingle:
         idcs_sorted = np.argsort(_waves_array)
         self._waves_array, self._latex_array = _waves_array[idcs_sorted], _latex_array[idcs_sorted]
 
-        # Set figure format with the user inputs overwriting the default conf
-        plt_cfg.setdefault('figure.figsize', (10, 6))
-        plt_cfg.setdefault('axes.labelsize', 12)
-        plt_cfg.setdefault('xtick.labelsize', 10)
-        plt_cfg.setdefault('ytick.labelsize', 10)
+        # Set the plot format where the user's overwrites the default
+        size_conf = {'figure.figsize': (10, 6), 'axes.labelsize': 12, 'xtick.labelsize': 10, 'ytick.labelsize': 10}
+        size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
 
-        norm_flux = self._sample.load_params.get('norm_flux')
-        units_wave, units_flux = self._sample.load_params.get('units_wave'), self._sample.load_params.get('units_flux')
-        PLT_CONF, self._AXES_CONF = self._figure_format(plt_cfg, ax_cfg, norm_flux=norm_flux, units_wave=units_wave,
-                                                        units_flux=units_flux)
+        PLT_CONF = theme.fig_defaults(size_conf)
+        self._AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux, fig_type=None)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
@@ -601,15 +597,12 @@ class RedshiftInspectionSingle:
             self._ax = self._fig.add_subplot(gs[0])
             self._ax.set(**self._AXES_CONF)
 
-            # Line Selection axis
+            # Create the RadioButtons widget for the lines
             buttoms_ax = self._fig.add_subplot(gs[1])
-            buttons_list = [r'$None$'] + list(self._latex_array) + [r'$Unknown$']
-            radio = RadioButtons(buttoms_ax, buttons_list)
-            for circle in radio.circles:  # Make the buttons a bit rounder
-                circle.set_height(0.025)
-                circle.set_width(0.075)
-            for r in radio.labels:
-                r.set_fontsize(6)
+            labels_buttons = [r'$None$'] + list(self._latex_array) + [r'$Unknown$']
+            radio_props = {'s': [10] * len(labels_buttons)}
+            label_props = {'fontsize': [6] * len(labels_buttons)}
+            radio = RadioButtons(buttoms_ax, labels_buttons, radio_props=radio_props, label_props=label_props)
 
             # Plot the spectrum
             self._launch_plots_ZI()
@@ -894,16 +887,12 @@ class RedshiftInspection:
             self._ax = self._fig.add_subplot(gs[0])
             self._ax.set(**self._AXES_CONF)
 
-            # Line Selection axis
+            # Create the RadioButtons widget for the lines
             buttoms_ax = self._fig.add_subplot(gs[1])
-            buttons_list = [r'$None$'] + list(self._latex_array) + [r'$Unknown$']
-            radio = RadioButtons(buttoms_ax, buttons_list)
-            for circle in radio.circles:  # Make the buttons a bit rounder
-                circle.set_height(0.025)
-                circle.set_width(0.075)
-                circle.set_edgecolor(theme.colors['fg'])  # or any color like 'black', '#333333', etc.
-            for r in radio.labels:
-                r.set_fontsize(6)
+            labels_buttons = [r'$None$'] + list(self._latex_array) + [r'$Unknown$']
+            radio_props = {'s': [10] * len(labels_buttons)}
+            label_props = {'fontsize': [6] * len(labels_buttons)}
+            radio = RadioButtons(buttoms_ax, labels_buttons, radio_props=radio_props, label_props=label_props)
 
             # Plot the spectrum
             self._launch_plots_ZI()
@@ -1349,10 +1338,12 @@ class CubeInspection:
             # Buttons axis if provided
             if len(self.masks_dict) > 0:
                 self._ax2 = self._fig.add_subplot(gs_image[1])
-                radio = RadioButtons(self._ax2, list(self.masks_dict.keys()))
 
-                for r in radio.labels:
-                    r.set_fontsize(5)
+                # Create the RadioButtons widget with the specified properties
+                labels_buttons = list(self.masks_dict.keys())
+                radio_props = {'s': [10] * len(labels_buttons)}
+                label_props = {'fontsize': [5] * len(labels_buttons)}
+                radio = RadioButtons(self._ax2, labels_buttons, radio_props=radio_props, label_props=label_props)
 
             # Plot the data
             self.data_plots()
@@ -1733,7 +1724,7 @@ class MaskInspection:
         return
 
 
-class SpectrumCheck(Plotter, RedshiftInspection, BandsInspection):
+class SpectrumCheck(Plotter, RedshiftInspectionSingle, BandsInspection):
 
     def __init__(self, spectrum):
 

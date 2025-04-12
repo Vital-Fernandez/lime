@@ -15,8 +15,11 @@ obs_cfg = lime.load_cfg(cfg_file)
 z_obj = obs_cfg['SHOC579']['redshift']
 
 # Load the Cube
-shoc579 = lime.Cube.from_file(cube_file, instrument='manga', redshift=z_obj)
-# shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
+shoc579 = lime.Cube.from_file(cube_file, instrument='manga', redshift=0.0475)
+wavelength_array = shoc579.wave_rest.data
+flux_cube_array = shoc579.flux.data
+
+shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
 
 # Fit the lines in one spaxel
 spaxel = shoc579.get_spectrum(38, 35)

@@ -881,7 +881,7 @@ class SpectrumFigures(Plotter):
 
         """
 
-        This function plots the spectrum flux versus wavelength.
+        This function plots the spectrum flux versus wavelength.z
 
         The user can include the line bands on the plot if added via the ``line_bands`` attribute.
 

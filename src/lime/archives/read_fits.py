@@ -4,6 +4,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 import logging
+from io import IOBase
 
 from lime.io import LiMe_Error
 from urllib.parse import urlparse
@@ -180,7 +181,7 @@ def check_fits_location(fits_address, lime_object=None, source=None):
                 output = None, False
 
         # Streamlit BytesIO input
-        elif type(fits_address).__name__ == 'UploadedFile':
+        elif (type(fits_address).__name__ == 'UploadedFile') or isinstance(fits_address, IOBase):
             output = fits_address, False
 
         # File address or url

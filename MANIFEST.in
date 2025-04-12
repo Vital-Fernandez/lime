@@ -4,4 +4,4 @@ include src/lime/changelog.txt
 include src/lime/resources/parent_mask.txt
 include src/lime/resources/types_params.txt
 include src/lime/resources/lines_database_v2.0.0.txt
-include src/lime/plotting/lime_theme.toml
+include src/lime/plotting/theme_lime.toml
