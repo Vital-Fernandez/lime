@@ -418,7 +418,9 @@ def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
         if np.isscalar(R_arr):
             line.sigma_instr = np.mean(wave_arr.compressed() / (R_arr * k_gFWHM))
         else:
-            line.sigma_instr = np.mean(wave_arr[idcs_line].compressed() / (R_arr[idcs_line] * k_gFWHM))
+            mask_data = ~wave_arr.mask
+            line.sigma_instr = np.mean(wave_arr[mask_data] / (R_arr[idcs_line][mask_data] * k_gFWHM))
+            wave_arr[mask_data] / (R_arr[idcs_line][mask_data] * k_gFWHM)
     else:
         line.sigma_instr = np.nan
 

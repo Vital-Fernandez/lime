@@ -749,6 +749,7 @@ class Line:
         self.kinem = None
         self.profile_comp = profile
         self.transition_comp = None
+        self.core = None
 
         self._ref_idx = None
         self._p_type = None
@@ -843,9 +844,11 @@ class Line:
         else:
             self._ref_idx = 0
 
+        # Core component definition
+        self.core = f'{comps_list[0]}_{comps_list[1]}'
+
         # Provide a bands from the log if possible
-        core_comp = f'{comps_list[0]}_{comps_list[1]}'
-        self.mask = label_mask_assigning(self.label, band, self.blended_check, self.merged_check, core_comp)
+        self.mask = label_mask_assigning(self.label, band, self.blended_check, self.merged_check, self.core)
 
         # Check if there are masked pixels in the line
         self.pixel_mask = 'no' if fit_conf is None else fit_conf.get(f'{self.label}_mask', 'no')
@@ -1039,89 +1042,93 @@ class Line:
         else:
             return idcs_bands
 
-    def index_bands_orig(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
+    # def index_bands_orig(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
+    #
+    #     if self.mask is None:
+    #         raise LiMe_Error(f'The line {self.label} does include bands. Please select another line or update the database.')
+    #
+    #     # Make sure it is a matrix
+    #     bands_arr = np.atleast_2d(self.mask) * (1 + redshift)
+    #
+    #     # if np.any(bands_arr[:, 0] < wavelength_array[0]) or np.any(bands_arr[:, 5] > wavelength_array[-1]):
+    #     #     _logger.warning(f'The {self.label} bands do not match the spectrum wavelength range (observed):')
+    #     #     _logger.warning(                f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
+    #     #     _logger.warning(f'-- The {self.label} bands are: {bands_arr} (rest frame * (1 + z))')
+    #
+    #     # Check if it is a masked array
+    #     wave_arr = wavelength_array.data
+    #
+    #     # Remove masked pixels from this function wavelength array
+    #     if self.pixel_mask != 'no':
+    #
+    #         # Convert cfg mask string to limits
+    #         line_mask_limits = format_line_mask_option(self.pixel_mask, wave_arr)
+    #
+    #         # Get masked indeces
+    #         idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
+    #         idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
+    #
+    #     else:
+    #         idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
+    #
+    #     # Find indeces for six points in spectrum
+    #     idcsW = np.searchsorted(wave_arr, bands_arr)
+    #
+    #     # Return just the edges of the bands
+    #     if just_band_edges:
+    #         outputs = idcsW[0]
+    #
+    #     # Return the indeces of all the pixels within the bands
+    #     else:
+    #
+    #         # Emission region
+    #         idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (
+    #                     wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
+    #
+    #         # Return left and right continua merged in one array
+    #         if merge_continua:
+    #             idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
+    #                                (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
+    #                               ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+    #                                       wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
+    #
+    #             outputs = idcsLineRegion, idcsContRegion
+    #
+    #         # Return left and right continua in separated arrays
+    #         else:
+    #             idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (
+    #                         wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
+    #             idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
+    #                         wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
+    #
+    #             outputs = idcsLineRegion, idcsContLeft, idcsContRight
+    #
+    #     return outputs
 
-        if self.mask is None:
-            raise LiMe_Error(f'The line {self.label} does include bands. Please select another line or update the database.')
+    def update_label(self, decimals=None, update_latex=True, bands_df=None, vacuum_label=False):
 
-        # Make sure it is a matrix
-        bands_arr = np.atleast_2d(self.mask) * (1 + redshift)
-
-        # if np.any(bands_arr[:, 0] < wavelength_array[0]) or np.any(bands_arr[:, 5] > wavelength_array[-1]):
-        #     _logger.warning(f'The {self.label} bands do not match the spectrum wavelength range (observed):')
-        #     _logger.warning(                f'-- The spectrum wavelength range is: ({wavelength_array[0]:0.2f}, {wavelength_array[-1]:0.2f}) (observed frame)')
-        #     _logger.warning(f'-- The {self.label} bands are: {bands_arr} (rest frame * (1 + z))')
-
-        # Check if it is a masked array
-        wave_arr = wavelength_array.data
-
-        # Remove masked pixels from this function wavelength array
-        if self.pixel_mask != 'no':
-
-            # Convert cfg mask string to limits
-            line_mask_limits = format_line_mask_option(self.pixel_mask, wave_arr)
-
-            # Get masked indeces
-            idcsMask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
-            idcsValid = ~idcsMask.sum(axis=1).astype(bool)[:, None]
-
+        # Reference wavelength
+        if (vacuum_label is True) and (bands_df is not None):
+            wave_ref = pd_get(bands_df, self.label, 'wave_vac')
         else:
-            idcsValid = np.ones(wave_arr.size).astype(bool)[:, None]
+            wave_ref = self.wavelength[self._ref_idx]
 
-        # Find indeces for six points in spectrum
-        idcsW = np.searchsorted(wave_arr, bands_arr)
-
-        # Return just the edges of the bands
-        if just_band_edges:
-            outputs = idcsW[0]
-
-        # Return the indeces of all the pixels within the bands
-        else:
-
-            # Emission region
-            idcsLineRegion = ((wave_arr[idcsW[:, 2]] <= wave_arr[:, None]) & (
-                        wave_arr[:, None] <= wave_arr[idcsW[:, 3]]) & idcsValid).squeeze()
-
-            # Return left and right continua merged in one array
-            if merge_continua:
-                idcsContRegion = (((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) &
-                                   (wave_arr[:, None] <= wave_arr[idcsW[:, 1]])) |
-                                  ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-                                          wave_arr[:, None] <= wave_arr[idcsW[:, 5]])) & idcsValid).squeeze()
-
-                outputs = idcsLineRegion, idcsContRegion
-
-            # Return left and right continua in separated arrays
-            else:
-                idcsContLeft = ((wave_arr[idcsW[:, 0]] <= wave_arr[:, None]) & (
-                            wave_arr[:, None] <= wave_arr[idcsW[:, 1]]) & idcsValid).squeeze()
-                idcsContRight = ((wave_arr[idcsW[:, 4]] <= wave_arr[:, None]) & (
-                            wave_arr[:, None] <= wave_arr[idcsW[:, 5]]) & idcsValid).squeeze()
-
-                outputs = idcsLineRegion, idcsContLeft, idcsContRight
-
-        return outputs
-
-    def update_label(self, decimals=None, update_latex=True, bands_df=None):
-
-        # Convert core transition particle
+        # Core transition particle
         part_str = self.particle[self._ref_idx]
-        wave_str = np.round(self.wavelength[self._ref_idx], 0).astype(int) if decimals is None else np.round(self.wavelength[self._ref_idx], decimals)
+        wave_str = np.round(wave_ref, 0).astype(int) if decimals is None else np.round(wave_ref, decimals)
         units_str = f'{self.units_wave[self._ref_idx]}' if self.units_wave[self._ref_idx] != 'Angstrom' else 'A'
         module_str = "_b" if self.blended_check else "_m" if self.merged_check else ""
+
+        # Optional components
         kinem_str = f'_k-{self.kinem[self._ref_idx]}' if self.kinem[self._ref_idx] != 0 else ''
         profile_str = f'_p-{self.profile_comp[self._ref_idx]}' if self.profile_comp[self._ref_idx] != 'g-emi' else ''
         trans_str = f'_t-{self.kinem[self._ref_idx]}' if not self.profile_comp[self._ref_idx] not in ['rec', 'col'] else ''
 
-        # New label
+        # Set label
         self.label = f'{part_str}_{wave_str}{units_str}{module_str}{kinem_str}{profile_str}{trans_str}'
 
         # Update latex notation
         if update_latex:
             self.latex_label = self._review_science_notation(bands_df, update_latex, decimals=decimals)
-
-        return
-
-    def get_latex_label(self):
 
         return

@@ -654,7 +654,7 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
     return
 
 
-def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, color_dict=theme.colors):
+def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, color_dict=theme.colors, show_central=True):
 
     # Security check for low selection
     if len(x[idcs_mask[2]:idcs_mask[3]]) > 1:
@@ -673,8 +673,9 @@ def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=Fa
             low_lim = m * x_interval + n
 
         # Central bands
-        axis.fill_between(x_interval/z_corr, low_lim*z_corr, y_interval*z_corr,
-                          facecolor=color_dict['line_band'], step='mid', alpha=0.25)
+        if show_central:
+            axis.fill_between(x_interval/z_corr, low_lim*z_corr, y_interval*z_corr,
+                              facecolor=color_dict['line_band'], step='mid', alpha=0.25)
 
         # Continua bands exclusion
         if exclude_continua is False:
@@ -767,8 +768,8 @@ class Plotter:
     def _line_matching_plot(self, axis, bands, x, y, z_corr, redshift):
 
         # Open the bands file the bands
-        match_log = self._spec.retrieve.line_bands(ref_bands=bands, fit_conf=None, instrumental_correction=False,
-                                                   adjust_central_bands=False)
+        match_log = self._spec.retrieve.line_bands(ref_bands=bands, fit_cfg=None, instrumental_correction=False,
+                                                   adjust_central_band=False)
         # Compute bands limits
         w3 = match_log.w3.values * (1 + redshift)
         w4 = match_log.w4.values * (1 + redshift)
@@ -782,6 +783,7 @@ class Plotter:
 
         # Loop through the detections and plot the names
         for i, line_label in enumerate(match_log.index):
+            print(line_label)
             line = Line(line_label, match_log)
 
             # Get the max flux on the region making the exception for 1 pixel bands
@@ -1274,7 +1276,7 @@ class SpectrumFigures(Plotter):
         return in_fig
 
     def bands(self, label=None, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, y_scale='auto', fig_cfg=None,
-              ax_cfg=None, in_fig=None, maximize=False):
+              ax_cfg=None, in_fig=None, maximize=False, show_err=True):
 
         """
 
@@ -1333,6 +1335,12 @@ class SpectrumFigures(Plotter):
         # Check which line should be plotted
         line = parse_bands_arguments(label, log, ref_bands, norm_flux)
 
+        # Check the observation has uncertainty to display
+        if show_err and (self._spec.err_flux is None):
+            if self._spec.err_flux is None:
+                _logger.info('Input observation does not include uncertainty to display')
+                show_err = False
+
         # Proceed to plot
         if line is not None:
 
@@ -1375,7 +1383,14 @@ class SpectrumFigures(Plotter):
                               where='mid', color=theme.colors['fg'], label=label_leg, linewidth=theme.plt['spectrum_width'])
 
                 # Continuum bands
-                bands_filling_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors)
+                bands_filling_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
+                                   show_central=not show_err)
+
+                if show_err:
+                    err_plot = self._spec.err_flux.data
+                    in_ax[0].fill_between(x=wave_plot[idcs_bands[2]:idcs_bands[3]] / z_corr, y1=(flux_plot[idcs_bands[2]:idcs_bands[3]] - err_plot[idcs_bands[2]:idcs_bands[3]]) * z_corr,
+                                       y2=(flux_plot[idcs_bands[2]:idcs_bands[3]] + err_plot[idcs_bands[2]:idcs_bands[3]]) * z_corr,
+                                       step='mid', alpha=1, color=theme.colors['line_band'], ec=None)
 
                 # Add the fitting results
                 if include_fits:

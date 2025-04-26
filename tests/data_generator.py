@@ -15,6 +15,7 @@ spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
 # Outputs
 file_address = baseline_folder/'manga_spaxel.txt'
 lines_log_file = baseline_folder/'manga_lines_log.txt'
+latex_log_file = baseline_folder/'manga_lines_log.tex'
 cube_log = baseline_folder/'manga_lines_log.txt'
 cube_log_address = baseline_folder/'SHOC579_log.fits'
 
@@ -51,9 +52,12 @@ wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, 
 np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 
 # Frame fitting
-spax.fit.frame(line_bands_file, fit_cfg, obj_conf_prefix='38-35', progress_output=None)
+spax.fit.frame(line_bands_file, fit_cfg, obj_cfg_prefix='38-35', progress_output=None)
 spax.save_frame(lines_log_file)
-spax.plot.spectrum()
+# spax.plot.spectrum()
+spax.save_frame(latex_log_file, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
+
+
 # spax.plot.bands('O3_5007A')
 
 # spax.plot.velocity_profile('H1_4861A')

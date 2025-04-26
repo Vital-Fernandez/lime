@@ -31,7 +31,7 @@ spec = lime.Spectrum.from_file(file_path, inst, redshift=redshift)
 # Output
 SHOC579_txt_address = data_folder/'spectra'/f'{obj}_data.txt'
 
-spec.fit.frame(data_folder /'bands' /f'{obj}_{inst}_bands.txt', cfg, obj_conf_prefix=f'{obj}_{inst}')
+spec.fit.frame(data_folder /'bands' /f'{obj}_{inst}_bands.txt', cfg, obj_cfg_prefix=f'{obj}_{inst}')
 spec_arrays = spec.retrieve.spectrum('H1_6563A', output_address=SHOC579_txt_address, split_components=True)
 
 lime.line_bands()

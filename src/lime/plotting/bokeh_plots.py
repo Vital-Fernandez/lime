@@ -270,7 +270,7 @@ class BokehFigures:
 
     def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
                  include_fits=True, include_cont=False, include_components=False, return_fig=False, fig_cfg=None, ax_cfg=None, maximize=False,
-                 detection_band=None, show_masks=True, show_categories=False):
+                 detection_band=None, show_masks=True, show_categories=False, show_err=False):
 
 
         # Set figure format with the user inputs overwriting the default conf
@@ -297,6 +297,14 @@ class BokehFigures:
         # Plot the bands if provided
         if bands is not None:
             bokeh_bands(fig, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
+
+        # Show uncertainty
+        if show_err and (self._spec.err_flux is not None):
+            err_plot = self._spec.err_flux.data
+            fig.varea_step(x=wave_plot / z_corr,
+                           y1=(flux_plot - err_plot) * z_corr,
+                           y2=(flux_plot + err_plot) * z_corr,
+                           step_mode="center", fill_alpha=0.2, color=theme.colors['err_area'])
 
         # Include the continuum
         if include_cont and self._spec.cont is not None:

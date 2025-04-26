@@ -13,6 +13,7 @@ from lime.transitions import Line, air_to_vacuum_function, label_decomposition
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lime.fitting.redshift import RedshiftFitting
 from lime import __version__
+from itertools import combinations
 
 try:
     import aspect
@@ -82,64 +83,6 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
     return idcsEmis, idcsCont
 
 
-def import_line_kinematics_backUp(line, z_cor, log, units_wave, fit_conf):
-
-    # Check if imported kinematics come from blended component
-    if line.group_label is not None:
-        childs_list = line.group_label.split('+')
-    else:
-        childs_list = np.array(line.label, ndmin=1)
-
-
-    for child_label in childs_list:
-
-        parent_label = fit_conf.get(f'{child_label}_kinem')
-
-        if parent_label is not None:
-
-            # Case we want to copy from previous line and the data is not available
-            if (parent_label not in log.index) and (not line.blended_check):
-                _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
-
-            else:
-                line_parent = Line(parent_label)
-                line_child = Line(child_label)
-                wtheo_parent, wtheo_child = line_parent.wavelength[0], line_child.wavelength[0]
-
-                # Copy v_r and sigma_vel in wavelength units
-                for param_ext in ('center', 'sigma'):
-                    param_label_child = f'{child_label}_{param_ext}'
-
-                    # Warning overwritten existing configuration
-                    if param_label_child in fit_conf:
-                        _logger.warning(f'{param_label_child} overwritten by {parent_label} kinematics in configuration input')
-
-                    # Case where parent and child are in blended group
-                    if parent_label in line.list_comps:
-                        # param_label_parent = f'{parent_label}_{param_ext}'
-                        # param_expr_parent = f'{wtheo_child/wtheo_parent:0.8f}*{param_label_parent}'
-                        # fit_conf[param_label_child] = {'expr': param_expr_parent}
-
-                        # param_label_parent = f'{parent_label}_{param_ext}'
-                        factor = wtheo_child/wtheo_parent if param_ext == 'center' else wtheo_child/wtheo_parent
-                        fit_conf[param_label_child] = {'expr': f'{factor:0.8f}*{parent_label}_{param_ext}'}
-
-                    # Case we want to copy from previously measured line
-                    else:
-                        mu_parent = log.loc[parent_label, ['center', 'center_err']].to_numpy()
-                        sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].to_numpy()
-
-                        if param_ext == 'center':
-                            param_value = wtheo_child / wtheo_parent * (mu_parent / z_cor)
-                        else:
-                            param_value = wtheo_child / wtheo_parent * sigma_parent
-
-                        fit_conf[param_label_child] = {'value': param_value[0], 'vary': False}
-                        fit_conf[f'{param_label_child}_err'] = param_value[1]
-
-    return
-
-
 def import_line_kinematics(line, z_cor, log, fit_conf):
 
     # Check if imported kinematics come from blended component
@@ -175,7 +118,9 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
 
             # Line has not been measured before found
             else:
-                _logger.info(f'{parent_label} has not been measured. Its kinematics were not copied to {child_label}')
+                _logger.info(f'\n{parent_label} has not been found on the input lines frame for {child_label} kinematics export.'
+                             f'\n - Please check you are using the right line label and that the line has been measured prior '
+                             f'prior to the current fitting.')
 
     return
 
@@ -271,7 +216,7 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
 
 
 def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
-               vacuum_waves=False, ref_bands=None, update_labels=True, update_latex=True):
+               vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
     """
 
     This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
@@ -332,30 +277,18 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     # Load the reference bands
     bands_df = check_file_dataframe(ref_bands)
 
-    # Check for modifications on labels units or wavelengths
-    new_format = False
-
-    # Convert to vacuum wavelengths if requested
-    if vacuum_waves:
-        bands_df['wavelength'] = bands_df['wave_vac']
-        bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
-        new_format = True
-
     # Convert to requested units
     if units_wave != 'Angstrom':
         wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
         conversion_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
         bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * conversion_factor
         bands_df['units_wave'] = units_wave
-        new_format = True
     else:
         conversion_factor = 1
 
     # First slice by wavelength and redshift
     idcs_rows = np.ones(bands_df.index.size).astype(bool)
     if wave_intvl is not None:
-
         w_min, w_max = wave_intvl[0], wave_intvl[-1]
 
         # Account for redshift
@@ -380,15 +313,21 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     bands_df = bands_df.loc[idcs_rows]
 
     # Update the labels to reflect new wavelengths and units if necessary and user requests it
-    if new_format and update_labels:
+    if update_labels or vacuum_label:
         list_labels = [None] * bands_df.index.size
         for i, label in enumerate(bands_df.index):
             line = Line(label, band=bands_df)
-            line.update_label(decimals=decimals, update_latex=update_latex)
+            line.update_label(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label)
             if update_latex:
                 bands_df.loc[label, 'latex_label'] = line.latex_label[0]
             list_labels[i] = line.label
         bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
+
+    # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
+    if vacuum_waves:
+        bands_df['wavelength'] = bands_df['wave_vac']
+        bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+        bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
 
     return bands_df
 
@@ -400,96 +339,219 @@ def res_power_approx(wavelength_arr):
     return wavelength_arr/delta_lambda
 
 
-def get_merged_blended_lines(spec, bands, fit_conf, default_prefix, obj_prefix):
+def get_merged_blended_lines(spec, bands, in_cfg, composite_lines):
 
-    # Get the the grouped lines
-    in_cfg = check_fit_conf(fit_conf, None, None)
+    # Get lines on the list
+    comps_dict = {} if in_cfg is False else {comp: group_label
+                                             for comp, group_label in in_cfg.items()
+                                             if comp.endswith(('_b', '_m'))}
 
+    # Limit the selection to the user lines
+    if composite_lines is not None:
+        comps_dict = {line: comps for line, comps in comps_dict.items() if line in composite_lines}
 
-    key_cfg = f'{default_prefix}_line_fitting'
-    default_dict = {} if key_cfg not in in_cfg else {comp: group_label
-                                                    for comp, group_label in in_cfg[key_cfg].items()
-                                                    if comp.endswith(('_b', '_m'))}
+    # # Determine the grouped lines
+    # key_cfg = f'{default_cfg_prefix}_line_fitting'
+    # default_dict = {} if key_cfg not in in_cfg else {comp: group_label
+    #                                                 for comp, group_label in in_cfg[key_cfg].items()
+    #                                                 if comp.endswith(('_b', '_m'))}
+    #
+    # key_cfg = f'{obj_cfg_prefix}_line_fitting'
+    # obj_dict =  {} if key_cfg not in in_cfg else{comp: group_label
+    #                                              for comp, group_label in in_cfg[key_cfg].items()
+    #                                              if comp.endswith(('_b', '_m'))}
+    #
+    # if len(default_dict) == 0 and len(obj_dict) == 0:
+    #     output_dict = fit_conf.copy()
+    # else:
+    #     output_dict = {**default_dict, **obj_dict}
 
-    key_cfg = f'{obj_prefix}_line_fitting'
-    obj_dict =  {} if key_cfg not in in_cfg else{comp: group_label
-                                                 for comp, group_label in in_cfg[key_cfg].items()
-                                                 if comp.endswith(('_b', '_m'))}
-    if len(default_dict) == 0 and len(default_dict) == 0:
-        output_dict = fit_conf.copy()
-    else:
-        output_dict = {**default_dict, **obj_dict}
-
-    # b_m_arr = np.array(list(default_dict) + list(obj_dict))
-    b_m_arr = np.array(list(output_dict.keys()))
-    core_arr = np.array([s[:-2] for s in b_m_arr])
-    unique_elements, counts = np.unique(core_arr, return_counts=True)
-    repeated_lines = unique_elements[counts > 1]
-
-    # Check each case individually
-    for line in repeated_lines:
-        line_blended, line_merged = line + '_b', line + '_m'
-        default_b, default_m = line_blended in default_dict, line_merged in default_dict
-        obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
-
-        # Object configuration has priority
-        if not (obj_b == obj_m):
-            output_dict.pop(line_blended if obj_b else line_merged)
-
-        # Try default configuration
-        elif not (default_b == default_m):
-            output_dict.pop(line_blended if default_b else line_merged)
-
-        # Solve the kinematics
-        else:
-
-            # Get components
-            comps = output_dict[line_blended].split('+')
-
-            # Check if more than one component is on the bands
-            df_comps = bands.loc[bands.index.isin(comps)]
-            if df_comps.index.size > 1:
-
-                # Set minimum number of pixels for the model solution in the bands
-                central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
-                idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
-                blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
-
-                # Print warning
-                _logger.info(f'The input configuration has merged and blended entries for {line}. '
-                             f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
-                             f'={output_dict[line_blended if blended_check else line_blended]})')
-                output_dict.pop(line_blended if blended_check else line_blended)
-
-
-    return output_dict
-
-    # # Check for merge_blended_
+    # b_m_arr = np.array(list(output_dict.keys()))
     # core_arr = np.array([s[:-2] for s in b_m_arr])
     # unique_elements, counts = np.unique(core_arr, return_counts=True)
-    # repeated_elements = unique_elements[counts > 1]
+    # repeated_lines = unique_elements[counts > 1]
     #
-    # return np.array(b_m_arr), np.array(core_arr), default_dict.update(obj_dict)
+    # # Check each case individually
+    # for line in repeated_lines:
+    #     line_blended, line_merged = line + '_b', line + '_m'
+    #     default_b, default_m = line_blended in default_dict, line_merged in default_dict
+    #     obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
+    #
+    #     # Object configuration has priority
+    #     if not (obj_b == obj_m):
+    #         output_dict.pop(line_blended if obj_b else line_merged)
+    #
+    #     # Try default configuration
+    #     elif not (default_b == default_m):
+    #         output_dict.pop(line_blended if default_b else line_merged)
+    #
+    #     # Solve the kinematics
+    #     else:
+    #
+    #         # Get components
+    #         comps = output_dict[line_blended].split('+')
+    #
+    #         # Check if more than one component is on the bands
+    #         df_comps = bands.loc[bands.index.isin(comps)]
+    #         if df_comps.index.size > 1:
+    #
+    #             # Set minimum number of pixels for the model solution in the bands
+    #             central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
+    #             idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
+    #             blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
+    #
+    #             # Print warning
+    #             _logger.info(f'The input configuration has merged and blended entries for {line}. '
+    #                          f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
+    #                          f'={output_dict[line_blended if blended_check else line_blended]})')
+    #             output_dict.pop(line_blended if blended_check else line_blended)
 
-def pars_bands_conf(spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix, ref_bands):
+    # # Get candidate lines for grouping
+    # line_arr = [item for v in output_dict.values() for item in v.split('+')]
+    # line_arr = bands.loc[bands.index.isin(line_arr)].index
+    # lambda_arr = bands.loc[line_arr, 'wavelength'].to_numpy()
+    #
+    # # Generate the line - wavelength matrix with the line pixels width
+    # wave_matrix = np.zeros((lambda_arr.size, spec.wave_rest.data.size))
+    # w3_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w3'].to_numpy())
+    # w4_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w4'].to_numpy())
+    # cols = np.arange(wave_matrix.shape[1])
+    # wave_matrix[(cols >= w3_arr[:, None]) & (cols <= w4_arr[:, None])] = 1
+    # pixels_width = wave_matrix.sum(axis=1)
+    #
+    # # Get the decision matrix with the matching intervals
+    # decision_matrix = wave_matrix @ wave_matrix.T
+    # blended_matrix = decision_matrix < np.ceil(pixels_width/3)[:, None]
+    # math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
+    #
+    # results_dict = {}
+    # for label, group_label in output_dict.items():
+    #     list_group = group_label.split('+')
+    #     if all(key in math_dict for key in list_group):
+    #         blended_group = True if label[-1] == 'b' else False
+    #         relations = np.array([blended_matrix[math_dict[i], math_dict[j]] for i, j in list(combinations(list_group, 2))])
+    #         if np.all(relations == blended_group):
+    #             print(f'Passess: {label}={group_label}')
+    #             results_dict[label] = group_label
+
+    return comps_dict
+
+
+
+
+
+# upper_triangle < (np.ceil(pixels_width/3)[:, None]=
+#
+#
+#     np.fill_diagonal(decision_matrix, 0)  # optional
+#
+#     # Step 2: Extract the upper triangle (excluding diagonal)
+#     upper_triangle = np.ma.masked_array(np.triu(decision_matrix, k=1), mask=np.tril(np.ones_like(decision_matrix), k=0).astype(bool)).astype(int)
+#
+#     # Step 3: Find (i, j) pairs with >1 shared steps
+#     rows_i, rows_j = np.where(upper_triangle > 1)
+#     edges = list(zip(line_arr[rows_i], line_arr[rows_j]))
+#
+#     matrix < thresholds[:, None]
+#
+#     # Step 3: Check if all values in each column satisfy the condition
+#     idcs_type = upper_triangle < np.ceil(pixels_width/3)[:, None]
+#     merged_idcs = np.all(idcs_type, axis=0)
+#     blended_idcs = np.all(~idcs_type, axis=0)
+#     #
+    # math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
+    # for row in rows_j:
+    #     print(line_arr[row])
+    #
+    # for label, group_label in output_dict.keys():
+    #     list_group = group_label.split('+')
+    #     if len(list_group) == 2:
+    #         x_label, y_label = math_dict.get(list_group[0]), math_dict.get(list_group[1])
+    #         if (x_label is not None) and (y_label is not None):
+    #
+
+
+    # print(w3_arr)
+    # print(w4_arr)
+    #
+    # wave_matrix[w3_arr:w4_arr, :]
+    # # box_pixels =
+    # #
+    # # print(idcs_lines)
+    # lambda_arr = bands.index.isin(line_arr)
+    # wave_arr = spec.wave.data
+
+    # Generate matrices array
+
+    # b_m_arr = np.array(list(output_dict.keys()))
+    # core_arr = np.array([s[:-2] for s in b_m_arr])
+    # unique_elements, counts = np.unique(core_arr, return_counts=True)
+    # repeated_lines = unique_elements[counts > 1]
+    #
+    # # Check each case individually
+    # for line in repeated_lines:
+    #     line_blended, line_merged = line + '_b', line + '_m'
+    #     default_b, default_m = line_blended in default_dict, line_merged in default_dict
+    #     obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
+    #
+    #     # Object configuration has priority
+    #     if not (obj_b == obj_m):
+    #         output_dict.pop(line_blended if obj_b else line_merged)
+    #
+    #     # Try default configuration
+    #     elif not (default_b == default_m):
+    #         output_dict.pop(line_blended if default_b else line_merged)
+    #
+    #     # Solve the kinematics
+    #     else:
+    #
+    #         # Get components
+    #         comps = output_dict[line_blended].split('+')
+    #
+    #         # Check if more than one component is on the bands
+    #         df_comps = bands.loc[bands.index.isin(comps)]
+    #         if df_comps.index.size > 1:
+    #
+    #             # Set minimum number of pixels for the model solution in the bands
+    #             central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
+    #             idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
+    #             blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
+    #
+    #             # Print warning
+    #             _logger.info(f'The input configuration has merged and blended entries for {line}. '
+    #                          f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
+    #                          f'={output_dict[line_blended if blended_check else line_blended]})')
+    #             output_dict.pop(line_blended if blended_check else line_blended)
+    #
+    #
+    # return output_dict
+
+def pars_bands_conf(spec, bands, ref_bands, fit_conf, composite_lines):
 
     # Get the the grouped lines
-    comps_dict = get_merged_blended_lines(spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix)
+    comps_dict = {} if fit_conf is False else {comp: group_label
+                                               for comp, group_label in fit_conf.items()
+                                               if comp.endswith(('_b', '_m'))}
 
-    # Loop through the lines on the list and check which corrections are necessary
-    rename_dict, exclude_list, group_dict, w3_dict, w4_dict = {}, [], {}, {}, {}
+    # Limit the selection to the user lines
+    if composite_lines is not None:
+        comps_dict = {line: comps for line, comps in comps_dict.items() if line in composite_lines}
+
+    # Loop through the lines on the list and review which changes are necessary
+    rename_dict, exclude_list= {}, []
+    group_dict, w3_dict, w4_dict = {}, {}, {}
     for new_label, group_label in comps_dict.items():
 
-        component_list = [x for x in group_label.split('+') if '_k-' not in x]
+        component_list = np.unique([Line(x).core for x in group_label.split('+') if '_k-' not in x])
         old_label = component_list[0]
 
         # Only apply corrections if components are present
         idcs_comps = bands.index.isin(component_list)
-        if np.sum(idcs_comps) == len(component_list):
+        if np.sum(idcs_comps) == component_list.size:
 
             # Save the modifications
             rename_dict[old_label] = new_label
-            exclude_list += component_list
+            exclude_list += list(component_list)
             w3_dict[new_label] = bands.loc[idcs_comps, 'w3'].min()
             w4_dict[new_label] = bands.loc[idcs_comps, 'w4'].max()
             group_dict[new_label] = group_label
@@ -513,7 +575,6 @@ def pars_bands_conf(spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix,
                     _logger.info(f'Missing line(s) "{np.setxor1d(bands.loc[idcs_comps].index.to_numpy(), component_list)}" '
                                  f'for configuration entry: '
                                  f'"{new_label}={comps_dict[new_label]}" in reference lines table')
-
 
     # Warn in case some of the bands dont match the database:
     if not set(exclude_list).issubset(bands.index):
@@ -552,21 +613,27 @@ class SpecRetriever:
 
         return
 
-    def line_bands(self, band_vsigma=70, n_sigma=4, fit_conf=None, default_conf_prefix='default', obj_conf_prefix=None,
-                   adjust_central_bands=True, instrumental_correction=True, components_detection=False, line_list=None,
-                   particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
-                   update_latex=False):
+    def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True, components_detection=False,
+               composite_lines=None, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
+               line_list=None, particle_list=None, decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False,
+               update_latex=False, vacuum_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
 
         # Crop the bands to match the observation
         bands = line_bands(wave_intvl, line_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
-                           decimals=sig_digits, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
-                           update_latex=update_latex)
+                           decimals=decimals, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+                           update_latex=update_latex, vacuum_label=vacuum_label)
+
+        # Compute the resolving power if necessary
+        if self._spec.res_power is not None:
+            res_power = self._spec.res_power
+        else:
+            res_power = res_power_approx(wave_intvl) if (instrumental_correction or fit_cfg is not None) else None
 
         # Adjust the middle bands to match the line width
-        if adjust_central_bands:
+        if adjust_central_band:
 
             # Expected transitions in the observed frame
             lambda_obs = bands.wavelength.to_numpy() * (1 + self._spec.redshift)
@@ -578,7 +645,6 @@ class SpecRetriever:
                 idcs = np.searchsorted(wave_intvl, lambda_obs)
 
                 # Use the instrumental resolution if available
-                res_power = res_power_approx(wave_intvl) if self._spec.res_power is None else self._spec.res_power
                 delta_lambda_inst = lambda_obs / (res_power[idcs] * k_gFWHM)
 
             # Constant velocity width
@@ -593,8 +659,9 @@ class SpecRetriever:
             bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
 
         # Combine the blended/merged lines
-        if fit_conf is not None:
-            pars_bands_conf(self._spec, bands, fit_conf, default_conf_prefix, obj_conf_prefix, ref_bands)
+        if fit_cfg is not None:
+            in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
+            pars_bands_conf(self._spec, bands, ref_bands, in_cfg, composite_lines)
 
         # Filter the table to match the line detections
         if components_detection:
@@ -618,7 +685,7 @@ class SpecRetriever:
                 bands = bands.loc[idcs]
 
             else:
-                raise(LiMe_Error(f'The aspect line detection algorithm needs to be run before matching the bands'))
+                _logger.warning(f'The observations has an empty preduction array. Please run the components detection')
 
         return bands
 
@@ -743,8 +810,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._i_line = 0
         self._n_lines = 0
 
-    def bands(self, label, bands=None, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, id_conf_prefix=None, default_conf_prefix='default'):
+    def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
+              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
 
         """
 
@@ -784,8 +851,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         :param bands: Bands six-value array, bands dataframe (or file address to the dataframe).
         :type bands: np.array, pandas.dataframe, str, Path, optional
 
-        :param fit_conf: Fitting configuration.
-        :type fit_conf: dict, optional
+        :param fit_cfg: Fitting configuration.
+        :type fit_cfg: dict, optional
 
         :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
                             The default value is 'least_squares'
@@ -800,16 +867,16 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
         :type temp: bool, optional
 
-        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_conf_prefix: str, optional
+        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_cfg_prefix: str, optional
 
-        :param id_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
-        :type id_conf_prefix: str, optional
+        :param obj_cfg_prefix: Label for the object configuration section in the ```fit_conf`` variable.
+        :type obj_cfg_prefix: str, optional
 
         """
 
         # Make a copy of the fitting configuration
-        input_conf = check_fit_conf(fit_conf, default_conf_prefix, id_conf_prefix)
+        input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
         # User inputs override default behaviour for the pixel error and the continuum calculation
         err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
@@ -856,8 +923,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def frame(self, bands, fit_conf=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
-              temp=10000.0, line_list=None, default_conf_prefix='default', obj_conf_prefix=None, line_detection=False,
+    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
+              temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,
               plot_fit=False, progress_output='bar'):
 
         """
@@ -900,8 +967,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         :param bands: Bands dataframe (or file address to the dataframe).
         :type bands: pandas.Dataframe, str, path.Pathlib
 
-        :param fit_conf: Fitting configuration.
-        :type fit_conf: dict, optional
+        :param fit_cfg: Fitting configuration.
+        :type fit_cfg: dict, optional
 
         :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
                             The default value is 'least_squares'
@@ -919,11 +986,11 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         :param line_list: Line list to measure from the bands dataframe.
         :type line_list: list, optional
 
-        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_conf_prefix: str, optional
+        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_cfg_prefix: str, optional
 
-        :param obj_conf_prefix: Label for the object configuration section in the ```fit_conf`` variable.
-        :type obj_conf_prefix: str, optional
+        :param obj_cfg_prefix: Label for the object configuration section in the ```fit_conf`` variable.
+        :type obj_cfg_prefix: str, optional
 
         :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
         :type line_detection: bool, optional
@@ -947,7 +1014,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            input_conf = check_fit_conf(fit_conf, default_conf_prefix, obj_conf_prefix, line_detection=line_detection)
+            input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, line_detection=line_detection)
 
             # Line detection if requested
             if line_detection:
@@ -987,7 +1054,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         self.bands(line, bands, input_conf, min_method, profile,
                                    cont_from_bands=cont_from_bands, err_from_bands=err_from_bands,
                                    temp=temp,
-                                   id_conf_prefix=None, default_conf_prefix=None)
+                                   obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
                             self._spec.plot.bands()
@@ -1087,9 +1154,9 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, mask_file, output_address, bands=None, fit_conf=None, mask_list=None, line_list=None,
+    def spatial_mask(self, mask_file, output_address, bands=None, fit_cfg=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
-                     temp=10000.0, default_conf_prefix='default', line_detection=False, progress_output='bar',
+                     temp=10000.0, default_cfg_prefix='default', update_default=True, line_detection=False, progress_output='bar',
                      plot_fit=False, header=None, join_output_files=True):
 
         """
@@ -1136,8 +1203,8 @@ class CubeTreatment(LineFitting):
         :param bands: Bands dataframe (or file address to the dataframe).
         :type bands: pandas.Dataframe, str, path.Pathlib
 
-        :param fit_conf: Fitting configuration.
-        :type fit_conf: dict, optional
+        :param fit_cfg: Fitting configuration.
+        :type fit_cfg: dict, optional
 
         :param mask_list: Masks name list to explore on the ``masks_file``.
         :type mask_list: list, optional
@@ -1161,8 +1228,8 @@ class CubeTreatment(LineFitting):
         :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
         :type temp: bool, optional
 
-        :param default_conf_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_conf_prefix: str, optional
+        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
+        :type default_cfg_prefix: str, optional
 
         :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
         :type line_detection: bool, optional
@@ -1182,6 +1249,7 @@ class CubeTreatment(LineFitting):
         :type join_output_files: bool, optional
 
         """
+
         if bands is not None:
             bands = check_file_dataframe(bands)
 
@@ -1192,10 +1260,8 @@ class CubeTreatment(LineFitting):
 
         # Check the mask configuration is included if there are no masks
         input_masks = mask_list if bands is None else None
-        input_conf = check_fit_conf(fit_conf, default_key=None, group_key=None, group_list=input_masks)
-
-        # Check we are not missing bands
-        # check_cube_bands(bands, mask_list, fit_conf)
+        input_conf = check_fit_conf(fit_cfg, default_key=None, obj_key=None, update_default=update_default,
+                                    group_list=input_masks)
 
         # Check if the output log folder exists
         output_address = Path(output_address)
@@ -1231,7 +1297,7 @@ class CubeTreatment(LineFitting):
             idcs_spaxels = spaxels_dict[i]
 
             # Recover the fitting configuration
-            mask_conf = check_fit_conf(input_conf, default_conf_prefix, mask_name)
+            mask_conf = check_fit_conf(input_conf, default_cfg_prefix, mask_name)
 
             # Load the mask log if provided
             if bands is None:
@@ -1265,8 +1331,8 @@ class CubeTreatment(LineFitting):
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
-                                 temp=temp, progress_output=None, plot_fit=None, obj_conf_prefix=None,
-                                 default_conf_prefix=None)
+                                 temp=temp, progress_output=None, plot_fit=None, obj_cfg_prefix=None,
+                                 default_cfg_prefix=None)
 
                 # Count the number of measurements
                 n_lines += spaxel.frame.index.size

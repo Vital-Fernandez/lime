@@ -142,7 +142,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
     # Check not all the pixels are masked
     if mask_check:
         if np.all(output_pixel_mask):
-            raise LiMe_Error(f'All the input observation pixels are masked. Please check that only bad pixels entries'
+            _logger.critical(f'All the input observation pixels are masked. Please check that only bad pixels entries'
                              f' are masked (in numpy arrays flux_arr[pixel_mask] = bad_entries)')
 
     return output_pixel_mask
@@ -1346,6 +1346,8 @@ class Sample(UserDict, OpenFits):
 
         else:
             obs = load_function_output
+
+
 
         return obs
 

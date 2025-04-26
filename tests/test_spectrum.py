@@ -5,6 +5,7 @@ import pytest
 from matplotlib import pyplot as plt
 from lime.io import _LOG_EXPORT_DICT
 from os import remove
+from copy import deepcopy
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
@@ -14,19 +15,21 @@ file_address = baseline_folder/'manga_spaxel.txt'
 conf_file_address = baseline_folder/'manga.toml'
 bands_file_address = baseline_folder/f'manga_line_bands.txt'
 lines_log_address = baseline_folder/'manga_lines_log.txt'
+lines_tex_address = baseline_folder/'manga_lines_log.tex'
 
 redshift = 0.0475
 norm_flux = 1e-17
 cfg = lime.load_cfg(conf_file_address)
+cfg_copy = deepcopy(cfg)
 tolerance_rms = 5.5
 
 wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
 pixel_mask = np.isnan(err_array)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
-                     pixel_mask=pixel_mask)
+                     pixel_mask=pixel_mask, id_label='SHOC579-Manga38-35')
 
-spec.fit.frame(bands_file_address, cfg, obj_conf_prefix='38-35')
+spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35')
 
 
 def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
@@ -66,6 +69,27 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
                             assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
 
     return
+
+
+def deep_equal(a, b):
+
+    if type(a) != type(b):
+        return False
+
+    if isinstance(a, dict):
+        if a.keys() != b.keys():
+            return False
+        return all(deep_equal(a[k], b[k]) for k in a)
+
+    if isinstance(a, list):
+        return len(a) == len(b) and all(deep_equal(x, y) for x, y in zip(a, b))
+
+    return a == b
+
+
+def read_file_contents(filepath):
+    with open(filepath, 'r', encoding='utf-8') as file:
+        return file.read()
 
 
 class TestSpectrumClass:
@@ -123,6 +147,13 @@ class TestSpectrumClass:
         assert np.allclose(wave_array / (1 + redshift), spec0.wave_rest.data)
         assert np.allclose(flux_array, spec0.flux.data * norm_flux, equal_nan=True)
         assert np.allclose(err_array, spec0.err_flux.data * norm_flux, equal_nan=True)
+
+        return
+
+    def test_cfg_preservation(self):
+
+        assert cfg == cfg_copy
+        assert deep_equal(cfg, cfg_copy)
 
         return
 
@@ -248,7 +279,7 @@ class TestSpectrumClass:
         measurement_tolerance_test(spec, log_orig, log_test)
 
         return
-    #
+
     def test_extra_pages_xlsx(self):
 
         file_xlsx = outputs_folder / 'test_lines_log_multi_page.xlsx'
@@ -267,6 +298,19 @@ class TestSpectrumClass:
             log_test = lime.load_frame(file_xlsx)
 
             measurement_tolerance_test(spec, log_orig, log_test)
+
+        return
+
+    def test_measurements_latex_file(self):
+
+        # Create tex file
+        extension = 'tex'
+        log_new = Path(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(log_new, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
+
+        with open(log_new, 'r') as f1, open(lines_tex_address, 'r') as f2:
+            for line1, line2 in zip(f1, f2):
+                assert line1 == line2, f"Line mismatch:\n{line1}\n!=\n{line2}"
 
         return
 
@@ -323,14 +367,14 @@ class TestSpectrumClass:
         # Measure lines explicit
         cfg_file, bands_file = baseline_folder/'sample_cfg.toml', baseline_folder/'SHOC579_bands.txt'
         sample_cfg, shoc549_df = lime.load_cfg(cfg_file),  lime.load_frame(bands_file)
-        SHOC579_a.fit.frame(shoc549_df, sample_cfg, obj_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(shoc549_df, sample_cfg, obj_cfg_prefix='SHOC579', line_detection=True)
         df_a = SHOC579_a.frame.copy()
 
         # Clear measurements
         SHOC579_a.frame = SHOC579_a.frame[0:0]
 
         # Measure lines implicit
-        SHOC579_a.fit.frame(bands_file, cfg_file, obj_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(bands_file, cfg_file, obj_cfg_prefix='SHOC579', line_detection=True)
         df_b = SHOC579_a.frame.copy()
 
         assert np.all(df_a.index == df_b.index)

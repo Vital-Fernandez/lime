@@ -283,6 +283,9 @@ class RedshiftFitting:
             else:
                 pred_arr, conf_arr = self._spec.infer.pred_arr, self._spec.infer.conf_arr
 
+        # Resolving power # TODO this should be read at another point...
+        res_power = self._spec.res_power if res_power is None else res_power
+
         # Set the type of fitting and the components to use
         if mode == 'key':
             components = components if components is not None else ['emission', 'doublet']

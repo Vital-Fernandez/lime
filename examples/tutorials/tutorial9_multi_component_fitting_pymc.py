@@ -229,8 +229,8 @@ redshift = cfg[inst][obj]['z']
 
 # Create the observation object
 spec = lime.Spectrum.from_file(file_path, inst, redshift=redshift)
-bands_obj = spec.retrieve.line_bands(fit_conf=cfg, obj_conf_prefix=f'{obj}_{inst}')
-spec.fit.bands('H1_6563A_b', data_folder/'bands'/f'{obj}_{inst}_bands.txt', cfg, id_conf_prefix=f'{obj}_{inst}')
+bands_obj = spec.retrieve.line_bands(fit_cfg=cfg, obj_cfg_prefix=f'{obj}_{inst}')
+spec.fit.bands('H1_6563A_b', data_folder /'bands' /f'{obj}_{inst}_bands.txt', cfg, obj_cfg_prefix=f'{obj}_{inst}')
 
 line = spec.fit.line
 idcs = np.searchsorted(spec.wave.data, line.mask[2:4] * (1 + spec.redshift))

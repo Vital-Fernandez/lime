@@ -35,7 +35,7 @@ pixel_mask = np.isnan(err_array)
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
 
-spec.fit.frame(bands_file_address, cfg, obj_conf_prefix=spaxel_label)
+spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix=spaxel_label)
 
 # MANGA cube web link and save file location
 cube_url = 'https://data.sdss.org/sas/dr17/manga/spectro/redux/v3_1_1/8626/stack/manga-8626-12704-LOGCUBE.fits.gz'
@@ -111,7 +111,7 @@ class TestCubeClass:
     def test_fit_spatial_mask(self):
 
         cfg['MASK_0_line_fitting']['bands'] = bands_file_address.as_posix()
-        cube.fit.spatial_mask(spatial_mask_address, fit_conf=cfg, line_detection=True, mask_list=['MASK_0'],
+        cube.fit.spatial_mask(spatial_mask_address, fit_cfg=cfg, line_detection=True, mask_list=['MASK_0'],
                               output_address=spatial_log_address)
 
         assert spatial_log_address.is_file()

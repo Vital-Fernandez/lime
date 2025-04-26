@@ -106,3 +106,7 @@ LiMe Mayor update - 2.0.0 - XX/XX/XXXX
     - The function lime.Spectrum.retrieve.spectrum() returns the spectrum axes as a recarray or saves it into a text file if the user provides a file address.
     - lime.Spectrum.from_file("fname", instrument='text') can now read the file from a text file following the format from the lime.Spectrum.retrieve.spectrum() function.
     - Bug the .plot.spectrum(include_fittings) does not show the combined profile
+    - Rename term "_conf" to "_cfg" across function names and arguments for uniformity
+    - Fitting functions now have the update_default=True argument. In the default behaviour the default configuration updates the default one. If set to update_default=False only the obj_cfg is used if available else the default one.
+    - Creating a spectrum object where all the entries are masked now produces a critical warning instead of raising an error.
+    - By default line_bands

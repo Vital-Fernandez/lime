@@ -446,8 +446,8 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
                 output_file.write(string_DF.encode('UTF-8'))
 
         # Pdf fluxes table
-        elif file_type == '.pdf':
-            table_fluxes(lines_log, log_path.parent / log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+        elif file_type == '.pdf' or  file_type == '.tex':
+            table_fluxes(lines_log, log_path.parent / log_path.stem, table_type=file_type[1:],  header_format_latex=_LOG_COLUMNS_LATEX,
                          lines_notation=log.latex_label.values, **kwargs)
 
         # Log in a fits format
@@ -601,7 +601,8 @@ def check_file_dataframe(df_variable, variable_type=pd.DataFrame, ext='FRAME', s
     return output
 
 
-def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_suffix='_line_fitting', line_detection=False):
+def check_fit_conf(fit_conf, default_key, obj_key, update_default=True, group_list=None, fit_cfg_suffix='_line_fitting',
+                   line_detection=False):
 
     # Check that there is an input configuration
     if fit_conf is not None:
@@ -634,33 +635,30 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
 
         # Recover the configuration expected for the object
         default_cfg = input_cfg.get(f'{default_key}_line_fitting') if default_key is not None else None
-        mask_cfg = input_cfg.get(f'{group_key}_line_fitting') if group_key is not None else None
+        custom_cfg = input_cfg.get(f'{obj_key}_line_fitting') if obj_key is not None else None
 
-        # Case there are not leveled entries
-        if (default_cfg is None) and (mask_cfg is None):
+        # Case there are not level entries
+        if (default_cfg is None) and (custom_cfg is None):
             output_cfg = input_cfg
 
         # Proceed to update the levels
         else:
 
             # Default configuration
-            output_cfg = {} if default_cfg is None else default_cfg
-            default_detect = output_cfg.get('line_detection')
+            default_cfg = {} if default_cfg is None else default_cfg
+            default_detect = default_cfg.get('line_detection', {})
 
-            # Mask conf
-            mask_conf = {} if mask_cfg is None else mask_cfg
-            mask_detect = mask_conf.get('line_detection')
+            # Custom configuration
+            custom_cfg = {} if custom_cfg is None else custom_cfg
+            custom_detect = custom_cfg.get('line_detection', {})
 
-            # Update the levels
-            output_cfg = {**output_cfg, **mask_conf}
+            # Update default configuration if requested else use only custom
+            output_cfg = {**default_cfg, **custom_cfg} if update_default else (custom_cfg if custom_cfg else default_cfg)
 
-            # If no line detection don't add it # TODO this is wrong lower should update upper
-            if mask_detect is not None:
-                output_cfg['line_detection'] = mask_detect
-            elif default_detect is not None:
-                output_cfg['line_detection'] = default_detect
-            else:
-                pass
+            # Update default detection if requested else use only custom
+            if line_detection:
+                output_cfg['line_detection'] = default_detect.update(custom_detect) if update_default else\
+                                                                    (custom_detect if custom_detect else default_detect)
 
     else:
         output_cfg = {}

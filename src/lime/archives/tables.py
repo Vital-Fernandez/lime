@@ -122,6 +122,9 @@ def table_fluxes(lines_df, table_address, header_format_latex, table_type='pdf',
         except:
             print('\n-- PDF compilation failure')
 
+    elif table_type == 'tex':
+        pdf.pdfDoc.generate_tex(table_address.as_posix())
+
     return
 
 

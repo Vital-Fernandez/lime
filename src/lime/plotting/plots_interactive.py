@@ -20,23 +20,31 @@ from ..transitions import label_decomposition, Line
 _logger = logging.getLogger('LiMe')
 
 
-def establish_selection_lines(spec, input_log, band_vsigma=70, n_sigma=4, fit_conf=None,
-                             default_conf_prefix='default', obj_conf_prefix=None, adjust_central_bands=True,
-                             instrumental_correction=True, components_detection=False, line_list=None,
-                             particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
-                             update_latex=False):
+def establish_selection_lines(spec, input_log, band_vsigma, n_sigma, adjust_central_band, instrumental_correction,
+                              components_detection, composite_lines, fit_cfg, default_cfg_prefix, obj_cfg_prefix,
+                              update_default, line_list, particle_list, decimals, vacuum_waves, ref_bands, update_labels,
+                              update_latex, vacuum_label):
 
     # Use the default database crop for the observation if none provided
-    ref_bands = spec.retrieve.line_bands(band_vsigma, n_sigma, None, None, None,
-                   adjust_central_bands, instrumental_correction, False, line_list,
-                   particle_list, sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
+    ref_bands = spec.retrieve.line_bands(band_vsigma=band_vsigma, n_sigma=n_sigma, adjust_central_band=adjust_central_band,
+                                         instrumental_correction=instrumental_correction, components_detection=False,
+                                         composite_lines=None, fit_cfg=None, default_cfg_prefix=None,
+                                         obj_cfg_prefix=None, update_default=True,
+                                         line_list=line_list, particle_list=particle_list, decimals=decimals,
+                                         vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+                                         update_latex=update_latex, vacuum_label=vacuum_label)
+
 
     # Load input log or copy the reference one
     in_bands = check_file_dataframe(input_log, verbose=False)
     if in_bands is None:
-        in_bands = spec.retrieve.line_bands(band_vsigma, n_sigma, fit_conf, default_conf_prefix, obj_conf_prefix,
-                               adjust_central_bands, instrumental_correction, components_detection, line_list,
-                               particle_list, sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
+        in_bands = spec.retrieve.line_bands(band_vsigma=band_vsigma, n_sigma=n_sigma, adjust_central_band=adjust_central_band,
+                                         instrumental_correction=instrumental_correction, components_detection=components_detection,
+                                         composite_lines=composite_lines, fit_cfg=fit_cfg, default_cfg_prefix=default_cfg_prefix,
+                                         obj_cfg_prefix=obj_cfg_prefix, update_default=update_default,
+                                         line_list=line_list, particle_list=particle_list, decimals=decimals,
+                                         vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+                                         update_latex=update_latex, vacuum_label=vacuum_label)
         default_status = 1 if components_detection else 0
     else:
         default_status = 1
@@ -77,6 +85,11 @@ def establish_selection_lines(spec, input_log, band_vsigma=70, n_sigma=4, fit_co
     log = log.iloc[sorted_indexes]
     active_lines = active_lines[sorted_indexes].astype(bool)
     labels_arr = labels_arr[sorted_indexes]
+
+    # Set NaN entries in dataframe as None
+    if 'group_label' in log.columns:
+        idcs_nan = log.group_label.isnull()
+        log.loc[idcs_nan, 'group_label'] = 'none'
 
     return log, labels_arr,  active_lines
 
@@ -180,17 +193,20 @@ class BandsInspection:
         self._color_bg = {True: theme.colors['inspection_positive'],
                           False: theme.colors['inspection_negative']}
 
+        self._out_params = ["wavelength", "wave_vac", "w1", "w2", "w3", "w4", "w5", "w6",
+                            "units_wave", "particle", "transition", "rel_int"]
+
         return
 
-    def bands(self, bands_file, band_vsigma=70, n_sigma=4, fit_conf=None, default_conf_prefix='default', obj_conf_prefix=None,
-              adjust_central_bands=True, instrumental_correction=True, components_detection=False, line_list=None,
-              particle_list=None, sig_digits=None, vacuum_waves=False, ref_bands=None, update_labels=True,
-              update_latex=False, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
-              exclude_continua=False,  n_pixels=10, fig_cfg=None, in_fig=None, maximize=False):
+    def bands(self, bands_file, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
+              components_detection=False, composite_lines=None, fit_cfg=None, default_cfg_prefix='default',
+              obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
+              vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False,
+              y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
+              exclude_continua=False, n_pixels=10, fig_cfg=None, in_fig=None, maximize=False):
 
 
         """
-
         This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
         function is run a second time, the user selections won't be overwritten.
 
@@ -266,10 +282,11 @@ class BandsInspection:
                     raise LiMe_Error(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
         # Establish the reference lines log to inspect the mask
-        self.log, self.line_list, self.active_lines = establish_selection_lines(self._spec, self._log_address,  band_vsigma, n_sigma, fit_conf,
-                                                        default_conf_prefix, obj_conf_prefix, adjust_central_bands,
-                                                        instrumental_correction, components_detection, line_list, particle_list,
-                                                        sig_digits, vacuum_waves, ref_bands, update_labels, update_latex)
+        self.log, self.line_list, self.active_lines = establish_selection_lines(self._spec, self._log_address,
+                                                      band_vsigma, n_sigma, adjust_central_band, instrumental_correction,
+                                                      components_detection, composite_lines, fit_cfg, default_cfg_prefix,
+                                                      obj_cfg_prefix, update_default, line_list, particle_list, decimals,
+                                                      vacuum_waves, ref_bands, update_labels, update_latex, vacuum_label)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:
@@ -430,7 +447,7 @@ class BandsInspection:
                     _logger.info(f'Unsuccessful line selection: {self.line}: w_low: {w_low}, w_high: {w_high}')
 
             # Save the log to the file
-            save_or_clear_log(self.log, self._log_address, self.active_lines)
+            save_or_clear_log(self.log, self._log_address, self.active_lines, self._out_params)
 
             # Redraw the line measurement
             self._ax.clear()
@@ -470,7 +487,7 @@ class BandsInspection:
                 self.active_lines[idx] = np.invert(self.active_lines[idx])
 
             # Save the log to the file
-            save_or_clear_log(self.log, self._log_address, self.active_lines)
+            save_or_clear_log(self.log, self._log_address, self.active_lines, self._out_params)
 
             # Plot the line selection with the new Background
             self._ax.clear()
@@ -516,7 +533,7 @@ class BandsInspection:
         self._fig.canvas.draw()
 
         # Save the log to the file
-        save_or_clear_log(self.log, self._log_address, self.active_lines)
+        save_or_clear_log(self.log, self._log_address, self.active_lines, self._out_params)
 
         return
 
@@ -821,8 +838,12 @@ class RedshiftInspection:
 
     def redshift(self, obj_idcs, reference_lines, output_file_log=None, output_idcs=None, redshift_column='redshift',
                  initial_z=None, none_value=np.nan, unknown_value=0.0,  legend_handle='levels', maximize=False, title=None,
-                 output_address=None, n_pixels=10, fig_cfg={}, ax_cfg={}, in_fig=None):
+                 output_address=None, n_pixels=10, fig_cfg={}, ax_cfg={}, in_fig=None, **kwargs):
 
+
+        # Check if input tuple
+        if isinstance(obj_idcs, tuple):
+            obj_idcs = pd.MultiIndex.from_tuples([obj_idcs], names=self._sample.index.names)
 
         # Assign the attributes
         self._obj_idcs = obj_idcs if isinstance(obj_idcs, pd.MultiIndex) else self._sample.loc[obj_idcs].index
@@ -832,6 +853,10 @@ class RedshiftInspection:
         self._spec_label = "" if title is None else title
         self._legend_handle = legend_handle
         self._user_point = None
+
+        # Parameters for the load function
+        self._load_params = {**self._sample.load_params, **kwargs}
+        self._load_params['redshift'] = 0
 
         # Output Log params
         self._log_address = output_file_log
@@ -904,9 +929,6 @@ class RedshiftInspection:
             # Plot on screen unless an output address is provided
             save_close_fig_swicth(output_address, 'tight', self._fig, maximise=maximize)
 
-        # else:
-        #     _logger.warning(f'The sample does not have objects. The redshift check could not be done')
-
         return
 
     def _launch_plots_ZI(self):
@@ -944,8 +966,7 @@ class RedshiftInspection:
         for i, obj_idx in enumerate(self._obj_idcs):
 
             # Load the spectrum with a zero redshift
-            load_params = {**self._sample.load_params, **{'redshift': 0}}
-            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **load_params)
+            spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._load_params)
 
             # Plot on the observed frame with reshift = 0
             wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, spec.redshift, 'observed')
@@ -966,8 +987,7 @@ class RedshiftInspection:
             for obj_idx in self._obj_idcs:
 
                 # Load the spectrum
-                load_params = {**self._sample.load_params, **{'redshift': 0}}
-                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **load_params)
+                spec = self._sample.load_function(self._sample.frame, obj_idx, self._sample.file_address, **self._load_params)
 
                 wavelength = spec.wave.data
                 wavelength = wavelength[~np.isnan(wavelength)]
@@ -1042,13 +1062,12 @@ class RedshiftInspection:
             _redshift_pred = redshift_output
 
         # Store the new redshift
-        #
+
         self._sample.loc[self._output_idcs, self._column_log] = _redshift_pred
 
         # Save to file if provided
         if self._log_address is not None:
             save_frame(self._log_address, self._sample.frame)
-
         return
 
     def _button_ZI(self, line_selection):

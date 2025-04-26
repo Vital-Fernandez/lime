@@ -27,7 +27,7 @@ line_components = {'O2_3726A_b': 'O2_3726A+O2_3729A',
                     'S2_6716A_b': 'S2_6716A+S2_6731A',
                     'O2_7319A_m': 'O2_7319A+O2_7330A'}
 
-bands_df = gp_spec.retrieve.line_bands(ref_bands=ref_bands_file, fit_conf=line_components)
+bands_df = gp_spec.retrieve.line_bands(ref_bands=ref_bands_file, fit_cfg=line_components)
 gp_spec.plot.spectrum(bands=bands_df, log_scale=True)
 
 if not obj_bands_file.is_file():

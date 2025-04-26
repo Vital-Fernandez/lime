@@ -109,6 +109,7 @@ mask_marker = '#FF0000'
 inspection_positive = '#FFFFFF'
 inspection_negative = '#ff796c' # 'xkcd:salmon'
 fade_fg = "#FFE5B4"
+err_area = "#00FF00"
 
 [colors.dark] # Dark theme
 bg = "#2B2B2B"
@@ -129,3 +130,4 @@ mask_marker = '#FF0000'
 inspection_positive = "#2B2B2B"
 inspection_negative = '#840000'
 fade_fg = "#73879B"
+err_area = "#00FF00"

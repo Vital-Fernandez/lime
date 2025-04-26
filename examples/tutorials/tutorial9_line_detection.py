@@ -10,8 +10,8 @@ cfg = lime.load_cfg(cfg_fname)
 spec = lime.Spectrum.from_file(fname, redshift=z_obj, instrument='nirspec')
 spec.unit_conversion('AA', 'FLAM')
 
-obj_bands = spec.retrieve.line_bands(ref_bands=ref_bands, fit_conf=cfg, default_conf_prefix='blended_prism',
-                                     band_vsigma=600, obj_conf_prefix=None)
+obj_bands = spec.retrieve.line_bands(ref_bands=ref_bands, fit_cfg=cfg, default_cfg_prefix='blended_prism',
+                                     band_vsigma=600, obj_cfg_prefix=None)
 spec.plot.spectrum(bands=obj_bands)
 
 

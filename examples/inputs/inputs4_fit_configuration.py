@@ -49,7 +49,7 @@ gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_o
 # gp_spec.fit.bands('O3_5007A_b', bands.loc['O3_5007A', 'w1':'w6'], fit_cfg)
 # gp_spec.plot.bands("O3_5007A_b", rest_frame=True)
 
-gp_spec.fit.bands('H1_4861A', lineBandsFile, cfgFile, id_conf_prefix='gp121903')
+gp_spec.fit.bands('H1_4861A', lineBandsFile, cfgFile, obj_cfg_prefix='gp121903')
 # gp_spec.plot.bands()
 
 # Fit of a line importing the kinematics from an external line

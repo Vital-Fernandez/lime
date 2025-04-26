@@ -37,7 +37,7 @@ for i, items in enumerate(object_dict.items()):
         spec.unit_conversion('AA', 'FLAM')
 
     # Bands the results
-    bands = spec.retrieve.line_bands(band_vsigma=100, fit_conf=cfg, obj_conf_prefix=f'{obj}_{inst}')
+    bands = spec.retrieve.line_bands(band_vsigma=100, fit_cfg=cfg, obj_cfg_prefix=f'{obj}_{inst}')
     # spec.plot.spectrum(bands=bands, rest_frame=True)
     # lime.save_frame(data_folder/'bands'/f'{obj}_{inst}_bands.txt', bands)
 
@@ -45,7 +45,7 @@ for i, items in enumerate(object_dict.items()):
     # spec.check.bands(data_folder/'bands'/f'{obj}_{inst}_bands.txt', exclude_continua=False, band_vsigma=100, fit_conf=cfg,
     #                  obj_conf_prefix=f'{obj}_{inst}')
 
-    spec.fit.frame(bands, cfg, obj_conf_prefix=f'{obj}_{inst}')
+    spec.fit.frame(bands, cfg, obj_cfg_prefix=f'{obj}_{inst}')
     spec.plot.spectrum(rest_frame=True)
     # spec.save_frame(data_folder / f'{obj}_{inst}_lines.txt')
 
