@@ -52,8 +52,8 @@ class LineFinder:
 
         return
 
-    def peaks_troughs(self, bands, sigma_threshold=3, emission_type=True, width_tol=5, band_modification=None,
-                       continuum_array=None, continuum_std=None, plot_steps=False, log_scale=False):
+    def peaks_troughs(self, bands, sigma_threshold=3, emission_type=True, width_tol=5,
+                       continuum_array=None, continuum_std=None, plot_steps=False, **kwargs):
 
         """
 
@@ -82,9 +82,6 @@ class LineFinder:
         :param width_tol: Minimum number of pixels between peaks/troughs. The default value is 5.
         :type width_tol: float, optional
 
-        :param band_modification: Method to adjust the line band with. The default value is None.
-        :type band_modification: str, optional
-
         :param ml_detection: Machine learning algorithm to detect lines. The default value is None.
         :type ml_detection: str, optional
 
@@ -105,101 +102,36 @@ class LineFinder:
 
         # Match peaks with theoretical lines
         bands = check_file_dataframe(bands)
-        matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, band_modification=band_modification,
-                                      line_type=emission_type)
+        matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, line_type=emission_type)
 
         # Plot the results
         if plot_steps:
-            plot_peaks_troughs(self._spec, idcs_peaks, limit_threshold, continuum_array, matched_DF, log_scale)
+            plot_peaks_troughs(self._spec, idcs_peaks, limit_threshold, continuum_array, matched_DF, **kwargs)
 
         return matched_DF
 
 
-    def label_peaks(self, peak_table, mask_df, line_type='emission', width_tol=5, band_modification=None, detect_check=False):
-
-        # TODO auto param should be changed to boolean
-        # Establish the type of input values for the peak indexes, first numpy array
-        if isinstance(peak_table, np.ndarray):
-            idcsLinePeak = peak_table
-
-        # Specutils table
-        else:
-            # Query the lines from the astropy finder archives #
-            if len(peak_table) != 0:
-                idcsLineType = peak_table['emission_type'] == line_type
-                idcsLinePeak = np.array(peak_table[idcsLineType]['line_center_index'])
-            else:
-                idcsLinePeak = np.array([])
+    def label_peaks(self, idcs_peaks, matched_DF, line_type='emission', width_tol=5):
 
         # Security check in case no lines detected
-        if len(idcsLinePeak) == 0:
-            return pd.DataFrame(columns=mask_df.columns)
+        if len(idcs_peaks) == 0:
+            return pd.DataFrame(columns=matched_DF.columns)
 
-        # Exclude bands not withing the regime:
-        w0, wf = self._spec.wave_rest.data[~self._spec.wave_rest.mask][0],  self._spec.wave_rest.data[~self._spec.wave_rest.mask][-1]
-        idcs_selection = (mask_df.w3 > w0) & (mask_df.w4 < wf)
+        # Add theoretical wavelength values if necessary
+        if 'wavelength' not in matched_DF.columns:
+            matched_DF['wavelength'] = label_decomposition(matched_DF.index.values, params_list=['wavelength'])[0]
 
-        # Prepare dataframe to stored the matched lines
-        matched_DF = mask_df.loc[idcs_selection].copy()
-        matched_DF['signal_peak'] = np.nan
+        # Get bands limits indexes
+        idcs_w3 = np.searchsorted(self._spec.wave_rest, matched_DF.w3)
+        idcs_w4 = np.searchsorted(self._spec.wave_rest, matched_DF.w4)
 
-        # Theoretical wave values
-        waveTheory = label_decomposition(matched_DF.index.values, params_list=['wavelength'])[0]
-        matched_DF['wavelength'] = waveTheory
+        # Get the bands matching
+        band_contains_peak = (idcs_peaks[None, :] > idcs_w3[:, None]) & (idcs_peaks[None, :] < idcs_w4[:, None])
+        idcs_matched_bands = band_contains_peak.any(axis=1)
+        idcs_matched_peaks = idcs_peaks[band_contains_peak.argmax(axis=1)[idcs_matched_bands]]
 
-        # Match the lines with the theoretical emission
-        tolerance = np.diff(self._spec.wave_rest).mean() * width_tol
-        matched_DF['observation'] = 'not_detected'
-        unidentifiedLine = dict.fromkeys(matched_DF.columns.values, np.nan)
+        # Crop the bands to the detection
+        matched_DF.loc[idcs_matched_bands, 'observation'] = 'detected'
+        matched_DF.loc[idcs_matched_bands, 'signal_peak'] = idcs_matched_peaks
 
-        # Get the wavelength peaks
-        wave_peaks = self._spec.wave_rest[idcsLinePeak]
-
-        for i in np.arange(wave_peaks.size):
-
-            idx_array = np.where(np.isclose(a=waveTheory.astype(np.float64), b=wave_peaks[i], atol=tolerance))
-
-            if len(idx_array[0]) == 0:
-                unknownLineLabel = 'xy_{:.0f}A'.format(np.round(wave_peaks[i]))
-
-                # Scheme to avoid repeated lines
-                if (unknownLineLabel not in matched_DF.index) and detect_check:
-                    newRow = unidentifiedLine.copy()
-                    newRow.update({'wavelength': wave_peaks[i], 'w3': wave_peaks[i] - 5, 'w4': wave_peaks[i] + 5,
-                                   'observation': 'not_identified'})
-                    matched_DF.loc[unknownLineLabel] = newRow
-
-            else:
-
-                row_index = matched_DF.index[matched_DF.wavelength == waveTheory[idx_array[0][0]]]
-                matched_DF.loc[row_index, 'observation'] = 'detected'
-                matched_DF.loc[row_index, 'signal_peak'] = idcsLinePeak[i]
-                theoLineLabel = row_index[0]
-
-                blended_check = True if '_b' in theoLineLabel else False
-                minSeparation = 4 if blended_check else 2
-
-                # Width is only computed for blended lines
-                if band_modification is not None:
-                    if band_modification == 'auto':
-                        if blended_check is False:
-                            emission_check = True if line_type == 'emission' else False
-                            idx_min = compute_line_width(idcsLinePeak[i], self._spec.flux, delta_i=-1, min_delta=minSeparation, emission_check=emission_check)
-                            idx_max = compute_line_width(idcsLinePeak[i], self._spec.flux, delta_i=1, min_delta=minSeparation, emission_check=emission_check)
-                            matched_DF.loc[row_index, 'w3'] = self._spec.wave_rest[idx_min]
-                            matched_DF.loc[row_index, 'w4'] = self._spec.wave_rest[idx_max]
-
-        # Include_only_detected
-        idcs_unknown = matched_DF['observation'] == 'not_detected'
-        matched_DF.drop(index=matched_DF.loc[idcs_unknown].index.values, inplace=True)
-
-        # Sort by wavelength
-        matched_DF.sort_values('wavelength', inplace=True)
-        matched_DF.drop(columns=['wavelength', 'observation'], inplace=True)
-
-        # Security check all bands are within selection
-        wave_peak_matched = self._spec.wave_rest[matched_DF.signal_peak.to_numpy().astype(int)]
-        idcs_valid = (matched_DF.w3 < wave_peak_matched) & (matched_DF.w4 > wave_peak_matched)
-        matched_DF = matched_DF.loc[idcs_valid]
-
-        return matched_DF
+        return matched_DF.loc[idcs_matched_bands]

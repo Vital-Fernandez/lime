@@ -13,7 +13,9 @@ from lime.transitions import Line, air_to_vacuum_function, label_decomposition
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lime.fitting.redshift import RedshiftFitting
 from lime import __version__
-from itertools import combinations
+from scipy.sparse import csr_matrix, csgraph
+
+
 
 try:
     import aspect
@@ -526,7 +528,7 @@ def get_merged_blended_lines(spec, bands, in_cfg, composite_lines):
     #
     # return output_dict
 
-def pars_bands_conf(spec, bands, ref_bands, fit_conf, composite_lines):
+def pars_bands_conf(spec, bands, ref_bands, fit_conf, composite_lines, automatic_grouping=False):
 
     # Get the the grouped lines
     comps_dict = {} if fit_conf is False else {comp: group_label
@@ -536,6 +538,31 @@ def pars_bands_conf(spec, bands, ref_bands, fit_conf, composite_lines):
     # Limit the selection to the user lines
     if composite_lines is not None:
         comps_dict = {line: comps for line, comps in comps_dict.items() if line in composite_lines}
+
+    if automatic_grouping:
+
+        # Get candidate lines for grouping
+        line_arr = [item for v in comps_dict.values() for item in v.split('+')]
+        line_arr = bands.loc[bands.index.isin(line_arr)].index
+        lambda_arr = bands.loc[line_arr, 'wavelength'].to_numpy()
+
+        # Generate the line - wavelength matrix with the line pixels width
+        wave_matrix = np.zeros((lambda_arr.size, spec.wave_rest.data.size))
+        w3_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w3'].to_numpy())
+        w4_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w4'].to_numpy())
+        cols = np.arange(wave_matrix.shape[1])
+        wave_matrix[(cols >= w3_arr[:, None]) & (cols <= w4_arr[:, None])] = 1
+        pixels_width = wave_matrix.sum(axis=1)
+
+        # Get the decision matrix with the matching intervals
+        decision_matrix = wave_matrix @ wave_matrix.T
+        blended_matrix = decision_matrix < np.ceil(pixels_width/3)[:, None]
+        math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
+
+        # Get groups of common entries
+        _, auto_labels = csgraph.connected_components(csgraph=csr_matrix(decision_matrix > 1), directed=False)
+        for labels, group in zip(line_arr, auto_labels):
+            print(f"{labels}   {group}")
 
     # Loop through the lines on the list and review which changes are necessary
     rename_dict, exclude_list= {}, []
@@ -811,7 +838,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._n_lines = 0
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
+              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
+              ref_bands=None):
 
         """
 
@@ -883,7 +911,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
-        self.line = Line(label, bands, input_conf, profile, cont_from_bands)
+        self.line = Line(label, bands, input_conf, profile, cont_from_bands, ref_bands=ref_bands)
 
         # Check the line selection is valid
         idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
@@ -925,7 +953,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
     def frame(self, bands, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
               temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,
-              plot_fit=False, progress_output='bar'):
+              plot_fit=False, progress_output='bar', ref_bands=None):
 
         """
 
@@ -1053,8 +1081,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         # Fit the lines
                         self.bands(line, bands, input_conf, min_method, profile,
                                    cont_from_bands=cont_from_bands, err_from_bands=err_from_bands,
-                                   temp=temp,
-                                   obj_cfg_prefix=None, default_cfg_prefix=None)
+                                   temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None, ref_bands=ref_bands)
 
                         if plot_fit:
                             self._spec.plot.bands()
@@ -1069,7 +1096,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         return
 
     def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_length=None, plot_steps=False,
-                  log_scale=False):
+                  **kwargs):
 
         """
 
@@ -1134,7 +1161,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             if plot_steps:
                 ax_cfg = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
                 self._spec.plot._continuum_iteration(input_wave, input_flux, cont_fit, input_flux_s, mask_cont, low_lim,
-                                                     high_lim, emis_threshold[i], ax_cfg, log_scale=log_scale)
+                                                     high_lim, emis_threshold[i], ax_cfg, **kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)

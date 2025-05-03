@@ -55,7 +55,7 @@ gp_spec.plot.bands()
 gp_spec.plot.bands(output_address=f'../sample_data/{line}.png')
 
 # Each fit is stored in the lines dataframe (log) attribute
-print(gp_spec.frame)
+print(gp_spec.frame.wavelength)
 
 # It can be saved into different types of document using the function
 gp_spec.save_frame('../sample_data/results/example1_linelog.txt')

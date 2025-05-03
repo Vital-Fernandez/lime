@@ -180,7 +180,6 @@ def pp_FWHM(line, idx):
 
 
 def gaussian_area(line, idx, n_steps):
-
     amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
     sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
 
@@ -470,8 +469,6 @@ class ProfileModelCompiler:
         self.model.prefix = f'line0_'
 
         # Fix or not the continuum
-        # m_cont_conf = _SLOPE_FIX_PAR if line._cont_from_adjacent else _SLOPE_FREE_PAR
-        # n_cont_conf = _INTER_FIX_PAR if line._cont_from_adjacent else _INTER_FREE_PAR
         self.define_param(0, line, 'm_cont', line.m_cont, _SLOPE_FIX_PAR, user_conf)
         self.define_param(0, line, 'n_cont', line.n_cont, _INTER_FIX_PAR, user_conf)
 
@@ -616,8 +613,11 @@ class ProfileModelCompiler:
             # Check for negative -0.0 # TODO this needs a better place # FIXME -0.0 error
             if np.signbit(line.sigma_err[i]):
                 line.sigma_err[i] = np.nan
-                if self.output.errorbars:
-                    _logger.warning(f'Negative value for profile sigma at {line.label}')
+                _logger.warning(f'Negative scale value for amplitude at {comp_label}')
+
+            if np.signbit(line.amp_err[i]):
+                line.amp_err[i] = np.nan
+                _logger.warning(f'Negative scale value for amplitude at {comp_label}')
 
             # Compute the profile areas
             profile_flux_dist = AREA_FUNCTIONS[line._p_shape[i]](line, i, 1000)

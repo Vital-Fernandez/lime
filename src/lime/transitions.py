@@ -185,20 +185,20 @@ def air_to_vacuum_function(wave_array, units_wave='AA'):
     return wave_array / (1 + 1e-6 * (287.6155 + 1.62887 * sigma2 + 0.01360 * np.square(sigma2)))
 
 
-def check_units_from_wave(line, str_ion, str_wave, lines_df):
+def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
 
-    # Try to recover from dataframe
-    if lines_df is not None:
+    # First the input database
+    if bands is not None:
 
         # Check literal unit
-        wave = pd_get(lines_df, line, 'wavelength')
-        units = pd_get(lines_df, line, 'units_wave')
+        wave = pd_get(bands, line, 'wavelength')
+        units = pd_get(bands, line, 'units_wave')
 
         # Check core element
         if wave is None:
             core_element = f'{str_ion}_{str_wave}'
-            wave = pd_get(lines_df, core_element, 'wavelength')
-            units = pd_get(lines_df, core_element, 'units_wave')
+            wave = pd_get(bands, core_element, 'wavelength')
+            units = pd_get(bands, core_element, 'units_wave')
 
         # Convert to units
         units = au.Unit(units) if units is not None else units
@@ -206,25 +206,31 @@ def check_units_from_wave(line, str_ion, str_wave, lines_df):
     else:
         wave, units = None, None
 
-    # Otherwise decipher from label
+    # Second the reference database
+    if (units is None) or (wave is None):
+        ref_bands = ref_bands if ref_bands is not None else _PARENT_BANDS
+        wave = pd_get(ref_bands, line, 'wavelength')
+        units = pd_get(ref_bands, line, 'units_wave')
+
+        # Convert to units
+        units = au.Unit(units) if units is not None else units
+
+    # Third decipher from label
     if (units is None) or (wave is None):
 
         # First check for Angstroms
         if str_wave[-1] == 'A':
-            units_label = au.Unit('AA')
-            wave_label = float(str_wave[:-1])
+            units = au.Unit('AA')
+            wave = float(str_wave[:-1])
 
         else:
             au_unit = au.Unit(str_wave)
-            units_label = au_unit.bases[0]
-            wave_label = au_unit.scale
+            units = au_unit.bases[0]
+            wave = au_unit.scale
 
-    else:
-        units_label, wave_label = None, None
-
-    # Give preferences to the tabel values
-    wave = wave_label if wave is None else wave
-    units = units_label if units is None else units
+    # # Give preferences to the tabel values
+    # wave = wave_label if wave is None else wave
+    # units = units_label if units is None else units
 
     return wave, units
 
@@ -400,7 +406,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
     #
 
 
-def label_composition(line_list, ref_df=None, default_profile=None):
+def label_composition(line_list, bands=None, default_profile=None, ref_bands=None):
 
     # Empty containers for the label componentes
     n_comps = len(line_list)
@@ -429,7 +435,7 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         particle[i] = Particle.from_label(line_items[0])
 
         # Wavelength properties
-        wavelength[i], units_wave[i] = check_units_from_wave(line, line_items[0], line_items[1], ref_df)
+        wavelength[i], units_wave[i] = check_units_from_wave(line, line_items[0], line_items[1], bands, ref_bands)
 
         # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'} # TODO better do that with optional_comps
         comp_conf = {optC[0]: optC[2:] for optC in line_items[2:]}
@@ -452,8 +458,8 @@ def label_composition(line_list, ref_df=None, default_profile=None):
         trans = comp_conf.get('t', None)
 
         # If none is provided check from the table
-        if (trans is None) and (ref_df is not None):
-            trans = pd_get(ref_df, line, 'transition')
+        if (trans is None) and (bands is not None):
+            trans = pd_get(bands, line, 'transition')
 
         # Else assume default
         if trans is None:
@@ -734,7 +740,7 @@ class Particle:
 class Line:
 
     def __init__(self, label, band=None, fit_conf=None, profile=None, cont_from_bands=True, z_line=None,
-                 update_latex=False, interpret=True):
+                 update_latex=False, ref_bands=None, interpret=True):
 
         # Label attributes
         self.label = label
@@ -796,7 +802,7 @@ class Line:
 
         # Interpret the line from the user reference
         if interpret:
-            self._from_label(label, band, fit_conf, update_latex)
+            self._from_label(label, band, fit_conf, update_latex, ref_bands)
 
         return
 
@@ -808,7 +814,7 @@ class Line:
 
         return self.label
 
-    def _from_label(self, label, band=None, fit_conf=None, update_latex=False):
+    def _from_label(self, label, band=None, fit_conf=None, update_latex=False, ref_bands=None):
 
         # If band is not provided use default database
         if band is None:
@@ -830,8 +836,8 @@ class Line:
         self._modularity_component(modularity_comp, fit_conf, band)
 
         # Review the components of the line
-        ref_bands_df = band if isinstance(band, DataFrame) else None
-        items = label_composition(self.list_comps, ref_df=ref_bands_df, default_profile=self.profile_comp)
+        items = label_composition(self.list_comps, bands=band if isinstance(band, DataFrame) else None,
+                                  default_profile=self.profile_comp)
         self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = items
 
         # Quick elements for the line profile

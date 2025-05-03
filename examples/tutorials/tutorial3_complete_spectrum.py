@@ -18,7 +18,7 @@ gp_spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5], plot_st
 
 # Find lines
 match_bands = gp_spec.infer.peaks_troughs(lineBandsFile, emission_type=True, sigma_threshold=3, plot_steps=False, log_scale=True)
-gp_spec.plot.spectrum(bands=match_bands, rest_frame=True)
+# gp_spec.plot.spectrum(bands=match_bands, rest_frame=True)
 
 # # Saving GP121903 bands
 obj_bands_file = '../sample_data/bands/gp121903_bands.txt'
@@ -26,6 +26,7 @@ obj_bands_file = '../sample_data/bands/gp121903_bands.txt'
 #
 # Measure the emission lines
 gp_spec.fit.frame(obj_bands_file, obs_cfg, obj_cfg_prefix='gp121903_osiris', line_detection=True)
+print(gp_spec.frame.wavelength)
 
 # Display the fits on the spectrum
 gp_spec.plot.spectrum(rest_frame=True, log_scale=True)
