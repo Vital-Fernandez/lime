@@ -35,6 +35,7 @@ def test_label_decomposition():
 
     return
 
+
 def test_format_line_mask_option():
 
     array1 = format_line_mask_option('5000-5009', wave_array)
@@ -47,6 +48,24 @@ def test_format_line_mask_option():
     assert np.all(array2[2] == np.array([6550, 6570.]))
 
     return
+
+
+def tests_bands_from_log():
+
+    # Declare the data
+    bands_df = lime.load_frame(baseline_folder/'manga_line_bands.txt')
+    log_df = lime.load_frame(baseline_folder/'manga_lines_log.txt')
+
+    # Make the transformation
+    rename_dict = {'Fe3_4658A_p-g-emi_b': 'Fe3_4658A_b'}
+    bands_new = lime.bands_from_measurements(log_df, index_dict=rename_dict)
+
+    # Compare the rows and columns
+    assert (set(bands_new.loc[:, 'w1':'w6'].columns) == set(bands_df.columns))  # True
+    assert (set(bands_new.index) == set(bands_df.index))  # True
+
+    return
+
 
 class TestLineClass:
 

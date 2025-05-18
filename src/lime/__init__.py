@@ -42,7 +42,7 @@ _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 from lime.observations import Spectrum, Sample, Cube
 from lime.io import *
 from lime.tools import *
-from lime.transitions import Line, label_decomposition, bands_from_frame
+from lime.transitions import Line, label_decomposition, bands_from_measurements
 from lime.archives.read_fits import OpenFits, show_instrument_cfg
 from lime.plotting.plots import theme
 from lime.workflow import line_bands

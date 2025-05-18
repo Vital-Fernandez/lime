@@ -54,7 +54,7 @@ def int_to_roman(num):
     return roman_num
 
 
-def pd_get(df, row, column, default=None, transform=None):
+def pd_get(df, row, column, default=None, transform=None, nan_to_none=False):
 
     # Fast get from dataframe
     try:
@@ -65,6 +65,12 @@ def pd_get(df, row, column, default=None, transform=None):
     # Transform the value from the dataframe to the default if requested
     if transform is not None:
         cell = default if cell == transform else cell
+
+    # Transform nan to None
+    if nan_to_none and (cell is not None):
+        if isinstance(cell, float):
+            # print('JODER', cell)
+            cell = None if np.isnan(cell) else cell
 
     return cell
 

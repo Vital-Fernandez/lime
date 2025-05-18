@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from numpy.core.fromnumeric import argmin
 
-from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error
+from .io import _PARENT_BANDS, _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error, load_frame
 from pandas import DataFrame
 from .tools import pd_get, au
 
@@ -191,17 +191,18 @@ def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
     if bands is not None:
 
         # Check literal unit
-        wave = pd_get(bands, line, 'wavelength')
-        units = pd_get(bands, line, 'units_wave')
+        wave = pd_get(bands, line, 'wavelength', nan_to_none=True)
+        units = pd_get(bands, line, 'units_wave', nan_to_none=True)
 
         # Check core element
         if wave is None:
             core_element = f'{str_ion}_{str_wave}'
-            wave = pd_get(bands, core_element, 'wavelength')
-            units = pd_get(bands, core_element, 'units_wave')
+            wave = pd_get(bands, core_element, 'wavelength', nan_to_none=True)
+            units = pd_get(bands, core_element, 'units_wave', nan_to_none=True)
 
         # Convert to units
         units = au.Unit(units) if units is not None else units
+        # units = None if (units is None or np.isnan(units)) else au.Unit(units)
 
     else:
         wave, units = None, None
@@ -209,8 +210,8 @@ def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
     # Second the reference database
     if (units is None) or (wave is None):
         ref_bands = ref_bands if ref_bands is not None else _PARENT_BANDS
-        wave = pd_get(ref_bands, line, 'wavelength')
-        units = pd_get(ref_bands, line, 'units_wave')
+        wave = pd_get(ref_bands, line, 'wavelength', nan_to_none=True)
+        units = pd_get(ref_bands, line, 'units_wave', nan_to_none=True)
 
         # Convert to units
         units = au.Unit(units) if units is not None else units
@@ -613,27 +614,48 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
-def bands_from_frame(frame, lines_level='line', sort=True):
+def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remove_empty_columns=False, index_dict=None,
+                            bands_hdrs=('wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'group_label', 'units_wave', 'particle',
+                                 'transition')):
 
-    # Empty container to store the data
-    headers = ['wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'group_label', 'latex_label', 'units_wave', 'particle', 'transition']
-    bands = pd.DataFrame(columns=headers)
+    # Load the frame if necessary
+    frame = check_file_dataframe(frame, sample_levels=sample_levels)
 
     # Single frame
     if not isinstance(frame.index, pd.MultiIndex):
-        print('bicho')
+
+        # Make dataframe with single lines
+        idcs_single = frame.group_label == 'none'
+        bands = frame.reindex(index=frame.loc[idcs_single].index, columns=bands_hdrs)
+
+        # Get the indexes of grouped lines
+        group_labels_arr = frame.loc[~idcs_single].group_label
+        unique_values, unique_indices = np.unique(group_labels_arr, return_index=True)
+        group_labels_arr = group_labels_arr.iloc[np.sort(unique_indices)]
+
+        # Make dataframe with grouped lines and add blended suffix
+        bands_group = frame.reindex(index=group_labels_arr.index, columns=bands_hdrs)
+        blended_arr = bands_group.loc[~bands_group.index.to_series().str.endswith('_m')].index.to_numpy()
+        bands_group.rename(index={key: f"{key}_b" for key in blended_arr}, inplace=True)
+
+        # Combine the dataframes
+        bands = pd.concat([bands, bands_group], axis=0)
 
     # Multi-index
     else:
 
-        line_list = frame.index.get_level_values(lines_level).unique()
+        line_list = frame.index.get_level_values(sample_levels).unique()
+
+        idcs_single = frame.group_label == 'none'
+        bands = frame.reindex(index=frame.loc[idcs_single].index, columns=bands_hdrs)
+
 
         # Loop through the lines
         for i, line_label in enumerate(line_list):
 
             # Exclude kinematic components:
             if '_k-' not in line_label:
-                df_line = frame.xs(line_label, level=lines_level, drop_level=False)
+                df_line = frame.xs(line_label, level=sample_levels, drop_level=False)
                 group_list = df_line.group_label.unique()
 
                 for j, group in enumerate(group_list):
@@ -679,11 +701,15 @@ def bands_from_frame(frame, lines_level='line', sort=True):
                     bands.loc[line.label, 'latex_label'] = line.latex_label
                     bands.loc[line.label, 'units_wave'] = line.units_wave[line._ref_idx]
                     bands.loc[line.label, 'particle'] = line.particle[line._ref_idx]
-                # bands.loc[line.label, 'transition'] = line.transition
-
 
     if sort:
         bands.sort_values(by=['wavelength', 'group_label'], inplace=True)
+
+    if remove_empty_columns:
+        bands = bands.dropna(axis=1, how='all')
+
+    if index_dict is not None:
+        bands.rename(index=index_dict, inplace=True)
 
     return bands
 

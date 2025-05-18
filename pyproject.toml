@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lime-stable"
-version = "2.0.dev5"
+version = "2.0.dev6"
 readme = "README.rst"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
@@ -25,7 +25,7 @@ classifiers = ["Programming Language :: Python :: 3",
 
 [project.optional-dependencies]
 full = ["asdf~=4.1",
-        "bokeh~=3.6",
+        "bokeh~=3.7",
         "mplcursors~=0.6",
         "openpyxl~=3.1",
         "PyLaTeX~=1.4",

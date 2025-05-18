@@ -102,14 +102,7 @@ def bokeh_bands(fig, bands, x, y, z_corr, redshift):
 
     # Loop through the detections and plot the names
     for i in np.arange(latex.size):
-        if idcs_band_limits[0, i] != idcs_band_limits[0, i]:  # Y limit for the label check if same pixel
-            max_region = np.max(y[idcs_band_limits[0, i]:idcs_band_limits[0, i]])
-        else:
-            max_region = y[idcs_band_limits[0, i]]
-
-        label = 'Matched line' if i == 0 else '_'
         fig.add_layout(BoxAnnotation(left=w3_obs[i]/z_corr, right=w4_obs[i]/z_corr, fill_alpha=0.3, fill_color=theme.colors['match_line']))
-        # axis.text(wave_array[i] * (1 + redshift) / z_corr, max_region * 0.9 * z_corr, latex[i], rotation=270)
 
     return
 
@@ -193,8 +186,8 @@ class BokehFigures:
 
         return
 
-    def bands(self, label, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, log_scale=True, fig_cfg=None,
-              ax_cfg=None, return_fig=False):
+    def bands(self, label, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, log_scale=True,
+              exclude_continua=True, fig_cfg=None, ax_cfg=None, return_fig=False):
 
 
         # Unpack variables
@@ -232,16 +225,13 @@ class BokehFigures:
             # Create figure with default utils if not provided
             fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
 
-            # # Create figure with default utils if not provided
-            # fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"))
-
             # Spectrum data source
             source = ColumnDataSource(data={"x": wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr,
                                             "y": flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr})
             fig.step("x", "y", source=source, color=theme.colors['fg'], line_width=1, mode='center')
 
             # Fille the bands
-            bands_filling_bokeh(fig, wave_plot, flux_plot, z_corr, idcs_bands, line)
+            bands_filling_bokeh(fig, wave_plot, flux_plot, z_corr, idcs_bands, line, exclude_continua=exclude_continua)
 
             # Plot labels
             fig.xaxis.axis_label = AXES_CONF['xlabel']
@@ -249,6 +239,9 @@ class BokehFigures:
 
             # Adjust the format of the plot
             update_bokeh_figure(fig, PLT_CONF)
+
+            # Hide the legend if there are line profiles
+            fig.legend.visible = legend_check
 
             # Save or display the plot
             if return_fig:
@@ -258,10 +251,13 @@ class BokehFigures:
                 save(fig, filename=output_address)
 
             else:
-                # output_notebook()
                 show(fig)
 
+        else:
+            _logger.info(f'The input line {label} could not be found')
+
         return
+
 
     def grid(self, output_address=None, rest_frame=True, log_scale=False, n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
              include_fits=True, in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
@@ -409,6 +405,9 @@ class BokehFigures:
 
         # Adjust the format of the plot
         update_bokeh_figure(fig, PLT_CONF)
+
+        # Hide the legend if there are line profiles
+        fig.legend.visible = legend_check
 
         # Save or display the plot
         if return_fig:

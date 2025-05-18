@@ -109,4 +109,5 @@ LiMe Mayor update - 2.0.0 - XX/XX/XXXX
     - Rename term "_conf" to "_cfg" across function names and arguments for uniformity
     - Fitting functions now have the update_default=True argument. In the default behaviour the default configuration updates the default one. If set to update_default=False only the obj_cfg is used if available else the default one.
     - Creating a spectrum object where all the entries are masked now produces a critical warning instead of raising an error.
-    - By default line_bands
+    - By default line_bands.
+    - Added bands_from_log function

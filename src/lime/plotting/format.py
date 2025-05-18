@@ -54,6 +54,7 @@ class Themer:
         self.conf = None        # All the formating data
         self.style = None       # Label of the active style
         self.active_conf = None   # Dictionary with the active figure configuration and library
+        self.default_lib = 'matplotlib'
 
         # LiMe plots personalization
         self.colors = None      # Features individual colors
@@ -66,6 +67,8 @@ class Themer:
         # Assign default
         self.conf = conf.copy()
         self.set_style(style)
+
+
 
         return
 
@@ -163,7 +166,7 @@ class Themer:
         return ax_cfg
 
 
-    def set_style(self, style=None, scale=None, colors_conf=None, library=None):
+    def set_style(self, style=None, scale=None, colors_conf=None, library='matplotlib'):
 
         # Set the default style
         # self.style = ['default']
@@ -173,6 +176,7 @@ class Themer:
         #     self.style += [style] if isinstance(style, str) else style
         self.style = 'default' if style is None else style
         self.scale = ['default'] if style is None else [scale]
+        self.default_lib = library
 
         # Set the library defaults
         self.active_conf = {'matplotlib': self.conf['matplotlib']['default'].copy(),

@@ -154,7 +154,7 @@ def check_fits_source(fits_source, lime_object=None, load_function=None):
     else:
 
         if load_function is None:
-            raise LiMe_Error(f'Please introduce fits file instrument or a load function to import the fits file as a '
+            _logger.warning(f'Please introduce fits file instrument or a load function to import the fits file as a '
                              f'LiMe observation')
 
     return fits_source, spectrum_type
