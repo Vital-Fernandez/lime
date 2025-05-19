@@ -7,20 +7,20 @@ from lime.io import _PARENT_BANDS
 _logger = logging.getLogger('LiMe')
 
 
-def parse_bands_arguments(label, log, ref_bands, norm_flux):
+def parse_bands_arguments(label, bands, log, norm_flux):
 
     line = None
     if label is None and (log.index.size > 0):
         label = log.index[-1]
         line = Line.from_log(label, log, norm_flux)
 
+    # The user provided a reference band to check the region use it
+    elif label is not None and bands is not None:
+        line = Line(label, bands)
+
     # Line has been measured before
     elif label is not None and (log.index.size > 0):
         line = Line.from_log(label, log, norm_flux)
-
-    # The user provided a reference band to check the region use it
-    elif label is not None and ref_bands is not None:
-        line = Line(label, ref_bands)
 
     elif label is not None and label in _PARENT_BANDS.index:
         line = Line(label, band=_PARENT_BANDS.loc[label, 'w1':'w6'].to_numpy())

@@ -1269,8 +1269,8 @@ class SpectrumFigures(Plotter):
 
         return in_fig
 
-    def bands(self, label=None, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, y_scale='auto', fig_cfg=None,
-              ax_cfg=None, in_fig=None, maximize=False, show_err=False):
+    def bands(self, label=None, bands=None, output_address=None, include_fits=True, rest_frame=False, y_scale='auto', fig_cfg=None,
+              ax_cfg=None, in_fig=None, maximize=False, show_err=False, exclude_continua=False):
 
         """
 
@@ -1327,7 +1327,7 @@ class SpectrumFigures(Plotter):
         display_check = True if in_fig is None else False
 
         # Check which line should be plotted
-        line = parse_bands_arguments(label, log, ref_bands, norm_flux)
+        line = parse_bands_arguments(label, bands, log, norm_flux)
 
         # Check the observation has uncertainty to display
         if show_err and (self._spec.err_flux is None):
@@ -1372,13 +1372,13 @@ class SpectrumFigures(Plotter):
                 idcs_bands = line.index_bands(self._spec.wave, self._spec.redshift, just_band_edges=True)
 
                 # Plot the spectrum
-                label_leg = line.latex_label if (line.latex_label is not None and include_fits is False) else None
+                label_leg = line.latex_label[0] if (line.latex_label[0] is not None and include_fits is False) else None
                 in_ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
                               where='mid', color=theme.colors['fg'], label=label_leg, linewidth=theme.plt['spectrum_width'])
 
                 # Continuum bands
                 bands_filling_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
-                                   show_central=not show_err)
+                                   show_central=not show_err, exclude_continua=exclude_continua)
 
                 if show_err:
                     err_plot = self._spec.err_flux.data

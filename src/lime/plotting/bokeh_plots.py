@@ -117,16 +117,25 @@ def bands_filling_bokeh(fig, x, y, z_corr, idcs_mask, label, exclude_continua=Fa
         low_lim = 0 if np.isnan(low_lim) else low_lim
 
         # Central bands
+        print('1',x[idcs_mask[2]:idcs_mask[3]]/z_corr)
+        print('1',y[idcs_mask[2]:idcs_mask[3]]*z_corr)
+        print('1',low_lim*z_corr)
         fig.varea_step(x=x[idcs_mask[2]:idcs_mask[3]]/z_corr, y1=low_lim*z_corr, y2=y[idcs_mask[2]:idcs_mask[3]]*z_corr,
                         step_mode="center", fill_alpha=0.25, color=color_dict['line_band'])
 
         # Continua bands exclusion
         if exclude_continua is False:
+            print('2', x[idcs_mask[0]:idcs_mask[1]]/z_corr)
+            print('2', low_lim*z_corr)
+            print('2', y[idcs_mask[0]:idcs_mask[1]]*z_corr)
             fig.varea_step(x=x[idcs_mask[0]:idcs_mask[1]]/z_corr,
                            y1=low_lim*z_corr,
                            y2=y[idcs_mask[0]:idcs_mask[1]]*z_corr,
                            step_mode="center", fill_alpha=0.25, color=color_dict['cont_band'])
 
+            print('3', x[idcs_mask[4]:idcs_mask[5]]/z_corr)
+            print('3', low_lim*z_corr)
+            print('3', y[idcs_mask[4]:idcs_mask[5]]*z_corr)
             fig.varea_step(x=x[idcs_mask[4]:idcs_mask[5]]/z_corr,
                            y1=low_lim*z_corr,
                            y2=y[idcs_mask[4]:idcs_mask[5]]*z_corr,
@@ -186,7 +195,7 @@ class BokehFigures:
 
         return
 
-    def bands(self, label, output_address=None, ref_bands=None, include_fits=True, rest_frame=False, log_scale=True,
+    def bands(self, label, output_address=None, bands=None, include_fits=True, rest_frame=False, log_scale=True,
               exclude_continua=True, fig_cfg=None, ax_cfg=None, return_fig=False):
 
 
@@ -198,7 +207,7 @@ class BokehFigures:
         legend_check = True if label is not None else False
 
         # Check which line should be plotted
-        line = parse_bands_arguments(label, log, ref_bands, norm_flux)
+        line = parse_bands_arguments(label, log, bands, norm_flux)
 
         # Proceed to plot
         if line is not None:
