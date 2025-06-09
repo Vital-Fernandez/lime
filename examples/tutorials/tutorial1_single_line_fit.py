@@ -30,8 +30,7 @@ normFlux = 1e-18
 # Line name and its location mask in the rest _frame
 line = 'H1_6563A'
 band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
-line = lime.Line(line, band_edges)
-print(line)
+
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 # gp_spec.bokeh.spectrum()
@@ -52,7 +51,7 @@ fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
 
 # Second attempt including the fit configuration
 gp_spec.fit.bands(line, band_edges, fit_conf)
-gp_spec.plot.bands('H1_6563A_b', exclude_continua=True)
+gp_spec.plot.bands(exclude_continua=False)
 
 # gp_spec.plot.bands()
 #

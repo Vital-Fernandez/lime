@@ -569,10 +569,13 @@ def results_to_log(line, log, norm_flux):
 
             # Converting None entries to str (9 = group_label)
             if j == 9:
+
                 if param_value is None:
                     param_value = 'none'
 
-            # print(comp, param, param_value)
+                if line.sub_comps[i] is not None:
+                    param_value = line.sub_comps[i].group_label
+
             log.at[comp, param] = param_value
 
     return

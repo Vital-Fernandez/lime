@@ -54,8 +54,8 @@ np.savetxt(file_address, np.c_[wave_array, flux_array, err_array])
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, obj_cfg_prefix='38-35', progress_output=None)
 spax.save_frame(lines_log_file)
-# spax.plot.spectrum()
 spax.save_frame(latex_log_file, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
+# spax.plot.spectrum()
 
 
 # spax.plot.bands('O3_5007A')

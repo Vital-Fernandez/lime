@@ -411,7 +411,8 @@ class Spectrum:
         return spec
 
     @classmethod
-    def from_file(cls, file_address, instrument, mask_flux_entries=None, **kwargs):
+    def from_file(cls, file_address, instrument, redshift=None, norm_flux=None, crop_waves=None, res_power=None,
+                  units_wave=None, units_flux=None, pixel_mask=None, id_label=None, wcs=None, **kwargs):
 
         """
 
@@ -446,13 +447,19 @@ class Spectrum:
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, mask_flux_entries)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, pixel_mask, **kwargs)
 
-        # Update the parameters file parameters with the user parameters
-        obs_args = {**fits_args, **kwargs}
+        # Update the file parameters with the user parameters
+        input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, res_power=res_power,
+                            units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
+
+        if cls._fitsMgr.spectrum_check:
+            input_args.pop('wcs')
+
+        input_args = {**fits_args, **{k: v for k, v in input_args.items() if v is not None}}
 
         # Create the LiMe object
-        return cls(**obs_args)
+        return cls(**input_args)
 
     @classmethod
     def from_survey(cls, target_id, survey, mask_flux_entries=None, **kwargs):

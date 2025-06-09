@@ -608,7 +608,6 @@ class ProfileModelCompiler:
                 line.eqw = np.full(self.n_comps, np.nan)
                 line.eqw_err = np.full(self.n_comps, np.nan)
                 line.FWHM_p = np.full(self.n_comps, np.nan)
-                # line.sigma_thermal = np.full(self.n_comps, np.nan)
 
             # Check for negative -0.0 # TODO this needs a better place # FIXME -0.0 error
             if np.signbit(line.sigma_err[i]):
@@ -825,12 +824,6 @@ class LineFitting:
         line.intg_flux = areasArray.mean()
         line.intg_flux_err = areasArray.std()
 
-        # # Compute the integrated signal to noise # TODO is this an issue for absorptions
-        # amp_ref = line.peak_flux - line.cont
-        # if emission_check:
-        #     if amp_ref < 0:
-        #         amp_ref = line.peak_flux
-
         # Compute SN_r
         line.snr_line = signal_to_noise_rola(line.peak_flux - line.cont, line.cont_err, line.n_pixels)
         line.snr_cont = line.cont/line.cont_err
@@ -842,20 +835,14 @@ class LineFitting:
         else:
             line._narrow_check = False
 
-        # # Line width to the pixel below the continuum (or mask size if not happening) # TODO Lime2.0 skip all this if narrow
-        # idx_0 = compute_FWHM0(peakIdx, emis_flux, -1, cont_arr, emission_check)
-        # idx_f = compute_FWHM0(peakIdx, emis_flux, 1, cont_arr, emission_check)
-        #
-        # # Velocity calculations
-        # velocArray = c_KMpS * (emis_wave[idx_0:idx_f] - line.peak_wave) / line.peak_wave
-        # self.velocity_profile_calc(line, velocArray, emis_flux[idx_0:idx_f], cont_arr[idx_0:idx_f], emission_check)
+        # Velocity calculations
         if (line.n_pixels >= min_array_dim) and (line._narrow_check is False):
             self.velocity_profile_calc(line, peakIdx, emis_wave, emis_flux, cont_arr, emission_check, min_array_dim=min_array_dim)
 
         # Pixel velocity # TODO we are not using this one
         line.pixel_vel = c_KMpS * line.pixelWidth/line.peak_wave
 
-        # Equivalent width computation (it must be an 1d array to avoid conflict in blended lines) # TODO Lime2.0 put all this on its function
+        # Equivalent width computation (it must be an 1d array to avoid conflict in blended lines)
         lineContinuumMatrix = cont_arr + normalNoise
         eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
 

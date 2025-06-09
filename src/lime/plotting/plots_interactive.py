@@ -1536,7 +1536,7 @@ class CubeInspection:
             self._ax0.set_ylim(self.axlim_dict['image_ylim'])
             self._ax1.set_xlim(self.axlim_dict['spec_xlim'])
 
-            if not self.maintain_y_zoom:
+            if self.maintain_y_zoom:
                 self._ax1.set_ylim(self.axlim_dict['spec_ylim'])
 
         else:

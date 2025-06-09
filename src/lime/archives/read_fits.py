@@ -257,35 +257,44 @@ def check_fits_instructions(fits_source, online_provider=False):
     else:
         fits_reader = None
 
-    # # Check for url location for surveys function
-    # if online_provider:
-    #     if hasattr(UrlFitsSurvey, fits_source):
-    #         url_locator = getattr(UrlFitsSurvey, fits_source)
-    #     else:
-    #         raise LiMe_Error(f'Input {fits_source} does not have a url manager for LiMe could not be created.')
-    # else:
-    #     url_locator = None
-
     return fits_reader
 
-def load_txt(text_address):
+def load_txt(text_address, **kwargs):
 
     # Columns
-    out_array = np.loadtxt(text_address)
+    out_array = np.loadtxt(text_address, **kwargs)
 
-    # Transform foot comments as dictionary data
+    # File address
+    if not type(text_address).__name__ == "UploadedFile":
+        with open(text_address, "r") as f:
+            lines = f.readlines()
+
+    # Uploaded file
+    else:
+        lines = text_address.getvalue().decode("utf-8").splitlines()
+
+    # Reverse loop over the lines
     params_dict = {}
-    with open(text_address, "r") as f:
+    for line in reversed(lines):
+        line = line.strip()
+        if not line.startswith("#") or line.startswith("# LiMe"):
+            break
+        key, value = line[1:].split(":", 1)
+        params_dict[key.strip()] = value.strip()
 
-        # Reverse loop while the lines start by a "#"
-        for line in reversed(f.readlines()):
-            line = line.strip()
-            if not line.startswith("#") or (line.startswith("# LiMe")):
-                break
-
-            # Extract key-value pairs
-            key, value = line[1:].split(":", 1)  # Split at the first ':'
-            params_dict[key.strip()] = value.strip()
+    # # Transform foot comments as dictionary data
+    # params_dict = {}
+    # with open(text_address, "r") as f:
+    #
+    #     # Reverse loop while the lines start by a "#"
+    #     for line in reversed(f.readlines()):
+    #         line = line.strip()
+    #         if not line.startswith("#") or (line.startswith("# LiMe")):
+    #             break
+    #
+    #         # Extract key-value pairs
+    #         key, value = line[1:].split(":", 1)  # Split at the first ':'
+    #         params_dict[key.strip()] = value.strip()
 
     return out_array, params_dict
 
@@ -362,10 +371,10 @@ class OpenFits:
 
         return
 
-    def parse_data_from_file(self, file_address, pixel_mask=None):
+    def parse_data_from_file(self, file_address, pixel_mask, **kwargs):
 
         # Read the fits data
-        wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(file_address)
+        wave_array, flux_array, err_array, header_list, fits_params = self.fits_reader(file_address, **kwargs)
         pixel_mask = pixel_mask if pixel_mask is not None else fits_params['pixel_mask']
 
         # Mask requested entries
@@ -441,10 +450,10 @@ class OpenFits:
         return fits_args
 
     @staticmethod
-    def text(file_address):
+    def text(file_address, **kwargs):
 
         # Read text file dividing the columns into the spectrum axis and the comments as its parameters
-        data_arr, params_dict = load_txt(file_address)
+        data_arr, params_dict = load_txt(file_address, **kwargs)
 
         # Unpack the columns into the spectrum axes
         wave_array, flux_array = data_arr[:, 0], data_arr[:, 1]
@@ -456,16 +465,13 @@ class OpenFits:
         # Convert strings to expected format
         params_dict['redshift'] = float(params_dict['redshift']) if 'redshift' in params_dict else None
         params_dict['norm_flux'] = float(params_dict['norm_flux']) if 'norm_flux' in params_dict else None
-        params_dict['id_label'] = params_dict['id_label'] if 'norm_flux' in params_dict else None
+        params_dict['id_label'] = params_dict['id_label'] if 'id_label' in params_dict else None
         params_dict['pixel_mask'] = mask_array
-
-        # metadata['units_wave'] = au.Unit(metadata['units_wave']) if 'units_wave' in metadata else au.Unit('AA')
-        # metadata['units_flux'] = au.Unit(metadata['units_flux']) if 'units_flux' in metadata else au.Unit('FLAM')
 
         return wave_array, flux_array, err_array, None, params_dict
 
     @staticmethod
-    def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), pixel_mask=None):
+    def nirspec(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), **kwargs):
 
         """
 
@@ -503,7 +509,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def isis(fits_address, data_ext_list=0, hdr_ext_list=0, pixel_mask=None):
+    def isis(fits_address, data_ext_list=0, hdr_ext_list=0, **kwargs):
 
         """
 
@@ -548,7 +554,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def osiris(fits_address, data_ext_list=0, hdr_ext_list=0, pixel_mask=None):
+    def osiris(fits_address, data_ext_list=0, hdr_ext_list=0, **kwargs):
 
         """
 
@@ -593,7 +599,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=(0), pixel_mask=None):
+    def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=(0), **kwargs):
 
         """
 
@@ -645,7 +651,7 @@ class OpenFits:
         return wave_array, flux_array, err_array, header_list, params_dict
 
     @staticmethod
-    def manga(fits_address, data_ext_list=('WAVE', 'FLUX', 'IVAR'), hdr_ext_list=('FLUX'), pixel_mask=None):
+    def manga(fits_address, data_ext_list=('WAVE', 'FLUX', 'IVAR'), hdr_ext_list=('FLUX'), **kwargs):
 
         """
 
@@ -692,7 +698,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def muse(fits_address, data_ext_list=(1, 2), hdr_ext_list=1, pixel_mask=None):
+    def muse(fits_address, data_ext_list=(1, 2), hdr_ext_list=1, **kwargs):
 
         """
 
@@ -737,7 +743,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def megara(fits_address, data_ext_list=0, hdr_ext_list=(0, 1), pixel_mask=None):
+    def megara(fits_address, data_ext_list=0, hdr_ext_list=(0, 1), **kwargs):
 
         """
 
@@ -781,7 +787,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def miri(fits_address, data_ext_list=(1,2), hdr_ext_list=(1), pixel_mask=None):
+    def miri(fits_address, data_ext_list=(1,2), hdr_ext_list=(1), **kwargs):
 
         """
 

@@ -76,6 +76,39 @@ class TestOpenFits:
 
         return
 
+    def test_text_file_params(self, file_name='sdss_dr18_0358-51818-0504.fits'):
+
+        # Open with LiMe functions
+        SHOC579 = lime.Spectrum.from_file(spectra_folder / file_name, instrument='sdss')
+
+        # Convert to a text file
+        SHOC579.retrieve.spectrum(output_address=outputs_folder/f'shoc579_sdss.txt')
+
+        # Read the text file
+        SHOC579_txt = lime.Spectrum.from_file(outputs_folder/f'shoc579_sdss.txt', instrument='text')
+
+        assert(np.all(np.isclose(SHOC579_txt.flux, SHOC579.flux)))
+        assert(np.all(np.isclose(SHOC579_txt.err_flux, SHOC579.err_flux)))
+        assert(np.all(np.isclose(SHOC579_txt.wave, SHOC579.wave)))
+        assert SHOC579_txt.units_wave == SHOC579.units_wave
+        assert SHOC579_txt.units_flux.scale == SHOC579.units_flux.scale
+        assert SHOC579_txt.units_flux.bases[0] == SHOC579.units_flux.bases[0]
+        assert SHOC579_txt.units_flux.bases[1] == SHOC579.units_flux.bases[1]
+        assert SHOC579_txt.units_flux.bases[2] == SHOC579.units_flux.bases[2]
+        assert SHOC579_txt.units_flux.bases[3] == SHOC579.units_flux.bases[3]
+        assert SHOC579_txt.norm_flux == SHOC579.norm_flux
+
+        # Perform a fitting and save that fitting
+        SHOC579.fit.bands('H1_4861A')
+        SHOC579.retrieve.spectrum(line_label='H1_4861A', output_address=outputs_folder/f'shoc579_sdss_Hbeta.txt')
+
+        # Compare with baseline
+        data_baseline = np.loadtxt(baseline_folder/f'shoc579_sdss_Hbeta.txt')
+        data_fit = np.loadtxt(baseline_folder/f'shoc579_sdss_Hbeta.txt')
+        assert(np.all(np.isclose(data_baseline, data_fit)))
+
+        return
+
     def test_read_miri_params(self, file_name='jw01039-o003_t001_miri_ch4-medium_s3d.fits'):
 
         NGC6552 = lime.Cube.from_file(spectra_folder/file_name, instrument='miri', redshift=redshift_dict['NGC6552'])

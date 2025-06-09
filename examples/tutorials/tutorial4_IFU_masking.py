@@ -62,4 +62,4 @@ shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_cont)
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_line)
 
 # Manually add/remove spaxels to the spatial mask
-shoc579.check.cube('H1_6563A', masks_file=spatial_mask_SN_line)
+shoc579.check.cube('H1_6563A', masks_file=spatial_mask_SN_line, maintain_y_zoom=False)

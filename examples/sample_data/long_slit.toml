@@ -14,17 +14,22 @@ SHOC579.z = 0.0475 # SHOC579 data
 [default_line_fitting]
 
 # Merged lines
+O2_7319A_b = "O2_7319A_m+O2_7330A_m"
+O2_7319A_m = "O2_7319A+O2_7320A"
+O2_7330A_m = "O2_7330A+O2_7331A"
+O2_7330A_m_kinem = "O2_7319A_m"
+
 O2_3726A_m = 'O2_3726A+O2_3729A'
 H1_3889A_m = "H1_3889A+He1_3889A"
 Ar4_4711A_m = "Ar4_4711A+He1_4713A"
-O2_7319A_m = "O2_7319A+O2_7330A"
 Ne3_3968A_m = "Ne3_3968A+H1_3970A"
 N1_5198A_m = "N1_5198A+N1_5200A"
 
 # Blended lines
 O2_3726A_b = 'O2_3726A+O2_3729A'
 S2_6716A_b = "S2_6716A+S2_6731A"
-O2_7319A_b = "O2_7319A+O2_7330A"
+
+# Data for special lines
 
 # Configuration for the continuum fitting
 continuum.degree_list = [3, 6, 6]

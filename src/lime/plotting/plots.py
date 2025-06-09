@@ -657,9 +657,10 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
     return
 
 
-def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=False, color_dict=theme.colors, show_central=True):
+def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=True, color_dict=theme.colors, show_central=True):
 
     # Security check for low selection
+    # TODO check this error crashing
     if y[idcs_mask[2]:idcs_mask[3]].size > 1:
 
         # Lower limit for the filled region
@@ -768,8 +769,8 @@ class Plotter:
     def _line_matching_plot(self, axis, bands, x, y, z_corr, redshift):
 
         # Open the bands file the bands
-        match_log = self._spec.retrieve.line_bands(ref_bands=bands, fit_cfg=None, instrumental_correction=False,
-                                                   adjust_central_band=False)
+        match_log = check_file_dataframe(bands)
+
         # Compute bands limits
         w3 = match_log.w3.values * (1 + redshift)
         w4 = match_log.w4.values * (1 + redshift)
@@ -1007,43 +1008,6 @@ class SpectrumFigures(Plotter):
                 low_limit, high_limit = self._spec.cont-self._spec.cont_std, self._spec.cont + self._spec.cont_std
                 in_ax.fill_between(wave_plot/z_corr, low_limit*z_corr, high_limit*z_corr, alpha=0.2,
                                    color=theme.colors['fade_fg'])
-
-            # # Include the detection bands
-            # if detection_band is not None:
-            #
-            #     detec_obj = getattr(self._spec.infer, detection_band)
-            #
-            #     if detec_obj.confidence is not None:
-            #
-            #         # Boundaries array for confidence intervals
-            #         bounds = np.array([0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-            #
-            #         # Adjust color map to match lower detection limit to fg color
-            #         cmap = plt.get_cmap(theme.colors['mask_map'])
-            #         cmaplist = [cmap(i) for i in range(cmap.N)]
-            #         cmaplist[0] = theme.colors['fg']
-            #         cmap = colors.LinearSegmentedColormap.from_list('mcm', cmaplist, bounds.size-1)
-            #         norm = colors.BoundaryNorm(bounds * 100, cmap.N)
-            #
-            #         # Iterate through the confidence intervals and plot the step spectrum
-            #         for i in range(1, len(bounds)):
-            #             if i > 1:
-            #                 idcs = detec_obj(bounds[i-1]*100, confidence_max=bounds[i]*100)
-            #                 wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
-            #                 wave_nan[idcs], flux_nan[idcs] = wave_plot[idcs] / z_corr, flux_plot[idcs] * z_corr
-            #
-            #                 in_ax.step(wave_nan, flux_nan, label=label, where='mid', color=cmap(i-1))
-            #
-            #         # Color bar
-            #         sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-            #         sm.set_array([])
-            #         cbar = plt.colorbar(sm, ax=in_ax)
-            #         cbar.set_label('Detection confidence %', rotation=270, labelpad=35)
-            #
-            #
-            #     else:
-            #         _logger.warning(f'The line detection bands confidence has not been calculated. They are not included'
-            #                         f' on plot.')
 
             # Show components
             if show_categories and self._spec.infer.pred_arr is not None:

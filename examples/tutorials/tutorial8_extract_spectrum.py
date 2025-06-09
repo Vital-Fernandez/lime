@@ -34,37 +34,25 @@ SHOC579_txt_address = data_folder/'spectra'/f'{obj}_data.txt'
 spec.fit.frame(data_folder /'bands' /f'{obj}_{inst}_bands.txt', cfg, obj_cfg_prefix=f'{obj}_{inst}')
 spec_arrays = spec.retrieve.spectrum('H1_6563A', output_address=SHOC579_txt_address, split_components=True)
 
-lime.line_bands()
-
-spec.plot.spectrum()
-print(spec.plot.frame)
 # spec.plot.bands('H1_6563A')
 
 
-#     # Create the observation object
-#     spec = lime.Spectrum.from_file(file_path, inst, redshift=redshift)
+# # Read text file
+# import numpy as np
+# import lime
+# fname = '../sample_data/spectra/SHOC579_data.txt'
+# fname = '/home/vital/Desktop/sfg_template_zmin0.002_zmax0.960_flux_nanmean.txt'
+# fname = '/home/vital/Desktop/59.txt'
 #
-
-# # Loop through the files and measure the lines
-# for i, items in enumerate(object_dict.items()):
+# # Load the data with whitespace separation
+# data = np.loadtxt(fname)
 #
-#     inst, obj = items
-#     file_path = data_folder/'spectra'/files_dict[inst]
-#     redshift = cfg[inst][obj]['z']
+# n_rows = data.shape[0]
+# nan_columns = np.full((n_rows, 3), np.nan)
+# data = np.hstack((nan_columns, data))
 #
-#     # Create the observation object
-#     spec = lime.Spectrum.from_file(file_path, inst, redshift=redshift)
+# np.savetxt('/home/vital/Desktop/59.csv', data, delimiter=';', fmt='%.6f')
 #
-#     if spec.units_wave != 'AA':
-#         spec.unit_conversion('AA', 'FLAM')
-#
-#     # Bands the results
-#     bands = spec.retrieve.line_bands(band_vsigma=100)
-#     # spec.check.bands(data_folder/'bands'/f'{obj}_{inst}_bands.txt', ref_bands=bands, exclude_continua=False)
-#
-#     spec.fit.frame(data_folder/'bands'/f'{obj}_{inst}_bands.txt', cfg, id_conf_prefix=f'{obj}_{inst}')
-#     # spec.plot.grid()
-#
-#     # spec.plot.spectrum(rest_frame=False)
-
-
+# # Save the data using ';' as the delimiter
+# spec = lime.Spectrum.from_file('/home/vital/Desktop/59.csv', instrument='text', delimiter=';', usecols=(3,4), redshift=0)
+# spec.plot.spectrum(rest_frame=True)

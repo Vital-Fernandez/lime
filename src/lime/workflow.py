@@ -10,10 +10,10 @@ from lmfit.models import PolynomialModel
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
 from lime.transitions import Line, air_to_vacuum_function, label_decomposition
+from lime.retrieve.line_bands import pars_bands_conf
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
 from lime.fitting.redshift import RedshiftFitting
 from lime import __version__
-from scipy.sparse import csr_matrix, csgraph
 
 
 
@@ -341,296 +341,6 @@ def res_power_approx(wavelength_arr):
     return wavelength_arr/delta_lambda
 
 
-def get_merged_blended_lines(spec, bands, in_cfg, composite_lines):
-
-    # Get lines on the list
-    comps_dict = {} if in_cfg is False else {comp: group_label
-                                             for comp, group_label in in_cfg.items()
-                                             if comp.endswith(('_b', '_m'))}
-
-    # Limit the selection to the user lines
-    if composite_lines is not None:
-        comps_dict = {line: comps for line, comps in comps_dict.items() if line in composite_lines}
-
-    # # Determine the grouped lines
-    # key_cfg = f'{default_cfg_prefix}_line_fitting'
-    # default_dict = {} if key_cfg not in in_cfg else {comp: group_label
-    #                                                 for comp, group_label in in_cfg[key_cfg].items()
-    #                                                 if comp.endswith(('_b', '_m'))}
-    #
-    # key_cfg = f'{obj_cfg_prefix}_line_fitting'
-    # obj_dict =  {} if key_cfg not in in_cfg else{comp: group_label
-    #                                              for comp, group_label in in_cfg[key_cfg].items()
-    #                                              if comp.endswith(('_b', '_m'))}
-    #
-    # if len(default_dict) == 0 and len(obj_dict) == 0:
-    #     output_dict = fit_conf.copy()
-    # else:
-    #     output_dict = {**default_dict, **obj_dict}
-
-    # b_m_arr = np.array(list(output_dict.keys()))
-    # core_arr = np.array([s[:-2] for s in b_m_arr])
-    # unique_elements, counts = np.unique(core_arr, return_counts=True)
-    # repeated_lines = unique_elements[counts > 1]
-    #
-    # # Check each case individually
-    # for line in repeated_lines:
-    #     line_blended, line_merged = line + '_b', line + '_m'
-    #     default_b, default_m = line_blended in default_dict, line_merged in default_dict
-    #     obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
-    #
-    #     # Object configuration has priority
-    #     if not (obj_b == obj_m):
-    #         output_dict.pop(line_blended if obj_b else line_merged)
-    #
-    #     # Try default configuration
-    #     elif not (default_b == default_m):
-    #         output_dict.pop(line_blended if default_b else line_merged)
-    #
-    #     # Solve the kinematics
-    #     else:
-    #
-    #         # Get components
-    #         comps = output_dict[line_blended].split('+')
-    #
-    #         # Check if more than one component is on the bands
-    #         df_comps = bands.loc[bands.index.isin(comps)]
-    #         if df_comps.index.size > 1:
-    #
-    #             # Set minimum number of pixels for the model solution in the bands
-    #             central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
-    #             idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
-    #             blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
-    #
-    #             # Print warning
-    #             _logger.info(f'The input configuration has merged and blended entries for {line}. '
-    #                          f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
-    #                          f'={output_dict[line_blended if blended_check else line_blended]})')
-    #             output_dict.pop(line_blended if blended_check else line_blended)
-
-    # # Get candidate lines for grouping
-    # line_arr = [item for v in output_dict.values() for item in v.split('+')]
-    # line_arr = bands.loc[bands.index.isin(line_arr)].index
-    # lambda_arr = bands.loc[line_arr, 'wavelength'].to_numpy()
-    #
-    # # Generate the line - wavelength matrix with the line pixels width
-    # wave_matrix = np.zeros((lambda_arr.size, spec.wave_rest.data.size))
-    # w3_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w3'].to_numpy())
-    # w4_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w4'].to_numpy())
-    # cols = np.arange(wave_matrix.shape[1])
-    # wave_matrix[(cols >= w3_arr[:, None]) & (cols <= w4_arr[:, None])] = 1
-    # pixels_width = wave_matrix.sum(axis=1)
-    #
-    # # Get the decision matrix with the matching intervals
-    # decision_matrix = wave_matrix @ wave_matrix.T
-    # blended_matrix = decision_matrix < np.ceil(pixels_width/3)[:, None]
-    # math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
-    #
-    # results_dict = {}
-    # for label, group_label in output_dict.items():
-    #     list_group = group_label.split('+')
-    #     if all(key in math_dict for key in list_group):
-    #         blended_group = True if label[-1] == 'b' else False
-    #         relations = np.array([blended_matrix[math_dict[i], math_dict[j]] for i, j in list(combinations(list_group, 2))])
-    #         if np.all(relations == blended_group):
-    #             print(f'Passess: {label}={group_label}')
-    #             results_dict[label] = group_label
-
-    return comps_dict
-
-
-
-
-
-# upper_triangle < (np.ceil(pixels_width/3)[:, None]=
-#
-#
-#     np.fill_diagonal(decision_matrix, 0)  # optional
-#
-#     # Step 2: Extract the upper triangle (excluding diagonal)
-#     upper_triangle = np.ma.masked_array(np.triu(decision_matrix, k=1), mask=np.tril(np.ones_like(decision_matrix), k=0).astype(bool)).astype(int)
-#
-#     # Step 3: Find (i, j) pairs with >1 shared steps
-#     rows_i, rows_j = np.where(upper_triangle > 1)
-#     edges = list(zip(line_arr[rows_i], line_arr[rows_j]))
-#
-#     matrix < thresholds[:, None]
-#
-#     # Step 3: Check if all values in each column satisfy the condition
-#     idcs_type = upper_triangle < np.ceil(pixels_width/3)[:, None]
-#     merged_idcs = np.all(idcs_type, axis=0)
-#     blended_idcs = np.all(~idcs_type, axis=0)
-#     #
-    # math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
-    # for row in rows_j:
-    #     print(line_arr[row])
-    #
-    # for label, group_label in output_dict.keys():
-    #     list_group = group_label.split('+')
-    #     if len(list_group) == 2:
-    #         x_label, y_label = math_dict.get(list_group[0]), math_dict.get(list_group[1])
-    #         if (x_label is not None) and (y_label is not None):
-    #
-
-
-    # print(w3_arr)
-    # print(w4_arr)
-    #
-    # wave_matrix[w3_arr:w4_arr, :]
-    # # box_pixels =
-    # #
-    # # print(idcs_lines)
-    # lambda_arr = bands.index.isin(line_arr)
-    # wave_arr = spec.wave.data
-
-    # Generate matrices array
-
-    # b_m_arr = np.array(list(output_dict.keys()))
-    # core_arr = np.array([s[:-2] for s in b_m_arr])
-    # unique_elements, counts = np.unique(core_arr, return_counts=True)
-    # repeated_lines = unique_elements[counts > 1]
-    #
-    # # Check each case individually
-    # for line in repeated_lines:
-    #     line_blended, line_merged = line + '_b', line + '_m'
-    #     default_b, default_m = line_blended in default_dict, line_merged in default_dict
-    #     obj_b, obj_m = line_blended in obj_dict, line_merged in obj_dict
-    #
-    #     # Object configuration has priority
-    #     if not (obj_b == obj_m):
-    #         output_dict.pop(line_blended if obj_b else line_merged)
-    #
-    #     # Try default configuration
-    #     elif not (default_b == default_m):
-    #         output_dict.pop(line_blended if default_b else line_merged)
-    #
-    #     # Solve the kinematics
-    #     else:
-    #
-    #         # Get components
-    #         comps = output_dict[line_blended].split('+')
-    #
-    #         # Check if more than one component is on the bands
-    #         df_comps = bands.loc[bands.index.isin(comps)]
-    #         if df_comps.index.size > 1:
-    #
-    #             # Set minimum number of pixels for the model solution in the bands
-    #             central_band = bands.loc[bands.index.isin(comps), 'w3':'w4'].to_numpy() * (1 + spec.redshift)
-    #             idcs_central = np.searchsorted(spec.wave, (central_band[:, 0].min(), central_band[:, 1].max()))
-    #             blended_check = idcs_central[1] - idcs_central[0] > (3 * len(comps))
-    #
-    #             # Print warning
-    #             _logger.info(f'The input configuration has merged and blended entries for {line}. '
-    #                          f'Automatic assignment as {"blended" if blended_check else "Merged"} ({line_blended if blended_check else line_blended}'
-    #                          f'={output_dict[line_blended if blended_check else line_blended]})')
-    #             output_dict.pop(line_blended if blended_check else line_blended)
-    #
-    #
-    # return output_dict
-
-def pars_bands_conf(spec, bands, ref_bands, fit_conf, composite_lines, automatic_grouping=False):
-
-    # Get the the grouped lines
-    comps_dict = {} if fit_conf is False else {comp: group_label
-                                               for comp, group_label in fit_conf.items()
-                                               if comp.endswith(('_b', '_m'))}
-
-    # Limit the selection to the user lines
-    if composite_lines is not None:
-        comps_dict = {line: comps for line, comps in comps_dict.items() if line in composite_lines}
-
-    if automatic_grouping:
-
-        # Get candidate lines for grouping
-        line_arr = [item for v in comps_dict.values() for item in v.split('+')]
-        line_arr = bands.loc[bands.index.isin(line_arr)].index
-        lambda_arr = bands.loc[line_arr, 'wavelength'].to_numpy()
-
-        # Generate the line - wavelength matrix with the line pixels width
-        wave_matrix = np.zeros((lambda_arr.size, spec.wave_rest.data.size))
-        w3_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w3'].to_numpy())
-        w4_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_arr, 'w4'].to_numpy())
-        cols = np.arange(wave_matrix.shape[1])
-        wave_matrix[(cols >= w3_arr[:, None]) & (cols <= w4_arr[:, None])] = 1
-        pixels_width = wave_matrix.sum(axis=1)
-
-        # Get the decision matrix with the matching intervals
-        decision_matrix = wave_matrix @ wave_matrix.T
-        blended_matrix = decision_matrix < np.ceil(pixels_width/3)[:, None]
-        math_dict = dict(zip(line_arr, np.arange(line_arr.size)))
-
-        # Get groups of common entries
-        _, auto_labels = csgraph.connected_components(csgraph=csr_matrix(decision_matrix > 1), directed=False)
-        for labels, group in zip(line_arr, auto_labels):
-            print(f"{labels}   {group}")
-
-    # Loop through the lines on the list and review which changes are necessary
-    rename_dict, exclude_list= {}, []
-    group_dict, w3_dict, w4_dict = {}, {}, {}
-    for new_label, group_label in comps_dict.items():
-
-        component_list = np.unique([Line(x).core for x in group_label.split('+') if '_k-' not in x])
-        old_label = component_list[0]
-
-        # Only apply corrections if components are present
-        idcs_comps = bands.index.isin(component_list)
-        if np.sum(idcs_comps) == component_list.size:
-
-            # Save the modifications
-            rename_dict[old_label] = new_label
-            exclude_list += list(component_list)
-            w3_dict[new_label] = bands.loc[idcs_comps, 'w3'].min()
-            w4_dict[new_label] = bands.loc[idcs_comps, 'w4'].max()
-            group_dict[new_label] = group_label
-
-        # Check the line or the same group is already there
-        else:
-            low, high = spec.wave_rest.compressed()[[0, -1]]
-            check_arr = np.array([(low < Line(label).wavelength < high)[0] for label in component_list])
-
-            # Lines outside wavelength range
-            if np.all(~check_arr):
-                continue
-
-            # Check if lines outside range
-            else:
-                if 'group_label' in bands.columns:
-                    if not np.any(comps_dict[new_label] == bands.group_label):
-                        _logger.info(f'Line component "{old_label}" for configuration entry: '
-                                     f'"{new_label}={comps_dict[new_label]}" not found in lines table')
-                else:
-                    _logger.info(f'Missing line(s) "{np.setxor1d(bands.loc[idcs_comps].index.to_numpy(), component_list)}" '
-                                 f'for configuration entry: '
-                                 f'"{new_label}={comps_dict[new_label]}" in reference lines table')
-
-    # Warn in case some of the bands dont match the database:
-    if not set(exclude_list).issubset(bands.index):
-        _logger.info(f' The following blended or merged lines were not found on the input lines database:\n'
-                     f' - {list(set(exclude_list) - set(bands.index))}\n'
-                     f' - It is recommended that the merged/blended components follow the reference transitions labels.\n')
-
-    # Change the latex labels
-    for old_label, new_label in rename_dict.items():
-        line = Line(new_label, band=bands, fit_conf=comps_dict, update_latex=True)
-        bands.loc[old_label, 'latex_label'] = line.latex_label[0] if line.merged_check else '+'.join(line.latex_label)
-
-    # Change the indexes
-    bands.rename(index=dict(rename_dict), inplace=True)
-
-    # Remove components columns
-    bands.drop(exclude_list, errors='ignore', inplace=True)
-
-    # Add the group_label values
-    if 'group_label' not in bands.columns:
-        bands['group_label'] = 'none'
-    bands['group_label'] = pd.Series(bands.index.map(group_dict), index=bands.index).fillna(bands['group_label'])
-
-    # Change velocity limits
-    bands['w3'] = pd.Series(bands.index.map(w3_dict), index=bands.index).fillna(bands['w3'])
-    bands['w4'] = pd.Series(bands.index.map(w4_dict), index=bands.index).fillna(bands['w4'])
-
-    return
-
 
 class SpecRetriever:
 
@@ -641,7 +351,7 @@ class SpecRetriever:
         return
 
     def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True, components_detection=False,
-               composite_lines=None, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
+               composite_lines=None, automatic_grouping=False, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
                line_list=None, particle_list=None, decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False,
                update_latex=False, vacuum_label=False):
 
@@ -685,10 +395,10 @@ class SpecRetriever:
             bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
             bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
 
-        # Combine the blended/merged lines
+        # Combine the blended/merged lines in the bands table
         if fit_cfg is not None:
             in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
-            pars_bands_conf(self._spec, bands, ref_bands, in_cfg, composite_lines)
+            pars_bands_conf(self._spec, bands, in_cfg, composite_lines, automatic_grouping)
 
         # Filter the table to match the line detections
         if components_detection:
@@ -725,7 +435,7 @@ class SpecRetriever:
         frame = self._spec.frame if ref_frame is None else ref_frame
 
         # By default report complete spectrum
-        idcs = (0, -1)
+        idcs = (0, None)
 
         # If a line is provided get indexes for the bands limits
         line_measured = False
@@ -838,8 +548,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._n_lines = 0
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
-              ref_bands=None):
+              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
 
         """
 
@@ -911,7 +620,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
-        self.line = Line(label, bands, input_conf, profile, cont_from_bands, ref_bands=ref_bands)
+        self.line = Line(label, bands, input_conf, profile, cont_from_bands)
 
         # Check the line selection is valid
         idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
@@ -940,7 +649,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                                  err_arr= pixel_err_arr[idcs_fitting],
                                  user_conf=input_conf, fit_method=min_method)
 
-            # Instrumental and thermal corrections for the lines # TODO make res_power array length of wave
+            # Instrumental and thermal corrections for the lines
             sigma_corrections(self.line, idcs_line, self._spec.wave[idcs_line], self._spec.res_power, temp)
 
             # Recalculate the SNR with the profile parameters
@@ -1081,7 +790,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         # Fit the lines
                         self.bands(line, bands, input_conf, min_method, profile,
                                    cont_from_bands=cont_from_bands, err_from_bands=err_from_bands,
-                                   temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None, ref_bands=ref_bands)
+                                   temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
                             self._spec.plot.bands()

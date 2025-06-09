@@ -185,7 +185,7 @@ def air_to_vacuum_function(wave_array, units_wave='AA'):
     return wave_array / (1 + 1e-6 * (287.6155 + 1.62887 * sigma2 + 0.01360 * np.square(sigma2)))
 
 
-def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
+def check_units_from_wave(line, str_ion, str_wave, bands):
 
     # First the input database
     if bands is not None:
@@ -202,16 +202,14 @@ def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
 
         # Convert to units
         units = au.Unit(units) if units is not None else units
-        # units = None if (units is None or np.isnan(units)) else au.Unit(units)
 
     else:
         wave, units = None, None
 
     # Second the reference database
     if (units is None) or (wave is None):
-        ref_bands = ref_bands if ref_bands is not None else _PARENT_BANDS
-        wave = pd_get(ref_bands, line, 'wavelength', nan_to_none=True)
-        units = pd_get(ref_bands, line, 'units_wave', nan_to_none=True)
+        wave = pd_get(_PARENT_BANDS, line, 'wavelength', nan_to_none=True)
+        units = pd_get(_PARENT_BANDS, line, 'units_wave', nan_to_none=True)
 
         # Convert to units
         units = au.Unit(units) if units is not None else units
@@ -228,10 +226,6 @@ def check_units_from_wave(line, str_ion, str_wave, bands, ref_bands=None):
             au_unit = au.Unit(str_wave)
             units = au_unit.bases[0]
             wave = au_unit.scale
-
-    # # Give preferences to the tabel values
-    # wave = wave_label if wave is None else wave
-    # units = units_label if units is None else units
 
     return wave, units
 
@@ -407,7 +401,7 @@ def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=Non
     #
 
 
-def label_composition(line_list, bands=None, default_profile=None, ref_bands=None):
+def label_composition(line_list, bands=None, default_profile=None):
 
     # Empty containers for the label componentes
     n_comps = len(line_list)
@@ -436,7 +430,7 @@ def label_composition(line_list, bands=None, default_profile=None, ref_bands=Non
         particle[i] = Particle.from_label(line_items[0])
 
         # Wavelength properties
-        wavelength[i], units_wave[i] = check_units_from_wave(line, line_items[0], line_items[1], bands, ref_bands)
+        wavelength[i], units_wave[i] = check_units_from_wave(line, line_items[0], line_items[1], bands)
 
         # Split the optional components: "H1_1216A_t-rec_k-0_p-g" -> {'t': 'rec', 'k': '0', 'p': 'g'} # TODO better do that with optional_comps
         comp_conf = {optC[0]: optC[2:] for optC in line_items[2:]}
@@ -765,25 +759,26 @@ class Particle:
 
 class Line:
 
-    def __init__(self, label, band=None, fit_conf=None, profile=None, cont_from_bands=True, z_line=None,
-                 update_latex=False, ref_bands=None, interpret=True):
+    def __init__(self, label, band=None, fit_conf=None, profile=None, update_latex=False):
 
-        # Label attributes
+        # Core attributes
         self.label = label
         self.mask = None
         self.latex_label = None,
         self.group_label, self.list_comps = None, None
+        self.sub_comps = None
 
         self.particle = None
         self.wavelength, self.units_wave = None, None
         self.blended_check, self.merged_check = False, False
 
+        # Transition components
         self.kinem = None
-        self.profile_comp = profile
-        self.transition_comp = None
         self.core = None
-
         self._ref_idx = None
+
+        self.transition_comp = None
+        self.profile_comp = profile
         self._p_type = None
         self._p_shape = None
 
@@ -802,7 +797,7 @@ class Line:
         self.alpha, self.beta = None, None
         self.alpha_err, self.beta_err = None, None
         self.frac, self.frac_err = None, None
-        self.z_line = z_line
+        self.z_line = None
         self.v_r, self.v_r_err = None, None
         self.pixel_vel = None
         self.sigma_vel, self.sigma_vel_err = None, None
@@ -822,62 +817,46 @@ class Line:
         self.pixelWidth = None
 
         # Extra checks
-        self._cont_from_adjacent = cont_from_bands
-        self._decimal_wave = False
+        # self._cont_from_adjacent = cont_from_bands
+        # self._decimal_wave = False
         self._narrow_check = False
 
-        # Interpret the line from the user reference
-        if interpret:
-            self._from_label(label, band, fit_conf, update_latex, ref_bands)
+        # Recover the line data from the input databases
+        self._get_containers_data(label,
+                                  _PARENT_BANDS if band is None else check_file_dataframe(band, copy_input=False),
+                                  fit_conf,
+                                  update_latex)
 
         return
 
     def __str__(self):
-
         return self.label
 
     def __repr__(self):
-
         return self.label
 
-    def _from_label(self, label, band=None, fit_conf=None, update_latex=False, ref_bands=None):
+    def __eq__(self, var):
+        return self.label == var if isinstance(var, str) else False
 
-        # If band is not provided use default database
-        if band is None:
-            band = _PARENT_BANDS
-        band = check_file_dataframe(band, copy_input=False)
+    def __hash__(self):
+        return hash(self.label)
+
+    def _get_containers_data(self, label, band=None, fit_conf=None, update_latex=False):
 
         # Infer label from log if input line is a wavelength
         self.label = check_line_in_log(label, band)
 
-        # Get label components
-        comps_list = self.label.split('_')
-        n_comps = len(comps_list)
-        if n_comps < 2:
-            raise LiMe_Error(f'The {self.label} the line label format is not recognized. '
-                             f'Please use a "Particle_WavelengthUnits" format.')
-
-        # Check the modularity      (only 2 comps)    (case b-6)
-        modularity_comp = comps_list[-1] if (comps_list[-1] == 'b') or (comps_list[-1] == 'm') else None
-        self._modularity_component(modularity_comp, fit_conf, band)
+        # Get the transitions involved on the line
+        self.line_group_review(fit_conf, band)
 
         # Review the components of the line
-        items = label_composition(self.list_comps, bands=band if isinstance(band, DataFrame) else None,
-                                  default_profile=self.profile_comp)
-        self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = items
+        components = label_composition(self.list_comps,
+                                       band if isinstance(band, DataFrame) else None,
+                                       self.profile_comp)
+        self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = components
 
         # Quick elements for the line profile
         self._p_shape, self._p_type = label_profiling(self.profile_comp)
-
-        # Index of the line closest to the one in label
-        if self.blended_check or self.merged_check:
-            wave_label, _label_units = check_units_from_wave(None, None, comps_list[1], None)
-            self._ref_idx = argmin(self.wavelength - wave_label)
-        else:
-            self._ref_idx = 0
-
-        # Core component definition
-        self.core = f'{comps_list[0]}_{comps_list[1]}'
 
         # Provide a bands from the log if possible
         self.mask = label_mask_assigning(self.label, band, self.blended_check, self.merged_check, self.core)
@@ -885,8 +864,8 @@ class Line:
         # Check if there are masked pixels in the line
         self.pixel_mask = 'no' if fit_conf is None else fit_conf.get(f'{self.label}_mask', 'no')
 
-        # Check if the wavelength has decimal transition
-        self._decimal_wave = True if '.' in self.label else False
+        # Check sub-line components
+        self.sub_transitions(fit_conf, band)
 
         # Compute latex entry if necessary
         self.latex_label = np.atleast_1d(self._review_science_notation(band if isinstance(band, DataFrame) else None,
@@ -898,13 +877,14 @@ class Line:
     def from_log(cls, label, log=None, norm_flux=1):
 
         # Confirm we are not introducing a blended line which has been blended
-
         if label in log.index:
             measured_check = True
+
         elif (label[-2:] == '_b') and (label[:-2] in log.index):
             _logger.warning(f'Blended line {label} not found in log, reading {label[:-2]}')
             label = label[:-2]
             measured_check = True
+
         else:
             _logger.warning(f'Input line {label} not found in log')
             measured_check = False
@@ -932,7 +912,17 @@ class Line:
 
         return inline
 
-    def _modularity_component(self, modularity_label, fit_conf=None, bands_log=None):
+    def line_group_review(self, fit_conf=None, bands_log=None):
+
+        # Establish the components
+        comps_list = self.label.split('_')
+        n_comps = len(comps_list)
+        if n_comps < 2:
+            raise LiMe_Error(f'The {self.label} the line label format is not recognized. '
+                             f'Please use a "Particle_WavelengthUnits" format.')
+
+        # Check the line type
+        modularity_label = comps_list[-1] if (comps_list[-1] == 'b') or (comps_list[-1] == 'm') else None
 
         # Not a single line
         if modularity_label is not None:
@@ -951,10 +941,8 @@ class Line:
         group_label_cfg = None if fit_conf is None else fit_conf.get(self.label, None)
         group_label_frame = None if not isinstance(bands_log, pd.DataFrame) else pd_get(bands_log, self.label,
                                                                                         column='group_label', transform='none')
-
-        self.group_label = group_label_cfg if group_label_cfg is not None else group_label_frame
-
         # Confirm blended or merged
+        self.group_label = group_label_cfg if group_label_cfg is not None else group_label_frame
         self.blended_check = True if (self.group_label is not None) and (self.merged_check is False) else False
 
         # Recover the profile components
@@ -981,6 +969,15 @@ class Line:
 
         else:
             self.list_comps = [self.label]
+
+        # Core component definition
+        self.core = f'{comps_list[0]}_{comps_list[1]}'
+
+        # Index of core component
+        if self.blended_check or self.merged_check:
+            self._ref_idx = self.list_comps.index(self.core) if self.core in self.list_comps else 0
+        else:
+            self._ref_idx = 0
 
         return
 
@@ -1073,6 +1070,16 @@ class Line:
         # Return just the edges of the bands
         else:
             return idcs_bands
+
+    def sub_transitions(self, fit_cfg, bands):
+
+        self.sub_comps = [None] * len(self.list_comps)
+        if self.blended_check and fit_cfg:
+            for i, sub_stransition in enumerate(self.list_comps):
+                if sub_stransition[-2:] == '_m':
+                    self.sub_comps[i] = Line(sub_stransition, bands, fit_cfg)
+
+        return
 
     # def index_bands_orig(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
     #

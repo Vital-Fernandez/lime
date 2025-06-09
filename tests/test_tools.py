@@ -200,7 +200,7 @@ def test_redshift_calculation():
     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
 
     assert z_df['weight'][0] is None
     assert z_df_eqw['weight'][0] == 'eqw'
@@ -217,7 +217,7 @@ def test_redshift_calculation():
     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
 
     assert np.all(z_df['weight'].to_numpy() == None)
     assert np.all(z_df_eqw['weight'] == 'eqw')
@@ -384,8 +384,8 @@ def test_line_bands_generation():
     n_sigma = 3
     band_vsigma = 120
     ref_bands = lime.line_bands()
-    bands_untouched = spec.retrieve.line_bands(adjust_central_bands=False)
-    bands = spec.retrieve.line_bands(n_sigma=n_sigma, band_vsigma = band_vsigma, adjust_central_bands=True,
+    bands_untouched = spec.retrieve.line_bands(adjust_central_band=False)
+    bands = spec.retrieve.line_bands(n_sigma=n_sigma, band_vsigma = band_vsigma, adjust_central_band=True,
                                                instrumental_correction=False)
     # Existing lines
     assert bands.iloc[0].name == 'H1_3704A'

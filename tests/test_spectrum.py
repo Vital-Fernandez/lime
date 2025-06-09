@@ -57,16 +57,23 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
                     assert diag
                 else:
                     if param.endswith('_err'):
-                        # assert np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
-                        a = np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
+                        diag = np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
+                        if not diag:
+                            print(line, param, param_value, param_exp_value)
+                        assert diag
 
                     else:
                         if param == 'FWZI':
-                            # print(line, param, param_value, param_exp_value)
-                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            diag = np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            if not diag:
+                                print(line, param, param_value, param_exp_value)
+                            assert diag
+
                         else:
-                            # print(line, param, param_value, param_exp_value, np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True))
-                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            diag = np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            if not diag:
+                                print(line, param, param_value, param_exp_value)
+                            assert diag
 
     return
 
