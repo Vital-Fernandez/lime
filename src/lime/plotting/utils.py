@@ -1,8 +1,8 @@
 import logging
 from lime.transitions import Line
+from lime.rsrc_manager import lineDB
 from matplotlib.pyplot import get_cmap
 from matplotlib.colors import rgb2hex
-from lime.io import _PARENT_BANDS
 
 _logger = logging.getLogger('LiMe')
 
@@ -22,8 +22,8 @@ def parse_bands_arguments(label, bands, log, norm_flux):
     elif label is not None and (log.index.size > 0):
         line = Line.from_log(label, log, norm_flux)
 
-    elif label is not None and label in _PARENT_BANDS.index:
-        line = Line(label, band=_PARENT_BANDS.loc[label, 'w1':'w6'].to_numpy())
+    elif label is not None and label in lineDB.frame.index:
+        line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
 
     else:
         _logger.warning(f'Line {label} has not been measured')

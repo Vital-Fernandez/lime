@@ -35,7 +35,7 @@ for i, coords in enumerate(masks_dict['MASK_0']):
     spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], obj_cfg_prefix='MASK_0', plot_fit=False)
 
 # Fit the lines in all the masks spaxels
-shoc579.fit.spatial_mask(spatial_mask_file, fit_cfg=cfg_file, line_detection=True, output_address=output_lines_log_file)
+shoc579.fit.spatial_mask(spatial_mask_file, fit_cfg=cfg_file, line_detection=True, output_address=is)
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)

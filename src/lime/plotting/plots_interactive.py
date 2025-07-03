@@ -20,34 +20,31 @@ from ..transitions import label_decomposition, Line
 _logger = logging.getLogger('LiMe')
 
 
-def establish_selection_lines(spec, input_log, band_vsigma, n_sigma, adjust_central_band, instrumental_correction,
-                              components_detection, composite_lines, fit_cfg, default_cfg_prefix, obj_cfg_prefix,
-                              update_default, line_list, particle_list, decimals, vacuum_waves, ref_bands, update_labels,
-                              update_latex, vacuum_label):
+def establish_selection_lines(spec, input_log, obj_bands, selected_by_default=True, **kwargs):
 
-    # Use the default database crop for the observation if none provided
-    ref_bands = spec.retrieve.line_bands(band_vsigma=band_vsigma, n_sigma=n_sigma, adjust_central_band=adjust_central_band,
-                                         instrumental_correction=instrumental_correction, components_detection=False,
-                                         composite_lines=None, fit_cfg=None, default_cfg_prefix=None,
-                                         obj_cfg_prefix=None, update_default=True,
-                                         line_list=line_list, particle_list=particle_list, decimals=decimals,
-                                         vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
-                                         update_latex=update_latex, vacuum_label=vacuum_label)
+    # Use the reference bands (by default the liens database) to compute the lines on the object
+    ref_params = {**kwargs, **{'automatic_grouping': False, 'components_detection': False,
+                              'fit_cfg': None, 'default_cfg_prefix': None, 'obj_cfg_prefix': None}}
 
+    ref_bands = spec.retrieve.line_bands(**ref_params)
 
-    # Load input log or copy the reference one
-    in_bands = check_file_dataframe(input_log, verbose=False)
-    if in_bands is None:
-        in_bands = spec.retrieve.line_bands(band_vsigma=band_vsigma, n_sigma=n_sigma, adjust_central_band=adjust_central_band,
-                                         instrumental_correction=instrumental_correction, components_detection=components_detection,
-                                         composite_lines=composite_lines, fit_cfg=fit_cfg, default_cfg_prefix=default_cfg_prefix,
-                                         obj_cfg_prefix=obj_cfg_prefix, update_default=update_default,
-                                         line_list=line_list, particle_list=particle_list, decimals=decimals,
-                                         vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
-                                         update_latex=update_latex, vacuum_label=vacuum_label)
-        default_status = 1 if components_detection else 0
-    else:
+    # Check if there is a physical bands file
+    file_bands = check_file_dataframe(input_log, verbose=False)
+
+    # Physical file has preference and it is assumed as those are detected
+    if file_bands is not None:
+        in_bands = file_bands
         default_status = 1
+
+    # There is an input object bands and those are assumed as detected
+    elif obj_bands is not None:
+        in_bands = obj_bands
+        default_status = 1
+
+    # New bands are created and the user decides if detected or not
+    else:
+        in_bands = spec.retrieve.line_bands(**kwargs)
+        default_status = 1 if selected_by_default else 0
 
     # Extract the lines from each dataframe and only get the ones in common (without suffixes)
     in_lines = in_bands.index.to_numpy()
@@ -198,13 +195,15 @@ class BandsInspection:
 
         return
 
-    def bands(self, bands_file, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
-              components_detection=False, composite_lines=None, fit_cfg=None, default_cfg_prefix='default',
-              obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
-              vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False,
-              y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
-              exclude_continua=False, n_pixels=10, fig_cfg=None, in_fig=None, maximize=False):
+    # def bands(self, bands_file, default_input_true=False, band_vsigma = 70, n_sigma = 4, adjust_central_band = True, instrumental_correction = True,
+    #     exclude_bands_masked = True, map_band_vsigma = None, composite_lines = None, automatic_grouping = False,
+    #     Rayleigh_threshold = 2, components_detection = False, fit_cfg = None, default_cfg_prefix = 'default', obj_cfg_prefix = None, update_default = True,
+    #     line_list = None, particle_list = None, decimals = None, vacuum_waves = False, ref_bands = None, update_labels = False,
+    #     update_latex = False, vacuum_label = False, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
+    #     exclude_continua=False, n_pixels=10, fig_cfg=None, in_fig=None, maximize=False):
 
+    def bands(self, bands_fname, bands_obj=None, selected_by_default=True, exclude_continua=False, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(1, 0.5),
+              n_pixels=10, fig_cfg=None, in_fig=None, maximize=False, **kwargs):
 
         """
         This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
@@ -276,17 +275,15 @@ class BandsInspection:
 
         # Input is a mask is address and it will be also used to save the file
         if self._log_address is None:
-            if isinstance(bands_file, (str, Path)):
-                self._log_address = Path(bands_file)
+            if isinstance(bands_fname, (str, Path)):
+                self._log_address = Path(bands_fname)
                 if not self._log_address.parent.is_dir():
                     raise LiMe_Error(f'Input bands file directory does not exist ({self._log_address.parent.as_posix()})')
 
+
         # Establish the reference lines log to inspect the mask
         self.log, self.line_list, self.active_lines = establish_selection_lines(self._spec, self._log_address,
-                                                      band_vsigma, n_sigma, adjust_central_band, instrumental_correction,
-                                                      components_detection, composite_lines, fit_cfg, default_cfg_prefix,
-                                                      obj_cfg_prefix, update_default, line_list, particle_list, decimals,
-                                                      vacuum_waves, ref_bands, update_labels, update_latex, vacuum_label)
+                                                                                bands_obj, selected_by_default, **kwargs)
 
         # Proceed if there are lines in the mask for the object spectrum wavelength range
         if len(self.log.index) > 0:

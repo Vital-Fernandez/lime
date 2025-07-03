@@ -301,6 +301,9 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_e
             idcs_slice = df_slice.index.isin(line_list)
             df_slice = df_slice.loc[idcs_slice]
 
+        # Exclude lines which failed to be measured
+        df_slice = df_slice.loc[df_slice.profile_flux_err.notnull()]
+
         # Exclude error lines:
         if min_err_pct is not None:
             idcs_slice = df_slice.center_err.to_numpy() / df_slice.center.to_numpy() <= min_err_pct

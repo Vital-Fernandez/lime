@@ -96,7 +96,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.0.dev8"
+release = "2.0.dev9"
 
 # -- General configuration ---------------------------------------------------
 

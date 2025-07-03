@@ -38,19 +38,20 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 # gp_spec.plot.spectrum(label='GP121903', show_categories=True)
 #
 # # Run the fit
-# gp_spec.fit.bands(line, band_edges)
+# gp_spec.fit.bands(line)
 #
 # # Plot the results from the last fitting
 # gp_spec.plot.bands()
 
 # Fit configuration
 line = 'H1_6563A_b'
-fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
-            'N2_6548A_amp': {'expr': 'N2_6584A_amp/2.94'},
-            'N2_6548A_kinem': 'N2_6584A'}
+fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6583A+N2_6548A',
+            'N2_6548A_amp': {'expr': 'N2_6583A_amp/2.94'},
+            'N2_6548A_kinem': 'N2_6583A'}
 
-# Second attempt including the fit configuration
-gp_spec.fit.bands(line, band_edges, fit_conf)
+bands = gp_spec.retrieve.line_bands()
+
+gp_spec.fit.bands(line, fit_cfg=fit_conf, arr_bands=band_edges)
 gp_spec.plot.bands(exclude_continua=False)
 
 # gp_spec.plot.bands()

@@ -56,7 +56,7 @@ _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep=r'\s+', header=0, index_col=0)
 
-_LINES_DATABASE_FILE = _LIME_FOLDER/'resources/lines_database_v2.0.0.txt'
+# _LINES_DATABASE_FILE = _LIME_FOLDER/'resources/lines_database_v2.0.0.txt'
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -539,20 +539,26 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 def results_to_log(line, log, norm_flux):
 
     # Loop through the line components
-    for i, comp in enumerate(line.list_comps):
+    for i, comp in enumerate(line.list_comps if line.group == 'b' else [line]):
+
+        # Identifiers
+        log.at[comp.label, 'particle'] = comp.particle.label
+        log.at[comp.label, 'latex_label'] = comp.latex_label
+        log.at[comp.label, 'group_label'] = 'none' if line.group_label is None else line.group_label
+        log.at[comp.label, 'pixel_mask'] = comp.pixel_mask
 
         # Add bands wavelengths
-        log.at[comp, 'w1'] = line.mask[0]
-        log.at[comp, 'w2'] = line.mask[1]
-        log.at[comp, 'w3'] = line.mask[2]
-        log.at[comp, 'w4'] = line.mask[3]
-        log.at[comp, 'w5'] = line.mask[4]
-        log.at[comp, 'w6'] = line.mask[5]
+        log.at[comp.label, 'w1'] = line.mask[0]
+        log.at[comp.label, 'w2'] = line.mask[1]
+        log.at[comp.label, 'w3'] = line.mask[2]
+        log.at[comp.label, 'w4'] = line.mask[3]
+        log.at[comp.label, 'w5'] = line.mask[4]
+        log.at[comp.label, 'w6'] = line.mask[5]
 
         # Treat every line
         for j in _RANGE_ATTRIBUTES_FIT:
             param = _ATTRIBUTES_FIT[j]
-            param_value = line.__getattribute__(param)
+            param_value = line.measurements.__getattribute__(param)
 
             # Get component parameter
             if _LOG_COLUMNS[param][3] and (param_value is not None):
@@ -563,20 +569,8 @@ def results_to_log(line, log, norm_flux):
                 if param_value is not None:
                     param_value = param_value * norm_flux
 
-            # Just string for particle
-            if j == 7:
-                param_value = param_value.label
-
-            # Converting None entries to str (9 = group_label)
-            if j == 9:
-
-                if param_value is None:
-                    param_value = 'none'
-
-                if line.sub_comps[i] is not None:
-                    param_value = line.sub_comps[i].group_label
-
-            log.at[comp, param] = param_value
+            # Store in dataframe
+            log.at[comp.label, param] = param_value
 
     return
 
@@ -885,7 +879,7 @@ def check_file_array_mask(var, mask_list=None):
         if input.is_file():
             mask_dict = load_spatial_mask(var, mask_list)
         else:
-            raise Error(f'No spatial mask file at {Path(var).as_posix()}')
+            raise LiMe_Error(f'No spatial mask file at {Path(var).as_posix()}')
 
     # Array
     elif isinstance(var, (np.ndarray, list)):
@@ -918,11 +912,12 @@ def check_file_array_mask(var, mask_list=None):
 
     else:
 
-        raise Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
+        raise LiMe_Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
                     f' numpy array or a list/array of numpy arrays')
 
     return mask_dict
 
-_PARENT_BANDS = load_frame(_LINES_DATABASE_FILE)
+
+# _PARENT_BANDS = load_frame(_LINES_DATABASE_FILE)
 
 

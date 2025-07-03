@@ -1,20 +1,19 @@
 import logging
 
 import numpy as np
-import pandas as pd
 from pathlib import Path
 from astropy.io import fits
 from time import time
 from lmfit.models import PolynomialModel
 
+from lime import __version__
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from lime.transitions import Line, air_to_vacuum_function, label_decomposition
+from lime.transitions import Line, air_to_vacuum_function, label_decomposition, Transition
+from lime.rsrc_manager import lineDB
 from lime.retrieve.line_bands import pars_bands_conf
-from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, _PARENT_BANDS
+from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
 from lime.fitting.redshift import RedshiftFitting
-from lime import __version__
-
 
 
 try:
@@ -92,12 +91,12 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
 
         # Check for kinem order
         parent_label = fit_conf.get(f'{child_label}_kinem')
-        if (parent_label is not None) and line.blended_check:
+        if (parent_label is not None) and line.group == 'b':
 
             # Tied kinematics in blended profile
             if parent_label in line.list_comps:
                 idx_parent = line.list_comps.index(parent_label)
-                factor = f'{line.wavelength[idx_child] / line.wavelength[idx_parent]:0.8f}'
+                factor = f'{line.list_comps[idx_child].wavelength / line.list_comps[idx_parent].wavelength:0.8f}'
                 fit_conf[f'{child_label}_center'] = {'expr': f'{factor}*{parent_label}_center'}
                 fit_conf[f'{child_label}_sigma'] = {'expr': f'{factor}*{parent_label}_sigma'}
 
@@ -105,7 +104,7 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
             elif parent_label in log.index:
                 mu_parent = log.loc[parent_label, ['center', 'center_err']].to_numpy()
                 sigma_parent = log.loc[parent_label, ['sigma', 'sigma_err']].to_numpy()
-                wave_ratio = line.wavelength[idx_child]/log.loc[parent_label, 'wavelength']
+                wave_ratio = line.list_comps[idx_child].wavelength/log.loc[parent_label, 'wavelength']
 
                 center_child_arr = wave_ratio * (mu_parent / z_cor)
                 sigma_child_arr = wave_ratio * sigma_parent
@@ -274,7 +273,7 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
 
     # Use the default lime mask if none provided
     if ref_bands is None:
-        ref_bands = _PARENT_BANDS
+        ref_bands = lineDB.frame
 
     # Load the reference bands
     bands_df = check_file_dataframe(ref_bands)
@@ -350,10 +349,11 @@ class SpecRetriever:
 
         return
 
-    def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True, components_detection=False,
-               composite_lines=None, automatic_grouping=False, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
-               line_list=None, particle_list=None, decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False,
-               update_latex=False, vacuum_label=False):
+    def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
+                   exclude_bands_masked=True, map_band_vsigma=None, composite_lines=None, automatic_grouping=False,
+                   Rayleigh_threshold=2, components_detection=False, fit_cfg=None, default_cfg_prefix='default',
+                   obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False,
+                   update_latex=False, vacuum_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -388,6 +388,13 @@ class SpecRetriever:
             else:
                 delta_lambda_inst = 0
 
+            # Use unique or specific velocity sigma for the bands
+            if map_band_vsigma is not None:
+                band_vsigma = np.full(lambda_obs.size, band_vsigma)
+                for idx in bands.index.get_indexer(map_band_vsigma.keys()):
+                    if idx > -1:
+                        band_vsigma[idx] = map_band_vsigma[bands.index[idx]]
+
             # Convert to spectral width
             delta_lambda = velocity_to_wavelength_band(n_sigma, band_vsigma, lambda_obs, delta_lambda_inst)
 
@@ -395,10 +402,17 @@ class SpecRetriever:
             bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
             bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
 
+        # Remove from the output bands those which have all their pixels masked
+        if exclude_bands_masked:
+            idcs_w3_w4 = np.searchsorted(self._spec.wave.data/(1+self._spec.redshift), bands.loc[:, 'w3':'w4'])
+            idcs_valid = [idx for idx, start, end in zip(bands.index, idcs_w3_w4[:, 0], idcs_w3_w4[:, 1])
+                          if not np.all(self._spec.flux[start:end].mask)]
+            bands = bands.loc[idcs_valid]
+
         # Combine the blended/merged lines in the bands table
         if fit_cfg is not None:
             in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
-            pars_bands_conf(self._spec, bands, in_cfg, composite_lines, automatic_grouping)
+            pars_bands_conf(self._spec, bands, in_cfg, composite_lines, automatic_grouping, n_sigma, Rayleigh_threshold)
 
         # Filter the table to match the line detections
         if components_detection:
@@ -548,7 +562,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._n_lines = 0
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
+              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
+              arr_bands=None):
 
         """
 
@@ -615,12 +630,18 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
-        # User inputs override default behaviour for the pixel error and the continuum calculation
+        # User inputs override default behaviour for the pixel error and the continuum calculation # TODO is this right?
         err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
         cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
-        self.line = Line(label, bands, input_conf, profile, cont_from_bands)
+        # self.line = Line(label, bands, input_conf, profile, cont_from_bands)
+        self.line = Transition.from_db(label, input_conf,
+                                       data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
+                                       init_measurements=True)
+
+        if arr_bands is not None:
+            self.line.mask = arr_bands
 
         # Check the line selection is valid
         idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
@@ -653,12 +674,15 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             sigma_corrections(self.line, idcs_line, self._spec.wave[idcs_line], self._spec.res_power, temp)
 
             # Recalculate the SNR with the profile parameters
-            self.line.snr_line = signal_to_noise_rola(self.line.amp, self.line.cont_err, self.line.n_pixels)
+            self.line.measurements.snr_line = signal_to_noise_rola(self.line.measurements.amp,
+                                                                   self.line.measurements.cont_err,
+                                                                   self.line.measurements.n_pixels)
 
             # Save the line parameters
             results_to_log(self.line, self._spec.frame, self._spec.norm_flux)
 
         return
+
 
     def frame(self, bands, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
               temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,

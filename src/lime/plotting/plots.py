@@ -1,4 +1,5 @@
 import logging
+from xmlrpc.client import boolean
 
 import numpy as np
 import pandas as pd
@@ -7,8 +8,9 @@ from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors,
 
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation
 from lime.tools import PARAMETER_LATEX_DICT
-from lime.io import check_file_dataframe, _PARENT_BANDS, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
+from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from lime.transitions import check_line_in_log, Line, label_decomposition, format_line_mask_option
+from lime.rsrc_manager import lineDB
 from lime.plotting.format import theme, latex_science_float
 from lime.plotting.utils import parse_bands_arguments, color_selector
 
@@ -36,6 +38,54 @@ if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
 
+
+def parse_bands_arguments(label, bands, log, norm_flux):
+
+    line = None
+    if label is None and (log.index.size > 0):
+        label = log.index[-1]
+        line = Line.from_log(label, log, norm_flux)
+        # line = Transition.from_log(log.index[-1], log, norm_flux)
+
+    # The user provided a reference band to check the region use it
+    elif label is not None and bands is not None:
+        line = Line(label, bands)
+
+    # Line has been measured before
+    elif label is not None and (log.index.size > 0):
+        line = Line.from_log(label, log, norm_flux)
+
+    elif label is not None and label in lineDB.frame.index:
+        line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
+
+    else:
+        _logger.warning(f'Line {label} has not been measured')
+
+    return line
+
+
+def parse_bands_arguments_back_up(label, bands, log, norm_flux):
+
+    line = None
+    if label is None and (log.index.size > 0):
+        label = log.index[-1]
+        line = Line.from_log(label, log, norm_flux)
+
+    # The user provided a reference band to check the region use it
+    elif label is not None and bands is not None:
+        line = Line(label, bands)
+
+    # Line has been measured before
+    elif label is not None and (log.index.size > 0):
+        line = Line.from_log(label, log, norm_flux)
+
+    elif label is not None and label in lineDB.frame.index:
+        line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
+
+    else:
+        _logger.warning(f'Line {label} has not been measured')
+
+    return line
 
 
 def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):
@@ -171,6 +221,39 @@ def _auto_flux_scale(axis, y, y_scale, scale_dict=theme.plt):
         axis.set_yscale(**y_scale)
 
         if y_scale["value"] != 'linear':
+            axis.text(0.12, 0.8, f'${y_scale["value"]}$',
+                      fontsize=scale_dict['textsize_notes'], ha='center', va='center',
+                      transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
+    else:
+        axis.set_yscale(y_scale)
+
+    return
+
+
+def _auto_flux_scale_backUp(axis, y, y_scale, scale_dict=theme.plt):
+
+    # If non-provided auto-decide
+    if y_scale == 'auto':
+
+        # Limits for the axes, ignore the divide by zero warning
+        with np.errstate(divide='ignore', invalid='ignore'):
+            neg_check = np.any(y < 0)
+            y_max, y_min = np.nanmax(y), np.nanmin(y)
+            ratio = np.abs(y_max/y_min)
+            if (ratio > 25) or (ratio < 0.06):
+                if neg_check:
+                    if np.sum(y>0) > 1:
+                        y_scale = {'value': 'symlog', 'linthresh': min(np.ceil(np.abs(y_min)), np.min(y[y>0]))}
+                    else:
+                        y_scale = {'value': 'symlog', 'linthresh': np.ceil(np.abs(y_min))}
+                else:
+                    y_scale = {'value': 'log'}
+            else:
+                y_scale = {'value': 'linear'}
+
+        axis.set_yscale(**y_scale)
+
+        if y_scale["value"] != 'linear':
             axis.text(0.12, 0.8, f'${y_scale["value"]}$', fontsize=scale_dict['textsize_notes'], ha='center', va='center',
                       transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
     else:
@@ -179,7 +262,7 @@ def _auto_flux_scale(axis, y, y_scale, scale_dict=theme.plt):
     return
 
 
-def check_line_for_bandplot(in_label, user_band, spec, log_ref=_PARENT_BANDS):
+def check_line_for_bandplot(in_label, user_band, spec, log_ref=lineDB.frame):
 
     # If no line provided, use the one from the last fitting
     label = None
@@ -660,7 +743,7 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
 def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=True, color_dict=theme.colors, show_central=True):
 
     # Security check for low selection
-    # TODO check this error crashing
+    # TODO check this error crashing when continua bands are very small, need a better error message
     if y[idcs_mask[2]:idcs_mask[3]].size > 1:
 
         # Lower limit for the filled region
@@ -710,7 +793,10 @@ def plot_peaks_troughs(spec, peak_idcs, detect_limit, continuum, match_bands, **
 
     continuum = continuum if continuum is not None else np.zeros(flux.size)
 
-    idcs_detect = match_bands['signal_peak'].to_numpy(dtype=int)
+    if 'signal_peak' in match_bands.columns:
+        idcs_detect = match_bands['signal_peak'].to_numpy(dtype=int)
+    else:
+        idcs_detect = np.zeros(match_bands.index.size, dtype=boolean)
 
     with rc_context(PLOT_CONF):
 
@@ -789,13 +875,14 @@ class Plotter:
             # Get the max flux on the region making the exception for 1 pixel bands
             idx_w3, idx_w4 = idcs_bands[:, i]
             max_region = np.max(y[idx_w3:idx_w4]) if idx_w3 != idx_w4 else y[idx_w3]
+            x_region = x[idx_w3:idx_w4]
 
             x_text = line.wavelength * (1 + redshift)/z_corr if not line.blended_check else line.wavelength[0] * (1 + redshift)/z_corr
             y_text = max_region * 0.9 * z_corr
             text = line.label
 
             axis.text(x_text, y_text, text, rotation=270)
-            axis.axvspan(x[idx_w3]/z_corr, x[idx_w4]/z_corr, label='Matched line' if i == 0 else '_', alpha=0.30,
+            axis.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label='Matched line' if i == 0 else '_', alpha=0.30,
                          color=theme.colors['match_line'])
 
         return
@@ -1294,10 +1381,8 @@ class SpectrumFigures(Plotter):
         line = parse_bands_arguments(label, bands, log, norm_flux)
 
         # Check the observation has uncertainty to display
-        if show_err and (self._spec.err_flux is None):
-            if self._spec.err_flux is None:
-                _logger.info('Input observation does not include uncertainty to display')
-                show_err = False
+        if show_err and (self._spec.err_flux is not None):
+            show_err = False
 
         # Proceed to plot
         if line is not None:
@@ -1336,9 +1421,9 @@ class SpectrumFigures(Plotter):
                 idcs_bands = line.index_bands(self._spec.wave, self._spec.redshift, just_band_edges=True)
 
                 # Plot the spectrum
-                label_leg = line.latex_label[0] if (line.latex_label[0] is not None and include_fits is False) else None
+                # label_leg = line.latex_label[0] if (line.latex_label[0] is not None and include_fits is False) else None
                 in_ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
-                              where='mid', color=theme.colors['fg'], label=label_leg, linewidth=theme.plt['spectrum_width'])
+                              where='mid', color=theme.colors['fg'], label=None, linewidth=theme.plt['spectrum_width'])
 
                 # Continuum bands
                 bands_filling_plot(in_ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
@@ -1402,7 +1487,7 @@ class SpectrumFigures(Plotter):
                          output_address=None, maximize=False):
 
         # Establish the line and band to user for the analysis
-        line, band = check_line_for_bandplot(line, band, self._spec, _PARENT_BANDS)
+        line, band = check_line_for_bandplot(line, band, self._spec, lineDB.frame)
 
         # Display check for the user figures
         display_check = True if in_fig is None else False

@@ -35,14 +35,10 @@ __version__ = _setup_cfg['metadata']['version']
 # Logging configuration
 _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 
-
-# class Error(Exception):
-#     """LiMe exception function"""
-
 from lime.observations import Spectrum, Sample, Cube
 from lime.io import *
 from lime.tools import *
-from lime.transitions import Line, label_decomposition, bands_from_measurements
+from lime.transitions import Line, label_decomposition, line_bands, bands_from_measurements
 from lime.archives.read_fits import OpenFits, show_instrument_cfg
 from lime.plotting.plots import theme
-from lime.workflow import line_bands
+from lime.rsrc_manager import lineDB

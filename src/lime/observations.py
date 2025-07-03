@@ -573,7 +573,7 @@ class Spectrum:
         return
 
     def save_frame(self, fname, page='FRAME', param_list='all', header=None, column_dtypes=None,
-                   safe_version=True):
+                   safe_version=True, skip_failed=False):
 
 
         """
@@ -621,9 +621,12 @@ class Spectrum:
                        'redshift':   self.redshift,
                        'id':         self.label}
 
-        # Save the file
-        save_frame(fname, self.frame, page, param_list, header, column_dtypes=column_dtypes,
-                   safe_version=safe_version, **meta_params)
+        # Exclude the failed fittings from the output log
+        out_put_frame = self.frame if skip_failed is False else self.frame.loc[self.frame['observations'] != 'No_errorbars']
+
+        # Save the dataframe
+        save_frame(fname, out_put_frame, page, param_list, header, column_dtypes=column_dtypes, safe_version=safe_version,
+                   **meta_params)
 
         return
 
@@ -647,7 +650,7 @@ class Spectrum:
         log_df = check_file_dataframe(fname, ext=page)
 
         # Security checks:
-        if log_df.index.size > 0:
+        if log_df is not None and log_df.index.size > 0:
             line_list = log_df.index.values
 
             # Get the first line in the log

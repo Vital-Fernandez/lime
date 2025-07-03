@@ -1,15 +1,13 @@
 import numpy as np
 import lime
-from lime.io import _LINES_DATABASE_FILE
+from lime.transitions import _LIME_DATABASE_FILE, LinesDatabase
+
+parent_bands = LinesDatabase(_LIME_DATABASE_FILE).frame
+
 
 def test_line_bands():
 
     log0 = lime.line_bands()
-    parent_bands = lime.load_frame(_LINES_DATABASE_FILE)
-
-    # TODO rework on the master database
-    # assert np.all(log0.index == parent_bands.index)
-    # assert log0.equals(parent_bands)
     assert np.all(log0.columns == parent_bands.columns)
 
     log1 = lime.line_bands(wave_intvl=(3000, 7000))
@@ -23,5 +21,27 @@ def test_line_bands():
 
     log4 = lime.line_bands(particle_list=['O3', 'S2'])
     assert log4.particle.isin(['O3', 'S2']).sum() == log4.index.size
+
+    return
+
+
+def test_database_modification():
+
+    # Original database
+    assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
+    assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wavelength'], 4861.25)
+    assert lime.lineDB.vacuum_check is False
+
+    # Change to vacuum wavelength values
+    lime.lineDB.set_database(vacuum_waves=True)
+    assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
+    assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wave_vac'], 4862.683)
+    assert lime.lineDB.vacuum_check is True
+
+    # Reset to original values
+    lime.lineDB.reset_database()
+    assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
+    assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wavelength'], 4861.25)
+    assert lime.lineDB.vacuum_check is False
 
     return

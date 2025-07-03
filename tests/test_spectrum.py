@@ -32,7 +32,7 @@ spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_
 spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35')
 
 
-def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
+def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=5, rel_tol=0.20):
 
     for line in input_spec.frame.index:
         for param in input_spec.frame.columns:
@@ -51,7 +51,8 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
 
                 if ('_err' not in param) and (f'{param}_err' in true_log.columns):
                     param_exp_err = true_log.loc[line, f'{param}_err']
-                    diag = np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                    diag = np.isclose(param_value, param_exp_value,
+                                      rtol=np.maximum(0.01, np.abs(param_exp_err/param_exp_value)), equal_nan=True)
                     if not diag:
                         print(line, param, param_value, param_exp_value, diag, param_exp_err, abs_factor)
                     assert diag

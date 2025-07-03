@@ -111,19 +111,19 @@ class LineFinder:
         return matched_DF
 
 
-    def label_peaks(self, idcs_peaks, matched_DF, line_type='emission', width_tol=5):
+    def label_peaks(self, idcs_peaks, bands_df, line_type='emission', width_tol=5):
 
         # Security check in case no lines detected
-        if len(idcs_peaks) == 0:
-            return pd.DataFrame(columns=matched_DF.columns)
+        if len(idcs_peaks) == 0 or bands_df.index.size == 0:
+            return pd.DataFrame(columns=bands_df.columns)
 
         # Add theoretical wavelength values if necessary
-        if 'wavelength' not in matched_DF.columns:
-            matched_DF['wavelength'] = label_decomposition(matched_DF.index.values, params_list=['wavelength'])[0]
+        if 'wavelength' not in bands_df.columns:
+            bands_df['wavelength'] = label_decomposition(bands_df.index.values, params_list=['wavelength'])[0]
 
         # Get bands limits indexes
-        idcs_w3 = np.searchsorted(self._spec.wave_rest, matched_DF.w3)
-        idcs_w4 = np.searchsorted(self._spec.wave_rest, matched_DF.w4)
+        idcs_w3 = np.searchsorted(self._spec.wave_rest, bands_df.w3)
+        idcs_w4 = np.searchsorted(self._spec.wave_rest, bands_df.w4)
 
         # Get the bands matching
         band_contains_peak = (idcs_peaks[None, :] > idcs_w3[:, None]) & (idcs_peaks[None, :] < idcs_w4[:, None])
@@ -131,7 +131,7 @@ class LineFinder:
         idcs_matched_peaks = idcs_peaks[band_contains_peak.argmax(axis=1)[idcs_matched_bands]]
 
         # Crop the bands to the detection
-        matched_DF.loc[idcs_matched_bands, 'observation'] = 'detected'
-        matched_DF.loc[idcs_matched_bands, 'signal_peak'] = idcs_matched_peaks
+        bands_df.loc[idcs_matched_bands, 'observation'] = 'detected'
+        bands_df.loc[idcs_matched_bands, 'signal_peak'] = idcs_matched_peaks
 
-        return matched_DF.loc[idcs_matched_bands]
+        return bands_df.loc[idcs_matched_bands]
