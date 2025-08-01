@@ -5,6 +5,7 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
+import lime
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
     observation_unit_convertion
 
@@ -15,7 +16,7 @@ from lime.plotting.bokeh_plots import BokehFigures
 from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame
 
 from lime.archives.read_fits import OpenFits
-from lime.transitions import Line
+from lime.transitions import Transition
 from lime.workflow import SpecTreatment, CubeTreatment, SpecRetriever
 from . import __version__
 
@@ -122,7 +123,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
                                          f'1D flux arrays for the Spectrum objects \n'
                                          f'and 3D flux arrays Cube objects.')
                 else:
-                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}')
+                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}:{value_arr}')
 
                 # Check for unmasked nan and inf entries
                 if i < 3:
@@ -654,15 +655,15 @@ class Spectrum:
             line_list = log_df.index.values
 
             # Get the first line in the log
-            line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
+            line_0 = Transition.from_log(line_list[0], measurements_df=log_df, norm_flux=self.norm_flux)
 
             # Confirm the lines in the log match the one of the spectrum
-            if line_0.units_wave[0] != self.units_wave:
+            if line_0.units_wave != self.units_wave:
                 _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
                                 f' in {line_0.units_wave[0]}')
 
             # Confirm all the log lines have the same units
-            au_str = 'A' if line_0.units_wave[0] == 'Angstrom' else str(line_0.units_wave)
+            au_str = 'A' if line_0.units_wave == 'Angstrom' else str(line_0.units_wave)
             same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), au_str) != -1).size == line_list.size
             if not same_units_check:
                 _logger.warning(f'The log has lines with different units')
@@ -897,14 +898,14 @@ class Cube:
         # Check the function inputs
         contour_pctls = np.atleast_1d(contour_pctls)
         if not np.all(np.diff(contour_pctls) > 0):
-            raise Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
+            raise LiMe_Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
         inver_percentiles = np.flip(contour_pctls)
 
         if not param in ['flux', 'SN_line', 'SN_cont']:
-            raise Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
+            raise LiMe_Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
 
         # Line for the background image
-        line_bg = Line(line, bands)
+        line_bg = Transition.from_db(line, data_frame=bands)
 
         # Get the band indexes
         idcsEmis, idcsCont = line_bg.index_bands(self.wave, self.redshift)
@@ -1234,6 +1235,7 @@ class Sample(UserDict, OpenFits):
         # Functionality objects
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
+        self.instrument = instrument
 
         # Check if there is not a log
         if self.frame is None:
@@ -1321,45 +1323,54 @@ class Sample(UserDict, OpenFits):
                 log_i = load_frame(log_list[i], page_name, levels)
                 df_list.append(review_sample_levels(log_i, id_spec, file_spec))
             else:
-                log_i = pd.DataFrame(columns=["id", "file"], data=(id_spec, file_spec))
+                log_i = pd.DataFrame(columns=["id", "file"], data=[[id_spec, file_spec]])
                 log_i.set_index(["id", "file"], inplace=True)
+                df_list.append(log_i)
 
         sample_log = pd.concat(df_list)
 
         return cls(sample_log, levels, load_function, instrument, folder_obs, **kwargs)
 
-    def load_function(self, log_df, obs_idx, root_address, **kwargs):
+    def load_function(self, log_df, obs_idx, root_address, instrument=None, **kwargs):
 
-        # Use loading function
+        # User load function
         if self._load_function is not None:
             load_function_output = self._load_function(log_df, obs_idx, root_address, **kwargs)
-        else:
-            load_function_output = {}
-
-        # Proceed to create the LiMe object if necessary
-        if isinstance(load_function_output, dict):
-
-            # Get address of observation
-            file_spec = root_address / obs_idx[log_df.index.names.index('file')]
-
-            # User provides a data parser
-            if self.fits_reader is not None:
-                spec_data = self.fits_reader(file_spec)
-                fits_args = {'input_wave': spec_data[0], 'input_flux': spec_data[1], 'input_err': spec_data[2],
-                             **spec_data[4]}
+            if isinstance(load_function_output, (Spectrum, Cube)):
+                return load_function_output
             else:
-                fits_args = {}
+                return Spectrum(**load_function_output) if self.spectrum_check else Cube(**load_function_output)
 
-            # Create observation
-            obs_args = {**fits_args, **load_function_output}
-            obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-
+        # Instrument load function
         else:
-            obs = load_function_output
+            fname_obj = root_address / obs_idx[log_df.index.names.index('file')]
+            class_obj = lime.Spectrum if self.spectrum_check else lime.Cube
+            return class_obj.from_file(fname_obj, instrument=instrument, **kwargs)
 
 
-
-        return obs
+        # # Proceed to create the LiMe object if necessary
+        # if isinstance(load_function_output, dict):
+        #
+        #     # Get address of observation
+        #     file_spec = root_address / obs_idx[log_df.index.names.index('file')]
+        #
+        #     # User provides a data parser
+        #     if self.fits_reader is not None:
+        #         spec_data = self.fits_reader(file_spec)
+        #         fits_args = {'input_wave': spec_data[0], 'input_flux': spec_data[1], 'input_err': spec_data[2],
+        #                      **spec_data[4]}
+        #     else:
+        #         fits_args = {}
+        #
+        #     # Create observation
+        #     obs_args = {**fits_args, **load_function_output}
+        #     obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+        #
+        # else:
+        #     obs = load_function_output
+        #
+        #
+        # return obs
 
     def __getitem__(self, id_key):
 
@@ -1537,70 +1548,4 @@ class Sample(UserDict, OpenFits):
         return check
 
 
-# class ObsManager(OpenFits):
-#
-#     def __init__(self, file_address, file_source, lime_object, load_function=None, **kwargs):
-#
-#         # Initialize the .fits reading class
-#         OpenFits.__init__(self, file_address, file_source, lime_object, load_function)
-#
-#         # Define attribute
-#         self.spectrum_check = False
-#         self.load_function = None
-#         self.user_params = None
-#
-#         # Store the user arguments for the spectra
-#         self.user_params = kwargs
-#
-#         # State the type of spectra
-#         if file_source is None:
-#             self.spectrum_check = True
-#         else:
-#             self.spectrum_check = True if self.source in list(SPECTRUM_FITS_PARAMS.keys()) else False
-#
-#         # Assign input load function
-#         if load_function is not None:
-#             self.load_function = load_function
-#
-#         # Assign the
-#         elif (file_source is not None) and (self.fits_reader is not None):
-#             self.load_function = self.default_file_parser
-#
-#         # No load function nor instrument
-#         else:
-#             raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
-#                              f'supported by LiMe')
-#
-#         return
-#
-#     def load_function(self, file_spec, log_df=None, id_spec=None, **kwargs):
-#
-#         default_args = self.fits_reader(file_spec) if self.fits_reader is not None else {}
-#         user_args = self.user_params if self.user_params is not None else {}
-#
-#         # Recover the user params
-#         user_args = user_args if user_args is not None else self.user_params
-#
-#         # Update with the default arguments
-#         default_args = {**default_args, **user_args}
-#
-#         # Run the load function
-#         load_function_output = self.load_function(file_spec, log_df, id_spec, **default_args)
-#
-#         # Proceed to create LiMe object if necessary
-#         if isinstance(load_function_output, dict):
-#             obs_args = {**default_args, **load_function_output}
-#             obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-#         else:
-#             obs = load_function_output
-#
-#         return obs
-#
-#     def default_file_parser(self, log_df=None, id_spec=None, **kwargs):
-#
-#         file_spec = self.id_spec[log_df.index.names.index('file')]
-#
-#         fits_args = self.fits_reader(file_spec)
-#
-#         return fits_args
 

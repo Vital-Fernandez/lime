@@ -42,7 +42,7 @@ N2_6548A_kinem = "N2_6584A"
 H1_9548A_sigma = "min:1.0,max:2.0"
 
 [38-35_line_fitting]
-Fe3_4658A_b = "Fe3_4658A_p-g-emi+Fe3_4658A_p-g-abs"
+Fe3_4658A_b = "Fe3_4658A_s-emi+Fe3_4658A_s-abs"
 O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
 H1_4861A_b = "H1_4861A+H1_4861A_k-1"
 O3_4959A_b = "O3_4959A+O3_4959A_k-1"
@@ -54,7 +54,7 @@ S3_9530A_b = "S3_9530A+H1_9546A"
 O2_3726A_kinem = "O2_3729A"
 H1_3712A_kinem = "H1_3734A"
 
-Fe3_4658A_p-g-abs_center = "value:4650"
+Fe3_4658A_s-abs_center = "value:4650"
 
 H1_4861A_k-1_sigma = "expr:>2.0*H1_4861A_sigma"
 H1_4861A_k-1_amp = "expr:<10.0*H1_4861A_amp"

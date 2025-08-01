@@ -50,11 +50,13 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=5, rel
                 param_value = test_log.loc[line, param]
 
                 if ('_err' not in param) and (f'{param}_err' in true_log.columns):
+                    param_err = test_log.loc[line, f'{param}_err']
                     param_exp_err = true_log.loc[line, f'{param}_err']
                     diag = np.isclose(param_value, param_exp_value,
                                       rtol=np.maximum(0.01, np.abs(param_exp_err/param_exp_value)), equal_nan=True)
                     if not diag:
-                        print(line, param, param_value, param_exp_value, diag, param_exp_err, abs_factor)
+                        print(f'Error 1) {line} {param}: Measured {param_value}±{param_err} VS {param_exp_value}±{param_exp_err}')
+                        print(line, param, param_value, param_exp_value, param_exp_err)
                     assert diag
                 else:
                     if param.endswith('_err'):
@@ -179,7 +181,15 @@ class TestSpectrumClass:
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum(self):
 
+        # fig = plt.figure()
+        # spec.plot.spectrum(in_fig=fig)
+
         fig = plt.figure()
+
+        spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, id_label='SHOC579-Manga38-35')
+
+        spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', line_list=['H1_6563A_b'])
         spec.plot.spectrum(in_fig=fig)
 
         return fig
@@ -196,7 +206,7 @@ class TestSpectrumClass:
     def test_check_bands_spectrum(self):
 
         fig = plt.figure()
-        spec.check.bands(bands_file=bands_file_address, in_fig=fig)
+        spec.check.bands(fname=bands_file_address, in_fig=fig)
 
         return fig
 
@@ -220,7 +230,23 @@ class TestSpectrumClass:
     def test_plot_line(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g-emi', in_fig=fig)
+        spec.plot.bands('Fe3_4658A_p-g-emi',  rest_frame=True, in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_plot_line_2nd(self):
+
+        fig = plt.figure()
+        spec.plot.bands('Fe3_4658A_p-g-emi', y_scale='log', in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_plot_line_3rd(self):
+
+        fig = plt.figure()
+        spec.plot.bands('Fe3_4658A_p-g-emi', show_continua=True, in_fig=fig)
 
         return fig
 

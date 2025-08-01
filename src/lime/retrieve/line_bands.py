@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import pandas as pd
 from lime.io import LiMe_Error
-from lime.transitions import Line, Transition
+from lime.transitions import Transition
 
 
 _logger = logging.getLogger('LiMe')
@@ -134,7 +134,7 @@ def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, 
     rename_dict, exclude_list = {}, []
     param_dict = dict(w3 = {}, w4 = {}, wavelength = {}, latex_label = {}, group_label = {})
     for new_label, group_label in groups_dict.items():
-
+        print(new_label)
         # The grouped line replaces the reference entry
         line = Transition.from_db(new_label, fit_conf)
         old_label = line.list_comps[line.ref_idx].core

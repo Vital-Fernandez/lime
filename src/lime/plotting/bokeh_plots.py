@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 
-from lime.transitions import label_decomposition, Line
+from lime.transitions import label_decomposition, Transition
 from lime.plotting.format import theme
 from lime.plotting.plots import frame_mask_switch
 from lime.plotting.utils import color_selector
@@ -330,7 +330,7 @@ class BokehFigures:
             line_list = self._spec.frame.index.values
             profile_list = [None] * line_list.size
             for i, line_label in enumerate(line_list):
-                line_i = Line.from_log(line_label, self._spec.frame)
+                line_i = Transition.from_log(line_label, measurements_df=self._spec.frame)
                 profile_list[i] = profile_bokeh(fig, line_i, z_corr, self._spec.frame, self._spec.redshift,
                                                self._spec.norm_flux)
 

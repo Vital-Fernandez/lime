@@ -1,12 +1,24 @@
 import numpy as np
 import pandas as pd
 import lime
+import pytest
 from pathlib import Path
-
+from matplotlib import pyplot as plt
 
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / 'outputs'
 lines_log_address = baseline_folder / 'manga_lines_log.txt'
+file_address = baseline_folder/'manga_spaxel.txt'
+
+# Data for the tests
+baseline_folder = Path(__file__).parent / 'baseline'
+outputs_folder = Path(__file__).parent / 'outputs'
+spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
+fits_address = baseline_folder/'sdss_dr18_0358-51818-0504.fits'
+
+
+
+tolerance_rms = 5.5
 
 # Data for the tests
 lines_log = lime.load_frame(lines_log_address)
@@ -40,17 +52,25 @@ class TestSampleClass:
 
         return
 
-    # def test_multindex_log(self):
-    #
-    #     # Default import
-    #     assert isinstance(obs.log.index, pd.MultiIndex)
-    #     assert obs.log.index.names == ['id', 'line']
-    #     assert np.all(obs.log.index.get_level_values('id').unique() == ['obj_0', 'obj_1', 'obj_2'])
-    #
-    #     return
-    #
-    # def test_extract_fluxes(self):
-    #
-    #     lime.extract_fluxes(obs.log, )
-    #
-    #     return
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_check_redshift_spectrum(self, tmp_path):
+
+        fig = plt.figure()
+
+        # Declaring the name of the observations
+        id_list = ['SHOC579_A', 'SHOC579_B', 'SHOC579_C']
+        obs_list = ['sdss_dr18_0358-51818-0504.fits'] * 3
+
+        # We declare the line measurements logs
+        sample1 = lime.Sample.from_file(id_list, log_list=None, file_list=obs_list, instrument='sdss',
+                                        folder_obs=baseline_folder, redshift=0.0475, norm_flux=1e-17)
+
+        ref_lines = ['H1_4861A', 'O3_5007A', 'H1_6563A']
+        sample_log_address = f'{tmp_path}/sample_log.txt'
+        sample1.frame['z_line'] = 0
+        sample1.check.redshift(sample1.frame.index, reference_lines=ref_lines, output_file_log=sample_log_address,
+                               output_idcs=sample1.frame.index, redshift_column='z_line', initial_z=0.0475,
+                               in_fig=fig)
+
+        return fig
+

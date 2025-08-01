@@ -44,6 +44,7 @@ def compute_gaussian_ridges(redshift, lines_lambda, wave_matrix, amp_arr, sigma_
 
     return gauss_arr
 
+
 def redshift_xor_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
                         sig_digits=2, plot_results=False):
 
@@ -166,6 +167,7 @@ def redshift_key_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, component
 
     return z_infer
 
+
 def permutation_objective_function(redshift, obs_arr, theo_arr):
 
     adjusted_observed = obs_arr / (1 + redshift)
@@ -175,12 +177,12 @@ def permutation_objective_function(redshift, obs_arr, theo_arr):
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
     residual = np.sum(cost_matrix[row_ind, col_ind])
 
+
 def permutation_residual(redshift, obs_arr, theo_arr):
 
     return permutation_objective_function(redshift, obs_arr, theo_arr)
 
 
-# Residual computation function
 def compute_residual(Z, observed, theoretical):
     """
     Computes the residual for a given redshift Z.
@@ -201,6 +203,7 @@ def compute_residual(Z, observed, theoretical):
     residual = np.sum(cost_matrix[row_ind, col_ind])
 
     return residual
+
 
 def redshift_permutation_method(spec, bands, z_min, z_max, pred_arr, components_number, plot_results):
 
@@ -231,8 +234,8 @@ def redshift_permutation_method(spec, bands, z_min, z_max, pred_arr, components_
 
         # Run the permutation
         # result = minimize(permutation_residual, x0=5, bounds=[(z_min, z_max)])
-        result = minimize(lambda Z: compute_residual(Z, wave_obs, wave_theo), x0=1, bounds=[(z_min, z_max)],
-                          method='dogleg')
+        result = minimize(lambda Z: compute_residual(Z, wave_obs, wave_theo), x0=0.01, bounds=[(z_min, z_max)],
+                          method='L-BFGS-B')
         z_infer = result.x[0]
 
         # Recompute cost matrix and find the best matching subset
@@ -252,6 +255,7 @@ def redshift_permutation_method(spec, bands, z_min, z_max, pred_arr, components_
         z_infer = None
 
     return z_infer
+
 
 class RedshiftFitting:
 

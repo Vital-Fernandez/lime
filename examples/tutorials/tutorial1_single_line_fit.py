@@ -1,7 +1,7 @@
 import numpy as np
 from astropy.io import fits
 import lime
-
+from matplotlib import pyplot as plt, rc_context
 
 def import_osiris_fits(file_address, ext=0):
 
@@ -34,9 +34,17 @@ band_edges = np.array([6438.03, 6508.66, 6535.10, 6600.95, 6627.70, 6661.82])
 # Define a spectrum object
 gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 # gp_spec.bokeh.spectrum()
-# gp_spec.plot.bands(line.label, bands=band_edges)
-# gp_spec.plot.spectrum(label='GP121903', show_categories=True)
+# gp_spec.plot.bands('H1_6563A')
+
+# for i in range(100):
 #
+#     with rc_context(lime.theme.fig_defaults()):
+#         fig = plt.figure()
+#         gp_spec.plot.spectrum(label='GP121903', in_fig=fig)
+#
+#     plt.tight_layout()
+#     plt.show()
+# #
 # # Run the fit
 # gp_spec.fit.bands(line)
 #
@@ -44,15 +52,31 @@ gp_spec = lime.Spectrum(wave, flux, redshift=z_obj, norm_flux=normFlux)
 # gp_spec.plot.bands()
 
 # Fit configuration
-line = 'H1_6563A_b'
+# line = 'H1_6563A_b'
+# fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6583A+N2_6548A',
+#             'N2_6548A_amp': {'expr': 'N2_6583A_amp/2.94'},
+#             'N2_6548A_kinem': 'N2_6583A'}
+#
+# bands = gp_spec.retrieve.line_bands()
+#
+# gp_spec.fit.bands(line, fit_cfg=fit_conf, arr_bands=band_edges)
+# gp_spec.save_frame('../sample_data/results/example1_linelog.txt')
+# gp_spec.plot.bands()
+
+line = 'H1_6563A_b' # Add test
 fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6583A+N2_6548A',
             'N2_6548A_amp': {'expr': 'N2_6583A_amp/2.94'},
-            'N2_6548A_kinem': 'N2_6583A'}
+            'N2_6548A_kinem': 'N2_6583A',
+            'H1_6563A_b_pixel_mask': '7833-7860'}
 
 bands = gp_spec.retrieve.line_bands()
 
 gp_spec.fit.bands(line, fit_cfg=fit_conf, arr_bands=band_edges)
-gp_spec.plot.bands(exclude_continua=False)
+gp_spec.save_frame('../sample_data/results/example1_linelog.txt')
+gp_spec.plot.bands()
+
+
+
 
 # gp_spec.plot.bands()
 #

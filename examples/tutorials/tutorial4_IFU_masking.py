@@ -43,23 +43,23 @@ wcs = WCS(hdr)
 # Define a LiMe cube object
 shoc579 = lime.Cube(wave, flux_cube, redshift=z_obj, norm_flux=norm_flux, wcs=wcs)
 
-spec = shoc579.get_spectrum(37, 37)
-spec.plot.spectrum(rest_frame=True)
-shoc579.plot.cube(6563, line_fg=4363)
+# spec = shoc579.get_spectrum(37, 37)
+# spec.plot.spectrum(rest_frame=True)
+# shoc579.plot.cube('H1_6563A', line_fg='O3_4363A')
 
 # Check the spaxels interactively
-shoc579.check.cube(6563, line_fg=6563, min_pctl_bg=80, cont_pctls_fg=[80, 90, 95, 99])
+shoc579.check.cube('H1_6563A', line_fg='H1_6563A', min_pctl_bg=80, cont_pctls_fg=[80, 90, 95, 99])
 
-# # Generate a spatial mask as a function of the signal-to-noise
+# Generate a spatial mask as a function of the signal-to-noise
 spatial_mask_SN_line = '../sample_data/SHOC579_mask.fits'
 spatial_mask_SN_cont = '../sample_data/SHOC579_mask_SN_cont.fits'
 
-shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_line)
-shoc579.spatial_masking('O3_4363A', param='SN_cont', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_cont)
+# shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_line)
+# shoc579.spatial_masking('O3_4363A', param='SN_cont', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_cont)
 
 # We can visualize this mask using the .plot.cube function
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_cont)
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_line)
 
 # Manually add/remove spaxels to the spatial mask
-shoc579.check.cube('H1_6563A', masks_file=spatial_mask_SN_line, maintain_y_zoom=False)
+shoc579.check.cube('H1_6563A', masks_file=spatial_mask_SN_line, maintain_y_zoom=True)

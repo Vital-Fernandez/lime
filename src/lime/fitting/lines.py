@@ -25,6 +25,8 @@ k_eFWHM = 2 * np.log(2)
 
 TARGET_PERCENTILES = np.array([0, 1, 5, 10, 50, 90, 95, 99, 100])
 
+lime_rng = np.random.default_rng()
+
 # Atomic mass constant
 amu = 1.66053906660e-27 # Kg
 tiny = 1.0e-15
@@ -180,8 +182,16 @@ def pp_FWHM(line, idx):
 
 
 def gaussian_area(line, idx, n_steps):
-    amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
-    sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
+
+    amp = lime_rng.normal(line.amp[idx], line.amp_err[idx], n_steps)
+    sigma = lime_rng.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
+
+    # amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
+    # sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
+
+    # area = 2.5066282746 * line.amp[idx] * line.amp[idx]
+    # area_err = area * np.sqrt(np.square(line.amp_err[idx] / line.amp[idx]) +
+    #                           np.square(line.sigma_err[idx] / line.sigma[idx]))
 
     return 2.5066282746 * amp * sigma
 
@@ -239,7 +249,19 @@ def velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_
     return n_sigma * ((band_velocity_sigma / c_KMpS) * lambda_obs + delta_instr)
 
 
-PROFILE_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
+# PROFILE_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
+
+ALL_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
+
+PROFILE_PARAMS = dict(g = ['amp', 'center', 'sigma'],
+                      l = ['amp', 'center', 'sigma'],
+                      v = ['amp', 'center', 'sigma', 'gamma'],
+                      pv = ['amp', 'center', 'sigma', 'frac'],
+                      pp = ['amp', 'center', 'sigma', 'alpha', 'frac'],
+                      p = ['a', 'b', 'c', 'alpha'],
+                      e = ['amp', 'center', 'alpha'])
+
+# np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
 
 PROFILE_FUNCTIONS =  {'g': gaussian_model, 'l': lorentz_model, 'v': voigt_model,
                       'pv': pseudo_voigt_model, 'pp': pseudo_power_model,
@@ -264,7 +286,6 @@ def profiles_computation(line_list, log, z_corr, shape_list, x_array=None, inter
     # All lines are computed with the same wavelength interval: The maximum interval[1]-interval[0] in the log times 3
     # and starting at interval[0] values beyond interval[0] are masked
 
-    #TODO Resfactor should be a lime parameter
     if x_array is None:
 
         # Create x array
@@ -421,7 +442,7 @@ def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
             line.measurements.sigma_instr = np.mean(wave_arr[mask_data] / (R_arr[idcs_line][mask_data] * k_gFWHM))
             wave_arr[mask_data] / (R_arr[idcs_line][mask_data] * k_gFWHM)
     else:
-        line.measurements.sigma_instr = np.nan
+        line.measurements.sigma_instr = None
 
     return
 
@@ -461,7 +482,6 @@ class ProfileModelCompiler:
         self.n_comps = len(line.list_comps)
 
         # Decide the line reference wavelength
-        # self.ref_wave = line.wavelength * (1 + redshift) if line.blended_check else np.atleast_1d(line.peak_wave)
         self.ref_wave = line.measurements.wavelength * (1 + redshift)
 
         # Continuum models
@@ -476,10 +496,10 @@ class ProfileModelCompiler:
         for idx, comp in enumerate(line.list_comps if line.group == 'b' else [line]):
 
             # Gaussian comp
-            self.model += Model(PROFILE_FUNCTIONS[line.p_type], prefix=f'line{idx}_')
+            self.model += Model(PROFILE_FUNCTIONS[line.profile], prefix=f'line{idx}_')
 
             # Amplitude configuration
-            if comp.p_shape:
+            if comp.shape == 'emi':
 
                 # Emission min, init, max values
                 min_lim = 0
@@ -497,7 +517,7 @@ class ProfileModelCompiler:
                 peak_0 = line.measurements.peak_flux * 0.5 - line.measurements.cont
 
             # Add the parameters according to the profile
-            match comp.p_type:
+            match comp.profile:
 
                 # Gaussian, lorentz and Voigt
                 case 'g':
@@ -571,7 +591,7 @@ class ProfileModelCompiler:
             weights_in = weights
         else:
             weights = 1.0/err
-            weights_in = weights[idcs_good]
+            weights_in = weights[idcs_good] # TODO add minimum weight for the case of very large uncertainty
 
         # Fit the line
         self.params = self.model.make_params()
@@ -579,6 +599,7 @@ class ProfileModelCompiler:
         with warnings.catch_warnings():
             warnings.simplefilter(_VERBOSE_WARNINGS)
             self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
+        # self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
 
         # Check fitting quality
         self.review_fitting(line)
@@ -587,31 +608,31 @@ class ProfileModelCompiler:
 
     def measurements_calc(self, measurements, list_transitions, group_type, user_conf):
 
-        # Loop through the line components
-        for i, comp_label in enumerate(list_transitions):
+        # Assign continuum values
+        for j, param in enumerate(['m_cont', 'n_cont']):
+            param_fit = self.output.params.get(f'line0_{param}', None)
+            param_value = np.nan if param_fit is None else param_fit.value
+            param_err = np.nan if param_fit is None else param_fit.stderr
+            setattr(measurements, param, param_value)
+            setattr(measurements, f'{param}_err', param_err)
 
-            # Recover the profile parameters
-            for j, param in enumerate(PROFILE_PARAMS):
+        # Loop through the line components and assign profile params
+        for i, comp_label in enumerate(list_transitions):
+            for j, param in enumerate(PROFILE_PARAMS[comp_label.profile]):
+
+                # Initialize the parameters
+                if i == 0:
+                    setattr(measurements, param, np.full(self.n_comps, np.nan))
+                    setattr(measurements, f'{param}_err', np.full(self.n_comps, np.nan))
 
                 # Recover possible component from fit
                 param_fit = self.output.params.get(f'line{i}_{param}', None)
                 param_value = np.nan if param_fit is None else param_fit.value
                 param_err = np.nan if param_fit is None else param_fit.stderr
 
-                # First component: Recover scalar continuum parameters and initialize profile array parameters
-                if i == 0:
-                    if j < 2:
-                        setattr(measurements, param, param_value)
-                        setattr(measurements, f'{param}_err', param_err)
-
-                    else:
-                        setattr(measurements, param, np.full(self.n_comps, np.nan))
-                        setattr(measurements, f'{param}_err', np.full(self.n_comps, np.nan))
-
                 # Assign array curve parameters
-                if j >= 2:
-                    value_array, err_array = getattr(measurements, param), getattr(measurements, f'{param}_err')
-                    value_array[i], err_array[i] = param_value, param_err
+                getattr(measurements, param)[i] = param_value
+                getattr(measurements, f'{param}_err')[i] = param_err
 
             # Initialize array parameters
             if i == 0:
@@ -630,13 +651,16 @@ class ProfileModelCompiler:
                 measurements.amp_err[i] = np.nan
                 _logger.warning(f'Negative scale value for amplitude at {comp_label}')
 
-            # Compute the profile areas
-            profile_flux_dist = AREA_FUNCTIONS[comp_label.p_type](measurements, i, 1000)
+
+            profile_flux_dist = AREA_FUNCTIONS[comp_label.profile](measurements, i, 1000)
             measurements.profile_flux[i] = np.mean(profile_flux_dist)
             measurements.profile_flux_err[i] = np.std(profile_flux_dist)
 
+            # Compute profile flux and uncertainty
+            # measurements.profile_flux[i], measurements.profile_flux_err[i] = AREA_FUNCTIONS[comp_label.profile](measurements, i, 1000)
+
             # Compute FWHM_p (Profile Full Width Half Maximum)
-            measurements.FWHM_p[i] = FWHM_FUNCTIONS[comp_label.p_type](measurements, i)
+            measurements.FWHM_p[i] = FWHM_FUNCTIONS[comp_label.profile](measurements, i)
 
             # Check parameters error propagation
             self.review_err_propagation(measurements, i, comp_label.label, user_conf, self.output.errorbars, group_type)
@@ -690,7 +714,7 @@ class ProfileModelCompiler:
             if line.group == 'b':
                 expr = param_conf['expr']
                 for i, comp in enumerate(comps):
-                    for g_param in PROFILE_PARAMS:
+                    for g_param in ALL_PARAMS:
                         expr = expr.replace(f'{comp}_{g_param}', f'line{i}_{g_param}')
                 param_conf['expr'] = expr
             else:
@@ -807,20 +831,22 @@ class LineFitting:
     def integrated_properties(self, line, emis_wave, emis_flux, emis_err, n_steps=1000, min_array_dim=15):
 
         # Use default line shape
-        if line.p_shape is not None:
-            emission_check = line.p_shape
-            peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
+        match line.shape:
+            case 'emi':
+                emission_check = True
+                peakIdx = np.argmax(emis_flux) if emission_check else np.argmin(emis_flux)
 
-        # Predict line shape
-        else:
-            # Maximum
-            if emis_flux[emis_flux.size // 2] > line.measurements.cont:
-                peakIdx = np.argmax(emis_flux)
-                line.p_shape = True
-            # Minimum
-            else:
+            case 'abs':
+                emission_check = False
                 peakIdx = np.argmin(emis_flux)
-                line.p_shape = False
+
+            case _:
+                if emis_flux[emis_flux.size // 2] > line.measurements.cont:
+                    peakIdx = np.argmax(emis_flux)
+                    line.p_shape = True
+                else:
+                    peakIdx = np.argmin(emis_flux)
+                    line.p_shape = False
 
         # Assign values peak/through properties
         line.measurements.n_pixels = emis_wave.compressed().size

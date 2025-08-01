@@ -37,6 +37,37 @@ PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'SN_cont': r'$\frac{S}{N}_{cont}$'}
 
 
+def unique_line_arr(frame, return_index = False):
+
+    idcs_s = frame.group_label == 'none'
+    idcs_m = pd.Series(frame.index.str.endswith('_m'), index=frame.index)
+
+    # Initialize with False
+    idcs_b = pd.Series(False, index=frame.index)
+    idcs_b.loc[frame.loc[~(idcs_s | idcs_m), 'group_label'].str.split('+').str[0].unique()] = True
+
+    # Get merged lines in blended lines
+    m_terms = (frame.loc[idcs_b, 'group_label'].apply(lambda x: [term for term in x.split('+')
+                                                                 if term.endswith('_m')]))
+    flat_m_terms = [item for sublist in m_terms if sublist for item in sublist]
+
+    if len(flat_m_terms) > 0:
+        idcs_m_in_b = pd.Series(False, index=frame.index)
+        idcs_m_in_b.loc[flat_m_terms] = True
+    else:
+        idcs_m_in_b = pd.Series(False, index=frame.index)
+
+    idcs_selection = (idcs_s | idcs_m | idcs_b) & ~idcs_m_in_b
+
+    # Return a series with the same length as the original index
+    if return_index:
+        return idcs_selection
+
+    # Return an array
+    else:
+        return idcs_selection[idcs_selection].index
+
+
 def mult_err_propagation(nominal_array, err_array, result):
 
     err_result = result * np.sqrt(np.sum(np.power(err_array/nominal_array, 2)))
@@ -69,7 +100,6 @@ def pd_get(df, row, column, default=None, transform=None, nan_to_none=False):
     # Transform nan to None
     if nan_to_none and (cell is not None):
         if isinstance(cell, float):
-            # print('JODER', cell)
             cell = None if np.isnan(cell) else cell
 
     return cell

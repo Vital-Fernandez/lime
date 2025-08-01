@@ -544,8 +544,7 @@ def results_to_log(line, log, norm_flux):
         # Identifiers
         log.at[comp.label, 'particle'] = comp.particle.label
         log.at[comp.label, 'latex_label'] = comp.latex_label
-        log.at[comp.label, 'group_label'] = 'none' if line.group_label is None else line.group_label
-        log.at[comp.label, 'pixel_mask'] = comp.pixel_mask
+        log.at[comp.label, 'group_label'] = 'none' if comp.group_label is None else comp.group_label
 
         # Add bands wavelengths
         log.at[comp.label, 'w1'] = line.mask[0]
@@ -554,6 +553,9 @@ def results_to_log(line, log, norm_flux):
         log.at[comp.label, 'w4'] = line.mask[3]
         log.at[comp.label, 'w5'] = line.mask[4]
         log.at[comp.label, 'w6'] = line.mask[5]
+
+        # Pixel mask
+        log.at[comp.label, 'pixel_mask'] = line.pixel_mask
 
         # Treat every line
         for j in _RANGE_ATTRIBUTES_FIT:

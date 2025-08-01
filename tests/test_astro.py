@@ -1,7 +1,7 @@
 import numpy as np
 import lime
 from lime.transitions import _LIME_DATABASE_FILE, LinesDatabase
-
+from lime.rsrc_manager import lineDB
 parent_bands = LinesDatabase(_LIME_DATABASE_FILE).frame
 
 

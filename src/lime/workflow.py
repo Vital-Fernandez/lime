@@ -9,12 +9,12 @@ from lmfit.models import PolynomialModel
 from lime import __version__
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from lime.transitions import Line, air_to_vacuum_function, label_decomposition, Transition
+from lime.transitions import air_to_vacuum_function, label_decomposition, Transition
 from lime.rsrc_manager import lineDB
 from lime.retrieve.line_bands import pars_bands_conf
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
 from lime.fitting.redshift import RedshiftFitting
-
+from lime.plotting.plots import spec_continuum_calculation
 
 try:
     import aspect
@@ -317,8 +317,9 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     if update_labels or vacuum_label:
         list_labels = [None] * bands_df.index.size
         for i, label in enumerate(bands_df.index):
-            line = Line(label, band=bands_df)
-            line.update_label(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label)
+            line = Transition.from_db(label, data_frame=bands_df)
+            line.update_label(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
+                              show_optional=False)
             if update_latex:
                 bands_df.loc[label, 'latex_label'] = line.latex_label[0]
             list_labels[i] = line.label
@@ -352,8 +353,8 @@ class SpecRetriever:
     def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
                    exclude_bands_masked=True, map_band_vsigma=None, composite_lines=None, automatic_grouping=False,
                    Rayleigh_threshold=2, components_detection=False, fit_cfg=None, default_cfg_prefix='default',
-                   obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False,
-                   update_latex=False, vacuum_label=False):
+                   obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
+                   vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -469,7 +470,7 @@ class SpecRetriever:
         if line_measured:
 
             # Declare line object and the components and its components from the frame
-            line = Line(line_label, frame)
+            line = Transition.from_db(line_label, data_frame=frame)
             line_list = line.list_comps
 
             # Compute the linear components
@@ -635,10 +636,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
-        # self.line = Line(label, bands, input_conf, profile, cont_from_bands)
         self.line = Transition.from_db(label, input_conf,
                                        data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
-                                       init_measurements=True)
+                                       )
 
         if arr_bands is not None:
             self.line.mask = arr_bands
@@ -892,9 +892,10 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
             # Compute the continuum and assign replace the value outside the bands the new continuum
             if plot_steps:
-                ax_cfg = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
-                self._spec.plot._continuum_iteration(input_wave, input_flux, cont_fit, input_flux_s, mask_cont, low_lim,
-                                                     high_lim, emis_threshold[i], ax_cfg, **kwargs)
+                input_kwargs = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
+                input_kwargs.update(kwargs)
+                spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_flux_s, mask_cont, low_lim,
+                                           high_lim, emis_threshold[i], **input_kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)

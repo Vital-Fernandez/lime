@@ -95,32 +95,33 @@ class Themer:
         return fig_conf
 
 
-    def ax_defaults(self, user_ax, units_wave, units_flux, norm_flux, fig_type='default', plotting_library='matplotlib',
-                    **kwargs):
+    def ax_defaults(self, user_labels=None, observation=None, fig_type='default', plotting_library='matplotlib', **kwargs):
 
         # Default wavelength and flux
         if fig_type == 'default':
 
             # Spectrum labels x-wavelegth, y-flux # TODO without units
-            x_label, y_label = spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library=plotting_library)
+            x_label, y_label = spectrum_figure_labels(observation.units_wave, observation.units_flux,
+                                                      observation.norm_flux, plotting_library=plotting_library)
+
             ax_cfg = {'xlabel': x_label, 'ylabel': y_label}
 
             # Update with the user configuration
-            ax_cfg = ax_cfg if user_ax is None else {**ax_cfg, **user_ax}
+            ax_cfg = ax_cfg if user_labels is None else {**ax_cfg, **user_labels}
 
         # Spatial cubes
         elif fig_type == 'cube':
 
-            ax_cfg = {} if user_ax is None else user_ax.copy()
+            ax_cfg = {} if user_labels is None else user_labels.copy()
 
             # Define the title
             if ax_cfg.get('title') is None:
 
-                title = r'{} band'.format(kwargs['line_bg'].latex_label[0])
+                title = r'{} band'.format(kwargs['line_bg'].latex_label)
 
                 line_fg = kwargs.get('line_fg')
                 if line_fg is not None:
-                    title = f'{title} with {line_fg.latex_label[0]} contours'
+                    title = f'{title} with {line_fg.latex_label} contours'
 
                 if len(kwargs['masks_dict']) > 0:
                     title += f'\n and spatial masks at foreground'
@@ -136,32 +137,31 @@ class Themer:
                 ax_cfg['ylabel'] = 'y' if kwargs['wcs'] is None else 'DEC'
 
             # Update with the user configuration
-            ax_cfg = ax_cfg if user_ax is None else {**ax_cfg, **user_ax}
+            ax_cfg = ax_cfg if user_labels is None else {**ax_cfg, **user_labels}
 
         elif fig_type == 'velocity':
 
             x_label = 'Velocity (Km/s)'
 
             # Flux axis units
-            norm_flux = units_flux.scale if norm_flux is None else norm_flux
+            norm_flux = observation.units_flux.scale if observation.norm_flux is None else observation.norm_flux
             norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(1/norm_flux))
 
-            y_label = f"Flux {units_flux.to_string('latex')}"
+            y_label = f"Flux {observation.units_flux.to_string('latex')}"
             y_label = y_label.replace(r'$\mathrm{', r'$\left(')
             y_label = y_label.replace('}$', norm_label)
 
             ax_cfg = {'xlabel': x_label, 'ylabel': y_label}
 
             # Update with the user configuration
-            ax_cfg = ax_cfg if user_ax is None else {**ax_cfg, **user_ax}
+            ax_cfg = ax_cfg if user_labels is None else {**ax_cfg, **user_labels}
 
         # No labels
         else:
             ax_cfg = {}
 
             # Update with the user configuration
-            ax_cfg = ax_cfg if user_ax is None else {**ax_cfg, **user_ax}
-
+            ax_cfg = ax_cfg if user_labels is None else {**ax_cfg, **user_labels}
 
         return ax_cfg
 

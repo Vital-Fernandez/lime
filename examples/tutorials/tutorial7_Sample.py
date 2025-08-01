@@ -53,23 +53,33 @@ folder_obs = f'../sample_data'
 obs_list = ['spectra/gp121903_osiris.fits'] * 3
 
 # We declare the line measurements logs
-log_list = [f'{folder_obs}/example3_linelog.txt'] * 3
+log_list = [f'{folder_obs}/results/example3_linelog.txt'] * 3
+
+
+sample1 = lime.Sample.from_file(id_list, log_list=None, file_list=obs_list, instrument='osiris',
+                                folder_obs=folder_obs, redshift=0.19531, norm_flux=1e-17)
+
+ref_lines = ['H1_4861A', 'O3_5007A', 'H1_6563A']
+sample_log_address = f'{folder_obs}/results/sample_log.txt'
+sample1.frame['z_line'] = 0.19531
+sample1.check.redshift(sample1.frame.index, reference_lines=ref_lines, output_file_log=sample_log_address,
+                       output_idcs=sample1.frame.index,  redshift_column='z_line', initial_z=0.19531)
 
 # We create the sample using the list of objects and files
-sample1 = lime.Sample.from_file(id_list, log_list, obs_list, folder_obs=folder_obs, load_function=osiris_load_function,
+sample1 = lime.Sample.from_file(id_list, log_list=log_list, file_list=obs_list, folder_obs=folder_obs, load_function=osiris_load_function,
                                 norm_flux=1e-17)
 
-# Get an individual observations:
-specA = sample1.get_observation('GP121903_A')
-
-# Review the measurements:
-specA.plot.spectrum(include_fits=True)
-
-# We can save the combiened sample log, so it can construct the Sample variable in the future.
-sample_log_address = f'{folder_obs}/sample_log.txt'
-sample1.save_frame(sample_log_address)
-
-# Just with the combined log and the load function
-sample2 = lime.Sample(sample_log_address, load_function=osiris_load_function, folder_obs=folder_obs, norm_flux=1e-17)
-sample2.plot.spectra(rest_frame=True)
-
+# # Get an individual observations:
+# specA = sample1.get_observation('GP121903_A')
+#
+# # Review the measurements:
+# specA.plot.spectrum(include_fits=True)
+#
+# # We can save the combiened sample log, so it can construct the Sample variable in the future.
+# sample_log_address = f'{folder_obs}/results/sample_log.txt'
+# sample1.save_frame(sample_log_address)
+#
+# # Just with the combined log and the load function
+# sample2 = lime.Sample(sample_log_address, load_function=osiris_load_function, folder_obs=folder_obs, norm_flux=1e-17)
+# sample2.plot.spectra(rest_frame=True)
+#

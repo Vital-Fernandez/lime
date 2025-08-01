@@ -6,7 +6,7 @@ import pandas as pd
 from scipy import signal
 from lime.io import check_file_dataframe
 from lime.transitions import label_decomposition
-from lime.plotting.plots import plot_peaks_troughs
+from lime.plotting.plots import spec_peak_calculation
 
 try:
     import joblib
@@ -106,7 +106,7 @@ class LineFinder:
 
         # Plot the results
         if plot_steps:
-            plot_peaks_troughs(self._spec, idcs_peaks, limit_threshold, continuum_array, matched_DF, **kwargs)
+            spec_peak_calculation(self._spec, matched_DF, limit_threshold, idcs_peaks, continuum_array, **kwargs)
 
         return matched_DF
 
@@ -119,7 +119,7 @@ class LineFinder:
 
         # Add theoretical wavelength values if necessary
         if 'wavelength' not in bands_df.columns:
-            bands_df['wavelength'] = label_decomposition(bands_df.index.values, params_list=['wavelength'])[0]
+            bands_df['wavelength'] = label_decomposition(bands_df.index.values, params_list=['wavelength'], verbose=False)[0]
 
         # Get bands limits indexes
         idcs_w3 = np.searchsorted(self._spec.wave_rest, bands_df.w3)
