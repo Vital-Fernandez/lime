@@ -5,7 +5,7 @@ from lime.io import check_fit_conf
 from copy import deepcopy
 
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
+outputs_folder = Path(__file__).parent / '3_explanations'
 
 conf_file_address = baseline_folder/'manga.toml'
 lines_log_address = baseline_folder/'manga_lines_log.txt'

@@ -463,7 +463,7 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
                 lineLogHDU = log_to_HDU(lines_log, ext_name=page, column_dtypes=column_dtypes, header_dict=header)
 
-                if log_path.is_file(): # TODO this strategy is slow for many inputs
+                if log_path.is_file(): # TODO this strategy is slow for many 2_guides
                     try:
                         fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
                     except KeyError:

@@ -203,7 +203,7 @@ class BokehFigures:
         log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
 
-        # Set figure format with the user inputs overwriting the default conf
+        # Set figure format with the user 2_guides overwriting the default conf
         legend_check = True if label is not None else False
 
         # Check which line should be plotted
@@ -278,7 +278,7 @@ class BokehFigures:
                  detection_band=None, show_masks=True, show_categories=False, show_err=False):
 
 
-        # Set figure format with the user inputs overwriting the default conf
+        # Set figure format with the user 2_guides overwriting the default conf
         legend_check = True if label is not None else False
 
         # Adjust the default theme

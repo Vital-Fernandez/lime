@@ -24,15 +24,15 @@ def read_muse_cube(file_address):
 # Inputs
 cfg_file = 'muse.toml'
 mask_file = 'CGCG007_masks.fits'
-cube_file = '../benchmark/CGCG007.fits'
+cube_file = '/CGCG007.fits'
 
 # Outputs
 log_file = 'log_CGCG007.fits'
 
 # Load configuration
 cfg = lime.load_cfg(cfg_file)
-norm_flux = cfg['sample_data']['norm_flux']
-z_obj = cfg['sample_data']['redshift']
+norm_flux = cfg['0_resources']['norm_flux']
+z_obj = cfg['0_resources']['redshift']
 
 # Load cube
 wave_array, cube, hdr = read_muse_cube(cube_file)

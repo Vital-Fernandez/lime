@@ -2,7 +2,6 @@ import logging
 from xmlrpc.client import boolean
 
 import numpy as np
-import pandas as pd
 
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines, figure
 
@@ -646,7 +645,7 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
     # Display check for the user figures
     display_check = True if in_fig is None else False
 
-    # Set figure format with the user inputs overwriting the default conf
+    # Set figure format with the user 2_guides overwriting the default conf
     legend_check = True if label is not None else False
 
     # Adjust the default theme
@@ -676,8 +675,7 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
         ax1.set(**AXES_CONF)
 
         # Reference _frame for the plot
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spectrum.wave, spectrum.flux,
-                                                                    z_infered, rest_frame)
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spectrum, rest_frame)
 
         # Plot spectrum
         ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
@@ -714,7 +712,7 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
     # Display check for the user figures
     display_check = True if in_fig is None else False
 
-    # Set figure format with the user inputs overwriting the default conf
+    # Set figure format with the user 2_guides overwriting the default conf
     legend_check = True if label is not None else False
 
     print(f'Observed wavelengths: {obs_wave_arr}')
@@ -1561,7 +1559,7 @@ class SpectrumFigures:
         # Display check for input figures
         display_check = False if in_fig is not None else True
 
-        # Set figure format with the user inputs overwriting the default conf
+        # Set figure format with the user 2_guides overwriting the default conf
         legend_check = True if label is not None else False
 
         # Adjust the default theme

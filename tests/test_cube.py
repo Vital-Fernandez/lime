@@ -9,7 +9,7 @@ import pytest
 
 
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
+outputs_folder = Path(__file__).parent / '3_explanations'
 
 file_address = baseline_folder/'manga_spaxel.txt'
 conf_file_address = baseline_folder/'manga.toml'
@@ -18,9 +18,9 @@ lines_log_address = baseline_folder/'manga_lines_log.txt'
 spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
 cube_log_address = baseline_folder/'SHOC579_log.fits'
 
-# cube_address = Path(__file__).parent/'outputs'/'manga-8626-12704-LOGCUBE.fits.gz'
-cube_address = Path(__file__).parent.parent/'examples/sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz'
-spatial_log_address = Path(__file__).parent/'outputs'/'SHOC579_log.fits'
+# cube_address = Path(__file__).parent/'3_explanations'/'manga-8626-12704-LOGCUBE.fits.gz'
+cube_address = Path(__file__).parent.parent/'examples/0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz'
+spatial_log_address = Path(__file__).parent/'3_explanations'/'SHOC579_log.fits'
 
 RMS_tolerance = 3
 redshift = 0.0475
@@ -153,7 +153,7 @@ class TestCubeClass:
 
     def test_save_paramter_maps(self):
 
-        ouput_folder = Path(__file__).parent/'outputs'
+        ouput_folder = Path(__file__).parent/'3_explanations'
 
         # Export the measurements log as maps:
         param_list = ['intg_flux', 'intg_flux_err', 'v_r', 'v_r_err']

@@ -11,8 +11,8 @@ from lime.fitting.lines import c_KMpS
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
-spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
+outputs_folder = Path(__file__).parent / '3_explanations'
+spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
 file_address = baseline_folder/'manga_spaxel.txt'
 lines_log_address = baseline_folder/'manga_lines_log.txt'

@@ -11,6 +11,6 @@ mplcursors~=0.6
 openpyxl~=3.1
 PyLaTeX~=1.4
 toml~=0.10
-nbsphinx~=0.9
 ipympl~=0.9
 sphinx-rtd-theme~=3.0
+myst-nb~=1.3

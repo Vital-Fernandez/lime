@@ -9,8 +9,8 @@ from copy import deepcopy
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
-spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
+outputs_folder = Path(__file__).parent / '3_explanations'
+spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 file_address = baseline_folder/'manga_spaxel.txt'
 conf_file_address = baseline_folder/'manga.toml'
 bands_file_address = baseline_folder/f'manga_line_bands.txt'

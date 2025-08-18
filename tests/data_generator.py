@@ -7,7 +7,7 @@ from astropy.wcs import WCS
 baseline_folder = Path(__file__).parent / 'baseline'
 
 # Inputs
-cube_file = Path('../examples/sample_data/spectra/manga-8626-12704-LOGCUBE.fits.gz')
+cube_file = Path('../examples/0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz')
 conf_file = baseline_folder/'manga.toml'
 line_bands_file = baseline_folder/'manga_line_bands.txt'
 spatial_mask_address = baseline_folder/'SHOC579_mask.fits'

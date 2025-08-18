@@ -23,6 +23,9 @@ DESI_SPECTRA_BANDS = ('B', 'R', 'Z')
 SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'res_power': None,
                                     'units_wave': 'um', 'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
 
+                        'nirspec_grizli': {'redshift': None, 'norm_flux': None, 'res_power': None,
+                                           'units_wave': 'um', 'units_flux': 'uJy', 'pixel_mask': "nan", 'id_label': None},
+
                         'isis': {'redshift': None, 'norm_flux': None, 'res_power': None,
                                  'units_wave': 'Angstrom', 'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
@@ -507,6 +510,46 @@ class OpenFits:
         params_dict['pixel_mask'] = pixel_mask
 
         return wave_array, flux_array, err_array, header_list, params_dict
+
+    @staticmethod
+    def nirspec_grizli(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), **kwargs):
+
+        """
+
+        This method returns the spectrum array data and headers from a GRIZLI (Brammer (2023a) and Valentino et al.
+        (2023)) reduction of a NIRSPEC observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Spectrum or Cube. These parameters include the observation wavelength/flux units, normalization
+        and wcs from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        wave_array, flux_array, err_array = data_list[0]['wave'], data_list[0]['flux'], data_list[0]['err']
+        pixel_mask = np.isnan(flux_array) | np.isnan(err_array)
+
+        # Spectrum properties
+        params_dict = SPECTRUM_FITS_PARAMS['nirspec_grizli']
+        params_dict['pixel_mask'] = pixel_mask
+
+        return wave_array, flux_array, err_array, header_list, params_dict
+
 
     @staticmethod
     def isis(fits_address, data_ext_list=0, hdr_ext_list=0, **kwargs):

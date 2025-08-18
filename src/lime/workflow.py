@@ -227,7 +227,7 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     this wavelength interval.
 
     Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-    lists. These inputs must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+    lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
 
     If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
     limited to the transitions at that observed range.
@@ -441,7 +441,7 @@ class SpecRetriever:
 
         return bands
 
-    def spectrum(self, line_label=None, output_address=None, ref_frame=None, split_components=False, **kwargs):
+    def spectrum(self, fname=None, line_label=None, ref_frame=None, split_components=False, **kwargs):
 
         # Headers for the default list
         headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
@@ -541,12 +541,16 @@ class SpecRetriever:
             default_kwargs['footer'] = footer_str
 
         # Return a recarray with the spectrum data
-        if output_address is None:
-            return np.core.records.fromarrays([out_arr[:, i] for i in range(out_arr.shape[1])], names=list(headers))
+        if fname is None:
+            output = np.core.records.fromarrays([out_arr[:, i] for i in range(out_arr.shape[1])], names=list(headers))
 
         # Save to a file
         else:
-            return np.savetxt(output_address, out_arr, **default_kwargs)
+            np.savetxt(fname, out_arr, **default_kwargs)
+            output = None
+
+        return output
+
 
 
 class SpecTreatment(LineFitting, RedshiftFitting):
@@ -562,9 +566,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._i_line = 0
         self._n_lines = 0
 
-    def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
-              arr_bands=None):
+    def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', cont_from_bands=True,
+              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
 
         """
 
@@ -631,17 +634,20 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
-        # User inputs override default behaviour for the pixel error and the continuum calculation # TODO is this right?
+        # User 2_guides override default behaviour for the pixel error and the continuum calculation # TODO is this right?
         err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
         cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
-        self.line = Transition.from_db(label, input_conf,
-                                       data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
-                                       )
+        if isinstance(label, str):
+            self.line = Transition.from_db(label, input_conf,
+                                           data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
+                                           )
+        else:
+            self.line = label
 
-        if arr_bands is not None:
-            self.line.mask = arr_bands
+        # if arr_bands is not None:
+        #     self.line.mask = arr_bands
 
         # Check the line selection is valid
         idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)

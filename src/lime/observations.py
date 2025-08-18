@@ -509,7 +509,7 @@ class Spectrum:
         # Class attributes
         self.label = label
 
-        # Review the inputs
+        # Review the 2_guides
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Checks units
@@ -766,7 +766,7 @@ class Cube:
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
-        # Review the inputs
+        # Review the 2_guides
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Class attributes
@@ -895,7 +895,7 @@ class Cube:
 
         """
 
-        # Check the function inputs
+        # Check the function 2_guides
         contour_pctls = np.atleast_1d(contour_pctls)
         if not np.all(np.diff(contour_pctls) > 0):
             raise LiMe_Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')

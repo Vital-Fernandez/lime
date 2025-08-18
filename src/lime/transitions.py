@@ -443,7 +443,7 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
 
     If the user provides a `bands dataframe <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
     (``bands`` argument) dataframe and a `fitting documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
-    (``fit_conf`` argument) the function will use this information to compute the requested outputs. Otherwise, only the
+    (``fit_conf`` argument) the function will use this information to compute the requested 3_explanations. Otherwise, only the
     `line label <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_ will be used to derive
     the information.
 
@@ -589,7 +589,7 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     this wavelength interval.
 
     Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-    lists. These inputs must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+    lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
 
     If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
     limited to the transitions at that observed range.
@@ -1526,7 +1526,7 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
     if group_type:
         group_label = None if fit_cfg is None else fit_cfg.get(label, None)
 
-        # Dict inputs have preference over database
+        # Dict 2_guides have preference over database
         if (group_label is None) and isinstance(data_frame, pd.DataFrame):
             group_label = pd_get(data_frame, label, column='group_label', transform='none')
     else:

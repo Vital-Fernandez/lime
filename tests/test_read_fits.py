@@ -12,8 +12,8 @@ tolerance_rms = 3
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
-spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
+outputs_folder = Path(__file__).parent / '3_explanations'
+spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
 # Fitting example for text fil
 redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189, 'NGC6552':0.0266}
@@ -82,7 +82,7 @@ class TestOpenFits:
         SHOC579 = lime.Spectrum.from_file(spectra_folder / file_name, instrument='sdss')
 
         # Convert to a text file
-        SHOC579.retrieve.spectrum(output_address=outputs_folder/f'shoc579_sdss.txt')
+        SHOC579.retrieve.spectrum(fname=outputs_folder / f'shoc579_sdss.txt')
 
         # Read the text file
         SHOC579_txt = lime.Spectrum.from_file(outputs_folder/f'shoc579_sdss.txt', instrument='text')
@@ -100,7 +100,7 @@ class TestOpenFits:
 
         # Perform a fitting and save that fitting
         SHOC579.fit.bands('H1_4861A')
-        SHOC579.retrieve.spectrum(line_label='H1_4861A', output_address=outputs_folder/f'shoc579_sdss_Hbeta.txt')
+        SHOC579.retrieve.spectrum(line_label='H1_4861A', fname=outputs_folder / f'shoc579_sdss_Hbeta.txt')
 
         # Compare with baseline
         data_baseline = np.loadtxt(baseline_folder/f'shoc579_sdss_Hbeta.txt')
