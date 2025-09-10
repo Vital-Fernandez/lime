@@ -71,7 +71,7 @@ def update_bokeh_figure(figure_obj, config_dict):
 
         # Single value entries
         else:
-            if key != 'tools':
+            if key != 'pyPopstar':
                 setattr(figure_obj, key, value)
 
     # Set zoom and pan as active
@@ -232,7 +232,7 @@ class BokehFigures:
             scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
 
             # Create figure with default utils if not provided
-            fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+            fig = figure(tools=PLT_CONF.get('pyPopstar', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
 
             # Spectrum data source
             source = ColumnDataSource(data={"x": wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr,
@@ -290,7 +290,7 @@ class BokehFigures:
         scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
 
         # Create figure with default utils if not provided
-        fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+        fig = figure(tools=PLT_CONF.get('pyPopstar', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
 
         # Data to plot
         wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,

@@ -58,7 +58,7 @@ default."textsize_notes" = 4
 default."width" = 600
 default."height" = 300
 default."tools" = 'fullscreen,pan,wheel_zoom,box_zoom,xzoom_in,yzoom_in,reset,save'
-#default."tools" = 'zoom_in,xzoom_in,yzoom_in,xwheel_zoom,ywheel_zoom,reset'
+#default."pyPopstar" = 'zoom_in,xzoom_in,yzoom_in,xwheel_zoom,ywheel_zoom,reset'
 
 
 [bokeh.size] # Figure elements size

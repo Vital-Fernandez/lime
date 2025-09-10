@@ -18,7 +18,6 @@ def all_but_ipynb(dir, contents):
             result += [c]
     return result
 
-
 def create_rst_from_changelog(input_file, output_file):
 
     with open(input_file, 'r') as file:
@@ -95,7 +94,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.0.dev11"
+release = "2.0.dev12"
 
 
 # -- General configuration ---------------------------------------------------
@@ -148,6 +147,8 @@ templates_path = ['_templates', '_build']
 # Exclude patterns
 exclude_patterns = []
 
+# Cell execution in case of documentation testing
+nb_execution_mode = "off"
 
 # -- MathJax configuration ---------------------------------------------------
 
@@ -167,7 +168,8 @@ imgmath_use_preview = True
 
 # html_theme = 'sphinx_rtd_theme'
 html_theme = 'sphinx_book_theme'
-html_static_path = ['_static']
+# html_static_path = ['_static']
+html_static_path = []
 
 html_theme_options = {"logo": {"image_light": "0_resources/images/LiMe2_logo_white_transparent.png",
                                "image_dark":  "0_resources/images/LiMe2_logo_dark_transparent.png",
@@ -189,7 +191,7 @@ sys.path.append(_lib_path.as_posix())
 sys.path.append(_examples_path.as_posix())
 
 # Delete existing files and copy the new versions
-list_folders = ['0_resources', '1_introduction', '2_guides', '3_explanations', '4_reference', '5_tutorials']
+list_folders = ['0_resources', '1_introduction', '2_guides', '3_explanations', '4_references']
 for sub_folder in list_folders: shutil.rmtree(_doc_folder / sub_folder, ignore_errors=True)
 for sub_folder in list_folders: shutil.copytree(_examples_path/sub_folder, _doc_folder/sub_folder, dirs_exist_ok=True)
 
@@ -197,5 +199,5 @@ for sub_folder in list_folders: shutil.copytree(_examples_path/sub_folder, _doc_
 
 # Compile the changelog page
 input_txt_changelog = _lib_path/'lime/changelog.txt'  # Path to the uploaded changelog file
-output_rst_changelog = _doc_folder/'4_reference/0_changelog.md'  # Output md file
+output_rst_changelog = _doc_folder/'4_references/0_changelog.md'  # Output md file
 create_md_from_changelog(input_txt_changelog, output_rst_changelog)

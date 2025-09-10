@@ -594,8 +594,19 @@ class ProfileModelCompiler:
             weights_in = weights[idcs_good] # TODO add minimum weight for the case of very large uncertainty
 
         # Fit the line
-        self.params = self.model.make_params()
+        # self.params = self.model.make_params()
 
+        # Compute model params displaying an error message if failed
+        try:
+            self.params = self.model.make_params()
+        except Exception as e:
+            msg = "Error compiling the line parameters below. Please check the input fitting configuration.\n"
+            for j, (name, conf) in enumerate(self.model.param_hints.items(), start=1):
+                name_comps = name.split('_')
+                msg +=  f"{line.list_comps[int(name_comps[0][-1])].label}_{'_'.join(name_comps[1:])}: {conf}\n"
+            raise LiMe_Error(msg)
+
+        # Run the fitting
         with warnings.catch_warnings():
             warnings.simplefilter(_VERBOSE_WARNINGS)
             self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
@@ -701,7 +712,6 @@ class ProfileModelCompiler:
         param_ref = f'line{idx}_{param_label}'
 
         # TODO if min max provided the value should be in the middle
-
         # Overwrite default by the one provided by the user
         if user_ref in user_conf:
             param_conf = {**default_conf, **user_conf[user_ref]}
@@ -753,7 +763,8 @@ class ProfileModelCompiler:
 
                     # Prepare definition of param:
                     new_expresion = f'{ineq_name}{ineq_operation}{ineq_linkedParam}'
-                    param_conf = dict(expr=new_expresion)
+                    # param_conf = dict(expr=new_expresion)
+                    param_conf = {'value': ineq_conf['value'], 'expr': new_expresion}
 
             # Case default value is not provided
             else:
@@ -767,6 +778,10 @@ class ProfileModelCompiler:
                 for param_conf_entry in ('value', 'min', 'max'):
                     if param_conf_entry in param_user_conf:
                         param_conf[param_conf_entry] = param_conf[param_conf_entry] * (1 + z_obj)
+
+        # In case of parameter is defined by an expresion, but it has no value
+        if (param_conf['value'] is None) and (param_value is not None):
+            param_conf['value'] = param_value
 
         # Assign the parameter configuration to the models
         self.model.set_param_hint(param_ref, **param_conf)

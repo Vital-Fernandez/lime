@@ -2,8 +2,8 @@ import logging
 from xmlrpc.client import boolean
 
 import numpy as np
-
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines, figure
+from pathlib import Path
 
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation, PROFILE_FUNCTIONS
 from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr
@@ -117,7 +117,6 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
 
     # By default, plot on screen unless an output address is provided
     if plot_check:
-
         if file_path is None:
 
             # Tight layout
@@ -130,12 +129,17 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
             # Display
             plt.show()
 
-        else:
+        elif isinstance(file_path, (Path, str)):
             plt.savefig(file_path, bbox_inches=bbox_inches)
 
             # Close the figure in the case of printing
             if fig_obj is not None:
                 plt.close(fig_obj)
+
+        # Keep the image on the memory
+        else:
+            _logger.info(f'Ouput filepath is not recognized: {file_path} ({type(file_path)})')
+            return
 
     return
 
@@ -1248,14 +1252,21 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
         ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color)
 
         # Label area
-        text = line_label
+        # text = line_label
         x_text = line.wavelength * (1 + redshift) / z_corr
         y_text = max_region * 0.9 * z_corr
-        ax.text(x_text, y_text, text, rotation=270)
+        # ax.text(x_text, y_text, text, rotation=270)
+        # print('seguro', text)
+
+        ax.annotate(line_label, xy=(line.wavelength * (1 + redshift) / z_corr, max_region * z_corr),
+                    xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", rotation=270)
+
+
 
     # Plot the detected line peaks
     if 'signal_peak' in bands.columns:
-        idcs_peaks = bands['signal_peak'].values.astype(int)
+        idcs_peaks = bands['signal_peak'].to_numpy()
+        idcs_peaks = idcs_peaks[(~np.isnan(idcs_peaks) | np.isfinite(idcs_peaks))].astype(int)
         ax.scatter(x[idcs_peaks] / z_corr, y[idcs_peaks] * z_corr, label='Peaks',
                      facecolors='none', edgecolors=theme.colors['peak'])
 
@@ -1489,7 +1500,7 @@ class SpectrumFigures:
 
         return
 
-    def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
+    def spectrum(self, fname=None, label=None, bands=None, rest_frame=False, log_scale=False,
                  show_profiles=True, show_cont=False, show_err=False, show_masks=True, show_components=False,
                  in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
 
@@ -1514,8 +1525,8 @@ class SpectrumFigures:
         The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
         and "title". It is not necessary to include all the keys in this argument.
 
-        :param output_address: File location to store the plot.
-        :type output_address: str, optional
+        :param fname: File location to store the plot.
+        :type fname: str, optional
 
         :param label: Label for the spectrum plot legend. The default label is 'Observed spectrum'.
         :type label: str, optional
@@ -1635,7 +1646,7 @@ class SpectrumFigures:
                 self.ax.legend()
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(output_address, 'tight', self.fig, maximize, display_check)
+            save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
 
         return
 
@@ -1778,7 +1789,7 @@ class SpectrumFigures:
 
         return
 
-    def bands(self, label=None, bands=None, output_address=None,rest_frame=False, y_scale='auto', show_profiles=True,
+    def bands(self, label=None, bands=None, output_address=None, rest_frame=False, y_scale='auto', show_profile=True,
               show_err=False, show_continua=True, fig_cfg=None, ax_cfg=None, in_fig=None, maximize=False):
 
         """
@@ -1804,8 +1815,8 @@ class SpectrumFigures:
         :param output_address: File location to store the plot.
         :type output_address: str, optional
 
-        :param show_profiles: Set to True to display fitted profiles. The default value is False.
-        :type show_profiles:  bool, optional
+        :param show_profile: Set to True to display fitted profiles. The default value is False.
+        :type show_profile:  bool, optional
 
         :param rest_frame: Set to True for a display in rest frame. The default value is False
         :type rest_frame: bool, optional
@@ -1841,7 +1852,7 @@ class SpectrumFigures:
             display_check = False if in_fig is not None else True
 
             # Check if the line has measuring data
-            show_profiles = show_profiles and (line.measurements is not None)
+            show_profile = show_profile and (line.measurements.profile_flux is not None)
 
             # Adjust the default theme
             plt_cfg = theme.fig_defaults(fig_cfg, fig_type='bands')
@@ -1854,7 +1865,7 @@ class SpectrumFigures:
                 self.fig = plt.figure() if in_fig is None else in_fig
 
                 # Establish the axes
-                if show_profiles:
+                if show_profile:
                     grid_ax = self.fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3, 1])
                     spec_ax = plt.subplot(grid_ax[0])
                     resid_ax = plt.subplot(grid_ax[1], sharex=spec_ax)
@@ -1873,9 +1884,10 @@ class SpectrumFigures:
                 self.ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]]/z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
                               where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
 
-                # Continuum bands
-                line_band_plotter(self.ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
-                                   show_central=True, show_continua=show_continua)
+                # Line bands
+                if show_profile:
+                    line_band_plotter(self.ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
+                                       show_central=True, show_continua=show_continua)
 
                 # Plot the uncertainty
                 if show_err and (self._spec.err_flux is not None):
@@ -1886,7 +1898,7 @@ class SpectrumFigures:
                                           step='mid', alpha=1, color=theme.colors['line_band'], ec=None)
 
                 # Add the fitting results
-                if show_profiles:
+                if show_profile:
 
                     # Plot profile
                     mplcursor_list = spec_profile_plotter(self.ax[0], self._spec, line, z_corr)
@@ -1909,7 +1921,8 @@ class SpectrumFigures:
                                   z_corr, self._spec.frame, line.param_arr('label'))
 
                 # Display the legend
-                self.ax[0].legend()
+                if show_profile:
+                    self.ax[0].legend()
 
                 # Set the scale
                 line_band_scaler(self.ax[0], y=flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr, y_scale=y_scale)
@@ -2140,6 +2153,11 @@ class SpectrumFigures:
 
         return
 
+    def show(self, **kwargs):
+
+        plt.show(**kwargs)
+
+        return
 
 class CubeFigures:
 

@@ -53,6 +53,9 @@ caption: Introduction
 ---
 1_introduction/0_installation
 1_introduction/1_observations
+1_introduction/2_line_labels
+1_introduction/3_line_bands
+1_introduction/4_fitting_configuration
 ```
 
 
@@ -61,10 +64,10 @@ caption: Introduction
 maxdepth: 2
 caption: Guides
 ---
-2_guides/0_open_fits_files
-2_guides/2_measure_multiple_lines
-
-
+2_guides/0_creating_observations
+2_guides/1_continuum_fitting
+2_guides/2_line_detection
+2_guides/3_multifile-line
 ```
 
 ```{toctree} 
@@ -72,7 +75,6 @@ caption: Guides
 maxdepth: 2
 caption: Explanations
 ---
-3_explanations/0_measurements_description
 
 ```
 
@@ -81,6 +83,5 @@ caption: Explanations
 maxdepth: 1
 caption: Reference
 ---
-4_reference/0_changelog
-
+4_references/0_changelog.md
 ```

@@ -818,9 +818,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         pbar.output_message(self._i_line, self._n_lines, pre_text="", post_text=f'({line})')
 
                         # Fit the lines
-                        self.bands(line, bands, input_conf, min_method, profile,
-                                   cont_from_bands=cont_from_bands, err_from_bands=err_from_bands,
-                                   temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
+                        self.bands(line, bands, input_conf, min_method, cont_from_bands=cont_from_bands,
+                                   err_from_bands=err_from_bands, temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
                             self._spec.plot.bands()
@@ -1068,9 +1067,15 @@ class CubeTreatment(LineFitting):
 
             # Load the mask log if provided
             if bands is None:
-                bands_file = mask_conf['bands']
-                bands_path = Path(bands_file).absolute() if bands_file[0] == '.' else Path(bands_file)
-                bands_in = load_frame(bands_path)
+                bands_file = Path(mask_conf['bands']).resolve()
+                if bands_file.exists():
+                    bands_in = load_frame(bands_file)
+                else:
+                    err_msg = (f'Bands file not found at: {bands_file}.'
+                               f'\n- Resolving from log section - entry: '
+                               f'\n [{mask_name}_line_fitting]'
+                               f'\n bands = {mask_conf['bands']}')
+                    raise LiMe_Error(err_msg)
             else:
                 bands_in = bands
 
