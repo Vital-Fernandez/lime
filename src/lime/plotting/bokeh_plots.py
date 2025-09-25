@@ -1,11 +1,11 @@
 import logging
 import numpy as np
 
-from lime.transitions import label_decomposition, Transition
+from lime.transitions import label_decomposition, Line
 from lime.plotting.format import theme
-from lime.plotting.plots import frame_mask_switch
+from lime.plotting.plots import frame_mask_switch, line_profile_generator
 from lime.plotting.utils import color_selector
-from lime.io import check_file_dataframe
+from lime.io import check_file_dataframe, LiMe_Error
 from lime.plotting.utils import parse_bands_arguments
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation
 
@@ -71,7 +71,7 @@ def update_bokeh_figure(figure_obj, config_dict):
 
         # Single value entries
         else:
-            if key != 'pyPopstar':
+            if key != 'tools':
                 setattr(figure_obj, key, value)
 
     # Set zoom and pan as active
@@ -146,10 +146,41 @@ def bands_filling_bokeh(fig, x, y, z_corr, idcs_mask, label, exclude_continua=Fa
     return
 
 
+def spec_profile_bokeh(fig, spec, line_i, z_corr):
+
+    # Compute the profile arrays
+    wave_array = np.linspace(line_i.mask[2], line_i.mask[3], 100) * (1 + spec.redshift)
+    cont_array = line_i.measurements.m_cont * wave_array + line_i.measurements.n_cont
+    flux_array = line_profile_generator(line_i, wave_array)
+
+    # Plot Continuum
+    cont_format = dict(line_color=theme.colors['cont'], line_dash="dashed", line_width=2)
+    fig.line(wave_array/z_corr, cont_array * z_corr / spec.norm_flux, **cont_format)
+    # ax.plot(wave_array/z_corr, cont_array * z_corr / spec.norm_flux, color=theme.colors['cont'], linestyle='--', linewidth=0.5)
+
+    # Combined component
+    comb_array = (flux_array.sum(axis=0) + cont_array) * z_corr / spec.norm_flux
+    line_format = color_selector(None, line_i.measurements.observations, idx_line=0, n_comps=1, scale_dict=theme.plt,
+                                 colors_dict=theme.colors, library='bokeh')
+    fig.line(wave_array / z_corr, comb_array, **line_format)
+
+    # Merged components
+    if line_i.group == 'b':
+
+        for j, y_arr in enumerate(flux_array):
+            single_array = (cont_array + y_arr) * z_corr / spec.norm_flux
+            line_format = color_selector(line_i.list_comps[j].label, line_i.measurements.observations, j, n_comps=flux_array.shape[0],
+                                         scale_dict=theme.plt, colors_dict=theme.colors, library='bokeh')
+            # ax.plot(wave_array/z_corr, single_array, **line_format)
+            fig.line(wave_array/z_corr, single_array, **line_format)
+
+    return
+
+
 def profile_bokeh(fig, line, z_cor, log, redshift, norm_flux):
 
     # Check if blended line or Single/merged
-    if line.blended_check:
+    if line.group == 'b':
         if line.list_comps:
             idx_line = line.list_comps.index(line.label)
             n_comps = len(line.list_comps)
@@ -232,7 +263,7 @@ class BokehFigures:
             scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
 
             # Create figure with default utils if not provided
-            fig = figure(tools=PLT_CONF.get('pyPopstar', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+            fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
 
             # Spectrum data source
             source = ColumnDataSource(data={"x": wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr,
@@ -274,160 +305,163 @@ class BokehFigures:
         return
 
     def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
-                 include_fits=True, include_cont=False, include_components=False, return_fig=False, fig_cfg=None, ax_cfg=None, maximize=False,
-                 detection_band=None, show_masks=True, show_categories=False, show_err=False):
+                 include_fits=True, include_cont=False, include_components=False, return_fig=False, fig_cfg=None,
+                 ax_cfg=None, maximize=False, detection_band=None, show_masks=True, show_categories=False, show_err=False):
+
+        if bokeh_check:
+
+            # Set figure format with the user 2_guides overwriting the default conf
+            legend_check = True if label is not None else False
+
+            # Adjust the default theme
+            PLT_CONF = theme.fig_defaults(fig_cfg, plot_lib='bokeh')
+            AXES_CONF = theme.ax_defaults(ax_cfg, self._spec, plotting_library='bokeh')
+
+            # Set the scale
+            scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
+
+            # Create figure with default utils if not provided
+            fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+
+            # Data to plot
+            wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
+
+            # Spectrum data source
+            fig.step( wave_plot / z_corr, flux_plot * z_corr, mode="center", line_width=1, color=theme.colors['fg'])
+
+            # Plot the bands if provided
+            if bands is not None:
+                bokeh_bands(fig, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
+
+            # Show uncertainty
+            if show_err and (self._spec.err_flux is not None):
+                fig.varea_step(x=wave_plot / z_corr,
+                               y1=(flux_plot - err_plot) * z_corr,
+                               y2=(flux_plot + err_plot) * z_corr,
+                               step_mode="center", fill_alpha=0.2, color=theme.colors['err_area'])
+
+            # Include the continuum
+            if include_cont and self._spec.cont is not None:
+                fig.line(wave_plot/z_corr, self._spec.cont*z_corr, legend_label="Continuum.",
+                         line_color=theme.colors['fade_fg'], line_dash="dashed", line_width=2)
+
+                low_limit, high_limit = self._spec.cont - self._spec.cont_std, self._spec.cont + self._spec.cont_std
+                fig.varea(x=wave_plot/z_corr, y1=low_limit*z_corr, y2=high_limit*z_corr, fill_alpha=0.2,
+                          color=theme.colors['fade_fg'])
+
+            # Plot the fittings
+            if include_fits and self._spec.frame.size > 0:
+
+                # Do not include the legend as the labels are necessary for mplcursors
+                legend_check = False
+
+                # Loop through the lines and plot them
+                line_list = self._spec.frame.index.values
+                profile_list = [None] * line_list.size
+                for i, line_label in enumerate(line_list):
+                    line_i = Line.from_transition(line_label, data_frame=self._spec.frame)
+                    # profile_list[i] = profile_bokeh(fig, line_i, z_corr, self._spec.frame, self._spec.redshift,
+                    #                                self._spec.norm_flux)
+                    spec_profile_bokeh(fig, self._spec, line_i, z_corr)
+
+            if include_components:
+                # Define the bins you want
+                bins = [40, 60, 80, 100]
+
+                # Use np.histogram to get the counts in each bin
+                if aspect_check:
+
+                    if self._spec.infer.pred_arr is not None:
+                        categories = np.sort(np.unique(self._spec.infer.pred_arr))
+                        # legend_scatter = []
+
+                        color_list, feature_list = [], []
+                        for category in categories:
+                            if category != 0:
+
+                                # Get category properties
+                                feature_name = self._spec.infer.model_mgr.medium.number_feature_dict[category]
+                                feature_color = aspect.cfg['colors'][feature_name]
+                                idcs_feature = self._spec.infer.pred_arr == category
+                                # legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
+                                #                                     markerfacecolor=feature_color, markersize=8,
+                                #                                     label=feature_name))
+                                color_list.append(feature_color)
+                                feature_list.append(feature_name)
+
+                                # Count the pixels for each category
+                                counts, _ = np.histogram(self._spec.infer.conf_arr[idcs_feature], bins=bins)
+                                for idx_conf, count_conf in enumerate(counts):
+                                    if count_conf > 0:
+                                        # Get indeces matching the detections
+                                        idcs_count = np.where((bins[idx_conf] < self._spec.infer.conf_arr[idcs_feature]) &
+                                                              (self._spec.infer.conf_arr[idcs_feature] <= bins[
+                                                                  idx_conf + 1]))[0]
+                                        idcs_nonnan = np.where(idcs_feature)[0][
+                                            idcs_count]  # Returns indices where mask is True
+
+                                        # Generate nan arrays with the data to avoid filling non detections
+                                        wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size,
+                                                                                                      np.nan)
+                                        wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
+                                        flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
+
+                                        # Plot with the corresponding colors and linestyle
+                                        fig.step(wave_nan, flux_nan, mode="center", color=feature_color,
+                                                 line_dash=category_conf_styles[idx_conf])
+
+                        # Add intensity label
+                        rlines = []
+                        for dash in category_conf_styles.values():
+                            rl = fig.line(x=wave_plot[0], y=wave_plot[0], line_color="black", line_dash=dash, line_width=2)
+                            rl.visible = False
+                            rlines.append(rl)
+
+                        # Create invisible scatter glyphs for the legend
+                        dots = []
+                        for color in color_list:
+                            r = fig.scatter(x=wave_plot[0], y=wave_plot[0], size=5, fill_color=color, line_color=None)
+                            r.visible = False  # hide from plot
+                            dots.append(r)
+
+                        dot_legend = Legend(items=[LegendItem(label=label, renderers=[r]) for label, r in
+                                                     zip(feature_list, dots)],
+                                              orientation="vertical", location="top_right")
+                        fig.add_layout(dot_legend)
 
 
-        # Set figure format with the user 2_guides overwriting the default conf
-        legend_check = True if label is not None else False
+                        labels_int = ["> 40% conf.", "> 60% conf.", "> 80% conf."]
+                        style_legend = Legend(items=[LegendItem(label=label, renderers=[r]) for label, r in
+                                                     zip(labels_int, rlines)],
+                                              orientation="horizontal", location="center")
 
-        # Adjust the default theme
-        PLT_CONF = theme.fig_defaults(fig_cfg, plot_lib='bokeh')
-        AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
-                                      plotting_library='bokeh')
+                        # Add legend *below* the plot
+                        fig.add_layout(style_legend, 'below')
 
-        # Set the scale
-        scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
+            # Plot labels
+            fig.xaxis.axis_label = AXES_CONF['xlabel']
+            fig.yaxis.axis_label = AXES_CONF['ylabel']
 
-        # Create figure with default utils if not provided
-        fig = figure(tools=PLT_CONF.get('pyPopstar', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+            # Adjust the format of the plot
+            update_bokeh_figure(fig, PLT_CONF)
 
-        # Data to plot
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
-                                                            self._spec.redshift, rest_frame)
+            # Hide the legend if there are line profiles
+            fig.legend.visible = legend_check
 
-        # Spectrum data source
-        fig.step( wave_plot / z_corr, flux_plot * z_corr, mode="center", line_width=1, color=theme.colors['fg'])
+            # Save or display the plot
+            if return_fig:
+                return fig
 
-        # Plot the bands if provided
-        if bands is not None:
-            bokeh_bands(fig, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
+            elif output_address is not None:
+                save(fig, filename=output_address)
 
-        # Show uncertainty
-        if show_err and (self._spec.err_flux is not None):
-            err_plot = self._spec.err_flux.data
-            fig.varea_step(x=wave_plot / z_corr,
-                           y1=(flux_plot - err_plot) * z_corr,
-                           y2=(flux_plot + err_plot) * z_corr,
-                           step_mode="center", fill_alpha=0.2, color=theme.colors['err_area'])
-
-        # Include the continuum
-        if include_cont and self._spec.cont is not None:
-            fig.line(wave_plot/z_corr, self._spec.cont*z_corr, legend_label="Continuum.",
-                     line_color=theme.colors['fade_fg'], line_dash="dashed", line_width=2)
-
-            low_limit, high_limit = self._spec.cont - self._spec.cont_std, self._spec.cont + self._spec.cont_std
-            fig.varea(x=wave_plot/z_corr, y1=low_limit*z_corr, y2=high_limit*z_corr, fill_alpha=0.2,
-                      color=theme.colors['fade_fg'])
-
-        # Plot the fittings
-        if include_fits and self._spec.frame.size > 0:
-
-            # Do not include the legend as the labels are necessary for mplcursors
-            legend_check = False
-
-            # Loop through the lines and plot them
-            line_list = self._spec.frame.index.values
-            profile_list = [None] * line_list.size
-            for i, line_label in enumerate(line_list):
-                line_i = Transition.from_log(line_label, measurements_df=self._spec.frame)
-                profile_list[i] = profile_bokeh(fig, line_i, z_corr, self._spec.frame, self._spec.redshift,
-                                               self._spec.norm_flux)
-
-        if include_components:
-            # Define the bins you want
-            bins = [40, 60, 80, 100]
-
-            # Use np.histogram to get the counts in each bin
-            if aspect_check:
-
-                if self._spec.infer.pred_arr is not None:
-                    categories = np.sort(np.unique(self._spec.infer.pred_arr))
-                    # legend_scatter = []
-
-                    color_list, feature_list = [], []
-                    for category in categories:
-                        if category != 0:
-
-                            # Get category properties
-                            feature_name = self._spec.infer.model_mgr.medium.number_feature_dict[category]
-                            feature_color = aspect.cfg['colors'][feature_name]
-                            idcs_feature = self._spec.infer.pred_arr == category
-                            # legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
-                            #                                     markerfacecolor=feature_color, markersize=8,
-                            #                                     label=feature_name))
-                            color_list.append(feature_color)
-                            feature_list.append(feature_name)
-
-                            # Count the pixels for each category
-                            counts, _ = np.histogram(self._spec.infer.conf_arr[idcs_feature], bins=bins)
-                            for idx_conf, count_conf in enumerate(counts):
-                                if count_conf > 0:
-                                    # Get indeces matching the detections
-                                    idcs_count = np.where((bins[idx_conf] < self._spec.infer.conf_arr[idcs_feature]) &
-                                                          (self._spec.infer.conf_arr[idcs_feature] <= bins[
-                                                              idx_conf + 1]))[0]
-                                    idcs_nonnan = np.where(idcs_feature)[0][
-                                        idcs_count]  # Returns indices where mask is True
-
-                                    # Generate nan arrays with the data to avoid filling non detections
-                                    wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size,
-                                                                                                  np.nan)
-                                    wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
-                                    flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
-
-                                    # Plot with the corresponding colors and linestyle
-                                    fig.step(wave_nan, flux_nan, mode="center", color=feature_color,
-                                             line_dash=category_conf_styles[idx_conf])
-
-                    # Add intensity label
-                    rlines = []
-                    for dash in category_conf_styles.values():
-                        rl = fig.line(x=wave_plot[0], y=wave_plot[0], line_color="black", line_dash=dash, line_width=2)
-                        rl.visible = False
-                        rlines.append(rl)
-
-                    # Create invisible scatter glyphs for the legend
-                    dots = []
-                    for color in color_list:
-                        r = fig.scatter(x=wave_plot[0], y=wave_plot[0], size=5, fill_color=color, line_color=None)
-                        r.visible = False  # hide from plot
-                        dots.append(r)
-
-                    dot_legend = Legend(items=[LegendItem(label=label, renderers=[r]) for label, r in
-                                                 zip(feature_list, dots)],
-                                          orientation="vertical", location="top_right")
-                    fig.add_layout(dot_legend)
-
-
-                    labels_int = ["> 40% conf.", "> 60% conf.", "> 80% conf."]
-                    style_legend = Legend(items=[LegendItem(label=label, renderers=[r]) for label, r in
-                                                 zip(labels_int, rlines)],
-                                          orientation="horizontal", location="center")
-
-                    # Add legend *below* the plot
-                    fig.add_layout(style_legend, 'below')
-
-        # Plot labels
-        fig.xaxis.axis_label = AXES_CONF['xlabel']
-        fig.yaxis.axis_label = AXES_CONF['ylabel']
-
-        # Adjust the format of the plot
-        update_bokeh_figure(fig, PLT_CONF)
-
-        # Hide the legend if there are line profiles
-        fig.legend.visible = legend_check
-
-        # Save or display the plot
-        if return_fig:
-            return fig
-
-        elif output_address is not None:
-            save(fig, filename=output_address)
+            else:
+                # output_notebook()
+                show(fig)
 
         else:
-            # output_notebook()
-            show(fig)
+
+            raise LiMe_Error(f'Bokeh is not installed')
 
         return
 

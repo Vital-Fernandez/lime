@@ -365,14 +365,11 @@ def profiles_computation(line_list, log, z_corr, shape_list, x_array=None, inter
 
         # Compute the individual profiles
         for i, comp in enumerate(line_list):
-
             profile_function = PROFILE_FUNCTIONS[shape_list[i]]
             if shape_list[i] in ['g', 'l']:
-
-                amp = log.loc[comp, 'amp']
-                center = log.loc[comp, 'center']
-                sigma = log.loc[comp, 'sigma']
-
+                amp = log.loc[comp.label, 'amp']
+                center = log.loc[comp.label, 'center']
+                sigma = log.loc[comp.label, 'sigma']
                 gaussian_array[:, i] = profile_function(x_array, amp, center, sigma)
 
         return gaussian_array
@@ -410,8 +407,8 @@ def linear_continuum_computation(line_list, log, z_corr, res_factor=100, interva
         cont_array = np.zeros((len(x_array), len(line_list)))
 
         for i, comp in enumerate(line_list):
-            m_cont = log.loc[comp, 'm_cont']
-            n_cont = log.loc[comp, 'n_cont']
+            m_cont = log.loc[comp.label, 'm_cont']
+            n_cont = log.loc[comp.label, 'n_cont']
             cont_array[:, i] = m_cont * x_array + n_cont
 
         return cont_array
@@ -428,8 +425,8 @@ def is_digit(x):
 def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
 
     # Thermal correction
-    line.measurements.sigma_thermal = np.full(len(line.list_comps), np.nan)
-    for i, comp in enumerate(line.measurements.sigma_thermal):
+    line.measurements.sigma_thermal = np.full(line.measurements.sigma.size, np.nan)
+    for i in range(line.measurements.sigma_thermal.size):
         atom_mass = ATOMIC_MASS.get(line.list_comps[i].particle.symbol, np.nan)
         line.measurements.sigma_thermal[i] = np.sqrt(k_Boltzmann * temperature / atom_mass) / 1000
 
@@ -473,18 +470,23 @@ class ProfileModelCompiler:
 
     def __init__(self, line, redshift, user_conf, y, narrow_check=False):
 
-        self.n_comps, self.ref_wave = None, None
         self.model = None
         self.params = None
         self.output = None
+        self.n_comps = None
+        self.ref_wave = None
 
-        # Confirm the number of gaussian components
-        self.n_comps = len(line.list_comps)
+        # Define Reference attributes according to single profile or multiple
+        if not line.group == 'b':
+            self.lcomps = [line]
+            self.n_comps = 1
+            self.ref_wave = np.array([line.wavelength]) * (1 + redshift)
+        else:
+            self.lcomps = line.list_comps
+            self.n_comps = len(line.list_comps)
+            self.ref_wave = line.param_arr('wavelength') * (1 + redshift)
 
-        # Decide the line reference wavelength
-        self.ref_wave = line.measurements.wavelength * (1 + redshift)
-
-        # Continuum models
+        # Continuum model
         self.model = Model(linear_model)
         self.model.prefix = f'line0_'
 
@@ -493,7 +495,7 @@ class ProfileModelCompiler:
         self.define_param(0, line, 'n_cont', line.measurements.n_cont, _INTER_FIX_PAR, user_conf)
 
         # Add one gaussian models per component
-        for idx, comp in enumerate(line.list_comps if line.group == 'b' else [line]):
+        for idx, comp in enumerate(self.lcomps):
 
             # Gaussian comp
             self.model += Model(PROFILE_FUNCTIONS[line.profile], prefix=f'line{idx}_')
@@ -587,14 +589,9 @@ class ProfileModelCompiler:
 
         # Compute weights
         if err is None:
-            weights = np.full(x.size, 1.0 / line.measurements.cont_err)
-            weights_in = weights
+            weights_in = np.full(x[idcs_good].size, 1.0 / line.measurements.cont_err)
         else:
-            weights = 1.0/err
-            weights_in = weights[idcs_good] # TODO add minimum weight for the case of very large uncertainty
-
-        # Fit the line
-        # self.params = self.model.make_params()
+            weights_in = 1.0/err[idcs_good].data
 
         # Compute model params displaying an error message if failed
         try:
@@ -610,31 +607,30 @@ class ProfileModelCompiler:
         with warnings.catch_warnings():
             warnings.simplefilter(_VERBOSE_WARNINGS)
             self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
-        # self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
 
         # Check fitting quality
         self.review_fitting(line)
 
         return
 
-    def measurements_calc(self, measurements, list_transitions, group_type, user_conf):
+    def measurements_calc(self, line, user_conf, redshift):
 
         # Assign continuum values
         for j, param in enumerate(['m_cont', 'n_cont']):
             param_fit = self.output.params.get(f'line0_{param}', None)
             param_value = np.nan if param_fit is None else param_fit.value
             param_err = np.nan if param_fit is None else param_fit.stderr
-            setattr(measurements, param, param_value)
-            setattr(measurements, f'{param}_err', param_err)
+            setattr(line.measurements, param, param_value)
+            setattr(line.measurements, f'{param}_err', param_err)
 
         # Loop through the line components and assign profile params
-        for i, comp_label in enumerate(list_transitions):
+        for i, comp_label in enumerate(self.lcomps):
             for j, param in enumerate(PROFILE_PARAMS[comp_label.profile]):
 
                 # Initialize the parameters
                 if i == 0:
-                    setattr(measurements, param, np.full(self.n_comps, np.nan))
-                    setattr(measurements, f'{param}_err', np.full(self.n_comps, np.nan))
+                    setattr(line.measurements, param, np.full(self.n_comps, np.nan))
+                    setattr(line.measurements, f'{param}_err', np.full(self.n_comps, np.nan))
 
                 # Recover possible component from fit
                 param_fit = self.output.params.get(f'line{i}_{param}', None)
@@ -642,61 +638,64 @@ class ProfileModelCompiler:
                 param_err = np.nan if param_fit is None else param_fit.stderr
 
                 # Assign array curve parameters
-                getattr(measurements, param)[i] = param_value
-                getattr(measurements, f'{param}_err')[i] = param_err
+                getattr(line.measurements, param)[i] = param_value
+                getattr(line.measurements, f'{param}_err')[i] = param_err
 
             # Initialize array parameters
             if i == 0:
-                measurements.profile_flux = np.full(self.n_comps, np.nan)
-                measurements.profile_flux_err = np.full(self.n_comps, np.nan)
-                measurements.eqw = np.full(self.n_comps, np.nan)
-                measurements.eqw_err = np.full(self.n_comps, np.nan)
-                measurements.FWHM_p = np.full(self.n_comps, np.nan)
+                line.measurements.profile_flux = np.full(self.n_comps, np.nan)
+                line.measurements.profile_flux_err = np.full(self.n_comps, np.nan)
+                line.measurements.eqw = np.full(self.n_comps, np.nan)
+                line.measurements.eqw_err = np.full(self.n_comps, np.nan)
+                line.measurements.FWHM_p = np.full(self.n_comps, np.nan)
 
             # Check for negative -0.0 # TODO this needs a better place # FIXME -0.0 error
-            if np.signbit(measurements.sigma_err[i]):
-                measurements.sigma_err[i] = np.nan
+            if np.signbit(line.measurements.sigma_err[i]):
+                line.measurements.sigma_err[i] = np.nan
                 _logger.warning(f'Negative scale value for amplitude at {comp_label}')
 
-            if np.signbit(measurements.amp_err[i]):
-                measurements.amp_err[i] = np.nan
+            if np.signbit(line.measurements.amp_err[i]):
+                line.measurements.amp_err[i] = np.nan
                 _logger.warning(f'Negative scale value for amplitude at {comp_label}')
 
 
-            profile_flux_dist = AREA_FUNCTIONS[comp_label.profile](measurements, i, 1000)
-            measurements.profile_flux[i] = np.mean(profile_flux_dist)
-            measurements.profile_flux_err[i] = np.std(profile_flux_dist)
+            profile_flux_dist = AREA_FUNCTIONS[comp_label.profile](line.measurements, i, 1000)
+            line.measurements.profile_flux[i] = np.mean(profile_flux_dist)
+            line.measurements.profile_flux_err[i] = np.std(profile_flux_dist)
 
             # Compute profile flux and uncertainty
             # measurements.profile_flux[i], measurements.profile_flux_err[i] = AREA_FUNCTIONS[comp_label.profile](measurements, i, 1000)
 
             # Compute FWHM_p (Profile Full Width Half Maximum)
-            measurements.FWHM_p[i] = FWHM_FUNCTIONS[comp_label.profile](measurements, i)
+            line.measurements.FWHM_p[i] = FWHM_FUNCTIONS[comp_label.profile](line.measurements, i)
 
             # Check parameters error propagation
-            self.review_err_propagation(measurements, i, comp_label.label, user_conf, self.output.errorbars, group_type)
+            self.review_err_propagation(line.measurements, i, comp_label.label, user_conf, self.output.errorbars,
+                                        line.group)
 
         # Compute the equivalent widths
-        measurements.eqw = measurements.profile_flux / measurements.cont
-        measurements.eqw_err = np.abs(measurements.eqw) * np.sqrt(np.square(measurements.profile_flux_err/measurements.profile_flux) +
-                                                  np.square(measurements.cont_err/measurements.cont))
+        line.measurements.eqw = line.measurements.profile_flux / line.measurements.cont
+        line.measurements.eqw_err = np.abs(line.measurements.eqw) * np.sqrt(np.square(line.measurements.profile_flux_err/line.measurements.profile_flux) +
+                                                  np.square(line.measurements.cont_err/line.measurements.cont))
 
         # Centroid redshifts
-        measurements.z_line = measurements.center/measurements.wavelength - 1
+        line.measurements.z_line = line.measurements.center/(self.ref_wave/(1 + redshift)) - 1
 
         # Kinematics
-        measurements.v_r = c_KMpS * (measurements.center - self.ref_wave) / self.ref_wave
-        measurements.v_r_err = c_KMpS * measurements.center_err / self.ref_wave
-        measurements.sigma_vel = c_KMpS * measurements.sigma / self.ref_wave
-        measurements.sigma_vel_err = c_KMpS * measurements.sigma_err / self.ref_wave
+        line.measurements.v_r = c_KMpS * (line.measurements.center - self.ref_wave) / self.ref_wave
+        line.measurements.v_r_err = c_KMpS * line.measurements.center_err / self.ref_wave
+        line.measurements.sigma_vel = c_KMpS * line.measurements.sigma / self.ref_wave
+        line.measurements.sigma_vel_err = c_KMpS * line.measurements.sigma_err / self.ref_wave
 
         # Fitting diagnostics
-        measurements.chisqr, measurements.redchi = self.output.chisqr, self.output.redchi
-        measurements.aic, measurements.bic = self.output.aic, self.output.bic
+        line.measurements.chisqr, line.measurements.redchi = self.output.chisqr, self.output.redchi
+        line.measurements.aic, line.measurements.bic = self.output.aic, self.output.bic
 
         # Updated signal-to-noise based on a successful profile fitting
         if self.output.errorbars:
-            measurements.snr_line = signal_to_noise_rola(measurements.amp, measurements.cont_err, measurements.n_pixels)
+            line.measurements.snr_line = signal_to_noise_rola(line.measurements.amp,
+                                                              line.measurements.cont_err,
+                                                              line.measurements.n_pixels)
 
         return
 
@@ -928,7 +927,7 @@ class LineFitting:
         self.profile.fit(line, x_arr, y_arr, err_arr, fit_method)
 
         # Store the results into the line attributes
-        self.profile.measurements_calc(line.measurements, line.list_comps, line.group, user_conf)
+        self.profile.measurements_calc(line, user_conf, self._spec.redshift)
 
         return
 
@@ -967,8 +966,7 @@ class LineFitting:
 
         # Constant pixel error array from adjacent bands
         if user_error_from_bands:
-            return np.full(self._spec.wave.shape, np.std(self._spec.flux[idcs_continua] -
-                          (self.line.measurements.m_cont * self._spec.wave[idcs_continua] + self.line.measurements.n_cont)))
+            return np.ma.array(np.full(self._spec.wave.shape, np.std(self._spec.flux[idcs_continua] - (self.line.measurements.m_cont * self._spec.wave[idcs_continua] + self.line.measurements.n_cont))), mask=np.zeros(self._spec.wave.shape, dtype=bool))
 
         # Pixel array
         else:

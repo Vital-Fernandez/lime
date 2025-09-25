@@ -1,5 +1,5 @@
 import logging
-from lime.transitions import Transition
+from lime.transitions import Line
 from lime.rsrc_manager import lineDB
 from matplotlib.pyplot import get_cmap
 from matplotlib.colors import rgb2hex
@@ -12,19 +12,19 @@ def parse_bands_arguments(label, bands, log, norm_flux):
     line = None
     if label is None and (log.index.size > 0):
         label = log.index[-1]
-        line = Transition.from_log(label, log, norm_flux=norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     # The user provided a reference band to check the region use it
     elif label is not None and bands is not None:
-        line = Transition.from_log(label, bands)
+        line = Line.from_transition(label, data_frame=bands)
 
     # Line has been measured before
     elif label is not None and (log.index.size > 0):
-        line = Transition.from_log(label, log, norm_flux=norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     elif label is not None and label in lineDB.frame.index:
         # line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
-        line = Transition.from_log(label)
+        line = Line.from_transition(label)
 
     else:
         _logger.warning(f'Line {label} has not been measured')

@@ -26,10 +26,10 @@ norm_flux = obs_cfg['SHOC579']['norm_flux']
 
 # Define a LiMe cube object
 shoc579 = lime.Cube.from_file(cube_address, instrument='manga', redshift=z_obj)
-shoc579.plot.cube('H1_6563A', line_fg='O3_4363A')
+shoc579.plot.cube('H1_6563A', line_fg='O3_4363A', )
 
 # Check the spaxels interactively
-shoc579.check.cube('H1_6563A', line_fg='H1_6563A', min_pctl_bg=70, cont_pctls_fg=[80, 90, 95, 99])
+shoc579.check.cube('H1_6563A', line_fg='H1_6563A', min_pctl_bg=70, cont_pctls_fg=[80, 90, 95, 99], maintain_y_zoom=True)
 
 # Line continuum mask
 spatial_mask_SN_cont = '../0_resources/results/SHOC579_mask_SN_cont.fits'

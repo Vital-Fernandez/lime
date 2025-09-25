@@ -2,13 +2,14 @@ import logging
 from xmlrpc.client import boolean
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines, figure
 from pathlib import Path
 
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation, PROFILE_FUNCTIONS
 from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr
 from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
-from lime.transitions import check_line_in_log, format_line_mask_option, Transition
+from lime.transitions import check_line_in_log, format_line_mask_option, Line
 from lime.rsrc_manager import lineDB
 from lime.plotting.format import theme, latex_science_float
 from lime.plotting.utils import parse_bands_arguments, color_selector
@@ -37,24 +38,31 @@ if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
 
+# Sentinel object for non input figures
+_NO_FIG = object()
 
 def parse_bands_arguments(label, bands, log, norm_flux=None):
 
     line = None
     if label is None and (log.index.size > 0):
         label = log.index[-1]
-        line = Transition.from_log(label, measurements_df=log, norm_flux=norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     # The user provided a reference band to check the region use it
     elif label is not None and bands is not None:
-        line = Transition.from_db(label, data_frame=bands)
-
+        if isinstance(bands, (pd.DataFrame)):
+            line = Line.from_transition(label, data_frame=bands)
+        elif isinstance(bands, (list, np.ndarray)):
+            line = Line.from_transition(label, data_frame=log)
+            line.w1, line.w2, line.w3, line.w4, line.w5, line.w6 = bands
+        else:
+            raise LiMe_Error(f'Bands for {label} have a not recognized format: {bands}')
     # Line has been measured before
     elif label is not None and (log.index.size > 0):
-        line = Transition.from_log(label, measurements_df=log, norm_flux=norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     elif label is not None and label in lineDB.frame.index:
-        line = Transition.from_db(label)
+        line = Line.from_transition(label)
 
     else:
         _logger.warning(f'Line {label} has not been measured')
@@ -67,15 +75,15 @@ def parse_bands_arguments_back_up(label, bands, log, norm_flux):
     line = None
     if label is None and (log.index.size > 0):
         label = log.index[-1]
-        line = Line.from_log(label, log, norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     # The user provided a reference band to check the region use it
     elif label is not None and bands is not None:
-        line = Line(label, bands)
+        line = Line.from_transition(label, data_frame=bands, norm_flux=norm_flux)
 
     # Line has been measured before
     elif label is not None and (log.index.size > 0):
-        line = Line.from_log(label, log, norm_flux)
+        line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     elif label is not None and label in lineDB.frame.index:
         line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
@@ -335,7 +343,7 @@ def determine_cube_images(cube, line, band, percentiles, color_scale, contours_c
     if line is not None:
 
         # Determine the line of reference
-        line = Transition.from_db(line, data_frame=band)
+        line = Line.from_transition(line, data_frame=band)
 
         # Compute the band map slice
         idcsEmis, idcsCont = line.index_bands(cube.wave, cube.redshift)
@@ -438,7 +446,7 @@ def spec_plot(ax, spec, rest_frame=False, show_profiles=True, log_scale=False):
     if show_profiles and spec.frame.size > 0:
         mplcursor_list = []
         for line_label in unique_line_arr(spec.frame):
-            line = Transition.from_log(line_label, spec.frame)
+            line = Line.from_transition(line_label, data_frame=spec.frame)
             mplcursor_list += spec_profile_plotter(ax, spec, line, z_corr)
 
         # Pop-ups
@@ -867,7 +875,7 @@ def line_profile_generator(line, x_array):
                 curve_arr[i, :] = PROFILE_FUNCTIONS[trans_i.profile](x_array, line.measurements.amp[i],
                                                                               line.measurements.center[i],
                                                                               line.measurements.sigma[i],
-                                                                              line.measurements.gamma[i])
+                                                                              line.measurements.frac[i])
             case 'pv':
                 curve_arr[i, :] = PROFILE_FUNCTIONS[trans_i.profile](x_array, line.measurements.amp[i],
                                                                               line.measurements.center[i],
@@ -888,7 +896,6 @@ def line_profile_generator(line, x_array):
                                                                               line.measurements.b[i],
                                                                               line.measurements.center[i],
                                                                               line.measurements.alpha[i])
-
             case _:
                 raise LiMe_Error(f'Line profile "{trans_i.profile}" for {trans_i.label} is not recognized. Please use '
                                  f'_p-g (gaussian)\n, _p-l (Lorentz)\n, _p-v (Voigt)\n, _p-pv (pseudo-Voigt)\n, '
@@ -946,7 +953,7 @@ class Plotter:
 
         # Loop through the detections and plot the names
         for i, line_label in enumerate(match_log.index):
-            line = Transition.from_db(line_label, data_frame=match_log)
+            line = Line.from_transition(line_label, data_frame=match_log)
 
             # Get the max flux on the region making the exception for 1 pixel bands
             idx_w3, idx_w4 = idcs_bands[:, i]
@@ -1240,7 +1247,7 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
 
     # Loop through the detections and plot the names
     for i, line_label in enumerate(bands.index):
-        line = Transition.from_db(line_label, data_frame=bands, verbose=False)
+        line = Line.from_transition(line_label, data_frame=bands, verbose=False)
 
         # Get the max flux on the region making the exception for 1 pixel bands
         idx_w3, idx_w4 = idcs_bands[:, i]
@@ -1502,7 +1509,7 @@ class SpectrumFigures:
 
     def spectrum(self, fname=None, label=None, bands=None, rest_frame=False, log_scale=False,
                  show_profiles=True, show_cont=False, show_err=False, show_masks=True, show_components=False,
-                 in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
+                 in_fig=_NO_FIG, fig_cfg=None, ax_cfg=None, maximize=False):
 
         """
 
@@ -1568,7 +1575,7 @@ class SpectrumFigures:
         self.reset_figure()
 
         # Display check for input figures
-        display_check = False if in_fig is not None else True
+        display_check = True if in_fig is _NO_FIG else False
 
         # Set figure format with the user 2_guides overwriting the default conf
         legend_check = True if label is not None else False
@@ -1581,7 +1588,7 @@ class SpectrumFigures:
         with ((rc_context(plt_cfg))):
 
             # Establish figure
-            self.fig = plt.figure() if in_fig is None else in_fig
+            self.fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
 
             # Establish the axes
             self.ax = self.fig.add_subplot()
@@ -1613,7 +1620,7 @@ class SpectrumFigures:
             if show_profiles and self._spec.frame.size > 0:
                 mplcursor_list = []
                 for line_label in unique_line_arr(self._spec.frame):
-                    line = Transition.from_log(line_label, self._spec.frame)
+                    line = Line.from_transition(line_label, data_frame=self._spec.frame)
                     mplcursor_list += spec_profile_plotter(self.ax, self._spec, line, z_corr)
 
                 # Pop-ups
@@ -1741,7 +1748,7 @@ class SpectrumFigures:
                     self.ax[i] = plt.subplot(grid_spec[i])
 
                     # Check components
-                    line_i = Transition.from_log(line_label, self._spec.frame)
+                    line_i = Line.from_transition(line_label, data_frame=self._spec.frame)
 
                     # Reference _frame for the plot
                     wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
@@ -1949,15 +1956,13 @@ class SpectrumFigures:
 
         # Adjust the default theme
         PLT_CONF = theme.fig_defaults(fig_cfg)
-        AXES_CONF = theme.ax_defaults(ax_cfg, self._spec.units_wave, self._spec.units_flux, self._spec.norm_flux,
-                                      fig_type='velocity')
+        AXES_CONF = theme.ax_defaults(ax_cfg, self._spec, fig_type='velocity')
 
         # Recover the line data
-        line = Line.from_log(line, self._spec.frame, self._spec.norm_flux)
+        line = Line.from_transition(line, data_frame=self._spec.frame, norm_flux=self._spec.norm_flux)
 
         # Line spectrum
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(self._spec.wave, self._spec.flux,
-                                                                    self._spec.redshift, False)
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, False)
 
         # Establish the limits for the line spectrum plot
         mask = band * (1 + self._spec.redshift)
@@ -1965,12 +1970,12 @@ class SpectrumFigures:
 
         # Velocity spectrum for the line region
         flux_plot = flux_plot[idcsM[0]:idcsM[5]]
-        cont_plot = line.m_cont * wave_plot[idcsM[0]:idcsM[5]] + line.n_cont
-        vel_plot = c_KMpS * (wave_plot[idcsM[0]:idcsM[5]] - line.peak_wave) / line.peak_wave
+        cont_plot = line.measurements.m_cont * wave_plot[idcsM[0]:idcsM[5]] + line.measurements.n_cont
+        vel_plot = c_KMpS * (wave_plot[idcsM[0]:idcsM[5]] - line.measurements.peak_wave) / line.measurements.peak_wave
 
         # Line edges
-        w_limits = np.array([line.w_i, line.w_f])
-        v_i, v_f = c_KMpS * (w_limits - line.peak_wave) / line.peak_wave
+        w_limits = np.array([line.measurements.w_i, line.measurements.w_f])
+        v_i, v_f = c_KMpS * (w_limits - line.measurements.peak_wave) / line.measurements.peak_wave
         # idx_i, idx_f = np.searchsorted(wave_plot[idcsM[0]:idcsM[5]], w_limits)
 
         # Create and fill the figure
@@ -1994,7 +1999,7 @@ class SpectrumFigures:
             target_percen = ['v_1', 'v_5', 'v_10', 'v_50', 'v_90', 'v_95', 'v_99']
             for i_percentil, percentil in enumerate(target_percen):
 
-                vel_per = line.__getattribute__(percentil)
+                vel_per = line.measurements.__getattribute__(percentil)
                 label_text = None if i_percentil > 0 else r'$v_{Pth}$'
                 self._ax.axvline(x=vel_per, label=label_text, color=theme.colors['fg'], linestyle='dotted', alpha=0.5)
 
@@ -2016,10 +2021,10 @@ class SpectrumFigures:
             self._ax.plot(vel_plot, cont_plot, linestyle='--', color=theme.colors['fg'])
 
             # Plot velocity bands
-            w80 = line.v_90-line.v_10
+            w80 = line.measurements.v_90-line.measurements.v_10
             label_arrow = r'$w_{{80}}={:0.1f}\,Km/s$'.format(w80)
-            p1 = patches.FancyArrowPatch((line.v_10, 0.4),
-                                         (line.v_90, 0.4),
+            p1 = patches.FancyArrowPatch((line.measurements.v_10, 0.4),
+                                         (line.measurements.v_90, 0.4),
                                          label=label_arrow,
                                          arrowstyle='<->',
                                          color='tab:blue',
@@ -2028,7 +2033,7 @@ class SpectrumFigures:
             self._ax.add_patch(p1)
 
             # Plot FWHM bands
-            label_arrow = r'$FWZI={:0.1f}\,Km/s$'.format(line.FWZI)
+            label_arrow = r'$FWZI={:0.1f}\,Km/s$'.format(line.measurements.FWZI)
             p2 = patches.FancyArrowPatch((v_i, 0),
                                          (v_f, 0),
                                          label=label_arrow,
@@ -2039,8 +2044,8 @@ class SpectrumFigures:
             self._ax.add_patch(p2)
 
             # Median velocity
-            label_vmed = r'$v_{{med}}={:0.1f}\,Km/s$'.format(line.v_med)
-            self._ax.axvline(x=line.v_med, color=theme.colors['fg'], label=label_vmed, linestyle='dashed', alpha=0.5)
+            label_vmed = r'$v_{{med}}={:0.1f}\,Km/s$'.format(line.measurements.v_med)
+            self._ax.axvline(x=line.measurements.v_med, color=theme.colors['fg'], label=label_vmed, linestyle='dashed', alpha=0.5)
 
             # Peak velocity
             label_vmed = r'$v_{{peak}}$'

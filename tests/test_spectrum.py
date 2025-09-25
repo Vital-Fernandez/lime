@@ -9,7 +9,7 @@ from copy import deepcopy
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
+outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 file_address = baseline_folder/'manga_spaxel.txt'
 conf_file_address = baseline_folder/'manga.toml'
@@ -198,7 +198,7 @@ class TestSpectrumClass:
     def test_plot_spectrum_with_fits(self):
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, include_fits=True)
+        spec.plot.spectrum(in_fig=fig, show_profiles=True)
 
         return fig
 
@@ -214,7 +214,7 @@ class TestSpectrumClass:
     def test_plot_spectrum_maximize(self):
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, include_fits=True, maximize=True)
+        spec.plot.spectrum(in_fig=fig, show_profiles=True, maximize=True)
 
         return fig
 
@@ -230,7 +230,7 @@ class TestSpectrumClass:
     def test_plot_line(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g-emi',  rest_frame=True, in_fig=fig)
+        spec.plot.bands('Fe3_4658A_s-emi',  rest_frame=True, in_fig=fig)
 
         return fig
 
@@ -238,7 +238,7 @@ class TestSpectrumClass:
     def test_plot_line_2nd(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g-emi', y_scale='log', in_fig=fig)
+        spec.plot.bands('Fe3_4658A_s-emi', y_scale='log', in_fig=fig)
 
         return fig
 
@@ -246,7 +246,7 @@ class TestSpectrumClass:
     def test_plot_line_3rd(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g-emi', show_continua=True, in_fig=fig)
+        spec.plot.bands('Fe3_4658A_s-emi', show_continua=True, in_fig=fig)
 
         return fig
 

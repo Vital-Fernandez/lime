@@ -12,11 +12,12 @@ tolerance_rms = 3
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
+outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
 # Fitting example for text fil
-redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189, 'NGC6552':0.0266}
+redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189, 'NGC6552':0.0266,
+                 'MRK209': 0.000932}
 
 
 class TestOpenFits:
@@ -76,10 +77,22 @@ class TestOpenFits:
 
         return
 
+    def test_read_cos_params(self, file_name='MRK209_cos_x1dsum.fits'):
+
+        mrk209 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='cos', redshift=redshift_dict['MRK209'],
+                                        norm_flux=1e-15)
+
+        assert mrk209.redshift == redshift_dict['MRK209']
+        assert mrk209.units_wave == 'Angstrom'
+        assert mrk209.units_flux == 'FLAM'
+        assert mrk209.norm_flux == 1e-15
+
+        return
+
     def test_text_file_params(self, file_name='sdss_dr18_0358-51818-0504.fits'):
 
         # Open with LiMe functions
-        SHOC579 = lime.Spectrum.from_file(spectra_folder / file_name, instrument='sdss')
+        SHOC579 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='sdss')
 
         # Convert to a text file
         SHOC579.retrieve.spectrum(fname=outputs_folder / f'shoc579_sdss.txt')
@@ -291,6 +304,16 @@ class TestOpenFits:
 
         fig = plt.figure()
         shoc579.check.cube('H1_6563A', in_fig=fig, rest_frame=True)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_read_nirspec(self, file_name='MRK209_cos_x1dsum.fits'):
+
+        mrk2009 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='cos', redshift=redshift_dict['ceers1027'])
+
+        fig = plt.figure()
+        mrk2009.plot.spectrum(in_fig=fig, rest_frame=True)
 
         return fig
 

@@ -11,7 +11,7 @@ from lime.fitting.lines import c_KMpS
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
+outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
 file_address = baseline_folder/'manga_spaxel.txt'
@@ -316,9 +316,6 @@ def test_spectra_unit_conversion():
 
 def test_refraction_index_air_vacuum():
 
-    from specutils.utils.wcs_utils import vac_to_air, refraction_index
-    from astropy.units import Unit
-
     input_vac_arr = np.array([3621.59598486, 3622.42998417, 3623.26417553])
     specutils_air_arr = np.array([3620.50684567, 3621.34061749, 3622.17458132])
 
@@ -383,10 +380,10 @@ def test_line_bands_generation():
     # Creating the bands
     n_sigma = 3
     band_vsigma = 120
-    ref_bands = lime.line_bands()
-    bands_untouched = spec.retrieve.line_bands(adjust_central_band=False)
-    bands = spec.retrieve.line_bands(n_sigma=n_sigma, band_vsigma = band_vsigma, adjust_central_band=True,
-                                               instrumental_correction=False)
+    ref_bands = lime.lines_frame()
+    bands_untouched = spec.retrieve.lines_frame(adjust_central_band=False)
+    bands = spec.retrieve.lines_frame(n_sigma=n_sigma, band_vsigma = band_vsigma, adjust_central_band=True,
+                                      instrumental_correction=False)
     # Existing lines
     assert bands.iloc[0].name == 'H1_3704A'
     assert bands.iloc[-1].name == 'H1_9546A'
@@ -416,16 +413,16 @@ def test_line_bands_generation():
 def test_line_bands_merged_blended():
 
     # Default only
-    bands = spec.retrieve.line_bands(fit_cfg=conf_file_address)
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address)
     assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 3
 
     # From certain list
-    bands = spec.retrieve.line_bands(fit_cfg=conf_file_address, composite_lines=['O2_3726A_m', 'H1_3889A_m', 'H1_6500A_b'])
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, composite_lines=['O2_3726A_m', 'H1_3889A_m', 'H1_6500A_b'])
     assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 2
     assert 'H1_6500A_b' not in bands.index
 
     # Combination of sections
-    bands = spec.retrieve.line_bands(fit_cfg=conf_file_address, obj_cfg_prefix='38-35', update_default=False)
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, obj_cfg_prefix='38-35', update_default=False)
     in_list = ['O2_3726A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b', 'O2_7319A_b', 'S3_9530A_b']
     out_list = bands.loc[bands.index.isin(in_list)].index.to_numpy()
     assert set(in_list) == set(in_list)
@@ -438,32 +435,32 @@ def test_line_bands_labels():
 
     lines_test = ['H1_1216A', 'He2_1640A', 'C3_1909A', 'H1_4861A', 'H1_6563A', 'S3_9530A', 'He1_10832A']
 
-    bands = lime.line_bands(line_list=lines_test)
+    bands = lime.lines_frame(line_list=lines_test)
     assert bands.loc['H1_1216A', 'wavelength'] == 1215.67
     assert bands.loc['H1_1216A', 'wavelength'] == bands.loc['H1_1216A', 'wave_vac']
     assert bands.loc['H1_4861A', 'wavelength'] == 4861.25
     assert bands.loc['H1_4861A', 'wavelength'] != bands.loc['H1_4861A', 'wave_vac']
 
-    bands = lime.line_bands(line_list=lines_test, vacuum_waves=True)
+    bands = lime.lines_frame(line_list=lines_test, vacuum_waves=True)
     assert bands.loc['H1_1216A', 'wavelength'] == 1215.67
     assert bands.loc['H1_1216A', 'wavelength'] == bands.loc['H1_1216A', 'wave_vac']
     assert bands.loc['H1_4861A', 'wavelength'] != 4861.25
     assert bands.loc['H1_4861A', 'wavelength'] == 4862.683
     assert bands.loc['H1_4861A', 'wavelength'] == bands.loc['H1_4861A', 'wave_vac']
 
-    bands = lime.line_bands(line_list=lines_test, units_wave='um', decimals=4, update_labels=True)
+    bands = lime.lines_frame(line_list=lines_test, units_wave='um', sig_digits=4, update_labels=True, update_latex=True)
     assert np.isclose(bands.loc['H1_0.1216um', 'wavelength'], 0.121567)
     assert np.isclose(bands.loc['H1_0.1216um', 'wavelength'], bands.loc['H1_0.1216um', 'wave_vac'])
     assert np.isclose(bands.loc['H1_0.4861um', 'wavelength'], 0.486125)
     assert not np.isclose(bands.loc['H1_0.4861um', 'wavelength'], bands.loc['H1_0.4861um', 'wave_vac'])
 
-    bands = lime.line_bands(line_list=lines_test, units_wave='um', decimals=4, update_labels=False)
+    bands = lime.lines_frame(line_list=lines_test, units_wave='um', sig_digits=4, update_labels=False)
     assert np.isclose(bands.loc['H1_1216A', 'wavelength'], 0.121567)
     assert np.isclose(bands.loc['H1_1216A', 'wavelength'], bands.loc['H1_1216A', 'wave_vac'])
     assert np.isclose(bands.loc['H1_4861A', 'wavelength'], 0.486125)
     assert not np.isclose(bands.loc['H1_4861A', 'wavelength'], bands.loc['H1_4861A', 'wave_vac'])
 
-    bands = lime.line_bands(line_list=lines_test, vacuum_waves=True, vacuum_label=True)
+    bands = lime.lines_frame(line_list=lines_test, vacuum_waves=True, update_labels=True, update_latex=True)
     assert np.isclose(bands.loc['H1_1216A', 'wavelength'], 1215.670)
     assert np.isclose(bands.loc['H1_1216A', 'wavelength'], bands.loc['H1_1216A', 'wave_vac'])
     assert np.isclose(bands.loc['H1_4863A', 'wavelength'], 4862.683)

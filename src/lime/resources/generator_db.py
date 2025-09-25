@@ -10,8 +10,7 @@ from pathlib import Path
 
 current_file_folder = Path(__file__).resolve().parent
 PARENT_DATABASE = current_file_folder/'Lines_database_18_01_2025.xlsx'
-CHILD_DATABASE = current_file_folder/'lines_database_v2.0.0.txt'
-
+CHILD_DATABASE = current_file_folder/'lines_database_v2.0.1.txt'
 
 def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, continua_center_width=200,
                           continua_width=70, delta_lambda_inst=0):
@@ -25,7 +24,7 @@ def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, contin
     assert np.any(df_lines.index.duplicated()) is np.False_
 
     for i, idx in enumerate(index_arr):
-        line = lime.Transition.from_db(idx)
+        line = lime.Line.from_transition(idx)
         if pd.notnull(df_lines.loc[idx, 'trans']):
             line.trans = df_lines.loc[idx, 'trans']
         wave_vac = df_lines.loc[idx, 'wave_vac']
@@ -38,14 +37,14 @@ def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, contin
             air_trans = False
 
         line.wavelength = np.array([wave_air]) if air_trans else np.array([wave_vac])
-        line.update_label(show_optional=False)
+        line.update_labels(show_optional=False)
 
         # Add a decimal if the line is already there
         if line.label not in updated_labels:
             updated_labels[i] = line.label
         else:
             message = f'{line.label} -> '
-            line.update_label(decimals=1)
+            line.update_labels(decimals=1)
             updated_labels[i] = line.label
             message += updated_labels[i]
 
@@ -53,7 +52,7 @@ def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, contin
         df_lines.loc[idx, 'wavelength'] = wave_air if air_trans else wave_vac
         df_lines.loc[idx, 'particle'] = line.particle[0]
 
-        line.update_label(update_latex=True)
+        line.update_labels(update_latex=True)
         df_lines.loc[idx, 'latex_label'] = line.latex_label
 
         if (line.trans == 'sem') and (line.latex_label[0][:2] == '$['):
@@ -113,12 +112,23 @@ def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, contin
     df_lines.drop('wave_vac.1', axis=1, inplace=True)
     df_lines.drop('w3_backup', axis=1, inplace=True)
     df_lines.drop('w4_backup', axis=1, inplace=True)
+    df_lines.drop('shape', axis=1, inplace=True)
+    df_lines.drop('profile', axis=1, inplace=True)
 
     return df_lines
 
 
 if __name__ == "__main__":
-    lime.save_frame(CHILD_DATABASE, format_lines_database())
+    # lime.save_frame(CHILD_DATABASE, format_lines_database())
+
+    PARENT_DATABASE = current_file_folder / 'lines_database_v2.0.0.txt'
+    CHILD_DATABASE = current_file_folder / 'lines_database_v2.0.0.txt'
+
+    parent_db = lime.load_frame(PARENT_DATABASE)
+    parent_db.drop('shape', axis=1, inplace=True)
+    parent_db.drop('profile', axis=1, inplace=True)
+
+    lime.save_frame(CHILD_DATABASE, parent_db)
 
 
 

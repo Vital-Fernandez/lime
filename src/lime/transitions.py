@@ -48,29 +48,39 @@ _LIME_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.0.txt'
 
 class LinesDatabase:
 
-    def __init__(self, frame_address=None):
+    def __init__(self, frame_address=None, default_shape=None, default_profile=None):
 
         # Default_lines database
         self.frame_address = _LIME_DATABASE_FILE if frame_address is None else frame_address
 
         # Function attributes
         self.vacuum_check = False
+
         self.frame = load_frame(self.frame_address)
+
+        self._shape = 'emi' if default_shape is None else default_shape
+        self._profile = 'g' if default_profile is None else default_profile
 
         return
 
     def set_database(self, wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom',
                      decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False,
-                     vacuum_label=False):
+                     vacuum_label=False, default_shape=None, default_profile=None):
 
 
         # Reload the database at each modification to avoid contamination
         ref_bands = load_frame(self.frame_address) if ref_bands is None else ref_bands
 
-        self.frame = line_bands(wave_intvl, line_list, particle_list, redshift, units_wave, decimals,
-                                vacuum_waves, ref_bands, update_labels, update_latex, vacuum_label)
+        self.frame = lines_frame(wave_intvl, line_list, particle_list, redshift, units_wave, decimals,
+                                 vacuum_waves, ref_bands, update_labels, update_latex)
 
         self.vacuum_check = vacuum_waves
+
+        if default_shape:
+            self.set_shape(default_shape)
+
+        if default_profile:
+            self.set_profile(default_profile)
 
         return
 
@@ -80,6 +90,24 @@ class LinesDatabase:
         self.frame = load_frame(_LIME_DATABASE_FILE)
 
         return
+
+    def copy(self):
+
+        return self.frame.copy()
+
+    def set_shape(self, value):
+        self._shape = value
+        return
+
+    def set_profile(self, value):
+        self._profile = value
+        return
+
+    def get_shape(self):
+        return self._shape
+
+    def get_profile(self):
+        return self._profile
 
 
 rsrc_manager.lineDB = LinesDatabase(_LIME_DATABASE_FILE)
@@ -136,6 +164,7 @@ def recover_transition(particle, input_trans=None):
 
     else:
         return input_trans
+
 
 def particle_notation(particle, transition):
 
@@ -280,49 +309,38 @@ def check_units_from_wave(line, str_ion, str_wave, bands):
     return wave, units
 
 
-def check_line_in_log(input_label, log=None, tol=1):
+def check_line_in_log(input_wave, log=None, tol=1):
 
     # Guess the transition if only a wavelength provided
-    if not isinstance(input_label, str):
-
+    if not isinstance(input_wave, str):
         if log is not None:
 
-            # Check the wavelength from the wave_obs column
+            # Check the wavelength from the wave_obs column or get it from the labels
             if 'wavelength' in log.columns:
                 ref_waves = log.wavelength.to_numpy()
-
-
-            # Get it from the indexes
             else:
                 ion_array, ref_waves = zip(*log.index.str.split('_').to_numpy())
                 _wave0, units_wave = check_units_from_wave(ref_waves[0])
                 ref_waves = np.char.strip(ref_waves, units_wave).astype(float)
 
-            # Check if table rows are not sorted
-            if not all(np.diff(ref_waves) >= 0): # TODO we might need to use something else than searchsorted
-                _logger.warning(f'The lines log rows are not sorted from lower to higher wavelengths. This can cause '
-                                f'issues to identify the lines using the transition wavelength. Try to use the string '
-                                f'line label')
 
             # Locate the best candidate
-            idx_closest = np.argmin(np.abs(ref_waves - input_label))
-            line_wave = ref_waves[idx_closest]
+            idx_closest = np.argmin(np.abs(ref_waves - input_wave))
+            label = log.iloc[idx_closest].name
+            _logger.warning(f'The transition wavelength "{input_wave}" has been identified as "{label}"')
 
-            # Check if input wavelength is close to the guessed line
-            disc = abs(line_wave - input_label)
-            if tol < disc < 1.5 * tol:
-                _logger.info(f'The input line {input_label} has been identified with {log.iloc[idx_closest].name}')
+            # Check if table rows are not sorted
+            if not all(np.diff(ref_waves) >= 0): # TODO we might need to use something else than searchsorted
+                _logger.warning(f'\nThe lines log rows are not sorted from lower to higher wavelengths.\nThis can cause '
+                                f'issues to identify the lines using the transition wavelength.\nTry to use the string '
+                                f'line label')
 
-            if disc > 1.5 * tol:
-                _logger.warning(f'The closest line to the input line {input_label} is {log.iloc[idx_closest].name}. '
-                                f'Please confirm that the database contains the target line and the units matched')
-
-            input_label = log.iloc[idx_closest].name
+            return label
 
         else:
-            _logger.critical(f'The line "{input_label}" could not be identified: A lines log was not provided')
+            _logger.critical(f'The line "{input_wave}" could not be identified: A lines log was not provided')
 
-    return input_label
+    return input_wave
 
 
 def latex_from_label(label, particle=None, wave=None, units_wave=None, kinem=None, transition_comp=None, scalar_output=False,
@@ -474,7 +492,7 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
 
     # Loop through the lines and derive their properties:
     for label in lines_df.index:
-        line = Transition.from_db(label, fit_conf, bands, verbose=verbose)
+        line = Line.from_transition(label, fit_conf, bands, verbose=verbose)
 
         lines_df.loc[label, :] = (line.particle.label, line.wavelength, line.latex_label, line.kinem,
                                   line.profile, line.trans)
@@ -578,8 +596,8 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
-def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
-               vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
+def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=4,
+                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False):
     """
 
     This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
@@ -621,8 +639,8 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     :param units_wave: Labels and bands wavelength units. The default value is "A".
     :type units_wave: str, optional
 
-    :param decimals: Number of decimal figures for the line labels.
-    :type decimals: int, optional
+    :param sig_digits: Number of decimal figures for the line labels.
+    :type sig_digits: int, optional
 
     :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
     :type vacuum_waves: bool, optional
@@ -671,25 +689,34 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     if line_list is not None:
         idcs_rows = idcs_rows & bands_df.index.isin(line_list)
 
-    # Final table
-    bands_df = bands_df.loc[idcs_rows]
-
-    # Update the labels to reflect new wavelengths and units if necessary and user requests it
-    if update_labels or vacuum_label:
-        list_labels = [None] * bands_df.index.size
-        for i, label in enumerate(bands_df.index):
-            line = Line(label, band=bands_df)
-            line.update_label(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label)
-            if update_latex:
-                bands_df.loc[label, 'latex_label'] = line.latex_label[0]
-            list_labels[i] = line.label
-        bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
-
     # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
     if vacuum_waves:
         bands_df['wavelength'] = bands_df['wave_vac']
         bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
         bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
+
+    # Final table
+    bands_df = bands_df.loc[idcs_rows]
+
+    # Update the labels if requested
+    if update_labels or update_latex:
+        n_lines = bands_df.index.size
+        labels, latex_list =  ([None] * n_lines if update_labels else None, [None] * n_lines if update_latex else None)
+
+        for i, band in enumerate(bands_df.index):
+            line = Line.from_transition(band, data_frame=bands_df)
+            line.update_labels(sig_digits=sig_digits)
+
+            if update_labels:
+                labels[i] = line.label
+            if update_latex:
+                latex_list[i] = line.latex_label
+
+        if update_latex:
+            bands_df["latex_label"] = latex_list
+
+        if update_labels:
+            bands_df.rename(index=dict(zip(bands_df.index, labels)), inplace=True)
 
     return bands_df
 
@@ -774,7 +801,7 @@ def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remo
                     ref_df = ref_df.to_frame().T
 
                     # Define LiMe line and add data to dataframe
-                    line = Line(entry_label, band=ref_df)
+                    line = Line.from_transition(entry_label, data_frame=ref_df)
 
                     # Assign the values:
                     bands.loc[line.label, 'wavelength'] = line.wavelength[line._ref_idx]
@@ -795,6 +822,31 @@ def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remo
 
     return bands
 
+
+def construct_classic_notation(line=None, line_params=None):
+
+    # From line objects
+    if line is not None:
+        if isinstance(line, Line):
+            for comp in line.list_comps:
+                particle_str = particle_notation(comp.particle, comp.trans)
+                wavelength_str = round_sig_clean(comp.wavelength)
+                units_str = f'{au.Unit(comp.units_wave):latex}'[9:-2].replace(' ', r'\,')
+                comp.latex_label = f'{particle_str}{wavelength_str}{units_str}$'
+            line.latex_label = '+'.join(line.param_arr('latex_label'))
+
+        else:
+            raise LiMe_Error('To reconstruct the line notation please use introduce a "lime.Line" object or a dictionary '
+                             'with its parameters.')
+
+    # From dictionary with the items
+    else:
+        particle_str = particle_notation(Particle.from_label(line_params["particle"]), line_params.get("trans"))
+        wavelength_str = round_sig_clean(line_params["wavelength"])
+        units_str = f'{au.Unit(line_params["units_wave"]):latex}'[9:-2].replace(' ', r'\,')
+        line_params['latex_label'] = f'{particle_str}{wavelength_str}{units_str}$'
+
+    return
 
 
 class Particle:
@@ -846,366 +898,11 @@ class Particle:
         return _inequality
 
 
-# class Line:
-#
-#     def __init__(self, label, band=None, fit_conf=None, profile=None, update_latex=False):
-#
-#         # Core attributes
-#         self.label = label
-#         self.mask = None
-#         self.latex_label = None,
-#         self.group_label, self.list_comps = None, None
-#         self.sub_comps = None
-#
-#         self.particle = None
-#         self.wavelength, self.units_wave = None, None
-#         self.blended_check, self.merged_check = False, False
-#
-#         # Transition components
-#         self.kinem = None
-#         self.core = None
-#         self._ref_idx = None
-#
-#         self.transition_comp = None
-#         self.profile_comp = profile
-#         self._p_type = None
-#         self._p_shape = None
-#
-#         # Measurements attributes
-#         self.intg_flux, self.intg_flux_err = None, None
-#         self.peak_wave, self.peak_flux = None, None
-#         self.eqw, self.eqw_err = None, None
-#         self.eqw_intg, self.eqw_intg_err = None, None
-#         self.profile_flux, self.profile_flux_err = None, None
-#         self.cont, self.cont_err = None, None
-#         self.m_cont, self.n_cont = None, None
-#         self.m_cont_err, self.n_cont_err = None, None
-#         self.m_cont_err_intg, self.n_cont_err_intg = None, None
-#         self.amp, self.center, self.sigma, self.gamma = None, None, None, None
-#         self.amp_err, self.center_err, self.sigma_err, self.gamma_err = None, None, None, None
-#         self.alpha, self.beta = None, None
-#         self.alpha_err, self.beta_err = None, None
-#         self.frac, self.frac_err = None, None
-#         self.z_line = None
-#         self.v_r, self.v_r_err = None, None
-#         self.sigma_vel, self.sigma_vel_err = None, None
-#         self.sigma_thermal, self.sigma_instr = None, None
-#         self.snr_line, self.snr_cont = None, None
-#         self.observations, self.comments = 'no', 'no'
-#         self.pixel_mask = 'no'
-#         self.n_pixels = None
-#         self.FWHM_i, self.FWHM_p, self.FWZI = None, None, None
-#         self.w_i, self.w_f = None, None
-#         self.v_med, self.v_50 = None, None
-#         self.v_5, self.v_10 = None, None
-#         self.v_90, self.v_95 = None, None
-#         self.v_1, self.v_99 = None, None
-#         self.chisqr, self.redchi = None, None
-#         self.aic, self.bic = None, None
-#         self.pixelWidth = None
-#
-#         # Extra checks
-#         self._narrow_check = False
-#
-#         # Recover the line data from the input databases
-#         self._get_containers_data(label,
-#                                   rsrc_manager.lineDB.frame if band is None else check_file_dataframe(band, copy_input=False),
-#                                   fit_conf,
-#                                   update_latex)
-#
-#         return
-#
-#     def __str__(self):
-#         return self.label
-#
-#     def __repr__(self):
-#         return self.label
-#
-#     def __eq__(self, var):
-#         return self.label == var if isinstance(var, str) else False
-#
-#     def __hash__(self):
-#         return hash(self.label)
-#
-#     def _get_containers_data(self, label, band=None, fit_conf=None, update_latex=False):
-#
-#         # Infer label from log if input line is a wavelength
-#         self.label = check_line_in_log(label, band)
-#
-#         # Get the transitions involved on the line
-#         self.line_group_review(fit_conf, band)
-#
-#         # Review the components of the line
-#         components = label_composition(self.list_comps,
-#                                        band if isinstance(band, DataFrame) else None,
-#                                        self.profile_comp)
-#         self.particle, self.wavelength, self.units_wave, self.kinem, self.profile_comp, self.transition_comp = components
-#
-#         # Quick elements for the line profile
-#         self._p_shape, self._p_type = label_profiling(self.profile_comp)
-#
-#         # Provide a bands from the log if possible
-#         self.mask = label_mask_assigning(self.label, band, self.blended_check, self.merged_check, self.core)
-#
-#         # Check if there are masked pixels in the line
-#         self.pixel_mask = 'no' if fit_conf is None else fit_conf.get(f'{self.label}_mask', 'no')
-#
-#         # Check sub-line components
-#         self.sub_transitions(fit_conf, band)
-#
-#         # Compute latex entry if necessary
-#         self.latex_label = np.atleast_1d(self._review_science_notation(band if isinstance(band, DataFrame) else None,
-#                                                                        update_latex=update_latex))
-#
-#         return
-#
-#     @classmethod
-#     def from_log(cls, label, log=None, norm_flux=1):
-#
-#         # Confirm we are not introducing a blended line which has been blended
-#         if label in log.index:
-#             measured_check = True
-#
-#         elif (label[-2:] == '_b') and (label[:-2] in log.index):
-#             _logger.warning(f'Blended line {label} not found in log, reading {label[:-2]}')
-#             label = label[:-2]
-#             measured_check = True
-#
-#         else:
-#             _logger.warning(f'Input line {label} not found in log')
-#             measured_check = False
-#
-#         # Reload the line
-#         if measured_check:
-#
-#             # Create the line object
-#             inline = cls(label, band=log)
-#
-#             # Recover "simple" attributes
-#             for i, param in enumerate(_LOG_EXPORT):
-#
-#                 param_value = log.at[label, param]
-#
-#                 # Normalize
-#                 if _LOG_COLUMNS[param][0]:
-#                     param_value = param_value / norm_flux
-#
-#                 inline.__setattr__(param, param_value)
-#
-#         else:
-#
-#             inline = None
-#
-#         return inline
-#
-#
-#     def line_group_review(self, fit_conf=None, bands_log=None):
-#
-#         # Establish the components
-#         comps_list = self.label.split('_')
-#         n_comps = len(comps_list)
-#         if n_comps < 2:
-#             raise LiMe_Error(f'The {self.label} the line label format is not recognized. '
-#                              f'Please use a "Particle_WavelengthUnits" format.')
-#
-#         # Check the line type
-#         modularity_label = comps_list[-1] if (comps_list[-1] == 'b') or (comps_list[-1] == 'm') else None
-#
-#         # Not a single line
-#         if modularity_label is not None:
-#
-#             if modularity_label == 'b':
-#                 self.blended_check = True
-#
-#             elif modularity_label == 'm':
-#                 self.merged_check = True
-#
-#             else:
-#                 raise LiMe_Error(f'The modularity component {modularity_label} in the input line "{self.label}" is not'
-#                                  f' recognized')
-#
-#         # Restore the group label if provided (Configuration file over rules log)
-#         group_label_cfg = None if fit_conf is None else fit_conf.get(self.label, None)
-#         group_label_frame = None if not isinstance(bands_log, pd.DataFrame) else pd_get(bands_log, self.label,
-#                                                                                         column='group_label', transform='none')
-#         # Confirm blended or merged
-#         self.group_label = group_label_cfg if group_label_cfg is not None else group_label_frame
-#         self.blended_check = True if (self.group_label is not None) and (self.merged_check is False) else False
-#
-#         # Recover the profile components
-#         if self.merged_check or self.blended_check:
-#
-#             # Reset and warned the line has a suffix but there are no components provided
-#             if self.group_label is None:
-#                 self.merged_check, self.blended_check = False, False
-#
-#                 # Warning incase there is an input configuration but the line is not there
-#                 if fit_conf is not None:
-#                     _logger.warning(f'The {self.label} line has a "_{modularity_label}" suffix but not components were '
-#                                     f' on the lines frames or the input configuration the configuration:\n{fit_conf}')
-#
-#         # List of components only for blended
-#         if (self.merged_check or self.blended_check) and (self.group_label is not None):
-#             self.list_comps = self.group_label.split('+') if self.blended_check else [self.label]
-#
-#             # Check if there are repeated elements
-#             if len(self.list_comps) > 1:
-#                 uniq, count = np.unique(self.list_comps, return_counts=True)
-#                 if any(count > 1):
-#                     _logger.warning(f'There are repeated entries in the line label: {self.label} = {self.list_comps}')
-#
-#         else:
-#             self.list_comps = [self.label]
-#
-#         # Core component definition
-#         self.core = f'{comps_list[0]}_{comps_list[1]}'
-#
-#         # Index of core component
-#         if self.blended_check or self.merged_check:
-#             self._ref_idx = self.list_comps.index(self.core) if self.core in self.list_comps else 0
-#         else:
-#             self._ref_idx = 0
-#
-#         return
-#
-#
-#     def _review_science_notation(self, bands, update_latex=False, decimals=None):
-#
-#         # Check if there is a latex label on the database
-#         if bands is not None:
-#             latex_label = pd_get(bands, self.label, 'latex_label', None, transform='none')
-#             if latex_label is not None:
-#                 latex_label = latex_label.split('+') if self.blended_check else [latex_label]
-#         else:
-#             latex_label = None
-#
-#         # Use existent label
-#         if latex_label is not None and update_latex is False:
-#             return latex_label
-#
-#         # Make a new one
-#         else:
-#
-#             # Single line
-#             if not self.merged_check and not self.blended_check:
-#                 return latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
-#                                         self.transition_comp, decimals=decimals)
-#
-#             # Merged or blended (try to combine from table)
-#             list_comps = self.group_label.split('+') if self.merged_check else self.list_comps
-#             if bands is not None:
-#                 list_latex = [pd_get(bands, comp, 'latex_label') for comp in list_comps]
-#             else:
-#                 list_latex = [None] * len(list_comps)
-#
-#             if np.all(pd.notnull(list_latex)):
-#                 return '+'.join(list_latex) if self.merged_check else list_latex
-#
-#             else:
-#                 # Merged reconstruct
-#                 if self.merged_check:
-#                     return '+'.join(latex_from_label(list_comps))
-#
-#                 # Blended reconstruct
-#                 else:
-#                     return latex_from_label(None, self.particle, self.wavelength, self.units_wave, self.kinem,
-#                                             self.transition_comp, decimals=decimals)
-#
-#
-#     def index_bands(self, wavelength_array, redshift, merge_continua=True, just_band_edges=False):
-#
-#         # Check the line has associated bands
-#         if self.mask is None:
-#             raise LiMe_Error(f'The line {self.label} does include bands. Please select another line or update the database.')
-#
-#         # Transform the bands into the observed frame
-#         bands_obs_arr = np.atleast_1d(self.mask) * (1 + redshift)
-#
-#         # Get the wavelength array and mask
-#         wave_arr = wavelength_array.data
-#
-#         # Find the indeces of the bands
-#         idcs_bands = np.searchsorted(wave_arr, bands_obs_arr)
-#
-#         # Return the boolean arrays
-#         if not just_band_edges:
-#             idcs_line = np.zeros(wave_arr.size, dtype=bool)
-#             idcs_line[idcs_bands[2]:idcs_bands[3]] = True
-#
-#             idcs_blue = np.zeros(wave_arr.size, dtype=bool)
-#             idcs_blue[idcs_bands[0]:idcs_bands[1]] = True
-#
-#             idcs_red = np.zeros(wave_arr.size, dtype=bool)
-#             idcs_red[idcs_bands[4]:idcs_bands[5]] = True
-#
-#             # Check for line pixel masking
-#             if self.pixel_mask != 'no':
-#                 line_mask_limits = format_line_mask_option(self.pixel_mask, wave_arr)
-#                 idcs_mask = (wave_arr[:, None] >= line_mask_limits[:, 0]) & (wave_arr[:, None] <= line_mask_limits[:, 1])
-#                 idcs_valid = ~idcs_mask.sum(axis=1).astype(bool)#[:, None]
-#
-#                 idcs_line = idcs_line & idcs_valid
-#                 idcs_blue = idcs_blue & idcs_valid
-#                 idcs_red = idcs_red & idcs_valid
-#
-#             # Output as merged continua bands
-#             if merge_continua:
-#                 return idcs_line, idcs_blue | idcs_red
-#
-#             # Output as independent continua bands
-#             else:
-#                 return idcs_line, idcs_blue, idcs_red
-#
-#         # Return just the edges of the bands
-#         else:
-#             return idcs_bands
-#
-#
-#     def sub_transitions(self, fit_cfg, bands):
-#
-#         self.sub_comps = [None] * len(self.list_comps)
-#         if self.blended_check and fit_cfg:
-#             for i, sub_stransition in enumerate(self.list_comps):
-#                 if sub_stransition[-2:] == '_m':
-#                     self.sub_comps[i] = Line(sub_stransition, bands, fit_cfg)
-#
-#         return
-#
-#
-#     def update_label(self, decimals=None, update_latex=True, bands_df=None, vacuum_label=False, show_optional=True):
-#
-#         # Reference wavelength
-#         if (vacuum_label is True) and (bands_df is not None):
-#             wave_ref = pd_get(bands_df, self.label, 'wave_vac')
-#         else:
-#             wave_ref = self.wavelength[self._ref_idx]
-#
-#         # Core transition particle
-#         part_str = self.particle[self._ref_idx]
-#         wave_str = np.round(wave_ref, 0).astype(int) if decimals is None else np.round(wave_ref, decimals)
-#         units_str = f'{self.units_wave[self._ref_idx]}' if self.units_wave[self._ref_idx] != 'Angstrom' else 'A'
-#         module_str = "_b" if self.blended_check else "_m" if self.merged_check else ""
-#
-#         # Optional components
-#         kinem_str = f'_k-{self.kinem[self._ref_idx]}' if self.kinem[self._ref_idx] != 0 else ''
-#         profile_str = f'_p-{self.profile[self._ref_idx]}' if self.profile[self._ref_idx] != 'g' else ''
-#         trans_str = f'_t-{self.trans[self._ref_idx]}' if not self.trans[self._ref_idx] not in ['rec', 'col'] else ''
-#         shape_str = f'_p-{self.shape[self._ref_idx]}' if self.shape[self._ref_idx] != 'emi' else ''
-#         self.label = f'{part_str}_{wave_str}{units_str}{module_str}{kinem_str}{profile_str}{trans_str}{shape_str}'
-#
-#         # Update latex notation
-#         if update_latex:
-#             self.latex_label = self._review_science_notation(bands_df, update_latex, decimals=decimals)
-#
-#         return
-#
-
 class LineMeasurements:
 
-    def __init__(self, wavelength_arr=None):
+    def __init__(self):
 
         # Measurements attributes
-        self.wavelength = wavelength_arr
         self.intg_flux, self.intg_flux_err = None, None
         self.peak_wave, self.peak_flux = None, None
         self.eqw, self.eqw_err = None, None
@@ -1244,8 +941,19 @@ class LineMeasurements:
 
         return
 
+def check_measurements_table(df):
 
-class Transition:
+    if df is not None:
+        try:
+            df.at[df.index[0], 'profile_flux']
+            return True
+        except:
+            return False
+    else:
+        return False
+
+
+class Line:
 
     def __init__(self, label, particle=None, wavelength=None, units_wave=None, latex_label=None, core=None,
                  group_label=None, group=None, list_comps=None, mask=None, kinem=None, trans=None, profile=None,
@@ -1310,24 +1018,39 @@ class Transition:
         return False
 
     @classmethod
-    def from_db(cls, label, fit_cfg=None, data_frame=None, parent_group_label=None, verbose=True):
-
-        # Check if its a measurements dataframe
-
+    def from_transition(cls, label, fit_cfg=None, data_frame=None, parent_group_label=None, norm_flux=None,
+                        def_shape=None, def_profile=None, verbose=True):
 
         # Extract line parameters from the input containers
-        line_params = parse_container_data(label, fit_cfg, data_frame, parent_group_label=parent_group_label,
+        line_params = parse_container_data(label,
+                                           fit_cfg,
+                                           data_frame,
+                                           parent_group_label=parent_group_label,
+                                           def_shape=rsrc_manager.lineDB.get_shape() if def_shape is None else def_shape,
+                                           def_profile=rsrc_manager.lineDB.get_profile() if def_profile is None else def_profile,
                                            verbose=verbose)
+
+        # Check if input dataframe has measurements
+        measurements_check = check_measurements_table(data_frame)
+
+        # Reconstruct de-blended parent:
+        if measurements_check:
+            if (line_params.get('group') is None) and line_params.get('group_label') and parent_group_label is None:
+                line_params['group'] = 'b'
+                line_params['list_comps'] = line_params['group_label'].split('+')
+                line_params['label'] = line_params.get('group_label').split('+')[0] + '_b'
 
         # Get the line parameters for additional components
         if line_params.get('group'):
-
-            # Restore blended line from transitions from measurements frame
-
-
             for i, line_i in enumerate(line_params['list_comps']):
-                line_params['list_comps'][i] = Transition.from_db(line_i, fit_cfg, data_frame,
-                                                                  parent_group_label=line_params['group_label'])
+                line_params['list_comps'][i] = Line.from_transition(line_i,
+                                                                    fit_cfg,
+                                                                    data_frame,
+                                                                    parent_group_label=line_params['group_label'],
+                                                                    norm_flux=None,
+                                                                    def_shape=def_shape,
+                                                                    def_profile=def_profile,
+                                                                    verbose=False)
 
             # Combine the latex label
             line_params['latex_label'] = '+'.join([line_i.latex_label for line_i in line_params['list_comps']])
@@ -1335,45 +1058,12 @@ class Transition:
         # Create the line and initiate the measurements container
         line = cls(**line_params)
         if parent_group_label is None:
-            line.measurements = LineMeasurements(line.param_arr('wavelength'))
-            # line.measurements = line.load_measurements(data_frame) if check_data else LineMeasurements(line.param_arr('wavelength'))
-
+            if measurements_check:
+                line.load_measurements(data_frame, norm_flux=norm_flux)
+            else:
+                line.measurements = LineMeasurements()
 
         return line
-
-    @classmethod
-    def from_log(cls, label, measurements_df, parent_group_label=None, norm_flux=None, verbose=True):
-
-        # Retrieve the line data
-        line_params = parse_container_data(label, None, measurements_df, parent_group_label=parent_group_label,
-                                           verbose=verbose)
-
-        if line_params is not None:
-
-            # Restore blended line from transitions from measurements frame
-            if (line_params.get('group') is None) and line_params.get('group_label') and parent_group_label is None:
-                line_params['group'] = 'b'
-                line_params['list_comps'] = line_params['group_label'].split('+')
-                line_params['label'] = line_params.get('group_label').split('+')[0] + '_b'
-
-            # Get the line parameters for additional components
-            if line_params.get('group'):
-                for i, line_i in enumerate(line_params['list_comps']):
-                    line_params['list_comps'][i] = Transition.from_log(line_i, measurements_df, norm_flux=None,
-                                                                       parent_group_label=line_params['group_label'])
-                # Combine the latex label
-                line_params['latex_label'] = '+'.join([line_i.latex_label for line_i in line_params['list_comps']])
-
-            # Create the line and load the measurements
-            inline = cls(**line_params)
-            if parent_group_label is None:
-                inline.load_measurements(measurements_df, norm_flux=norm_flux)
-
-        else:
-            _logger.warning(f'Input line {label} not found in log')
-            inline = None
-
-        return inline
 
     def param_arr(self, param):
 
@@ -1434,7 +1124,7 @@ class Transition:
     def load_measurements(self, data_frame, norm_flux=None):
 
         # Reset the measurements
-        self.measurements = LineMeasurements(self.param_arr('wavelength'))
+        self.measurements = LineMeasurements()
 
         # Recover measurements from table
         list_comps = [self.label] if self.group != 'b' else self.param_arr('label')
@@ -1462,8 +1152,32 @@ class Transition:
 
         return
 
+    def update_labels(self, sig_digits=None):
 
-def parse_container_data(label, fit_cfg, data_frame, parent_group_label, verbose):
+        # Get core components wavelength
+        new_label = (f'{self.list_comps[self.ref_idx].particle}'
+                     f'_{round_sig_clean(self.wavelength, sig_digits)}'
+                     f'{"A" if self.units_wave == "Angstrom" else self.units_wave}')
+
+        # Group suffix
+        group_str = "_b" if self.group == 'b' else "_m" if self.group == 'm' else ""
+
+        # Get optional components
+        if self.group != 'b':
+            new_label += f'_k-{self.list_comps[self.ref_idx].kinem}' if self.list_comps[self.ref_idx].kinem != 0 else ''
+            new_label += f'_t-{self.list_comps[self.ref_idx].trans}' if '_t-' in self.label else ''
+            new_label += f'_p-{self.list_comps[self.ref_idx].profile}' if '_p-' in self.label else ''
+            new_label += f'_s-{self.list_comps[self.ref_idx].shape}' if '_s-' in self.label else ''
+
+        # New label
+        self.label = f'{new_label}{group_str}'
+
+        # New latex label
+        construct_classic_notation(line=self)
+
+        return
+
+def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, verbose):
 
     # Review line notation and its group structure
     line_params = get_line_group(label, fit_cfg, data_frame, parent_group_label, verbose)
@@ -1475,7 +1189,7 @@ def parse_container_data(label, fit_cfg, data_frame, parent_group_label, verbose
     line_params = get_line_from_df(line_params, data_frame)
 
     # Review input for missing/default parameter values
-    review_input_params(line_params)
+    review_input_params(line_params, def_shape, def_profile)
 
     return line_params
 
@@ -1484,6 +1198,10 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
 
     # Container for the parameters
     line_params = {}
+
+    # Numerical label
+    if not isinstance(label, str):
+        label = check_line_in_log(label, rsrc_manager.lineDB.frame if data_frame is None else data_frame)
 
     # Review label components
     items = label.split('_')
@@ -1508,6 +1226,7 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
                 group_type = None
                 opt_items = items[2:]
 
+
     # Untangle the optional components and update the default values:
     if opt_items is not None:
         for opt_i in  opt_items:
@@ -1517,7 +1236,7 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
 
             else:
                 _logger.warning(f'Line {label} has an unrecognized optional item: {opt_i}.'
-                                f' - Please use "_k-", "_p-", "_t-", "_s-".')
+                                f' - Please use "_k-", "_t-", "_p-", "_s-".')
 
     # Get line core label
     core = f'{items[0]}_{items[1]}'
@@ -1627,7 +1346,8 @@ def get_line_from_df(line_params, input_df):
                          trans=pd_get(input_df, row_name, 'trans'),
                          kinem=pd_get(input_df, row_name, 'kinem'),
                          profile=pd_get(input_df, row_name, 'profile'),
-                         shape=pd_get(input_df, row_name, 'shape'))
+                         shape=pd_get(input_df, row_name, 'shape'),
+                         )
 
         if 'w1' in input_df.columns:
             db_params['mask'] = [pd_get(input_df, row_name, 'w1'),
@@ -1646,7 +1366,7 @@ def get_line_from_df(line_params, input_df):
         return line_params
 
 
-def review_input_params(line_params):
+def review_input_params(line_params, def_shape, def_profile):
 
     # Check core components
     line_items = line_params['label'].split('_')
@@ -1678,20 +1398,17 @@ def review_input_params(line_params):
 
     # Profile component
     if line_params.get('profile') is None:
-        line_params['profile'] = _DEFAULT_PROFILE
+        line_params['profile'] = def_profile
 
     # Line shape (emi, abs)
     if line_params.get('shape') is None:
-        line_params['shape'] = _DEFAULT_SHAPE
+        line_params['shape'] = def_shape
 
     # Review latex label
     if line_params.get('group') is None:
 
         if line_params.get('latex_label') is None:
-            particle_str = particle_notation(Particle.from_label(line_params["particle"]), line_params.get("trans"))
-            wavelength_str = round_sig_clean(line_params["wavelength"])
-            units_str = f'{au.Unit(line_params["units_wave"]):latex}'[9:-2].replace(' ', r'\,')
-            line_params['latex_label'] = f'{particle_str}{wavelength_str}{units_str}$'
+            construct_classic_notation(line_params=line_params)
 
         if line_params.get('kinem') > 0 and ('_k-' not in line_params['latex_label']):
             line_params['latex_label'] = line_params['latex_label'][:-1] + f'_k-{line_params["kinem"]}$'

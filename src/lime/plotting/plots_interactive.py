@@ -17,7 +17,7 @@ from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_
                     line_band_scaler, spec_profile_plotter
 
 from lime.tools import pd_get, unique_line_arr
-from ..transitions import label_decomposition, Transition
+from ..transitions import label_decomposition, Line
 
 _logger = logging.getLogger('LiMe')
 
@@ -28,7 +28,7 @@ def check_line_selection(spec, input_log, obj_bands, selected_by_default=True, *
     ref_params = {**kwargs, **{'automatic_grouping': False, 'components_detection': False,
                               'fit_cfg': None, 'default_cfg_prefix': None, 'obj_cfg_prefix': None}}
 
-    ref_bands = spec.retrieve.line_bands(**ref_params)
+    ref_bands = spec.retrieve.lines_frame(**ref_params)
 
     # Check if there is a physical bands file
     file_bands = check_file_dataframe(input_log, verbose=False)
@@ -45,7 +45,7 @@ def check_line_selection(spec, input_log, obj_bands, selected_by_default=True, *
 
     # New bands are created and the user decides if detected or not
     else:
-        in_bands = spec.retrieve.line_bands(**kwargs)
+        in_bands = spec.retrieve.lines_frame(**kwargs)
         default_status = 1 if selected_by_default else 0
 
     # Extract the lines from each dataframe and only get the ones in common (without suffixes)
@@ -571,9 +571,7 @@ class RedshiftInspection:
         size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
 
         PLT_CONF = theme.fig_defaults(size_conf)
-        self._AXES_CONF = theme.ax_defaults(ax_cfg, self._sample.load_params.get('units_wave'),
-                                            self._sample.load_params.get('units_flux'),
-                                            self._sample.load_params.get('norm_flux'), fig_type=None)
+        self._AXES_CONF = theme.ax_defaults(ax_cfg, self._sample, fig_type=None)
 
         # Create and fill the figure
         with rc_context(PLT_CONF):
@@ -645,7 +643,7 @@ class RedshiftInspection:
                                               instrument=self._sample.instrument, **self._load_params)
 
             # Plot on the observed frame with reshift = 0
-            wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spec.wave, spec.flux, spec.redshift, 'observed')
+            wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spec, True)
 
             # Plot the spectrum
             ax.step(wave_plot/z_corr, flux_plot*z_corr, label=self._label_generator(obj_idx), where='mid',
@@ -1071,7 +1069,7 @@ class CubeInspection:
         if show_profiles and spec.frame.size > 0:
             mplcursor_list = []
             for line_label in unique_line_arr(spec.frame):
-                line = Transition.from_log(line_label, spec.frame)
+                line = Line.from_transition(line_label, data_frame=spec.frame)
                 mplcursor_list += spec_profile_plotter(self.ax[1], spec, line, z_corr)
 
             # Pop-ups

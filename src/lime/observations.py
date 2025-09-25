@@ -16,7 +16,7 @@ from lime.plotting.bokeh_plots import BokehFigures
 from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame
 
 from lime.archives.read_fits import OpenFits
-from lime.transitions import Transition
+from lime.transitions import Line
 from lime.workflow import SpecTreatment, CubeTreatment, SpecRetriever
 from . import __version__
 
@@ -655,7 +655,7 @@ class Spectrum:
             line_list = log_df.index.values
 
             # Get the first line in the log
-            line_0 = Transition.from_log(line_list[0], measurements_df=log_df, norm_flux=self.norm_flux)
+            line_0 = Line.from_transition(line_list[0], data_frame=log_df, norm_flux=self.norm_flux)
 
             # Confirm the lines in the log match the one of the spectrum
             if line_0.units_wave != self.units_wave:
@@ -775,7 +775,7 @@ class Cube:
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.res_power = np.nan if res_power is None else res_power
+        self.res_power = res_power
         self.wcs = wcs
 
         # Treatments objects
@@ -905,7 +905,7 @@ class Cube:
             raise LiMe_Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
 
         # Line for the background image
-        line_bg = Transition.from_db(line, data_frame=bands)
+        line_bg = Line.from_transition(line, data_frame=bands)
 
         # Get the band indexes
         idcsEmis, idcsCont = line_bg.index_bands(self.wave, self.redshift)
@@ -1485,7 +1485,7 @@ class Sample(UserDict, OpenFits):
                 line_list = log_df.index.values
 
                 # Get the first line in the log
-                line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
+                line_0 = Line.from_transition(line_list[0], data_frame=log_df, norm_flux=self.norm_flux)
 
                 # Confirm the lines in the log match the one of the spectrum
                 # TODO we need something more advance for the line_0 units

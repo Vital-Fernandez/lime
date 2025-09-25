@@ -5,18 +5,17 @@ import pytest
 from pathlib import Path
 from matplotlib import pyplot as plt
 
-baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
-lines_log_address = baseline_folder / 'manga_lines_log.txt'
-file_address = baseline_folder/'manga_spaxel.txt'
+# baseline_folder = Path(__file__).parent / 'baseline'
+# outputs_folder = Path(__file__).parent / '3_explanations'
+# outputs_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
+outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 fits_address = baseline_folder/'sdss_dr18_0358-51818-0504.fits'
-
-
+lines_log_address = baseline_folder / 'manga_lines_log.txt'
+file_address = baseline_folder/'manga_spaxel.txt'
 
 tolerance_rms = 5.5
 

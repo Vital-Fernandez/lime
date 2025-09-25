@@ -31,7 +31,7 @@ class TestSpectrumClass:
         fig = plt.figure()
         spec = lime.Spectrum.from_file(file_address, 'sdss', redshift=0.0475, id_label='SHOC579-SDSS')
         spec.fit.continuum(degree_list=[3, 6, 6, 7], emis_threshold=[5, 3, 2, 2])
-        spec.plot.spectrum(in_fig=fig, include_cont=True, log_scale=True, label='SHOC579', rest_frame=True)
+        spec.plot.spectrum(in_fig=fig, show_cont=True, log_scale=True, label='SHOC579', rest_frame=True)
 
         return fig
 
@@ -41,7 +41,7 @@ class TestSpectrumClass:
         fig = plt.figure()
         spec = lime.Spectrum.from_file(file_address, 'sdss', redshift=0.0475, id_label='SHOC579-SDSS')
         spec.err_flux = spec.err_flux * 5
-        spec.plot.spectrum(in_fig=fig, include_err=True, log_scale=True, label='SHOC579',
+        spec.plot.spectrum(in_fig=fig, show_err=True, log_scale=True, label='SHOC579',
                            ax_cfg={'title': 'Test err * 10', 'xlabel': 'Dipersion axis'})
 
         return fig

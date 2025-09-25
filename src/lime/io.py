@@ -543,8 +543,11 @@ def results_to_log(line, log, norm_flux):
 
         # Identifiers
         log.at[comp.label, 'particle'] = comp.particle.label
+        log.at[comp.label, 'wavelength'] = comp.wavelength
         log.at[comp.label, 'latex_label'] = comp.latex_label
         log.at[comp.label, 'group_label'] = 'none' if comp.group_label is None else comp.group_label
+        log.at[comp.label, 'profile'] = comp.profile
+        log.at[comp.label, 'shape'] = comp.shape
 
         # Add bands wavelengths
         log.at[comp.label, 'w1'] = line.mask[0]

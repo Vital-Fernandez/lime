@@ -7,19 +7,19 @@ parent_bands = LinesDatabase(_LIME_DATABASE_FILE).frame
 
 def test_line_bands():
 
-    log0 = lime.line_bands()
+    log0 = lime.lines_frame()
     assert np.all(log0.columns == parent_bands.columns)
 
-    log1 = lime.line_bands(wave_intvl=(3000, 7000))
+    log1 = lime.lines_frame(wave_intvl=(3000, 7000))
     assert np.all((3000 <= log1.wavelength.to_numpy()) & (log1.wavelength.to_numpy() <= 7000))
 
-    log2 = lime.line_bands(wave_intvl=(3000, 7000), redshift=22)
+    log2 = lime.lines_frame(wave_intvl=(3000, 7000), redshift=22)
     assert np.all((3000 * 2 <= log2.wavelength.to_numpy()) & (log2.wavelength.to_numpy() <= 7000 * 2))
 
-    log3 = lime.line_bands(line_list=['O3_4363A', 'O3_4959A', 'O3_5007A'])
+    log3 = lime.lines_frame(line_list=['O3_4363A', 'O3_4959A', 'O3_5007A'])
     assert log3.index.isin(['O3_4363A', 'O3_4959A', 'O3_5007A']).sum() == log3.index.size
 
-    log4 = lime.line_bands(particle_list=['O3', 'S2'])
+    log4 = lime.lines_frame(particle_list=['O3', 'S2'])
     assert log4.particle.isin(['O3', 'S2']).sum() == log4.index.size
 
     return

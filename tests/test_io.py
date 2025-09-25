@@ -5,7 +5,7 @@ from lime.io import check_fit_conf
 from copy import deepcopy
 
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / '3_explanations'
+outputs_folder = Path(__file__).parent.parent/'examples/0_resources/results/'
 
 conf_file_address = baseline_folder/'manga.toml'
 lines_log_address = baseline_folder/'manga_lines_log.txt'
@@ -127,8 +127,8 @@ def test_log_parameters_calculation():
     assert 'eqw_new' in log_lines.columns
 
     for label in log_lines.index:
-        line = lime.Line.from_log(label, log_lines)
-        if line.blended_check is False:
+        line = lime.Line.from_transition(label, data_frame=log_lines)
+        if line.group == '_b':
             param_exp_value = log_lines.loc[label, 'eqw']
             param_value = log_lines.loc[label, 'eqw_new']
             param_exp_err = log_lines.loc[label, f'eqw_new_err']

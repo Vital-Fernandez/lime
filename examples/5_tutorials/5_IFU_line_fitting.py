@@ -16,13 +16,15 @@ z_obj = obs_cfg['SHOC579']['redshift']
 
 # Load the Cube
 shoc579 = lime.Cube.from_file(cube_address, instrument='manga', redshift=z_obj)
-shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
-
-# Fit the lines in one spaxel
+# shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
+#
+# # Fit the lines in one spaxel
 spaxel = shoc579.get_spectrum(38, 35)
-spaxel.plot.spectrum(bands=bands_file_0)
-spaxel.fit.frame(bands_file_0, cfg_file, obj_cfg_prefix='MASK_0')
-spaxel.plot.spectrum(log_scale=True)
+# spaxel.plot.spectrum(bands=bands_file_0)
+# spaxel.fit.frame(bands_file_0, cfg_file, obj_cfg_prefix='MASK_0')
+# spaxel.plot.spectrum(log_scale=True)
+
+spaxel.check.bands('./bands_template.txt', band_vsigma=70, n_sigma=4, instrumental_correction=True)
 
 # Load the spaxels mask coordinates
 masks_dict = lime.load_spatial_mask(spatial_mask_file, return_coords=True)

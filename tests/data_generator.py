@@ -53,8 +53,9 @@ wave_array, flux_array, err_array = spax.wave.data, spax.flux.data * norm_flux, 
 # Frame fitting
 spax.fit.frame(line_bands_file, fit_cfg, obj_cfg_prefix='38-35', progress_output=None)
 # spax.plot.spectrum(rest_frame=True, log_scale=True)
-# spax.save_frame(lines_log_file)
-spax.save_frame(baseline_folder/'manga_lines_log_TESTING.txt')
+
+spax.save_frame(lines_log_file)
+# spax.save_frame(baseline_folder/'manga_lines_log_TESTING.txt')
 
 spax.save_frame(latex_log_file, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
 # spax.plot.spectrum()

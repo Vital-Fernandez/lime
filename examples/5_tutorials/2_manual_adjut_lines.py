@@ -6,23 +6,22 @@ obsFitsFile = Path('../0_resources/spectra/gp121903_osiris.fits')
 instrMaskFile = Path('../0_resources/osiris_bands.txt')
 ref_bands_file = Path('../0_resources/bands/lines_star_forming_galaxies_optical.txt')
 obj_bands_file = Path('../0_resources/bands/gp121903_osiris_bands.txt')
-# obj_bands_file = Path('../0_resources/bands/gp121903_bands.txt')
 
 # Create the Spectrum object
 z_obj = 0.19531
 norm_flux = 1e-18
 gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
 
-# # Generate a bands file taking into account the observation resolution and wavelength range
-# bands_df = gp_spec.retrieve.line_bands(band_vsigma=70, n_sigma=4, instrumental_correction=True,
-#                                        map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
-#                                                         'O3_4959A': 240, 'O3_5007A': 240})
-#
-# # Plot the bands (manually cropping a region of interest)
-# gp_spec.plot.spectrum(fname=False, bands=bands_df, log_scale=True, rest_frame=False)
-# gp_spec.plot.ax.set_xlim((4600 * (1 + gp_spec.redshift), 5050 * (1 + gp_spec.redshift)))
-# gp_spec.plot.fig.tight_layout()
-# gp_spec.plot.show()
+# Generate a bands file taking into account the observation resolution and wavelength range
+bands_df = gp_spec.retrieve.lines_frame(band_vsigma=70, n_sigma=4, instrumental_correction=True,
+                                        map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
+                                                        'O3_4959A': 240, 'O3_5007A': 240})
+
+# Plot the bands (manually cropping a region of interest)
+gp_spec.plot.spectrum(fname=False, bands=bands_df, log_scale=True, rest_frame=False)
+gp_spec.plot.ax.set_xlim((4600 * (1 + gp_spec.redshift), 5050 * (1 + gp_spec.redshift)))
+gp_spec.plot.fig.tight_layout()
+gp_spec.plot.show()
 
 # Dictionary with grouped profiles
 line_components = {'O2_3726A_b': 'O2_3726A+O2_3729A',
@@ -37,10 +36,10 @@ line_components = {'O2_3726A_b': 'O2_3726A+O2_3729A',
                    'S2_6716A_b': 'S2_6716A+S2_6731A'}
 
 # Generate a bands file taking into account the observation resolution and wavelength range
-bands_df = gp_spec.retrieve.line_bands(band_vsigma=70, n_sigma=4, instrumental_correction=True,
-                                       map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
+bands_df = gp_spec.retrieve.lines_frame(band_vsigma=70, n_sigma=4, instrumental_correction=True,
+                                        map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
                                                         'O3_4959A': 240, 'O3_5007A': 240},
-                                       fit_cfg=line_components)
+                                        fit_cfg=line_components)
 
 # Plot the bands (manually cropping a region of interest)
 gp_spec.plot.spectrum(fname=False, bands=bands_df, log_scale=True, rest_frame=False)
@@ -51,10 +50,10 @@ gp_spec.plot.show()
 line_components.update({'O2_7319A_b' : "O2_7319A_m+O2_7330A_m",
                         'O2_7319A_m' : "O2_7319A+O2_7320A",
                         'O2_7330A_m' : "O2_7330A+O2_7331A"})
-bands_df = gp_spec.retrieve.line_bands(band_vsigma=70, n_sigma=4, instrumental_correction=True,
-                                       map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
+bands_df = gp_spec.retrieve.lines_frame(band_vsigma=70, n_sigma=4, instrumental_correction=True,
+                                        map_band_vsigma={'H1_4861A': 140, 'H1_6563A': 140,
                                                         'O3_4959A': 240, 'O3_5007A': 240},
-                                       fit_cfg=line_components, automatic_grouping=True)
+                                        fit_cfg=line_components, automatic_grouping=True)
 
 # Plot the bands (manually cropping a region of interest)
 gp_spec.plot.spectrum(fname=False, bands=bands_df, log_scale=True, rest_frame=False)

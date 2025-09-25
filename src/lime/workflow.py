@@ -9,7 +9,7 @@ from lmfit.models import PolynomialModel
 from lime import __version__
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from lime.transitions import air_to_vacuum_function, label_decomposition, Transition
+from lime.transitions import air_to_vacuum_function, label_decomposition, Line
 from lime.rsrc_manager import lineDB
 from lime.retrieve.line_bands import pars_bands_conf
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
@@ -317,9 +317,9 @@ def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=Non
     if update_labels or vacuum_label:
         list_labels = [None] * bands_df.index.size
         for i, label in enumerate(bands_df.index):
-            line = Transition.from_db(label, data_frame=bands_df)
-            line.update_label(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
-                              show_optional=False)
+            line = Line.from_transition(label, data_frame=bands_df)
+            line.update_labels(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
+                               show_optional=False)
             if update_latex:
                 bands_df.loc[label, 'latex_label'] = line.latex_label[0]
             list_labels[i] = line.label
@@ -350,11 +350,11 @@ class SpecRetriever:
 
         return
 
-    def line_bands(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
-                   exclude_bands_masked=True, map_band_vsigma=None, composite_lines=None, automatic_grouping=False,
-                   Rayleigh_threshold=2, components_detection=False, fit_cfg=None, default_cfg_prefix='default',
-                   obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
-                   vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
+    def lines_frame(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
+                    exclude_bands_masked=True, map_band_vsigma=None, composite_lines=None, automatic_grouping=False,
+                    Rayleigh_threshold=2, components_detection=False, fit_cfg=None, default_cfg_prefix='default',
+                    obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
+                    vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -470,12 +470,12 @@ class SpecRetriever:
         if line_measured:
 
             # Declare line object and the components and its components from the frame
-            line = Transition.from_db(line_label, data_frame=frame)
+            line = Line.from_transition(line_label, data_frame=frame)
             line_list = line.list_comps
 
             # Compute the linear components
-            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line._p_shape,
-                                 x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line.profile,
+                                                x_array=self._spec.wave.data[idcs[0]: idcs[1]])
             linear_arr = linear_continuum_computation(line_list, frame, 1 + self._spec.redshift, x_array=self._spec.wave.data[idcs[0]: idcs[1]])
 
             # Determine which component you want to extract:
@@ -566,8 +566,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._i_line = 0
         self._n_lines = 0
 
-    def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', cont_from_bands=True,
-              err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
+    def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile=None, shape=None,
+              cont_from_bands=True, err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None,
+              update_default=True):
 
         """
 
@@ -640,14 +641,14 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         # Interpret the input line
         if isinstance(label, str):
-            self.line = Transition.from_db(label, input_conf,
-                                           data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
-                                           )
+            self.line = Line.from_transition(label,
+                                             input_conf,
+                                             data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
+                                             def_shape=shape,
+                                             def_profile=profile
+                                             )
         else:
             self.line = label
-
-        # if arr_bands is not None:
-        #     self.line.mask = arr_bands
 
         # Check the line selection is valid
         idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
@@ -690,9 +691,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         return
 
 
-    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile='g-emi', cont_from_bands=None, err_from_bands=None,
+    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_from_bands=None, err_from_bands=None,
               temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,
-              plot_fit=False, progress_output='bar', ref_bands=None):
+              plot_fit=False, progress_output='bar'):
 
         """
 
@@ -818,7 +819,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         pbar.output_message(self._i_line, self._n_lines, pre_text="", post_text=f'({line})')
 
                         # Fit the lines
-                        self.bands(line, bands, input_conf, min_method, cont_from_bands=cont_from_bands,
+                        self.bands(line, bands, input_conf, min_method, profile, shape, cont_from_bands=cont_from_bands,
                                    err_from_bands=err_from_bands, temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
@@ -921,7 +922,7 @@ class CubeTreatment(LineFitting):
         self._spec = None
 
     def spatial_mask(self, mask_file, output_address, bands=None, fit_cfg=None, mask_list=None, line_list=None,
-                     log_ext_suffix='_LINELOG', min_method='least_squares', profile='g-emi', cont_from_bands=True,
+                     log_ext_suffix='_LINELOG', min_method='least_squares', profile=None, shape=None, cont_from_bands=True,
                      temp=10000.0, default_cfg_prefix='default', update_default=True, line_detection=False, progress_output='bar',
                      plot_fit=False, header=None, join_output_files=True):
 
@@ -1102,9 +1103,9 @@ class CubeTreatment(LineFitting):
 
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
-                                 line_detection=line_detection, profile=profile, cont_from_bands=cont_from_bands,
-                                 temp=temp, progress_output=None, plot_fit=None, obj_cfg_prefix=None,
-                                 default_cfg_prefix=None)
+                                 line_detection=line_detection, profile=profile, shape=shape,
+                                 cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
+                                 obj_cfg_prefix=None, default_cfg_prefix=None)
 
                 # Count the number of measurements
                 n_lines += spaxel.frame.index.size

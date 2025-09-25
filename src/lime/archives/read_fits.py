@@ -32,6 +32,9 @@ SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'res_po
                         'osiris': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                    'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
 
+                        'cos': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
+                                   'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
+
                         'sdss': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
                                  'units_flux': '1e-17*FLAM', 'pixel_mask': 'nan', 'id_label': None},
 
@@ -262,6 +265,7 @@ def check_fits_instructions(fits_source, online_provider=False):
 
     return fits_reader
 
+
 def load_txt(text_address, **kwargs):
 
     # Columns
@@ -300,6 +304,7 @@ def load_txt(text_address, **kwargs):
     #         params_dict[key.strip()] = value.strip()
 
     return out_array, params_dict
+
 
 def load_fits(fits_address, data_ext_list=None, hdr_ext_list=None, url_check=False):
 
@@ -640,6 +645,44 @@ class OpenFits:
         params_dict = SPECTRUM_FITS_PARAMS['osiris']
 
         return wave_array, flux_array, err_array, header_list, params_dict
+
+    @staticmethod
+    def cos(fits_address, data_ext_list=(1), hdr_ext_list=(0), **kwargs):
+
+        """
+
+        This method returns the spectrum array data and headers from the COS instrument at Hubble.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Spectrum. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        wave_array = data_list[0]['WAVELENGTH'][0] # TODO check for additional extension to join the spectra
+        flux_array = data_list[0]['FLUX'][0]
+        err_array = data_list[0]['ERROR'][0]
+
+        # Spectrum properties
+        params_dict = SPECTRUM_FITS_PARAMS['cos']
+
+        return wave_array, flux_array, err_array, header_list, params_dict
+
 
     @staticmethod
     def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=(0), **kwargs):
