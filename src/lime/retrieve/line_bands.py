@@ -18,25 +18,19 @@ def deblend_criteria(mu_arr, sigma_arr, Rayleigh_threshold):
     return resolvable
 
 
-def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, n_sigma, Rayleigh_threshold):
+def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grouping, n_sigma, Rayleigh_threshold):
 
-    # Use the input groups
+    # Check if the input configuration has a list of lines
+    composite_lines = fit_conf['grouped_lines'] if 'grouped_lines' in fit_conf else composite_lines
+
+    # Use all the group entries
+    groups_dict = {}
     if automatic_grouping is False:
+        for entry, value in fit_conf.items():
+            if entry.endswith(("_b", "_m")) and (composite_lines is None or entry in composite_lines):
+                groups_dict[entry] = value
 
-        # Get the the grouped lines
-        groups_dict = {} if fit_conf is False else {comp: group_label
-                                                   for comp, group_label in fit_conf.items()
-                                                   if comp.endswith(('_b', '_m'))}
-
-        # Limit the selection to the user lines
-        if composite_lines is not None:
-            groups_dict = {line: comps for line, comps in groups_dict.items() if line in composite_lines}
-
-        group_names = list(groups_dict.keys())
-        group_lines = [group.split('+') for group in groups_dict.values()]
-        groups_dict = dict(zip(group_names, group_lines))
-
-    # Automatic group review
+    # Automatic groups review
     else:
 
         # Check the input dataframe is sorted
@@ -44,8 +38,7 @@ def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, 
             _logger.warning(f'The input bands table is not sorted. This can cause issues in the bands generation:'
                             f'\n{bands["wavelength"]}')
 
-
-        # Get list all the line groups and their lines
+        # Get list of all the line groups and their lines
         line_list, group_lines = [], []
         group_names, group_blended_check = [], []
         for comp, group_label in fit_conf.items():
@@ -85,13 +78,25 @@ def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, 
                     group_blended_check.append(groups_i)
                     line_list += lines_i
 
+        # If a grouped list is provided add it to the highest priority
+        if composite_lines:
+            for i, item in enumerate(composite_lines):
+                if item in fit_conf:
+                    lines_i = bands.loc[bands.index.isin(fit_conf[item].split('+'))].index.to_numpy()
+                    group_names.insert(i, item)
+                    group_lines.insert(i, lines_i)
+                    group_blended_check.insert(i, None)
+                    line_list += list(lines_i)
+                else:
+                    raise LiMe_Error(f'The input grouped line "{item}" does not have components.'
+                                     f'\nPlease define a "{item}=LineA+LineB" in the configuration file')
+
         # Sort the input lines using line banbs table
         line_list = bands.loc[bands.index.isin(line_list)].index
         sub_bands = bands.loc[line_list]
         lambda_arr = sub_bands['wavelength'].to_numpy()
 
         # Compare the observed line groups
-        groups_dict = {}
         if line_list.size > 1:
 
             # Get limits of the bands on the spectrum wavelength range
@@ -114,29 +119,40 @@ def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, 
                 idcs_i = sub_bands.index.get_indexer(group_lines[i])
                 if np.all(assigned_lines[idcs_i] == False):
 
+                    # If line in requested group added it automatically
+                    if composite_lines and (group in composite_lines):
+                        groups_dict[group] = fit_conf[group]
+                        assigned_lines[idcs_i] = True
+
                     # Check the observed group of lines is the same size as the input one
-                    obs_group_size = (np.diagonal(decision_matrix[idcs_i[0]:, idcs_i], offset=1) > 0).sum() + 1
-                    if obs_group_size == idcs_i.size:
+                    else:
 
-                        # Establish the observed grouping of the lines
-                        w3_arr = idx3_arr[idcs_i]
-                        w4_arr = idx4_arr[idcs_i]
-                        obs_group_blend_chek = deblend_criteria(mu_arr=(w3_arr + w4_arr) / 2,
-                                                                sigma_arr=(w4_arr - w3_arr) / (n_sigma * 2),
-                                                                Rayleigh_threshold= Rayleigh_threshold)
+                        obs_group_size = (np.diagonal(decision_matrix[idcs_i[0]:, idcs_i], offset=1) > 0).sum() + 1
+                        if obs_group_size == idcs_i.size:
 
-                        # Add the configuration entry if there is a matching between observation and user grouping
-                        if np.all(obs_group_blend_chek == group_blended_check[i]):
-                            groups_dict[group] = fit_conf[group]
-                            assigned_lines[idcs_i] = True
+                            # Establish the observed grouping of the lines
+                            w3_arr = idx3_arr[idcs_i]
+                            w4_arr = idx4_arr[idcs_i]
+                            obs_group_blend_chek = deblend_criteria(mu_arr=(w3_arr + w4_arr) / 2,
+                                                                    sigma_arr=(w4_arr - w3_arr) / (n_sigma * 2),
+                                                                    Rayleigh_threshold= Rayleigh_threshold)
 
-    # Apply the requested group changes
+                            # Add the configuration entry if there is a matching between observation and user grouping
+                            if np.all(obs_group_blend_chek == group_blended_check[i]):
+                                groups_dict[group] = fit_conf[group]
+                                assigned_lines[idcs_i] = True
+
+    return groups_dict
+
+def groupify_lines_df(bands, fit_cfg, groups_dict, spec):
+
+    # Apply the requested changes
     rename_dict, exclude_list = {}, []
     param_dict = dict(w3 = {}, w4 = {}, wavelength = {}, latex_label = {}, group_label = {})
     for new_label, group_label in groups_dict.items():
-        print(new_label)
+
         # The grouped line replaces the reference entry
-        line = Line.from_transition(new_label, fit_conf)
+        line = Line.from_transition(new_label, fit_cfg=fit_cfg)
         old_label = line.list_comps[line.ref_idx].core
 
         # Extract the components includes sub-transitions
@@ -178,7 +194,7 @@ def pars_bands_conf(spec, bands, fit_conf, composite_lines, automatic_grouping, 
                                  f'for configuration entry: '
                                  f'"{new_label}={groups_dict[new_label]}" in reference lines table')
 
-    # Warn in case some of the bands dont match the database:
+    # Warn in case some of the bands don't match the database:
     if not set(exclude_list).issubset(bands.index):
         _logger.info(f' The following blended or merged lines were not found on the input lines database:\n'
                      f' - {list(set(exclude_list) - set(bands.index))}\n'

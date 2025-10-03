@@ -52,8 +52,8 @@ class LineFinder:
 
         return
 
-    def peaks_troughs(self, bands, sigma_threshold=3, emission_type=True, width_tol=5,
-                       continuum_array=None, continuum_std=None, plot_steps=False, **kwargs):
+    def peaks_troughs(self, bands, sigma_threshold=3, emission_shape=True, width_tol=5,
+                      continuum_array=None, continuum_std=None, plot_steps=False, **kwargs):
 
         """
 
@@ -76,8 +76,8 @@ class LineFinder:
         :param sigma_threshold: Continuum standard deviation factor for line detection. The default value is 3.
         :type sigma_threshold: float, optional
 
-        :param emission_type: Line type. The default value is "True" for emission lines.
-        :type emission_type: str, optional
+        :param emission_shape: Line type. The default value is "True" for emission lines.
+        :type emission_shape: str, optional
 
         :param width_tol: Minimum number of pixels between peaks/troughs. The default value is 5.
         :type width_tol: float, optional
@@ -97,12 +97,12 @@ class LineFinder:
 
         # Get indeces of peaks
         limit_threshold = sigma_threshold * continuum_std
-        limit_threshold = continuum_array + limit_threshold if emission_type else continuum_array + limit_threshold
+        limit_threshold = continuum_array + limit_threshold if emission_shape else continuum_array + limit_threshold
         idcs_peaks, _ = signal.find_peaks(self._spec.flux, height=limit_threshold, distance=width_tol)
 
         # Match peaks with theoretical lines
         bands = check_file_dataframe(bands)
-        matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, line_type=emission_type)
+        matched_DF = self.label_peaks(idcs_peaks, bands, width_tol=width_tol, line_type=emission_shape)
 
         # Plot the results
         if plot_steps:

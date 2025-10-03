@@ -43,7 +43,14 @@ SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I
 
 
 # Reading file with the format and export status for the measurements
-_LIME_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.0.txt'
+_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.0.txt'
+
+def check_lines_frame_units(frame):
+
+    if 'units_wave' in frame.columns:
+        return au.Unit(frame["units_wave"].iat[0])
+    else:
+        return au.Unit(Line.from_transition(frame.index[0], data_frame=frame).units_wave)
 
 
 class LinesDatabase:
@@ -51,30 +58,31 @@ class LinesDatabase:
     def __init__(self, frame_address=None, default_shape=None, default_profile=None):
 
         # Default_lines database
-        self.frame_address = _LIME_DATABASE_FILE if frame_address is None else frame_address
-
-        # Function attributes
-        self.vacuum_check = False
-
+        self.frame_address = _DATABASE_FILE if frame_address is None else frame_address
         self.frame = load_frame(self.frame_address)
 
+        # Default values
+        self._vacuum_check = False
         self._shape = 'emi' if default_shape is None else default_shape
         self._profile = 'g' if default_profile is None else default_profile
+        self.set_units_wave()
 
         return
 
     def set_database(self, wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom',
-                     decimals=None, vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False,
-                     vacuum_label=False, default_shape=None, default_profile=None):
-
+                     sig_digits=4, vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False,
+                     exclude_lines=None, default_shape=None, default_profile=None):
 
         # Reload the database at each modification to avoid contamination
         ref_bands = load_frame(self.frame_address) if ref_bands is None else ref_bands
 
-        self.frame = lines_frame(wave_intvl, line_list, particle_list, redshift, units_wave, decimals,
-                                 vacuum_waves, ref_bands, update_labels, update_latex)
+        self.frame = lines_frame(wave_intvl, line_list, particle_list, redshift, units_wave, sig_digits=sig_digits,
+                                 vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
+                                 update_latex=update_latex, rejected_lines=exclude_lines)
 
-        self.vacuum_check = vacuum_waves
+        self._vacuum_check = vacuum_waves
+
+        self.set_units_wave()
 
         if default_shape:
             self.set_shape(default_shape)
@@ -84,10 +92,9 @@ class LinesDatabase:
 
         return
 
-    def reset_database(self):
+    def reset(self, frame_address=None, default_shape=None, default_profile=None):
 
-        self.vacuum_check = False
-        self.frame = load_frame(_LIME_DATABASE_FILE)
+        self.__init__(frame_address, default_shape, default_profile)
 
         return
 
@@ -103,14 +110,23 @@ class LinesDatabase:
         self._profile = value
         return
 
+    def set_units_wave(self):
+
+        self._units_wave = check_lines_frame_units(self.frame)
+
+        return
+
     def get_shape(self):
         return self._shape
 
     def get_profile(self):
         return self._profile
 
+    def get_units(self):
+        return self._units_wave
 
-rsrc_manager.lineDB = LinesDatabase(_LIME_DATABASE_FILE)
+
+rsrc_manager.lineDB = LinesDatabase(_DATABASE_FILE)
 
 
 def int_to_roman(num):
@@ -597,7 +613,8 @@ def format_line_mask_option(entry_value, wave_array):
 
 
 def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=4,
-                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False):
+                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, rejected_lines=None):
+    
     """
 
     This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
@@ -703,8 +720,8 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
         n_lines = bands_df.index.size
         labels, latex_list =  ([None] * n_lines if update_labels else None, [None] * n_lines if update_latex else None)
 
-        for i, band in enumerate(bands_df.index):
-            line = Line.from_transition(band, data_frame=bands_df)
+        for i, label_i in enumerate(bands_df.index):
+            line = Line.from_transition(label_i, data_frame=bands_df)
             line.update_labels(sig_digits=sig_digits)
 
             if update_labels:
@@ -717,6 +734,10 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
 
         if update_labels:
             bands_df.rename(index=dict(zip(bands_df.index, labels)), inplace=True)
+
+    # Exclude lines
+    if rejected_lines is not None:
+        bands_df = bands_df.loc[~bands_df.index.isin(rejected_lines)]
 
     return bands_df
 
@@ -940,6 +961,7 @@ class LineMeasurements:
         self.pixelWidth = None
 
         return
+
 
 def check_measurements_table(df):
 
@@ -1176,6 +1198,7 @@ class Line:
         construct_classic_notation(line=self)
 
         return
+
 
 def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, verbose):
 

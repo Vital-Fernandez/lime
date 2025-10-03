@@ -77,7 +77,7 @@ def check_line_selection(spec, input_log, obj_bands, selected_by_default=True, *
     if 'wavelength' in log.columns:
         sorted_indexes = log['wavelength'].values.argsort()
     else:
-        wave_arr = label_decomposition(log.index.to_numpy(), params_list=['wavelength'])
+        wave_arr = label_decomposition(log.index.to_numpy(), params_list=['wavelength'], verbose=False)
         sorted_indexes = np.argsort(wave_arr[0])
 
     # Use the sorted index to reorder the DataFrame
@@ -191,8 +191,8 @@ class BandsInspection:
         self.z_corr = None
         self.idcs_mask = None
 
-        self.color_bg = {True: theme.colors['inspection_positive'],
-                         False: theme.colors['inspection_negative']}
+        self.color_bg = {True: theme.colors['line_selected'],
+                         False: theme.colors['line_removed']}
 
         self.out_params = ["wavelength", "wave_vac", "w1", "w2", "w3", "w4", "w5", "w6",
                             "units_wave", "particle", "transition", "rel_int"]
@@ -370,9 +370,9 @@ class BandsInspection:
 
         # Background for selective line for selected lines
         if self.active_lines[self.line_list == line][0]:
-            ax.set_facecolor(theme.colors['inspection_positive'])
+            ax.set_facecolor(theme.colors['line_selected'])
         else:
-            ax.set_facecolor(theme.colors['inspection_negative'])
+            ax.set_facecolor(theme.colors['line_removed'])
 
         # Scale the y axis
         line_band_scaler(ax, self.flux_plot[idxL:idxH] * self.z_corr, 'auto')

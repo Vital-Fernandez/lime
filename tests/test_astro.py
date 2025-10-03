@@ -1,8 +1,8 @@
 import numpy as np
 import lime
-from lime.transitions import _LIME_DATABASE_FILE, LinesDatabase
+from lime.transitions import _DATABASE_FILE, LinesDatabase
 from lime.rsrc_manager import lineDB
-parent_bands = LinesDatabase(_LIME_DATABASE_FILE).frame
+parent_bands = LinesDatabase(_DATABASE_FILE).frame
 
 
 def test_line_bands():
@@ -30,18 +30,18 @@ def test_database_modification():
     # Original database
     assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
     assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wavelength'], 4861.25)
-    assert lime.lineDB.vacuum_check is False
+    assert lime.lineDB._vacuum_check is False
 
     # Change to vacuum wavelength values
     lime.lineDB.set_database(vacuum_waves=True)
     assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
     assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wave_vac'], 4862.683)
-    assert lime.lineDB.vacuum_check is True
+    assert lime.lineDB._vacuum_check is True
 
     # Reset to original values
-    lime.lineDB.reset_database()
+    lime.lineDB.reset()
     assert np.isclose(lime.lineDB.frame.loc['H1_1216A', 'wavelength'], 1215.67)
     assert np.isclose(lime.lineDB.frame.loc['H1_4861A', 'wavelength'], 4861.25)
-    assert lime.lineDB.vacuum_check is False
+    assert lime.lineDB._vacuum_check is False
 
     return

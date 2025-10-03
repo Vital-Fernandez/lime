@@ -42,3 +42,4 @@ from lime.transitions import label_decomposition, lines_frame, bands_from_measur
 from lime.archives.read_fits import OpenFits, show_instrument_cfg
 from lime.plotting.plots import theme
 from lime.rsrc_manager import lineDB
+from lime.fitting.lines import show_profile_parameters

@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 import lime
-from lime.transitions import _LIME_DATABASE_FILE
+from lime.transitions import _DATABASE_FILE
 from lime.transitions import Line, label_decomposition, Particle, format_line_mask_option
 from lime.resources.generator_db import format_lines_database
 from lime.io import _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, _LOG_COLUMNS

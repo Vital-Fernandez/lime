@@ -696,6 +696,12 @@ class Spectrum:
 
         raise LiMe_Error(f'The line_detection functionality has been moved an rebranded. Please use:\n'
                          f'Spectrum.infer.peaks_troughs()')
+    
+    def clear_data(self):
+        
+        self.frame = self.frame[0:0]
+
+        return
 
 
 class Cube:

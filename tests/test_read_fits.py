@@ -310,7 +310,7 @@ class TestOpenFits:
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_read_nirspec(self, file_name='MRK209_cos_x1dsum.fits'):
 
-        mrk2009 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='cos', redshift=redshift_dict['ceers1027'])
+        mrk2009 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='cos', redshift=redshift_dict['MRK209'])
 
         fig = plt.figure()
         mrk2009.plot.spectrum(in_fig=fig, rest_frame=True)

@@ -417,7 +417,7 @@ def test_line_bands_merged_blended():
     assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 3
 
     # From certain list
-    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, composite_lines=['O2_3726A_m', 'H1_3889A_m', 'H1_6500A_b'])
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, grouped_lines=['O2_3726A_m', 'H1_3889A_m', 'H1_6500A_b'])
     assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 2
     assert 'H1_6500A_b' not in bands.index
 

@@ -9,9 +9,9 @@ from lmfit.models import PolynomialModel
 from lime import __version__
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from lime.transitions import air_to_vacuum_function, label_decomposition, Line
+from lime.transitions import air_to_vacuum_function, label_decomposition, Line, check_lines_frame_units, lines_frame
 from lime.rsrc_manager import lineDB
-from lime.retrieve.line_bands import pars_bands_conf
+from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
 from lime.fitting.redshift import RedshiftFitting
 from lime.plotting.plots import spec_continuum_calculation
@@ -216,122 +216,123 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
-               vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
-    """
+# def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
+#                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
+#     """
 
-    This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
-    as a pandas dataframe.
+#     This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
+#     as a pandas dataframe.
 
-    If the user provides a wavelength array (``wave_inter``) the output dataframe will be limited to the lines within
-    this wavelength interval.
+#     If the user provides a wavelength array (``wave_inter``) the output dataframe will be limited to the lines within
+#     this wavelength interval.
 
-    Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-    lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+#     Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
+#     lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
 
-    If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
-    limited to the transitions at that observed range.
+#     If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
+#     limited to the transitions at that observed range.
 
-    The user can specify the desired wavelength units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
-    or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_. The default value
-    unit is angstroms.
+#     The user can specify the desired wavelength units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
+#     or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_. The default value
+#     unit is angstroms.
 
-    The argument ``sig_digits`` determines the number of decimal figures for the line labels.
+#     The argument ``sig_digits`` determines the number of decimal figures for the line labels.
 
-    The user can request the output line labels and bands wavelengths in vacuum setting ``vacuum=True``. This conversion
-    is done using the relation from `Greisen et al. (2006) <https://www.aanda.org/articles/aa/abs/2006/05/aa3818-05/aa3818-05.html>`_.
+#     The user can request the output line labels and bands wavelengths in vacuum setting ``vacuum=True``. This conversion
+#     is done using the relation from `Greisen et al. (2006) <https://www.aanda.org/articles/aa/abs/2006/05/aa3818-05/aa3818-05.html>`_.
 
-    Instead of the default LiMe database, the user can provide a ``ref_bands`` dataframe (or the dataframe file address)
-    to use as the reference database.
+#     Instead of the default LiMe database, the user can provide a ``ref_bands`` dataframe (or the dataframe file address)
+#     to use as the reference database.
 
-    :param wave_intvl: Wavelength interval for output line transitions.
-    :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
+#     :param wave_intvl: Wavelength interval for output line transitions.
+#     :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
 
-    :param line_list: Line list for output line bands.
-    :type line_list: list, numpy.array, optional
+#     :param line_list: Line list for output line bands.
+#     :type line_list: list, numpy.array, optional
 
-    :param particle_list: Particle list for output line bands.
-    :type particle_list: list, numpy.array, optional
+#     :param particle_list: Particle list for output line bands.
+#     :type particle_list: list, numpy.array, optional
 
-    :param redshift: Redshift interval for output line bands.
-    :type redshift: list, numpy.array, optional
+#     :param redshift: Redshift interval for output line bands.
+#     :type redshift: list, numpy.array, optional
 
-    :param units_wave: Labels and bands wavelength units. The default value is "A".
-    :type units_wave: str, optional
+#     :param units_wave: Labels and bands wavelength units. The default value is "A".
+#     :type units_wave: str, optional
 
-    :param decimals: Number of decimal figures for the line labels.
-    :type decimals: int, optional
+#     :param decimals: Number of decimal figures for the line labels.
+#     :type decimals: int, optional
 
-    :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
-    :type vacuum_waves: bool, optional
+#     :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
+#     :type vacuum_waves: bool, optional
 
-    :param ref_bands: Reference bands dataframe. The default value is None.
-    :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
+#     :param ref_bands: Reference bands dataframe. The default value is None.
+#     :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
 
-    :return:
-    """
+#     :return:
+#     """
 
-    # Use the default lime mask if none provided
-    if ref_bands is None:
-        ref_bands = lineDB.frame
+#     # Use the default lime mask if none provided
+#     if ref_bands is None:
+#         ref_bands = lineDB.frame.copy()
+#         units_database = lineDB.get_units()
+#     else:
+#         ref_bands = check_file_dataframe(ref_bands)
+#         units_database = check_lines_frame_units(ref_bands)
 
-    # Load the reference bands
-    bands_df = check_file_dataframe(ref_bands)
+#     # Convert to requested units
+#     if units_wave != units_database:
+#         wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+#         conversion_factor = unit_conversion(in_units=units_database, out_units=units_wave, wave_array=1)
+#         ref_bands.loc[:, wave_columns] = ref_bands.loc[:, wave_columns] * conversion_factor
+#         ref_bands['units_wave'] = units_wave
+#     else:
+#         conversion_factor = 1
 
-    # Convert to requested units
-    if units_wave != 'Angstrom':
-        wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        conversion_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
-        bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * conversion_factor
-        bands_df['units_wave'] = units_wave
-    else:
-        conversion_factor = 1
+#     # First slice by wavelength and redshift
+#     idcs_rows = np.ones(ref_bands.index.size).astype(bool)
+#     if wave_intvl is not None:
+#         w_min, w_max = wave_intvl[0], wave_intvl[-1]
 
-    # First slice by wavelength and redshift
-    idcs_rows = np.ones(bands_df.index.size).astype(bool)
-    if wave_intvl is not None:
-        w_min, w_max = wave_intvl[0], wave_intvl[-1]
+#         # Account for redshift
+#         redshift = redshift if redshift is not None else 0
+#         if 'wavelength' in ref_bands.columns:
+#             wave_arr = ref_bands['wavelength'] * (1 + redshift)
+#         else:
+#             wave_arr = label_decomposition(ref_bands.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
 
-        # Account for redshift
-        redshift = redshift if redshift is not None else 0
-        if 'wavelength' in bands_df.columns:
-            wave_arr = bands_df['wavelength'] * (1 + redshift)
-        else:
-            wave_arr = label_decomposition(bands_df.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
+#         # Compare with wavelength values
+#         idcs_rows = idcs_rows & (wave_arr >= w_min) & (wave_arr <= w_max)
 
-        # Compare with wavelength values
-        idcs_rows = idcs_rows & (wave_arr >= w_min) & (wave_arr <= w_max)
+#     # Second slice by particle
+#     if particle_list is not None:
+#         idcs_rows = idcs_rows & ref_bands.particle.isin(particle_list)
 
-    # Second slice by particle
-    if particle_list is not None:
-        idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
+#     # Finally slice by the name of the lines
+#     if line_list is not None:
+#         idcs_rows = idcs_rows & ref_bands.index.isin(line_list)
 
-    # Finally slice by the name of the lines
-    if line_list is not None:
-        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
+#     # Final table
+#     bands_df = ref_bands.loc[idcs_rows]
 
-    # Final table
-    bands_df = bands_df.loc[idcs_rows]
+#     # Update the labels to reflect new wavelengths and units if necessary and user requests it
+#     if update_labels or vacuum_label:
+#         list_labels = [None] * bands_df.index.size
+#         for i, label in enumerate(bands_df.index):
+#             line = Line.from_transition(label, data_frame=bands_df)
+#             line.update_labels(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
+#                                show_optional=False)
+#             if update_latex:
+#                 bands_df.loc[label, 'latex_label'] = line.latex_label[0]
+#             list_labels[i] = line.label
+#         bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
 
-    # Update the labels to reflect new wavelengths and units if necessary and user requests it
-    if update_labels or vacuum_label:
-        list_labels = [None] * bands_df.index.size
-        for i, label in enumerate(bands_df.index):
-            line = Line.from_transition(label, data_frame=bands_df)
-            line.update_labels(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
-                               show_optional=False)
-            if update_latex:
-                bands_df.loc[label, 'latex_label'] = line.latex_label[0]
-            list_labels[i] = line.label
-        bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
+#     # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
+#     if vacuum_waves:
+#         bands_df['wavelength'] = bands_df['wave_vac']
+#         bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
+#         bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
 
-    # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
-    if vacuum_waves:
-        bands_df['wavelength'] = bands_df['wave_vac']
-        bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
-
-    return bands_df
+#     return bands_df
 
 def res_power_approx(wavelength_arr):
 
@@ -351,18 +352,25 @@ class SpecRetriever:
         return
 
     def lines_frame(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
-                    exclude_bands_masked=True, map_band_vsigma=None, composite_lines=None, automatic_grouping=False,
-                    Rayleigh_threshold=2, components_detection=False, fit_cfg=None, default_cfg_prefix='default',
-                    obj_cfg_prefix=None, update_default=True, line_list=None, particle_list=None, decimals=None,
-                    vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
+                    exclude_bands_masked=True, map_band_vsigma=None, grouped_lines=None, automatic_grouping=False,
+                    Rayleigh_threshold=2, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
+                    update_default=True, line_list=None, particle_list=None, sig_digits=4, ref_bands=None,
+                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
 
+        # Check configuration format
+        in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default) if fit_cfg else None
+
+        # Overwrite rejected lines from the configuration
+        rejected_lines = in_cfg['rejected_lines'] if in_cfg and ('rejected_lines' in in_cfg) else rejected_lines
+
         # Crop the bands to match the observation
-        bands = line_bands(wave_intvl, line_list, particle_list, redshift=self._spec.redshift, units_wave=self._spec.units_wave,
-                           decimals=decimals, vacuum_waves=vacuum_waves, ref_bands=ref_bands, update_labels=update_labels,
-                           update_latex=update_latex, vacuum_label=vacuum_label)
+        bands = lines_frame(wave_intvl, line_list, particle_list, redshift=self._spec.redshift,
+                            units_wave=self._spec.units_wave, sig_digits=sig_digits, ref_bands=ref_bands,
+                            vacuum_waves=vacuum_waves, update_labels=update_labels, update_latex=update_latex,
+                            rejected_lines=rejected_lines)
 
         # Compute the resolving power if necessary
         if self._spec.res_power is not None:
@@ -411,33 +419,38 @@ class SpecRetriever:
             bands = bands.loc[idcs_valid]
 
         # Combine the blended/merged lines in the bands table
-        if fit_cfg is not None:
-            in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
-            pars_bands_conf(self._spec, bands, in_cfg, composite_lines, automatic_grouping, n_sigma, Rayleigh_threshold)
+        if in_cfg:
 
-        # Filter the table to match the line detections
-        if components_detection:
-            if self._spec.infer.pred_arr is not None:
+            # Determine the line groups
+            groups_dict = determine_line_groups(self._spec, bands, in_cfg, grouped_lines, automatic_grouping, n_sigma,
+                                                Rayleigh_threshold)
 
-                # Create masks for all intervals
-                starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
-                ends = bands.w4.to_numpy()[:, None] * (1 + self._spec.redshift)
+            # Apply the changes
+            groupify_lines_df(bands, in_cfg, groups_dict, self._spec)
 
-                # Check if x values fall within each interval
-                in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
-
-                # Check where y equals the target category
-                is_target_category = np.isin(self._spec.infer.pred_arr, (3, 7, 9))
-
-                # Combine the masks to count target_category occurrences in each interval
-                counts = np.sum(in_intervals & is_target_category, axis=1)
-
-                # Check which intervals satisfy the minimum count condition
-                idcs = counts >= 3
-                bands = bands.loc[idcs]
-
-            else:
-                _logger.warning(f'The observations has an empty preduction array. Please run the components detection')
+        # # Filter the table to match the line detections
+        # if components_detection:
+        #     if self._spec.infer.pred_arr is not None:
+        #
+        #         # Create masks for all intervals
+        #         starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
+        #         ends = bands.w4.to_numpy()[:, None] * (1 + self._spec.redshift)
+        #
+        #         # Check if x values fall within each interval
+        #         in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
+        #
+        #         # Check where y equals the target category
+        #         is_target_category = np.isin(self._spec.infer.pred_arr, (3, 7, 9))
+        #
+        #         # Combine the masks to count target_category occurrences in each interval
+        #         counts = np.sum(in_intervals & is_target_category, axis=1)
+        #
+        #         # Check which intervals satisfy the minimum count condition
+        #         idcs = counts >= 3
+        #         bands = bands.loc[idcs]
+        #
+        #     else:
+        #         _logger.warning(f'The observations has an empty preduction array. Please run the components detection')
 
         return bands
 
@@ -834,7 +847,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_length=None, plot_steps=False,
+    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_scale=None, plot_steps=False,
                   **kwargs):
 
         """
@@ -870,8 +883,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
 
         # Smooth the spectrum
-        if smooth_length is not None:
-            smoothing_window = np.ones(smooth_length) / smooth_length
+        if smooth_scale is not None:
+            smoothing_window = np.ones(smooth_scale) / smooth_scale
             input_flux_s = np.convolve(input_flux, smoothing_window, mode='same')
         else:
             input_flux_s = input_flux
@@ -900,8 +913,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             if plot_steps:
                 input_kwargs = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
                 input_kwargs.update(kwargs)
-                spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_flux_s, mask_cont, low_lim,
-                                           high_lim, emis_threshold[i], **input_kwargs)
+                spec_continuum_calculation(self._spec, input_wave, input_flux_s, cont_fit, mask_cont, low_lim,
+                                           high_lim, smooth_scale, **input_kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)

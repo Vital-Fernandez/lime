@@ -261,7 +261,13 @@ PROFILE_PARAMS = dict(g = ['amp', 'center', 'sigma'],
                       p = ['a', 'b', 'c', 'alpha'],
                       e = ['amp', 'center', 'alpha'])
 
-# np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
+PROFILE_ABBREV = dict(g = 'Gaussian',
+                      l = 'Lorentzian',
+                      v = 'Voigt',
+                      pv = 'Pseudo-Voigt',
+                      pp = 'Pseudo-Power law',
+                      p = 'Broken Power law',
+                      e = 'Exponential')
 
 PROFILE_FUNCTIONS =  {'g': gaussian_model, 'l': lorentz_model, 'v': voigt_model,
                       'pv': pseudo_voigt_model, 'pp': pseudo_power_model,
@@ -272,6 +278,24 @@ AREA_FUNCTIONS = {'g': gaussian_area, 'l': lorentz_area, 'v': voigt_area,
                   'p': power_area, 'e': exp_area}
 
 FWHM_FUNCTIONS =  {'g': g_FWHM, 'l': l_FWHM, 'v': v_FWHM, 'pv': v_FWHM, 'pp': pp_FWHM, 'p': p_FWHM, 'e': e_FWHM}
+
+
+def show_profile_parameters(profile_params=PROFILE_PARAMS, profile_abbrev=PROFILE_ABBREV):
+
+    """
+    Print a clean list of profiles with their abbreviation and parameter names.
+
+    Args:
+        profile_params (dict): Dictionary mapping profile codes to parameter lists.
+        profile_abbrev (dict): Dictionary mapping profile codes to full names.
+    """
+
+    print("\nAvailable profiles (with their identifying character) and their parameters:")
+    for id_character, param_list in profile_params.items():
+        profile = profile_abbrev[id_character]
+        print(f'- {profile} "{id_character}": {param_list}')
+
+    return
 
 
 def signal_to_noise_rola(amp, std_cont, n_pixels):

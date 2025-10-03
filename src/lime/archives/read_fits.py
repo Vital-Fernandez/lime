@@ -9,6 +9,7 @@ from io import IOBase
 from lime.io import LiMe_Error
 from urllib.parse import urlparse
 
+
 try:
     import requests
     requests_check = True
@@ -671,17 +672,35 @@ class OpenFits:
 
         """
 
-        # Get data table and header dict lists
+        # Check dimensions of array
         data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+        if data_list[0]['WAVELENGTH'].squeeze().ndim == 1:
+            wave_arr = data_list[0]['WAVELENGTH'].squeeze()
+            flux_arr = data_list[0]['FLUX'].squeeze()
+            err_arr = data_list[0]['ERROR'].squeeze()
 
-        wave_array = data_list[0]['WAVELENGTH'][0] # TODO check for additional extension to join the spectra
-        flux_array = data_list[0]['FLUX'][0]
-        err_array = data_list[0]['ERROR'][0]
+        else:
+            # Get common middle index for joining the spectra
+            # wave_matrix = data_list[0]['WAVELENGTH'][::-1]
+            idcs_common = np.nonzero(data_list[0]['WAVELENGTH'][1, :] > data_list[0]['WAVELENGTH'][0, 0])[0]
+            center_idx = idcs_common.shape[0] // 2
+
+            # Create empty containers
+            wave_arr = np.empty(data_list[0]['WAVELENGTH'].size - center_idx, data_list[0]['WAVELENGTH'].dtype)  # TODO check for additional extension to join the spectra
+            flux_arr = np.empty(data_list[0]['FLUX'].size - center_idx, data_list[0]['FLUX'].dtype)  # dtype=data_list[0]['FLUX'].dtype)
+            err_arr = np.empty(data_list[0]['ERROR'].size - center_idx, data_list[0]['ERROR'].dtype)  # dtype=data_list[0]['ERROR'].dtype)
+
+            # Fill with the array data
+            arr_size = data_list[0]['WAVELENGTH'].shape[1]
+            for key_arr, cont_arr in zip(['WAVELENGTH', 'FLUX', 'ERROR'], [wave_arr, flux_arr, err_arr]):
+                cont_arr[0:arr_size - center_idx] = data_list[0][key_arr][1][0:arr_size - center_idx]
+                cont_arr[arr_size - center_idx:] = data_list[0][key_arr][0]
+                # print(key_arr, np.any(np.isnan(cont_arr)))
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['cos']
 
-        return wave_array, flux_array, err_array, header_list, params_dict
+        return wave_arr, flux_arr, err_arr, header_list, params_dict
 
 
     @staticmethod
