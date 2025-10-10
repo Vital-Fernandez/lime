@@ -14,8 +14,8 @@ baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 fits_address = baseline_folder/'sdss_dr18_0358-51818-0504.fits'
-lines_log_address = baseline_folder / 'manga_lines_log.txt'
-file_address = baseline_folder/'manga_spaxel.txt'
+lines_log_address = baseline_folder / 'SHOC579_MANGA38-35_log.txt'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
 
 tolerance_rms = 5.5
 

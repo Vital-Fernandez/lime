@@ -9,8 +9,8 @@ default."ytick.labelsize" = 8
 default."font.size" = 5
 
 [matplotlib.size] # Figure elements size
-default."single_width" = '1'
-default."comp_width" = '0.75'
+default."single_width" = '1.5'
+default."comp_width" = '1'
 default."err_width" = '2'
 default."cont_width" = '0.5'
 default."spectrum_width" = '0.75'

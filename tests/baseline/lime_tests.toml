@@ -1,0 +1,111 @@
+[object_properties]
+shoc579.redshift = 0.0475
+shoc579.norm_flux = 1e-17
+shoc579.spaxel_coords = [38, 35]
+
+[default_line_fitting]
+transitions.O2_3726A_m.wavelength = 3728.484
+transitions.O2_7325A_m.wavelength = 7325.000
+transitions.O2_7325A_b.wavelength = 7325.000
+
+#O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
+O2_3726A_b = "O2_3726A+O2_3729A"
+O2_3726A_m = 'O2_3726A+O2_3729A'
+H1_3889A_m = "H1_3889A+He1_3889A"
+Ne3_3968A_m = "Ne3_3968A+H1_3970A"
+Ar4_4711A_m = "Ar4_4711A+He1_4713A"
+Fe3_4925A_m= 'He1_4922A+Fe3_4925A'
+
+N1_5198A_m = "N1_5198A+N1_5200A"
+O1_6300A_b = "O1_6300A+S3_6312A"
+H1_6563A_b = "H1_6563A+N2_6583A+N2_6548A"
+H1_6563A_m = "H1_6563A+N2_6583A+N2_6548A"
+S2_6716A_b = "S2_6716A+S2_6731A"
+S2_6716A_m = "S2_6716A+S2_6731A"
+O2_7325A_b = "O2_7319A_m+O2_7330A_m"
+O2_7325A_m = "O2_7319A+O2_7320A+O2_7330A+O2_7331A"
+O2_7319A_m = "O2_7319A+O2_7320A"
+O2_7330A_m = "O2_7330A+O2_7331A"
+S3_9530A_b = "S3_9530A+H1_9546A"
+
+[38-35_line_fitting]
+map_band_vsigma.O2_3726A = 180
+map_band_vsigma.O2_3729A = 180
+map_band_vsigma.H1_4861A = 200
+map_band_vsigma.Fe3_4658A = 250
+map_band_vsigma.O3_4959A = 250
+map_band_vsigma.O3_5007A = 250
+map_band_vsigma.H1_6563A = 200
+map_band_vsigma.N2_6548A = 200
+map_band_vsigma.N2_6583A = 200
+map_band_vsigma.S3_9531A = 70
+map_band_vsigma.H1_9546A = 70
+
+grouped_lines = ['O2_3726A_b', 'Fe3_4658A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b', 'O1_6300A_b']
+rejected_lines = ['S3_3722A', 'Fe3_4008A', 'S2_4076A', 'Fe2_4287A', 'Fe2_4358A', 'Fe3_4881A', 'Ar3_5192A']
+
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [3, 2, 1.5]
+peaks_troughs.sigma_threshold = 3
+
+O2_3726A_b = "O2_3726A+O2_3729A"
+#O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
+O2_3726A_kinem = "O2_3729A"
+H1_3712A_kinem = "H1_3734A"
+
+Fe3_4658A_b = "Fe3_4658A_s-emi+Fe3_4658A_s-abs"
+Fe3_4658A_s-abs_center = "value:4650"
+
+H1_4861A_b = "H1_4861A+H1_4861A_k-1"
+H1_4861A_k-1_sigma = "expr:>2.0*H1_4861A_sigma"
+H1_4861A_k-1_amp = "expr:<10.0*H1_4861A_amp"
+
+O3_4959A_b = "O3_4959A+O3_4959A_k-1"
+O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
+O3_4959A_k-1_amp = "expr:<10.0*O3_4959A_amp"
+
+O3_5007A_b = "O3_5007A+O3_5007A_k-1+He1_5016A"
+O3_5007A_kinem = "O3_4959A"
+O3_5007A_k-1_kinem = "O3_4959A_k-1"
+He1_5016A_center = "min:5014,max:5018"
+He1_5016A_sigma = "min:1.0,max:2.0"
+
+H1_6563A_b = "H1_6563A+H1_6563A_k-1+N2_6583A+N2_6548A"
+H1_6563A_k-1_sigma = "expr:>2.0*H1_6563A_sigma"
+H1_6563A_k-1_amp = "expr:<10.0*H1_6563A_amp"
+N2_6548A_amp = "expr:N2_6583A_amp/2.94"
+N2_6548A_kinem = "N2_6583A"
+
+S3_9530A_b = "S3_9530A+H1_9546A"
+H1_9546A_sigma = "min:1.0,max:2.0"
+
+[MASK_0_line_fitting]
+bands = "./tests/baseline/SHOC579_MASK0_bands.txt"
+
+peaks_troughs.sigma_threshold = 3
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [5, 3, 2]
+
+O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
+H1_4861A_b = "H1_4861A+H1_4861A_k-1"
+O3_4959A_b = "O3_4959A+O3_4959A_k-1"
+O3_5007A_b = "O3_5007A+O3_5007A_k-1"
+H1_6563A_b = "H1_6563A+H1_6563A_k-1+N2_6584A+N2_6548A"
+O2_7319A_b = "O2_7319A+O2_7330A"
+S3_9531A_b = "S3_9531A+H1_9548A"
+
+O2_3726A_kinem = "O2_3729A"
+H1_3712A_kinem = "H1_3734A"
+
+H1_4861A_k-1_sigma = "expr:>2.0*H1_4861A_sigma"
+H1_4861A_k-1_amp = "expr:<10.0*H1_4861A_amp"
+
+O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
+O3_4959A_k-1_amp = "expr:<10.0*O3_4959A_amp"
+
+O3_5007A_k-1_kinem = "O3_4959A_k-1"
+O3_5007A_k-1_amp = "expr:<10.0*O3_5007A_amp"
+
+H1_6563A_k-1_sigma = "expr:>2.0*H1_6563A_sigma"
+N2_6548A_amp = "expr:N2_6584A_amp/2.94"
+N2_6548A_kinem = "N2_6584A"

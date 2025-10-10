@@ -1,0 +1,115 @@
+# Changelog
+
+## 1.0.0 LiMe release (04/29/2024)
+- First stable release
+
+## 1.0.1 LiMe minor update (05/04/2024)
+- Created lime.io.parce_lime_cfg function to convert the .toml sections with lime suffix to the expected format to be its own operation
+- Created lime.plots.spectrum_labels to generate spectrum figure axis labels
+- Delete "log" attribute from lime.Cube class
+- Fix error normalize_fluxes was not cropping the lines frame for an input line list. Need to fix normalize flux error
+- log now returns the dataframe
+
+## 1.0.2 LiMe minor update (05/09/2024)
+- SDSS lime.Spectrum.from_file no reads redshift from fits header
+
+## 1.0.3 LiMe minor update (05/09/2024)
+- Restored deleted config.toml
+
+## 1.0.4 LiMe minor update (05/17/2024)
+- Corrected MANGA flux error measurement
+- New tests for comparison between standard and lime loading of SDSS and MANGA observations
+- Change cm.get_cmap to plt.get_cmap due to matplotlib depreciation
+- Bug fix for multi-index flux extraction function due to pandas depreciation
+
+## 1.0.5 LiMe minor update (05/25/2024)
+- Change "continuum_fit" keyword for toml keyword in continuum fitting configuration to "continuum" to match function name
+
+## 1.0.6 LiMe minor update (06/20/2024)
+- Fix error in unit conversion of Cubes
+- Clearer messages for bands not matching the spectrum wavelength range
+- Added test for line fitting with line detection using implicit and explicit configuration and bands declaration
+- Plots using the automatic scale now show the scale as in figure text.
+- Added own stringBool from distiutils because it is being discontinued in python 3.12
+
+## 1.0.7 LiMe minor update (07/19/2024)
+- define_masks function has been replaces by line.index_bands()
+- The line.index_bands() now warns if line does not have bands at the point of indexing an input spectrum wavelength.
+- Corrections on the measurements documentation page
+
+## 1.0.8 LiMe minor update (09/15/2024)
+- The check_fit_cfg function now reviews if the continuum and line_detection functions parameters are present and gives a warning if not.
+- show_masks attribute in Spectrum.plot.spectrum to hide the pixels masks on the output plot.
+
+## 1.1.0 LiMe medium update (09/30/2024)
+- By default LiMe will now mask the input spectrum if "nan" and "inf" entries are present in the flux and err_flux arrays but the user does not provide a pixel mask. If the user provides a mask but "nan" or "inf" entries are detected only a warning will be provided.
+- The website now includes the changelog with the LiMe updates.
+- Fixed bug where nan entries would cause an error in the line band detection.
+- New logic operator to store bands which only cover one pixel in band detection.
+- Documentation corrections by E.C. Herenz
+
+## 1.1.1 LiMe minor update (10/29/2024)
+- Adding bands from frame function
+- Bug fix for re-normalization in the units_conversion function
+- Bug fix to normalize by 1 if nanmedian flux is <= 0
+- Added security fix for re-normalization in the units_conversion function
+- The review_bands function now checks if all the line_band pixels flux and all the continuum_band pixels flux sum is zero. This is done to avoid all zero line or continuum entries.
+
+## 1.2.0 LiMe medium update (11/05/2024)
+- The unit_conversion functions have been updated to avoid bugs on betwen certain units
+- The unit_conversion functions now review the normalization and masking the same way as in the spectrum creation
+- The line detection function has been updated to account for masked data within the input line bands
+- The automatic normalization function now using the mean instead of median as the scale_flux
+- If the scale flux is negative the normalization will remove the lowest pixel value from the mean flux for the automatic normalization.
+- Initial introduction for aspect functions for thea automatic detection of spectral features.
+- New checks to avoid the measurements of bands where all the entries are masked.
+
+## 1.2.1 LiMe minor update (10/29/2024)
+- Rename the "line_bands" argument in the lime.Spectrum.plot.spectrum function to "bands" to match library style
+- The lime.Spectrum.plot.spectrum function will now only display "bands" w3 and w4 values are within the rest wavelength range (no need to crop the bands in advance now).
+- Added support for reading MIRI IFU observations with MJy/str and um units
+- Corrected bug on the latex label generation in the lime.line_bands command not reproducing the expected format
+- The unit_conversion function for Cube observations now uses the format from the previous update.
+
+## 1.3.0 LiMe medium update (10/29/2024)
+- This update includes ASPECT as an optional dependency and has adapted several functions to include the possibility to use its predictions
+- Added the Spectrum.retrieve attribute to group tasks which return data for the user related to the spectrum
+- Added the Spectrum.retrieve.line_bands to return the line bands which match the observation redshift, wave interval and components detection.
+- The lime.line_bands and Spectrum.retrieve.line_bands now use the argument "redshift" to adjust the output bands which are within a "wave_intvl" for that redshift (for the Spectrum.retrieve.line_bands this is always the case)
+- The lime.line_bands has been moved to the workflow.py file
+- The ".line_bands" have now use the new unit conversion function and includes more functionality via new update_labels=True, update_latex=True.
+- The inst_FWHM at the creation of observations has been replaced by res_power (resolving power) and now can be a float or an array (same length as the observation wavelength). This provides a more robust computation of the sigma_instr
+- The sigma_instr and sigma_thermal corrections are not computed within the sigma_corrections function
+- During the lime.Sample.get_spectrum the user can now specify kwargs arguments to update the creation kwargs for that object.
+- Several bugs were corrected on the lime.redshift_calculation to avoid very large errors when weak lines were present.
+- Bug correction on the previous update lime.Spectrum.plot.spectrum to plot bands within the observation wavelength range.
+- The lime.Sample.check.redshift function now has a new "initial_z" argument for the initial guess of the redshift measurement.
+- The lime.Sample.check.redshift "title_label" argument has been renamed -> "title" for consistency
+- The air_to_vacuum_function now only applies the theoretical relation, its inputs and outputs are wavelength arrays.
+- The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.
+
+## 2.0.0 LiMe Mayor update (XX/XX/XXXX)
+- Change installer convention from "setup.py + requirements.txt" to pyproject.toml
+- Updated dependencies to current version of packages and for python 3.12
+- Renamed cfg.toml to lime.toml
+- Arrange library .py files into folder structure reproducing the .fit, .infer, .retrieve, .plot functions. The functions related to file types are are located in archives folder.
+- Added new mechanic to compute the lines continuum from the line band edges or the continua bands.
+- Added new mechanic to compute the pixel uncertainty from the provided uncertainty flux or the adjacent continua bands.
+- Fix error where the error from the line profile center and sigma parameters was uncertainty was 0 if the line kinematics were imported from a previously measured line.
+- Added support for bokeh plots.
+- The theme configuration parameters are stored now in the src/plotting/theme_lime.toml.
+- The .fit.report function now formats the output report to include the component label name and has the argument return_text=False to give the option to return the report message as a variable instead of printing on the terminal.
+- Fix a bug where the kinematics export function was not applying the correct rest frame wavelength length on the radial velocity calculation.
+- New ".infer" to host high level functions to predict spectroscopic features
+- The "Spectrum.line_detection()" has been moved to "Spectrum.infer.peaks_troughs()". The old function now raises and error moving to the new function.
+- Now the observations wave, flux, err_flux and wave_rest arrays are always masked arrays
+- The lines database name has been changed from parent_bands.txt to "lines_database_v2.0.0.txt". The wavelength are based on van Hoof, P.A.M., 2018, Galaxies, 6, 63 and Roueff+ (2019).
+- The central wavelenght bands are now calculated assuming a bands_vsigma=70 and n_sigma=4
+- The function lime.Spectrum.retrieve.spectrum() returns the spectrum axes as a recarray or saves it into a text file if the user provides a file address.
+- lime.Spectrum.from_file("fname", instrument='text') can now read the file from a text file following the format from the lime.Spectrum.retrieve.spectrum() function.
+- Bug the .plot.spectrum(include_fittings) does not show the combined profile
+- Rename term "_conf" to "_cfg" across function names and arguments for uniformity
+- Fitting functions now have the update_default=True argument. In the default behaviour the default configuration updates the default one. If set to update_default=False only the obj_cfg is used if available else the default one.
+- Creating a spectrum object where all the entries are masked now produces a critical warning instead of raising an error.
+- By default line_bands.
+- Added bands_from_log function

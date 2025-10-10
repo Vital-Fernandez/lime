@@ -12,10 +12,8 @@ baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / '3_explanations'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 file_address = baseline_folder/'sdss_dr18_0358-51818-0504.fits'
-conf_file_address = baseline_folder/'manga.toml'
+conf_file_address = baseline_folder/'lime_tests.toml'
 bands_file_address = baseline_folder/f'manga_line_bands.txt'
-# lines_log_address = baseline_folder/'manga_lines_log.txt'
-# lines_tex_address = baseline_folder/'manga_lines_log.tex'
 
 redshift = 0.0475
 # norm_flux = 1e-17

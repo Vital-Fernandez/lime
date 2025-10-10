@@ -14,15 +14,15 @@ baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 
-file_address = baseline_folder/'manga_spaxel.txt'
-lines_log_address = baseline_folder/'manga_lines_log.txt'
-conf_file_address = baseline_folder/'manga.toml'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
 
 lines_log = lime.load_frame(lines_log_address)
 redshift = 0.0475
 norm_flux = 1e-17
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
+# pixel_mask = np.isnan(err_array)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
@@ -280,7 +280,10 @@ def test_cube_spectrum_unit_conversion(file_name='jw01039-o003_t001_miri_ch4-med
     return
 
 
-def test_spectra_unit_conversion():
+def test_spectra_unit_conversion(text_spec_address=file_address):
+
+    # Load the data
+    wave_array, flux_array, err_array, pixel_mask = np.loadtxt(text_spec_address, unpack=True)
 
     # Astropy conversion
     wave_astropy_in =  wave_array * au.Unit('Angstrom')

@@ -147,24 +147,47 @@ def parse_lime_cfg(toml_cfg, fit_cfg_suffix='_line_fitting'):
 def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
     """
+    Load a LiMe configuration file (TOML) and normalize LiMe-specific sections.
 
-    This function reads a configuration file with the `toml format <https://toml.io/en/>`_.
+    This reads a TOML configuration file and, for any section whose name ends
+    with `fit_cfg_suffix`, converts its key/value pairs to the formats expected
+    by LiMe's line-fitting routines.
 
-    If one of the file sections has the suffix specified by the ``fit_cfg_suffix`` argument, the function will query its items and
-    convert their values to the format expected by `LiMe functions <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
-    The default suffix is "_line_fitting".
+    Parameters
+    ----------
+    file_address : str or pathlib.Path
+        Path to the input configuration file (.toml).
+    fit_cfg_suffix : str, optional
+        Section-name suffix that identifies LiMe line-fitting configuration
+        blocks to be normalized. Default is ``"_line_fitting"``.
 
-    The function will show a critical warning if it fails to convert an item in a ``fit_cfg_suffix`` section.
+    Returns
+    -------
+    dict
+        Parsed configuration mapping with LiMe sections converted where
+        applicable.
 
-    :param file_address: Input configuration file address.
-    :type file_address: str, pathlib.Path
+    Raises
+    ------
+    LiMe_Error
+        If the file does not exist at `file_address`.
+    tomllib.TOMLDecodeError
+        If the TOML file cannot be parsed.
 
-    :param fit_cfg_suffix: Suffix for LiMe configuration sections. The default value is "_line_fitting".
-    :type fit_cfg_suffix:  str
+    Notes
+    -----
+    - Sections ending with `fit_cfg_suffix` are passed to
+      ``parse_lime_cfg`` for normalization.
+    - If an item within a `fit_cfg_suffix` section cannot be converted,
+      a critical warning is emitted (handled inside ``parse_lime_cfg``),
+      but the rest of the configuration is still returned when possible.
+    - Requires Python 3.11+ for ``tomllib``.
 
-    :return: Parsed configuration data
-    :type: dict
-
+    Examples
+    --------
+    >>> cfg = load_cfg("settings.toml")
+    >>> cfg["my_model_line_fitting"]["method"]
+    'gaussian'
     """
 
     file_path = Path(file_address)
@@ -270,27 +293,61 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
 def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
 
     """
-    This function reads the input ``file_address`` as a pandas dataframe.
+    Loads a lines frame (pandas.DataFrame) from various file formats.
 
-    The expected file types are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx". The dataframes expected format is discussed
-    on the `line bands <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_ and `measurements <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_ documentation.
+    Supported inputs include plain text tables, CSV, FITS HDUs, Excel sheets, ASDF nodes,
+    and Streamlit ``UploadedFile`` objects. If the resulting table contains the columns
+    listed in ``levels``, a MultiIndex is reconstructed by setting those columns as the
+    index.
 
-    For ".fits" and ".xlsx" files the user can provide a page name ``ext`` for the HDU/sheet. The default name is "_LINELOG".
+    Parameters
+    ----------
+    fname : str or pathlib.Path or UploadedFile
+        Path to the lines log file or a Streamlit ``UploadedFile``. When a path is
+        provided, the file type is inferred from the suffix.
+    page : str, optional
+        HDU name (FITS) / sheet name (Excel) / node key (ASDF) to read from.
+        Used only for ``.fits``, ``.xlsx``/``.xls``, and ``.asdf`` inputs.
+        Default is ``"FRAME"``.
+    levels : list of str, optional
+        Column names to use for reconstructing a MultiIndex via ``DataFrame.set_index``.
+        If all names in ``levels`` are present as columns, they are set as the index.
+        Default is ``["id", "line"]``.
 
-    To reconstruct a `MultiIndex dataframe <https://pandas.pydata.org/docs/user_guide/advanced.html#advanced-hierarchical>`_
-    the user needs to specify the ``sample_levels``.
+    Returns
+    -------
+    pandas.DataFrame
+        The loaded lines log. For text/CSV/Excel/ASDF the first column is treated
+        as the initial index during read; if all ``levels`` are present as columns,
+        they are set as a MultiIndex on return.
 
-    :param fname: Lines frame file address.
-    :type fname: str, Path
+    Raises
+    ------
+    LiMe_Error
+        If ``fname`` is a path and the file does not exist.
+    SystemExit
+        If the file exists but cannot be opened/parsed (wraps a ``ValueError``).
 
-    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "_LINELOG".
-    :type page: str, optional
+    Notes
+    -----
+    Detected formats and readers:
+      * ``.fits``: read via ``hdu_to_log_df(log_path, page)``.
+      * ``.xlsx`` / ``.xls``: read via ``pandas.read_excel(..., sheet_name=page, header=0, index_col=0)``.
+      * ``.asdf``: read node ``page`` and build a DataFrame from records; index set from the
+        ``"index"`` field.
+      * ``.txt``: whitespace-separated via ``pandas.read_csv(..., sep=r"\\s+", header=0, index_col=0, comment="#")``.
+      * ``.csv``: comma-separated via ``pandas.read_csv(..., sep=",", header=0, index_col=0, comment="#")``.
+      * ``UploadedFile`` (Streamlit): treated like a whitespace-separated text table.
 
-    :param levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
-    :type levels: list, optional
+    Examples
+    --------
+    Load an Excel sheet named ``FRAME`` and restore a MultiIndex of (``id``, ``line``):
 
-    :return: lines log table
-    :rtype: pandas.DataFrame
+    >>> df = load_frame("lines.xlsx", page="FRAME", levels=["id", "line"])
+
+    Load a FITS HDU named ``FRAME``:
+
+    >>> df = load_frame("lines.fits", page="FRAME")
 
     """
 
@@ -356,44 +413,62 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
                safe_version=True, **kwargs):
 
     """
+    Save a lines frame (pandas.DataFrame) to disk in one of several supported formats.
 
-    This function saves the input ``dataframe`` at the ``fname`` provided by the user.
+    The output format is inferred from the file extension. Supported formats include
+    plain text tables, FITS HDUs, ASDF trees, and Excel sheets. Optional metadata such
+    as FITS/ASDF headers and custom column data types can be provided.
 
-    The accepted extensions are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
+    Parameters
+    ----------
+    fname : str or pathlib.Path
+        Destination file path. The extension determines the file format.
+        Supported extensions are ``.txt``, ``.fits``, ``.asdf``, and ``.xlsx``.
+    dataframe : pandas.DataFrame
+        Lines log to be saved.
+    parameters : list or {"all"}, optional
+        Columns to include in the output. If ``"all"``, all DataFrame columns are written.
+        Default is ``"all"``.
+    page : str, optional
+        HDU name (for FITS) or sheet name (for Excel) to use when writing.
+        Default is ``"FRAME"``.
+    header : dict, optional
+        Additional metadata to include in the output file. For FITS and ASDF files,
+        this dictionary is added to the file header.
+    column_dtypes : str, type, or dict, optional
+        Data type conversion mapping for the output FITS record array.
+        - If a string or type, all columns are cast to that type.
+        - If a dictionary, specify a mapping of column names or indices (zero-indexed) to their desired data types.
+        This argument overrides LiMe’s default FITS formatting.
+    safe_version : bool, optional
+        If ``True``, the current LiMe version is saved as a footnote or page header
+        in the output log. Default is ``True``.
 
-    For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-    The default name is "FRAME".
+    Raises
+    ------
+    ValueError
+        If the file extension is unsupported or the DataFrame cannot be written
+        in the specified format.
 
-    The user can specify the ``parameters`` to be saved in the output file.
+    Notes
+    -----
+    - For FITS and Excel outputs, the target HDU or sheet is named according to ``page``.
+    - FITS headers can be extended using ``header``.
+    - Custom column data types can be enforced via ``column_dtypes``.
+    - The function ensures compatibility with LiMe’s internal data formats.
 
-    For ".fits" files the user can provide a dictionary to add to the ``fits_header``. The user can provide a ``column_dtypes``
-    string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
-    same columns as the file names.
+    Examples
+    --------
+    Save a DataFrame to a FITS file with a custom header:
 
-    :param fname: Lines frame file address.
-    :type fname: str, Path
+    >>> header = {"OBSERVER": "V. Pérez", "INSTRUME": "MEGARA"}
+    >>> save_frame("lines.fits", df, header=header)
 
-    :param dataframe: Lines dataframe.
-    :type dataframe: pandas.DataFrame
+    Save selected columns to an Excel sheet named ``FRAME``:
 
-    :param parameters: Output parameters list. The default value is "all"
-    :type parameters: list
-
-    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
-    :type page: str, optional
-
-    :param header: Dictionary for ".fits" and ".asdf" file headers.
-    :type header: dict, optional
-
-    :param column_dtypes: Conversion variable for the `records array <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html>`.
-                          for the output fits file. If a string or type, the data type to store all columns. If a dictionary, a mapping of column
-                          names and indices (zero-indexed) to specific data types.
-    :type column_dtypes: str, dict, optional
-
-    :param safe_version: Save LiMe version as footnote or page header on the output log. The default value is True.
-    :type safe_version: bool, optional
-
+    >>> save_frame("lines.xlsx", df, parameters=["profile_flux", "profile_flux_err", "eqw"], page="FRAME")
     """
+
 
     # Confirm file path exits
     log_path = Path(fname)

@@ -44,7 +44,9 @@ def unique_line_arr(frame, return_index = False):
 
     # Initialize with False
     idcs_b = pd.Series(False, index=frame.index)
-    idcs_b.loc[frame.loc[~(idcs_s | idcs_m), 'group_label'].str.split('+').str[0].unique()] = True
+    idcs_components = frame.loc[~(idcs_s | idcs_m), 'group_label'].str.split('+').str[0].unique()
+    idcs_components = idcs_b.index.isin(idcs_components)
+    idcs_b[idcs_components] = True
 
     # Get merged lines in blended lines
     m_terms = (frame.loc[idcs_b, 'group_label'].apply(lambda x: [term for term in x.split('+')

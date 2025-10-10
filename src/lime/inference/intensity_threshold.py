@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from scipy import signal
-from lime.io import check_file_dataframe
+from lime.io import check_file_dataframe, LiMe_Error
 from lime.transitions import label_decomposition
 from lime.plotting.plots import spec_peak_calculation
 
@@ -94,6 +94,11 @@ class LineFinder:
         # Check for the peaks of the emission lines
         continuum_array = self._spec.cont if continuum_array is None else continuum_array
         continuum_std = self._spec.cont_std if continuum_std is None else continuum_std
+
+        # Check the continuum has been calculated in advance
+        if (continuum_array is None) or (continuum_std is None):
+            raise LiMe_Error(f'Please provide a continuum and std array to the function or run "Spectrum.fit.continuum"'
+                             f' prior to the peak detection')
 
         # Get indeces of peaks
         limit_threshold = sigma_threshold * continuum_std

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lime-stable"
-version = "2.0.dev14"
+version = "2.0.dev15"
 readme = "README.rst"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
@@ -32,6 +32,8 @@ full = ["asdf~=4.1",
         "toml~=0.10",]
 
 docs = ["sphinx-rtd-theme~=3.0",
+        "sphinx_togglebutton~=0.3",
+        "sphinx_book_theme~=1.1",
         "ipympl~=0.9",
         "myst-nb~=1.3"]
 

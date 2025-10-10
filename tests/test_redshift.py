@@ -11,10 +11,10 @@ from copy import deepcopy
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / '3_explanations'
 spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
-file_address = baseline_folder/'manga_spaxel.txt'
-conf_file_address = baseline_folder/'manga.toml'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
 bands_file_address = baseline_folder/f'manga_line_bands.txt'
-lines_log_address = baseline_folder/'manga_lines_log.txt'
+lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
 lines_tex_address = baseline_folder/'manga_lines_log.tex'
 
 redshift = 0.0475
@@ -23,11 +23,11 @@ cfg = lime.load_cfg(conf_file_address)
 cfg_copy = deepcopy(cfg)
 tolerance_rms = 5.5
 
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
+# pixel_mask = np.isnan(err_array)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
-                     pixel_mask=pixel_mask, id_label='SHOC579-Manga38-35')
+                     pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
 
 spec.infer.components()
 

@@ -94,24 +94,27 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.0.dev14"
+release = "2.0.dev15"
 
 
 # -- General configuration ---------------------------------------------------
+_lib_path = Path(__file__).parents[2]/'src'
+sys.path.insert(0, os.path.abspath(_lib_path))        # adjust to your project root
+sys.path.insert(1, '/home/vital/PycharmProjects/aspect/src')        # adjust to your project root
+# sys.path.append(_lib_path.as_posix())
 
-extensions = [# 'myst_parser',  # Markdown support
-                'myst_nb',
-                'sphinx_togglebutton',
-                'sphinx.ext.duration',
-                'sphinx.ext.doctest',
-                'sphinx.ext.autodoc',
-                'sphinx.ext.viewcode',
-                'sphinx.ext.autosummary',
-                'sphinx.ext.intersphinx',
-                'sphinx.ext.mathjax',
-                'matplotlib.sphinxext.plot_directive',
-                # 'nbsphinx',
-                ]
+extensions = ['myst_nb',
+              'sphinx_togglebutton',
+              'sphinx.ext.duration',
+              'sphinx.ext.doctest',
+              'sphinx.ext.autodoc',
+              'sphinx.ext.napoleon',
+              'sphinx.ext.viewcode',
+              'sphinx.ext.autosummary',
+              'sphinx.ext.intersphinx',
+              'sphinx.ext.mathjax',
+              'matplotlib.sphinxext.plot_directive',
+              ]
 
 # Markdown configuration
 myst_enable_extensions = [
@@ -130,7 +133,7 @@ myst_heading_anchors = 2
 source_suffix = {'.rst': 'restructuredtext',
                  '.ipynb': 'myst-nb',
                  '.myst': 'myst-nb',
-}
+                 '.md': 'myst-nb'}
 
 # Jupyter notebooks settings
 nbsphinx_markdown = True
@@ -140,6 +143,10 @@ nbsphinx_execute = 'always'
 # Autodoc options
 autodoc_member_order = 'bysource'
 autodoc_default_options = {"imported-members": True}
+
+# Set to True to output parameter types (like `str` or `dict`) clearly.
+napoleon_use_param = True
+napoleon_use_rtype = True
 
 # Template paths
 templates_path = ['_templates', '_build']
@@ -183,17 +190,18 @@ html_theme_options = {"logo": {"image_light": "0_resources/images/LiMe2_logo_whi
 # -- Folder cleanup and example copy -----------------------------------------
 
 # Paths to the documentation and the notebooks (examples) folder
-_lib_path = Path(__file__).parents[2]/'src'
 _doc_folder = Path(__file__).parents[2]/'docs/source'
-_examples_path = Path(__file__).parents[2]/'examples'
+_examples_path = Path(__file__).parents[2]/'examples/doc_notebooks'
+_examples_path.mkdir(parents=True, exist_ok=True)
 
-sys.path.append(_lib_path.as_posix())
+# sys.path.append(_lib_path.as_posix())
 sys.path.append(_examples_path.as_posix())
 
 # Delete existing files and copy the new versions
 list_folders = ['0_resources', '1_introduction', '2_guides', '3_explanations', '4_references']
-for sub_folder in list_folders: shutil.rmtree(_doc_folder / sub_folder, ignore_errors=True)
-for sub_folder in list_folders: shutil.copytree(_examples_path/sub_folder, _doc_folder/sub_folder, dirs_exist_ok=True)
+for sub_folder in list_folders: shutil.rmtree(_examples_path/sub_folder, ignore_errors=True)
+for sub_folder in list_folders: shutil.copytree(_doc_folder/sub_folder, _examples_path/sub_folder, dirs_exist_ok=True)
+
 
 # -- Changelog compiler ------------------------------------------------------
 

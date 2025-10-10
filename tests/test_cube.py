@@ -11,10 +11,10 @@ import pytest
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / '3_explanations'
 
-file_address = baseline_folder/'manga_spaxel.txt'
-conf_file_address = baseline_folder/'manga.toml'
-bands_file_address = baseline_folder/f'manga_line_bands.txt'
-lines_log_address = baseline_folder/'manga_lines_log.txt'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
+bands_file_address = baseline_folder/f'SHOC579_MANGA38-35_bands.txt'
+lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
 spatial_mask_address = baseline_folder/'SHOC579_mask.fits'
 cube_log_address = baseline_folder/'SHOC579_log.fits'
 
@@ -33,8 +33,8 @@ spaxel_label = '38-35'
 cfg = lime.load_cfg(conf_file_address)
 
 # Spaxel data
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
+# pixel_mask = np.isnan(err_array)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
@@ -114,7 +114,7 @@ class TestCubeClass:
 
     def test_fit_spatial_mask(self):
 
-        cfg['MASK_0_line_fitting']['bands'] = bands_file_address.as_posix()
+        # cfg['MASK_0_line_fitting']['bands'] = bands_file_address.as_posix()
         cube.fit.spatial_mask(spatial_mask_address, fit_cfg=cfg, line_detection=True, mask_list=['MASK_0'],
                               output_address=spatial_log_address)
 

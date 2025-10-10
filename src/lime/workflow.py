@@ -355,7 +355,8 @@ class SpecRetriever:
                     exclude_bands_masked=True, map_band_vsigma=None, grouped_lines=None, automatic_grouping=False,
                     Rayleigh_threshold=2, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
                     update_default=True, line_list=None, particle_list=None, sig_digits=4, ref_bands=None,
-                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None):
+                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None,
+                    save_group_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -363,8 +364,10 @@ class SpecRetriever:
         # Check configuration format
         in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default) if fit_cfg else None
 
-        # Overwrite rejected lines from the configuration
+        # Get the parameters from configuration file if provided
+        map_band_vsigma = in_cfg['map_band_vsigma'] if in_cfg and ('map_band_vsigma' in in_cfg) else map_band_vsigma
         rejected_lines = in_cfg['rejected_lines'] if in_cfg and ('rejected_lines' in in_cfg) else rejected_lines
+        grouped_lines = in_cfg['grouped_lines'] if in_cfg and ('grouped_lines' in in_cfg) else grouped_lines
 
         # Crop the bands to match the observation
         bands = lines_frame(wave_intvl, line_list, particle_list, redshift=self._spec.redshift,
@@ -426,7 +429,7 @@ class SpecRetriever:
                                                 Rayleigh_threshold)
 
             # Apply the changes
-            groupify_lines_df(bands, in_cfg, groups_dict, self._spec)
+            groupify_lines_df(bands, in_cfg, groups_dict, self._spec, save_group_label)
 
         # # Filter the table to match the line detections
         # if components_detection:
@@ -704,9 +707,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         return
 
 
-    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_from_bands=None, err_from_bands=None,
-              temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,
-              plot_fit=False, progress_output='bar'):
+    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_from_bands=None,
+              err_from_bands=None, temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None,
+              update_default=True, line_detection=False, plot_fit=False, progress_output='bar'):
 
         """
 
@@ -795,18 +798,29 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                 bands = bands.loc[idcs]
 
             # Load configuration
-            input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, line_detection=line_detection)
+            input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default=update_default,
+                                        line_detection=line_detection)
 
             # Line detection if requested
             if line_detection:
 
                 # Review the configuration entries
-                cont_fit_conf = input_conf.get('continuum', {})
-                detect_conf = input_conf.get('peaks_troughs', {})
+                cont_fit_conf = input_conf.get('continuum', None)
+                if cont_fit_conf:
+                    self._spec.fit.continuum(**cont_fit_conf)
+                else:
+                    _logger.warning(f'No "continuum" entry in input configuration file. No continuum fitting will be applied')
+
 
                 # Perform the line detection
-                self._spec.fit.continuum(**cont_fit_conf)
-                bands = self._spec.infer.peaks_troughs(bands, **detect_conf)
+                detect_conf = input_conf.get('peaks_troughs', {})
+                if detect_conf:
+                    bands = self._spec.infer.peaks_troughs(bands, **detect_conf)
+                else:
+                    _logger.warning(f'No "peaks_troughs" entry in input configuration file. No line thresholding will be applied')
+
+            else:
+                cont_fit_conf, detect_conf = None, None
 
             # Define lines to treat through the lines
             label_list = bands.index.to_numpy()
@@ -818,7 +832,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                 # On screen progress bar
                 pbar = ProgressBar(progress_output, f'{self._n_lines} lines')
                 if progress_output is not None:
-                    print(f'\nLine fitting progress:')
+                    print(f'\nLine fitting progress{" (continuum fitting)" if cont_fit_conf is not None else ""}'
+                                                  f'{" (line detection)" if detect_conf is not None else ""}:')
 
                 for self._i_line in np.arange(self._n_lines):
 
@@ -1118,7 +1133,7 @@ class CubeTreatment(LineFitting):
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, shape=shape,
                                  cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
-                                 obj_cfg_prefix=None, default_cfg_prefix=None)
+                                 obj_cfg_prefix=None, default_cfg_prefix=None, update_default=update_default)
 
                 # Count the number of measurements
                 n_lines += spaxel.frame.index.size

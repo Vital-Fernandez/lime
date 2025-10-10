@@ -44,39 +44,81 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
         for comp, group_label in fit_conf.items():
             if comp.endswith(('_b', '_m')):
 
-                # Homogeneous group
-                if '_m' not in group_label:
-                    lines_i = group_label.split('+')
-                    groups_i = [True] * (len(lines_i) - 1) if comp[-2:] == '_b' else [False] * (len(lines_i) - 1)
+                # No kinematic groups
 
-                # Mixed group (merged child line in the blended parent group)
-                else:
+                # Only lines with multiple components depending on the kinematics
+                line_i = Line.from_transition(comp, fit_conf, bands, warn_missing_db=True)
+                if len(line_i.list_comps) > 1:
+
                     lines_i, groups_i = [], []
-                    for i, line in enumerate(group_label.split('+')):
-                        if line[-2:] != '_m':       # Single line
-                            lines_i.append(line)
-                            groups_i.append(0)
-                        else:                       # Merged line
-                            sub_group_label = fit_conf.get(line)
-                            if sub_group_label:
-                                items = sub_group_label.split('+')
-                                lines_i += items
-                                groups_i += [i] * len(items)
-                            else:
-                                raise LiMe_Error(f'The merged line: "{line}" in grouped line: "{comp}={group_label}" '
-                                                 f'is not specified.\nPlease define a "{line}=LineA+LineB" '
-                                                 f'in your configuration file.')
+                    for i, trans_i in enumerate(line_i.list_comps):
 
-                    # Convert the sub_group_type to the relation
+                        # Only add first order kinematic
+                        if trans_i.kinem == 0:
+
+                            # Single comp
+                            if trans_i.group is None:
+                                lines_i.append(trans_i.core)
+                                groups_i.append(i if (line_i.group == 'b' or i == 0) else groups_i[-1])
+
+                            # Merged comp
+                            else:
+
+                                # Raise error if sub-merged line is not present
+                                if trans_i.label not in fit_conf:
+                                    raise LiMe_Error(f'The merged line: "{trans_i}" in grouped line: "{comp}={group_label}" '
+                                                     f'is not specified.\nPlease define a "{trans_i}=LineA+LineB" '
+                                                     f'in your configuration file.')
+
+                                sub_trans = np.unique(trans_i.param_arr('core'))
+                                lines_i += list(sub_trans)
+                                groups_i += [i] * sub_trans.size
+
+                    # Compute the group label deblendeding relation
                     groups_i = np.diff(groups_i).astype(bool)
 
-                # Add the group is all lines (sorted) in current wavelength range
-                idcs_i = bands.index.get_indexer(lines_i)
-                if np.all(idcs_i > -1):
-                    group_names.append(comp)
-                    group_lines.append(bands.loc[bands.index.isin(lines_i)].index.to_numpy())
-                    group_blended_check.append(groups_i)
-                    line_list += lines_i
+                else:
+                    raise LiMe_Error(f'The automatic grouping did not find the components for the {comp}={group_label}. '
+                                     f'Please check the configuration dictionary')
+
+
+                # # Homogeneous group
+                # if '_m' not in group_label:
+                #     lines_i = group_label.split('+')
+                #     groups_i = [True] * (len(lines_i) - 1) if comp[-2:] == '_b' else [False] * (len(lines_i) - 1)
+                #
+                # # Mixed group (merged child line in the blended parent group)
+                # else:
+                #     lines_i, groups_i = [], []
+                #     for i, line in enumerate(group_label.split('+')):
+                #         if line[-2:] != '_m':       # Single line
+                #             lines_i.append(line)
+                #             groups_i.append(0)
+                #         else:                       # Merged line
+                #             sub_group_label = fit_conf.get(line)
+                #             if sub_group_label:
+                #                 items = sub_group_label.split('+')
+                #                 lines_i += items
+                #                 groups_i += [i] * len(items)
+                #             else:
+                #                 raise LiMe_Error(f'The merged line: "{line}" in grouped line: "{comp}={group_label}" '
+                #                                  f'is not specified.\nPlease define a "{line}=LineA+LineB" '
+                #                                  f'in your configuration file.')
+                #
+                #     # Convert the sub_group_type to the relation
+                #     groups_i = np.diff(groups_i).astype(bool)
+
+                    # Not components with blended kinematics only:
+                # Only components with more than one kinematic component
+                if len(groups_i) > 0:
+
+                    # Add the group is all lines (sorted) in current wavelength range  #TODO should the indexes be blended deblended be sorted too?
+                    idcs_i = bands.index.get_indexer(lines_i)
+                    if np.all(idcs_i > -1):
+                        group_names.append(comp)
+                        group_lines.append(bands.loc[bands.index.isin(lines_i)].index.to_numpy())
+                        group_blended_check.append(groups_i)
+                        line_list += lines_i
 
         # If a grouped list is provided add it to the highest priority
         if composite_lines:
@@ -144,9 +186,9 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
 
     return groups_dict
 
-def groupify_lines_df(bands, fit_cfg, groups_dict, spec):
+def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False):
 
-    # Apply the requested changes
+    # Containers for the requested changes
     rename_dict, exclude_list = {}, []
     param_dict = dict(w3 = {}, w4 = {}, wavelength = {}, latex_label = {}, group_label = {})
     for new_label, group_label in groups_dict.items():
@@ -155,19 +197,23 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec):
         line = Line.from_transition(new_label, fit_cfg=fit_cfg)
         old_label = line.list_comps[line.ref_idx].core
 
-        # Extract the components includes sub-transitions
-        component_list = []
-        for trans in line.list_comps:
-            if trans.kinem == 0:
-                component_list += list(trans.param_arr('core'))
+        # unique_comp_list = list(np.unique(line.param_arr('core')))
+
+        # for trans in line.list_comps:
+        #     if trans.kinem == 0:
+        #         unique_comp_list += list(trans.param_arr('core'))
+        # Extract the single components from the sub-transitions if necessary
+        unique_comp_list = []
+        for trans in line.list_comps: unique_comp_list += list(trans.param_arr('core'))
+        unique_comp_list = np.unique(unique_comp_list)
 
         # Only apply corrections if components are present
-        idcs_comps = bands.index.isin(component_list)
-        if idcs_comps.sum() == len(component_list):
+        idcs_comps = bands.index.isin(unique_comp_list)
+        if idcs_comps.sum() == len(unique_comp_list):
 
             # Save the modifications
             rename_dict[old_label] = new_label
-            exclude_list += component_list
+            exclude_list += list(unique_comp_list)
             param_dict['w3'][new_label] = bands.loc[idcs_comps, 'w3'].min()
             param_dict['w4'][new_label] = bands.loc[idcs_comps, 'w4'].max()
             param_dict['wavelength'][new_label] = line.wavelength
@@ -190,7 +236,7 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec):
                         _logger.info(f'Line component "{old_label}" for configuration entry: '
                                      f'"{new_label}={groups_dict[new_label]}" not found in lines table')
                 else:
-                    _logger.info(f'Missing line(s) "{np.setxor1d(bands.loc[idcs_comps].index.to_numpy(), component_list)}" '
+                    _logger.info(f'Missing line(s) "{np.setxor1d(bands.loc[idcs_comps].index.to_numpy(), unique_comp_list)}" '
                                  f'for configuration entry: '
                                  f'"{new_label}={groups_dict[new_label]}" in reference lines table')
 
@@ -210,9 +256,12 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec):
     bands['w3'] = pd.Series(bands.index.map(param_dict['w3']), index=bands.index).fillna(bands['w3'])
     bands['w4'] = pd.Series(bands.index.map(param_dict['w4']), index=bands.index).fillna(bands['w4'])
     bands['wavelength'] = pd.Series(bands.index.map(param_dict['wavelength']), index=bands.index).fillna(bands['wavelength'])
-    bands['latex_label'] = pd.Series(bands.index.map(param_dict['latex_label']), index=bands.index).fillna(bands['latex_label'])
 
-    bands['group_label'] = 'none'
-    bands['group_label'] = pd.Series(bands.index.map(param_dict['group_label']), index=bands.index).fillna(bands['group_label'])
+    if 'latex_label' in  bands:
+        bands['latex_label'] = pd.Series(bands.index.map(param_dict['latex_label']), index=bands.index).fillna(bands['latex_label'])
+
+    if save_group_label:
+        bands['group_label'] = 'none'
+        bands['group_label'] = pd.Series(bands.index.map(param_dict['group_label']), index=bands.index).fillna(bands['group_label'])
 
     return

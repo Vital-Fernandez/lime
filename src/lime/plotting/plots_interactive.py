@@ -24,16 +24,15 @@ _logger = logging.getLogger('LiMe')
 
 def check_line_selection(spec, input_log, obj_bands, selected_by_default=True, **kwargs):
 
-    # Use the reference bands (by default the liens database) to compute the lines on the object
-    ref_params = {**kwargs, **{'automatic_grouping': False, 'components_detection': False,
-                              'fit_cfg': None, 'default_cfg_prefix': None, 'obj_cfg_prefix': None}}
-
+    # Use the reference bands (by default the lines database) to compute the lines on the object
+    ref_params = {**kwargs, **{'automatic_grouping': False, 'fit_cfg':None,
+                               'default_cfg_prefix': None, 'obj_cfg_prefix': None}}
     ref_bands = spec.retrieve.lines_frame(**ref_params)
 
     # Check if there is a physical bands file
     file_bands = check_file_dataframe(input_log, verbose=False)
 
-    # Physical file has preference and it is assumed as those are detected
+    # Physical file has preference over ref bands and by default those are active
     if file_bands is not None:
         in_bands = file_bands
         default_status = 1
@@ -199,8 +198,8 @@ class BandsInspection:
 
         return
 
-    def bands(self, fname, bands=None, default_status=True, show_continua=False, y_scale='auto',
-              n_cols=6, n_rows=None, col_row_scale=(1, 0.5), n_pixels=10, fig_cfg=None, in_fig=None, maximize=False, **kwargs):
+    def bands(self, fname, bands=None, default_status=True, show_continua=False, y_scale='auto', n_cols=6, n_rows=None,
+              col_row_scale=(1, 0.5), fig_cfg=None, in_fig=None, maximize=False, **kwargs):
 
         """
         This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
@@ -831,7 +830,7 @@ class CubeInspection:
 
         return
 
-    def cube(self, line, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
+    def cube(self, line_bg, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
              lines_file=None, ext_frame_suffix='_LINELOG', maintain_y_zoom=True, wcs=None, spaxel_selection_button=1,
@@ -865,8 +864,8 @@ class CubeInspection:
         and FORWARD = 9
 
 
-        :param line: Line label for the spatial map background image.
-        :type line: str
+        :param line_bg: Line label for the spatial map background image.
+        :type line_bg: str
 
         :param bands: Bands dataframe (or file address to the dataframe).
         :type bands: pandas.Dataframe, str, path.Pathlib, optional
@@ -952,7 +951,7 @@ class CubeInspection:
         self.rest_frame, self.log_scale = rest_frame, log_scale
 
         # Prepare the background image data
-        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line, bands,
+        line_bg, self.bg_image, self.bg_levels, self.bg_scale = determine_cube_images(self._cube, line_bg, bands,
                                                                                       min_pctl_bg, bg_norm,
                                                                                       contours_check=False)
 

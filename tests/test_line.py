@@ -10,24 +10,44 @@ from lime.io import _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, _LOG_COLUMNS
 baseline_folder = Path(__file__).parent / 'baseline'
 outputs_folder = Path(__file__).parent / '3_explanations'
 
-file_address = baseline_folder/'manga_spaxel.txt'
-conf_file_address = baseline_folder/'manga.toml'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
 
 redshift, norm_flux = 0.0475, 1e-17
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
+# pixel_mask = np.isnan(err_array)
 
 cfg = lime.load_cfg(conf_file_address)
-input_cfg = {**cfg['38-35_line_fitting'], **cfg['default_line_fitting']}
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
-                     pixel_mask=pixel_mask, id_label='SHOC579-Manga38-35')
+                     pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
 
-bands = spec.retrieve.lines_frame(fit_cfg=cfg, obj_cfg_prefix='38-35')
+# bands = spec.retrieve.lines_frame(fit_cfg=cfg, obj_cfg_prefix='38-35')
+bands = spec.retrieve.lines_frame(band_vsigma=90, fit_cfg=cfg, obj_cfg_prefix='38-35', automatic_grouping=True)
 
 # TODO if line He2_1640_m does not find components on the log it is going
 #  to use the database this can cause an issue with he bands width...
 
+def find_groups_with_n_and_diffcol(df, same_cols, diff_col, n=6, exact=False):
+    """
+    Find groups of rows where:
+      - The rows match on `same_cols`
+      - The group has at least (or exactly) `n` rows
+      - The values of `diff_col` are not all the same
+    Returns: list of tuples of row indexes
+    """
+    groups = df.groupby(same_cols, dropna=False).groups  # dict: key -> Index
+
+
+    result = []
+    for idxes in groups.values():
+        size = len(idxes)
+        if (exact and size == n) or (not exact and size >= n):
+            # Check if diff_col values are not constant
+            if df.loc[idxes, diff_col].nunique() > 1:
+                result.append(tuple(idxes))
+
+    return result
 
 def test_label_decomposition():
 
@@ -70,16 +90,22 @@ def test_format_line_mask_option():
 def tests_bands_from_log():
 
     # Declare the data
-    bands_df = lime.load_frame(baseline_folder/'manga_line_bands.txt')
-    log_df = lime.load_frame(baseline_folder/'manga_lines_log.txt')
+    bands_df = lime.load_frame(baseline_folder/'SHOC579_MANGA38-35_bands.txt')
+    log_df = lime.load_frame(baseline_folder/'SHOC579_MANGA38-35_log.txt')
 
     # Make the transformation
-    rename_dict = {'Fe3_4658A_s-emi_b': 'Fe3_4658A_b'}
+    rename_dict = {'Fe3_4658A_s-emi_b': 'Fe3_4658A_b', 'O2_7319A_b': 'O2_7325A_b'}
     bands_new = lime.bands_from_measurements(log_df, index_dict=rename_dict)
 
     # Compare the rows and columns
-    assert (set(bands_new.loc[:, 'w1':'w6'].columns) == set(bands_df.columns))  # True
-    assert (set(bands_new.index) == set(bands_df.index))  # True
+    assert {'wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label', 'particle', 'units_wave',
+            'trans'}.issubset(bands_df.columns)
+
+    assert {'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label', 'particle'}.issubset(log_df.columns)
+
+    assert {'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'particle'}.issubset(bands_new.columns)
+
+    assert (set(bands_new.index) == set(bands_df.index))
 
     return
 
@@ -312,7 +338,7 @@ class TestTransitionClass:
     def test_line_db_vs_log(self):
 
         line_label = 'He1_5876A'
-        spec.fit.frame(bands, input_cfg, obj_cfg_prefix='38-35', line_list=[line_label], progress_output=None)
+        spec.fit.frame(bands, cfg, obj_cfg_prefix='38-35', line_list=[line_label], progress_output=None)
 
         line_db = Line.from_transition(line_label)
         line_log = Line.from_transition(line_label, data_frame=spec.frame)
@@ -336,9 +362,9 @@ class TestTransitionClass:
         assert_measurements(line_fit, line_log)
 
         line_label = 'H1_4861A_b'
-        spec.fit.frame(bands, input_cfg, obj_cfg_prefix='38-35', line_list=[line_label], progress_output=None)
+        spec.fit.frame(bands, cfg, obj_cfg_prefix='38-35', line_list=[line_label])
 
-        line_db = Line.from_transition(line_label, fit_cfg=input_cfg)
+        line_db = Line.from_transition(line_label, fit_cfg=cfg['38-35_line_fitting'])
         line_log = Line.from_transition(line_label, data_frame=spec.frame)
         line_fit = spec.fit.line
 
@@ -360,9 +386,9 @@ class TestTransitionClass:
         assert_measurements(line_fit, line_log)
 
         line_label = 'H1_3889A_m'
-        spec.fit.frame(bands, input_cfg, obj_cfg_prefix='38-35', line_list=[line_label], progress_output=None)
+        spec.fit.frame(bands, cfg, obj_cfg_prefix='38-35', line_list=[line_label], progress_output=None)
 
-        line_db = Line.from_transition(line_label, fit_cfg=input_cfg)
+        line_db = Line.from_transition(line_label, fit_cfg=cfg['default_line_fitting'])
         line_log = Line.from_transition(line_label, data_frame=spec.frame)
         line_fit = spec.fit.line
 

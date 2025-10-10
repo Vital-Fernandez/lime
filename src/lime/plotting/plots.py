@@ -2145,7 +2145,7 @@ class CubeFigures:
 
         return
 
-    def cube(self, line, bands=None, line_fg=None, output_address=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99),
+    def cube(self, line_bg, bands=None, line_fg=None, output_address=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99),
              bg_cmap='gray', fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r',
              masks_alpha=0.2, wcs=None, fig_cfg=None, ax_cfg=None, in_fig=None, maximise=False):
 
@@ -2170,8 +2170,8 @@ class CubeFigures:
         If the user provides the address to a binary fits file to a mask file, this will be overploted on the map as
         shaded pixels.
 
-        :param line: Line label for the spatial map background image.
-        :type line: str
+        :param line_bg: Line label for the spatial map background image.
+        :type line_bg: str
 
         :param bands: Bands dataframe (or file address to the dataframe).
         :type bands: pandas.Dataframe, str, path.Pathlib, optional
@@ -2232,7 +2232,7 @@ class CubeFigures:
         """
 
         # Prepare the background image data
-        line_bg, bg_image, bg_levels, bg_norm = determine_cube_images(self._cube, line, bands,
+        line_bg, bg_image, bg_levels, bg_norm = determine_cube_images(self._cube, line_bg, bands,
                                                                       min_pctl_bg, bg_norm, contours_check=False)
 
         # Prepare the foreground image data

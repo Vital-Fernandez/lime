@@ -752,7 +752,7 @@ def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remo
     if not isinstance(frame.index, pd.MultiIndex):
 
         bands_hdrs = ('wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'group_label', 'units_wave',
-                                        'particle', 'transition') if bands_hdrs is None else None
+                                        'particle', 'trans', 'latex_label') if bands_hdrs is None else None
 
         # Make dataframe with single lines
         idcs_single = frame.group_label == 'none'
@@ -778,7 +778,6 @@ def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remo
 
         idcs_single = frame.group_label == 'none'
         bands = frame.reindex(index=frame.loc[idcs_single].index, columns=bands_hdrs)
-
 
         # Loop through the lines
         for i, line_label in enumerate(line_list):
@@ -831,6 +830,25 @@ def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remo
                     bands.loc[line.label, 'latex_label'] = line.latex_label
                     bands.loc[line.label, 'units_wave'] = line.units_wave[line._ref_idx]
                     bands.loc[line.label, 'particle'] = line.particle[line._ref_idx]
+
+    # Check for blended merged lines
+    idcs_merged_blended = bands.duplicated(subset=['w1', 'w2', 'w3', 'w4', 'w5', 'w6'], keep=False) & (bands.group_label != 'none')
+    duplicate_groups = (bands.loc[idcs_merged_blended].groupby(['w1', 'w2', 'w3', 'w4', 'w5', 'w6']).filter(lambda x: len(x) > 1)  # Filter for groups with more than one row (i.e., duplicates)
+                        .groupby(['w1', 'w2', 'w3', 'w4', 'w5', 'w6']).groups)
+    idcs_repeated_bands = [index.tolist() for index in duplicate_groups.values()]
+
+    if len(idcs_repeated_bands) > 0:
+        indexes_to_drop, rename_groups = [], {}
+        for group_merged in idcs_repeated_bands:
+            bands.loc[group_merged[0], 'group_label'] = '+'.join(group_merged)
+            indexes_to_drop += group_merged[1:]
+            rename_groups[group_merged[0]] = group_merged[0] + '_b' if not group_merged[0].endswith("_m") else group_merged[0][:-2] + '_b'
+            if index_dict is None or (rename_groups[group_merged[0]] not in index_dict):
+                _logger.warning(f'\nBlended line "{group_merged[0]}" with merged components has been renamed "{rename_groups[group_merged[0]]}={bands.loc[group_merged[0], "group_label"]}"'
+                                f'\nIt is adviced rename via index_dict argument to match future measurements.')
+            
+        bands.drop(indexes_to_drop, inplace=True)
+        bands.rename(rename_groups, inplace=True)
 
     if sort:
         bands.sort_values(by=['wavelength', 'group_label'], inplace=True)
@@ -1041,7 +1059,7 @@ class Line:
 
     @classmethod
     def from_transition(cls, label, fit_cfg=None, data_frame=None, parent_group_label=None, norm_flux=None,
-                        def_shape=None, def_profile=None, verbose=True):
+                        def_shape=None, def_profile=None, verbose=True, warn_missing_db=False):
 
         # Extract line parameters from the input containers
         line_params = parse_container_data(label,
@@ -1050,7 +1068,8 @@ class Line:
                                            parent_group_label=parent_group_label,
                                            def_shape=rsrc_manager.lineDB.get_shape() if def_shape is None else def_shape,
                                            def_profile=rsrc_manager.lineDB.get_profile() if def_profile is None else def_profile,
-                                           verbose=verbose)
+                                           verbose=verbose,
+                                           warn_missing_db=warn_missing_db)
 
         # Check if input dataframe has measurements
         measurements_check = check_measurements_table(data_frame)
@@ -1072,7 +1091,8 @@ class Line:
                                                                     norm_flux=None,
                                                                     def_shape=def_shape,
                                                                     def_profile=def_profile,
-                                                                    verbose=False)
+                                                                    verbose=False,
+                                                                    warn_missing_db=warn_missing_db)
 
             # Combine the latex label
             line_params['latex_label'] = '+'.join([line_i.latex_label for line_i in line_params['list_comps']])
@@ -1200,7 +1220,7 @@ class Line:
         return
 
 
-def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, verbose):
+def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, verbose, warn_missing_db=False):
 
     # Review line notation and its group structure
     line_params = get_line_group(label, fit_cfg, data_frame, parent_group_label, verbose)
@@ -1209,7 +1229,7 @@ def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_sha
     line_params = get_line_from_cfg(line_params, fit_cfg)
 
     # The configuration parameters overwrite those from the database
-    line_params = get_line_from_df(line_params, data_frame)
+    line_params = get_line_from_df(line_params, data_frame, warn_missing_db)
 
     # Review input for missing/default parameter values
     review_input_params(line_params, def_shape, def_profile)
@@ -1317,9 +1337,9 @@ def get_line_from_cfg(line_params, fit_cfg):
 
             # Check for the full label
             if fit_cfg['transitions'].get(line_params['label']):
-                line_cfg = fit_cfg['transitions'].get(line_params['label'])
-                line_cfg.update(line_params)
-                return line_cfg
+                # line_cfg = {**fit_cfg['transitions'].get(line_params['label']), **line_params}
+                # line_cfg.update(line_params)
+                return {**fit_cfg['transitions'].get(line_params['label']), **line_params}
 
             # Check for the core label
             elif fit_cfg['transitions'].get(line_params['core']):
@@ -1340,7 +1360,7 @@ def get_line_from_cfg(line_params, fit_cfg):
         return line_params
 
 
-def get_line_from_df(line_params, input_df):
+def get_line_from_df(line_params, input_df, warn_missing_db=False):
 
     # Get the line information from the dataframe if available
     if input_df is not None:
@@ -1386,6 +1406,11 @@ def get_line_from_df(line_params, input_df):
         return db_params
 
     else:
+
+        # Print warning if requested for a line not present on the database
+        if warn_missing_db and line_params.get('group') is None:
+            _logger.warning(f'Line {line_params["label"]} was not found on the database')
+
         return line_params
 
 
