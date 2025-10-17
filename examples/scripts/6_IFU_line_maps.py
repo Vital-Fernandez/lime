@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import lime
 from astropy.io import fits
@@ -5,11 +6,17 @@ from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 
 # State the data location
-cfg_file = '../0_resources/ifu_manga.toml'
-cube_address = '../0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz'
-bands_file_0 = '../0_resources/bands/SHOC579_MASK0_bands.txt'
-spatial_mask_file = '../0_resources/results/SHOC579_mask_SN_line.fits'
-output_lines_log_file = '../0_resources/SHOC579_log.fits'
+data_folder = Path('../doc_notebooks/0_resources/')
+cfg_file = data_folder/'ifu_manga.toml'
+# cube_address = '../0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz'
+# bands_file_0 = '../0_resources/bands/SHOC579_MASK0_bands.txt'
+# spatial_mask_file = '../0_resources/results/SHOC579_mask_SN_line.fits'
+# output_lines_log_file = '../0_resources/SHOC579_log.fits'
+cube_address = data_folder/'spectra/manga-8626-12704-LOGCUBE.fits.gz'
+bands_file_0 = data_folder/'bands/SHOC579_MASK0_bands.txt'
+spatial_mask_file = data_folder/'results/SHOC579_mask_SN_line.fits'
+output_lines_log_file = data_folder/'results/SHOC579_log.fits'
+
 
 # Load the configuration file:
 obs_cfg = lime.load_cfg(cfg_file)
@@ -17,7 +24,7 @@ obs_cfg = lime.load_cfg(cfg_file)
 # Load the Cube
 z_obj = obs_cfg['SHOC579']['redshift']
 shoc579 = lime.Cube.from_file(cube_address, instrument='manga', redshift=z_obj)
-shoc579.check.cube('H1_6563A', lines_file=output_lines_log_file, masks_file=spatial_mask_file)
+shoc579.check.cube('H1_6563A', fname=output_lines_log_file, masks_file=spatial_mask_file)
 
 # Check the individual spaxel fitting configuration
 spaxel = shoc579.get_spectrum(38, 35)
@@ -27,7 +34,7 @@ spaxel.plot.grid()
 # Export the line measurements as spatial maps:
 param_list = ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err', 'v_r', 'v_r_err']
 lines_list = ['H1_4861A', 'H1_6563A', 'O3_4363A', 'O3_4959A', 'O3_5007A', 'S3_6312A', 'S3_9069A', 'S3_9531A']
-lime.save_parameter_maps(output_lines_log_file, '../0_resources/', param_list, lines_list,
+lime.save_parameter_maps(output_lines_log_file, data_folder/'results', param_list, lines_list,
                          mask_file=spatial_mask_file, output_file_prefix='SHOC579_', wcs=shoc579.wcs)
 
 # State line ratios for the plots
@@ -36,7 +43,7 @@ lines_ratio = {'H1': ['H1_6563A', 'H1_4861A'],
                'S3': ['S3_9531A', 'S3_9069A']}
 
 # State the parameter map file
-fits_file = f'../0_resources/SHOC579_profile_flux.fits'
+fits_file = data_folder/'results/SHOC579_profile_flux.fits'
 
 # Loop through the line ratios
 for ion, lines in lines_ratio.items():

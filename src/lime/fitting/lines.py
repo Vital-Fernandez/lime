@@ -249,8 +249,6 @@ def velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_
     return n_sigma * ((band_velocity_sigma / c_KMpS) * lambda_obs + delta_instr)
 
 
-# PROFILE_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
-
 ALL_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])
 
 PROFILE_PARAMS = dict(g = ['amp', 'center', 'sigma'],
@@ -283,11 +281,33 @@ FWHM_FUNCTIONS =  {'g': g_FWHM, 'l': l_FWHM, 'v': v_FWHM, 'pv': v_FWHM, 'pp': pp
 def show_profile_parameters(profile_params=PROFILE_PARAMS, profile_abbrev=PROFILE_ABBREV):
 
     """
-    Print a clean list of profiles with their abbreviation and parameter names.
+    Display the available emission line profile models and their parameters.
 
-    Args:
-        profile_params (dict): Dictionary mapping profile codes to parameter lists.
-        profile_abbrev (dict): Dictionary mapping profile codes to full names.
+    Parameters
+    ----------
+    profile_params : dict, optional
+        Dictionary mapping profile identifier characters (e.g., ``"g"``, ``"l"``)
+        to lists of parameter names (e.g., ``["amplitude", "center", "sigma"]``).
+        Default is :data:`PROFILE_PARAMS`.
+    profile_abbrev : dict, optional
+        Dictionary mapping profile identifier characters to their descriptive names
+        (e.g., ``{"g": "Gaussian", "l": "Lorentzian"}``).
+        Default is :data:`PROFILE_ABBREV`.
+
+    Examples
+    --------
+    Display all registered profiles:
+
+    >>> show_profile_parameters()
+
+    Example output:
+
+    .. code-block:: text
+
+       Available profiles (with their identifying character) and their parameters:
+       - Gaussian "g": ['amp', 'center', 'sigma']
+       - Lorentzian "l": ['amp', 'center', 'sigma']
+       - Voigt "v": ['amp', 'center', 'sigma', 'gamma']
     """
 
     print("\nAvailable profiles (with their identifying character) and their parameters:")
@@ -955,10 +975,11 @@ class LineFitting:
 
         return
 
-    def continuum_calculation(self, idcs_emis, idcs_cont, user_cont_from_bands):
+    # noinspection PyTupleAssignmentBalance
+    def continuum_calculation(self, idcs_emis, idcs_cont, user_cont_source):
 
         # Use the continuum bands for the calculation
-        if user_cont_from_bands:
+        if user_cont_source == 'adjacent':
 
             # Fit the model, including uncertainties
             params, covariance = curve_fit(linear_model,
@@ -970,8 +991,8 @@ class LineFitting:
             self.line.measurements.m_cont, self.line.measurements.n_cont = params
             self.line.measurements.m_cont_err_intg, self.line.measurements.n_cont_err_intg = np.sqrt(np.diag(covariance))
 
-        # Use just the side bands edges
-        else:
+        # Use the continua bands
+        elif user_cont_source == 'central':
             x, y = self._spec.wave[idcs_emis].compressed(), self._spec.flux[idcs_emis].compressed()
             err = self._spec.err_flux[idcs_emis].compressed() if self._spec.err_flux is not None else [0, 0]
 
@@ -980,6 +1001,10 @@ class LineFitting:
 
             self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
             self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+
+        # New methods
+        else:
+            raise(LiMe_Error(f'Continuum source "{user_cont_source}" is not recognized. Please use "central" or "adjacent".'))
 
         # Initial continuum level value
         self.line.measurements.cont = self.line.measurements.m_cont * (self._spec.wave[idcs_emis].compressed().mean()) + self.line.measurements.n_cont

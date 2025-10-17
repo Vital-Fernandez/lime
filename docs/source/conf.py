@@ -94,8 +94,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.0.dev15"
-
+release = "2.0.1"
 
 # -- General configuration ---------------------------------------------------
 _lib_path = Path(__file__).parents[2]/'src'
@@ -145,8 +144,11 @@ autodoc_member_order = 'bysource'
 autodoc_default_options = {"imported-members": True}
 
 # Set to True to output parameter types (like `str` or `dict`) clearly.
-napoleon_use_param = True
-napoleon_use_rtype = True
+# napoleon_use_param = False
+# napoleon_use_rtype = False
+# napoleon_use_ivar = False
+# napoleon_include_init_with_doc = False   # don’t merge __init__ doc into class doc
+# napoleon_attr_annotations = False
 
 # Template paths
 templates_path = ['_templates', '_build']
@@ -207,5 +209,5 @@ for sub_folder in list_folders: shutil.copytree(_doc_folder/sub_folder, _example
 
 # Compile the changelog page
 input_txt_changelog = _lib_path/'lime/changelog.txt'  # Path to the uploaded changelog file
-output_rst_changelog = _doc_folder/'4_references/0_changelog.md'  # Output md file
+output_rst_changelog = _doc_folder/'4_references/1_changelog.md'  # Output md file
 create_md_from_changelog(input_txt_changelog, output_rst_changelog)

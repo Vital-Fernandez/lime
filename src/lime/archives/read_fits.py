@@ -1,14 +1,12 @@
-from pathlib import Path
-
+import logging
 import numpy as np
+from pathlib import Path
+from io import IOBase
 from astropy.io import fits
 from astropy.wcs import WCS
-import logging
-from io import IOBase
 
-from lime.io import LiMe_Error
+from lime.io import LiMe_Error, lime_cfg
 from urllib.parse import urlparse
-
 
 try:
     import requests
@@ -21,58 +19,66 @@ _logger = logging.getLogger('LiMe')
 
 DESI_SPECTRA_BANDS = ('B', 'R', 'Z')
 
-SPECTRUM_FITS_PARAMS = {'nirspec': {'redshift': None, 'norm_flux': None, 'res_power': None,
-                                    'units_wave': 'um', 'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
-
-                        'nirspec_grizli': {'redshift': None, 'norm_flux': None, 'res_power': None,
-                                           'units_wave': 'um', 'units_flux': 'uJy', 'pixel_mask': "nan", 'id_label': None},
-
-                        'isis': {'redshift': None, 'norm_flux': None, 'res_power': None,
-                                 'units_wave': 'Angstrom', 'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                        'osiris': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                   'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                        'cos': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                   'units_flux': 'FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                        'sdss': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                 'units_flux': '1e-17*FLAM', 'pixel_mask': 'nan', 'id_label': None},
-
-                        'desi': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                 'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                        'text': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                                 'units_flux': 'FLAM', 'pixel_mask': None, 'id_label': None}}
-
-CUBE_FITS_PARAMS = {'manga': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                              'units_flux': '1e-17*FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                    'muse':  {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                              'units_flux': '1e-20*FLAM', 'pixel_mask': "nan", 'id_label': None},
-
-                    'megara': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'Angstrom',
-                               'units_flux': 'Jy', 'pixel_mask': "nan", 'id_label': None},
-
-                    'miri': {'redshift': None, 'norm_flux': None, 'res_power': None, 'units_wave': 'um',
-                             'units_flux': 'MJy', 'pixel_mask': "nan", 'id_label': None},
-
-                    }
-
+SPECTRUM_FITS_PARAMS = lime_cfg['instrument_params']['long_slit']
+CUBE_FITS_PARAMS = lime_cfg['instrument_params']['cube']
 
 def show_instrument_cfg():
 
-    print(f'\nLong-slit ".fits" observation instrument configuration:')
-    for i, items in enumerate(SPECTRUM_FITS_PARAMS.items()):
-        key, value = items
-        print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]}, '
-              f'pixel_mask: {value["pixel_mask"]}, res_power: {value["res_power"]}')
+    """
+    Display the available instrument configurations for LiMe FITS observations.
 
-    print(f'\nCube ".fits" observation instrument configuration:')
-    for i, items in enumerate(CUBE_FITS_PARAMS.items()):
-        key, value = items
-        print(f'{i} {key}) \t units_wave: {value["units_wave"]}, units_flux: {value["units_flux"]},'
-              f'pixel_mask: {value["pixel_mask"]}, res_power: {value["res_power"]}')
+    The information is printed to the console for user inspection.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    - Each entry includes:
+        * ``units_wave`` — wavelength units
+        * ``units_flux`` — flux units
+        * ``pixel_mask`` — mask handling flag
+        * ``res_power`` — instrumental resolving power
+
+    Examples
+    --------
+    Display all supported instrument configurations:
+
+    >>> show_instrument_cfg()
+
+    Example output:
+        Long-slit ".fits" observation instrument configuration:
+        0 osiris)  units_wave: Angstrom, units_flux: erg/s/cm2/A, pixel_mask: False, res_power: 5000
+
+        Cube ".fits" observation instrument configuration:
+        0 megaracube)  units_wave: Angstrom, units_flux: erg/s/cm2/A, pixel_mask: True, res_power: 6000
+    """
+
+    # pick widths that fit your data
+    SEC_W, UW_W, UF_W, PM_W, RP_W = 15, 10, 10, 8, 8
+    row_fmt = (f'{{i:>2}}\t'  
+               f'{{key:<{SEC_W}}}\t'  
+               f'units_wave: {{uw:<{UW_W}}}\t'
+               f'units_flux: {{uf:<{UF_W}}}\t'
+               f'pixel_mask: {{pm:<{PM_W}}}\t'
+               f'res_power: {{rp:<{RP_W}}}')
+
+    print('\nLong-slit ".fits" observation instrument configuration:')
+    for i, (key, value) in enumerate(SPECTRUM_FITS_PARAMS.items()):
+        print(row_fmt.format(i=i, key=str(key),
+                             uw=str(value["units_wave"]),
+                             uf=str(value["units_flux"]),
+                             pm=str(value["pixel_mask"]),
+                             rp=str(value["res_power"]),))
+
+    print('\nCube ".fits" observation instrument configuration:')
+    for i, (key, value) in enumerate(CUBE_FITS_PARAMS.items()):
+        print(row_fmt.format(i=i, key=str(key),
+                             uw=str(value["units_wave"]),
+                             uf=str(value["units_flux"]),
+                             pm=str(value["pixel_mask"]),
+                             rp=str(value["res_power"]),))
 
     return
 
@@ -461,6 +467,67 @@ class OpenFits:
     @staticmethod
     def text(file_address, **kwargs):
 
+        """
+        Load a spectrum from a plain text file.
+
+        This function reads a spectral table from a text file, unpacks the wavelength and flux
+        columns, and optionally extracts uncertainty and pixel mask data if present.
+
+        Commented lines (for example #units_flux: FLAM) at the end of the document are parsed as arguments for the
+        lime.Spectrum.Spectrum function.
+
+        Parameters
+        ----------
+        file_address : str or pathlib.Path
+            Path to the text file containing the spectrum.
+        **kwargs
+            Additional keyword arguments passed directly to
+            [`numpy.loadtxt`](https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html),
+            such as ``delimiter``, ``comments``, or ``skiprows``.
+
+        Returns
+        -------
+        wave_array : ndarray of shape (n,)
+            Wavelength array.
+        flux_array : ndarray of shape (n,)
+            Flux values.
+        err_array : ndarray of shape (n,), optional
+            Flux uncertainties if available (third column). ``None`` if not provided.
+        header_list : None
+            Placeholder for compatibility with other readers; always ``None`` for text input.
+        params_dict : dict
+            Dictionary containing spectrum metadata such as:
+              - ``redshift`` : float, optional
+              - ``norm_flux`` : float, optional
+              - ``id_label`` : str, optional
+              - ``pixel_mask`` : ndarray, optional
+
+            These parameters are extracted from the comment section or inferred from the
+            file content.
+
+        Notes
+        -----
+        - If the text file follows the format produced by
+          :meth:`lime.Spectrum.retrieve.spectrum`, the function automatically recovers
+          the wavelength and flux units, flux normalization, and redshift values stored
+          in the file header.
+        - The function supports files with up to four columns:
+            1. Wavelength
+            2. Flux
+            3. Uncertainty (optional)
+            4. Pixel mask (optional)
+
+        Examples
+        --------
+        Load a simple two-column spectrum file:
+
+        >>> wave, flux, err, hdr, params = lime.OpenFits.text("spectrum.txt")
+
+        Load a spectrum with custom delimiters using numpy.loadtxt options:
+
+        >>> wave, flux, err, hdr, params = lime.OpenFits.text("spectrum.dat", delimiter=",", skiprows=2)
+        """
+
         # Read text file dividing the columns into the spectrum axis and the comments as its parameters
         data_arr, params_dict = load_txt(file_address, **kwargs)
 
@@ -556,7 +623,6 @@ class OpenFits:
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
-
     @staticmethod
     def isis(fits_address, data_ext_list=0, hdr_ext_list=0, **kwargs):
 
@@ -606,25 +672,61 @@ class OpenFits:
     def osiris(fits_address, data_ext_list=0, hdr_ext_list=0, **kwargs):
 
         """
+        Load spectral data and metadata from an OSIRIS FITS observation.
 
-        This method returns the spectrum array data and headers from a OSIRIS observation.
+        The function extracts the wavelength, flux, and (if available) uncertainty arrays from
+        the specified FITS file. It also returns the selected header(s) and a dictionary of
+        LiMe Spectrum parameters describing the observation units, normalization, and WCS
+        configuration.
 
-        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
-        standard deviation available), a list with the requested headers and a dictionary with the parameters to
-        construct a LiMe Spectrum. These parameters include the observation wavelength/flux units, normalization and wcs
-        from the input fits file.
+        Parameters
+        ----------
+        fits_address : str or pathlib.Path
+            Path to the OSIRIS observation FITS file.
+        data_ext_list : int, str, or list of {int, str}, optional
+            Extension(s) containing the spectral data. Each element may be an integer index
+            or an extension name. Default is ``0``.
+        hdr_ext_list : int, str, or list of {int, str}, optional
+            Extension(s) containing the FITS headers corresponding to the data extensions.
+            Each element may be an integer index or an extension name. Default is ``0``.
+        **kwargs
+            Additional keyword arguments passed to :func:`load_fits`.
 
-        :param fits_address: File location address for the observation .fits file.
-        :type fits_address: str, Path
+        Returns
+        -------
+        wave_array : ndarray of shape (n,)
+            Wavelength array reconstructed from FITS header keywords ``CRVAL1``, ``CD1_1``,
+            and ``NAXIS1``.
+        flux_array : ndarray of shape (n,)
+            Flux values from the FITS data extension.
+        err_array : ndarray of shape (n,), optional
+            Flux uncertainty array, if available. Returned as ``None`` if no uncertainty
+            extension is found.
+        header_list : list of astropy.io.fits.Header
+            Headers corresponding to the selected data extensions.
+        params_dict : dict
+            Observation parameters required to initialize a LiMe Spectrum, including
+            wavelength/flux units, normalization, and WCS information.
 
-        :param data_ext_list: Data extension number or name to extract from the .fits file.
-        :type fits_address: int, str or list of either, optional
+        Notes
+        -----
+        - The function assumes a linear wavelength solution defined by FITS header
+          keywords ``CRVAL1``, ``CD1_1``, and ``NAXIS1``.
+        - For two-dimensional FITS data arrays (``shape == (2, n)``), the first row is
+          interpreted as flux and the second as uncertainty.
+        - For one-dimensional arrays, only the flux is returned and ``err_array`` is ``None``.
 
-        :param hdr_ext_list: header extension number or name to extract from the .fits file.
-        :type hdr_ext_list: int, str or list of either, optional
+        Examples
+        --------
+        Load an OSIRIS FITS file and retrieve its spectral arrays:
 
-        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+        >>> wave, flux, err, hdrs, params = osiris("osiris_obs.fits")
 
+        Load a specific data and header extension by name:
+
+        >>> wave, flux, err, hdrs, params = osiris("osiris_obs.fits",
+        ...                                        data_ext_list="SCI",
+        ...                                        hdr_ext_list="SCI_HDR")
         """
 
         # Get data table and header dict lists
@@ -701,7 +803,6 @@ class OpenFits:
         params_dict = SPECTRUM_FITS_PARAMS['cos']
 
         return wave_arr, flux_arr, err_arr, header_list, params_dict
-
 
     @staticmethod
     def sdss(fits_address, data_ext_list=(1, 2), hdr_ext_list=(0), **kwargs):
@@ -844,6 +945,50 @@ class OpenFits:
 
         # Fits properties
         fits_params = {**CUBE_FITS_PARAMS['muse'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
+
+        return wave_array, flux_cube, err_cube, header_list, fits_params
+
+    @staticmethod
+    def kcwi(fits_address, data_ext_list=(1, 2), hdr_ext_list=(1,2), **kwargs):
+
+        """
+
+        This method returns the spectrum array data and headers from a kcwi observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Cube. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        w_min, dw, pixels = header_list[0]['CRVAL3'], header_list[0]['CDELT3'], header_list[0]['NAXIS3']
+        w_max = w_min + dw * pixels
+        wave_array = np.linspace(w_min, w_max, pixels, endpoint=False)
+
+        flux_cube = data_list[0]
+        err_cube = data_list[1]
+        pixel_mask_cube = np.isnan(flux_cube)
+
+        wcs = WCS(header_list[0])
+
+        # Fits properties
+        fits_params = {**CUBE_FITS_PARAMS['kcwi'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
 

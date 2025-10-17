@@ -4,14 +4,14 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.wcs import WCS
 
-data_folder = Path('../../examples/0_resources/spectra')
+data_folder = Path('../../examples/doc_notebooks/0_resources/spectra')
 baseline_folder = Path(__file__).parent
 
 # Inputs
 conf_file = baseline_folder/'lime_tests.toml'
 line_bands_file = baseline_folder/'SHOC579_MANGA38-35_bands.txt'
 spatial_mask_address = baseline_folder/'SHOC579_MANGA38-35_mask.fits'
-cube_file = Path('../../examples/0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz')
+cube_file = data_folder/'manga-8626-12704-LOGCUBE.fits.gz'
 
 # Outputs
 spec_text_address = baseline_folder/'SHOC579_MANGA38-35.txt'
@@ -58,10 +58,9 @@ spax = lime.Spectrum.from_file(spec_text_address, instrument='text')
 
 # Generate the bands
 bands = spax.retrieve.lines_frame(band_vsigma=90, fit_cfg=fit_cfg, obj_cfg_prefix='38-35', automatic_grouping=True)
-# spax.plot.spectrum(bands=bands, log_scale=True, rest_frame=True)
 
 # Frame fitting
-spax.fit.frame(bands, fit_cfg, obj_cfg_prefix='38-35', cont_from_bands=False)
+spax.fit.frame(bands, fit_cfg, obj_cfg_prefix='38-35')
 spax.plot.spectrum(rest_frame=True, log_scale=False)
 
 # Save the results

@@ -116,13 +116,15 @@ def compare_dictionaries(dict1, dict2):
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
-spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
 file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
 conf_file_address = baseline_folder/'lime_tests.toml'
 bands_file_address = baseline_folder/'SHOC579_MANGA38-35_bands.txt'
 lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
 lines_tex_address = baseline_folder/'SHOC579_MANGA38-35_log.tex'
+
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+outputs_folder = data_folder/'results'
+spectra_folder = data_folder/'spectra'
 
 redshift = 0.0475
 norm_flux = 1e-17
@@ -136,7 +138,7 @@ spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_
                      pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
 
 # spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_from_bands=False)
-spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_from_bands=False)
+spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35')
 
 
 class TestSpectrumClass:
@@ -485,8 +487,7 @@ class TestFluxMeasurements:
 
         spec2 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                              pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
-        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_from_bands=True)
-        spec2.plot.grid()
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='adjacent')
         line_arr = ["O2_3726A","O2_3729A","He1_4026A","H1_4861A","H1_4861A_k-1","Fe3_4658A_s-emi","Fe3_4658A_s-abs",
                     "He2_4686A","H1_8545A","H1_8750A","Fe3_4925A_m","O1_6300A","S3_6312A","S2_6716A","S2_6731A","He1_7065A",
                     "Ar3_7751A"]

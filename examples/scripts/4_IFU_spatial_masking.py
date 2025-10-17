@@ -6,8 +6,9 @@ from pathlib import Path
 cube_url = 'https://data.sdss.org/sas/dr17/manga/spectro/redux/v3_1_1/8626/stack/manga-8626-12704-LOGCUBE.fits.gz'
 
 # Data location
-cube_address = Path('../0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz')
-cfgFile = '../0_resources/ifu_manga.toml'
+data_folder = Path('../doc_notebooks/0_resources/')
+cube_address = data_folder/'spectra/manga-8626-12704-LOGCUBE.fits.gz'
+cfgFile = data_folder/'ifu_manga.toml'
 
 # Download the cube file if necessary (this may take some time)
 if not cube_address.is_file():
@@ -31,13 +32,13 @@ shoc579.plot.cube('H1_6563A', line_fg='O3_4363A', min_pctl_bg=70, cont_pctls_fg=
 shoc579.check.cube('H1_6563A', line_fg='H1_6563A', min_pctl_bg=70, cont_pctls_fg=[80, 90, 95, 99])
 
 # Line continuum mask
-spatial_mask_SN_cont = '../0_resources/results/SHOC579_mask_SN_cont.fits'
-shoc579.spatial_masking('O3_4363A', param='SN_cont', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_cont)
+spatial_mask_SN_cont = data_folder/'results/SHOC579_mask_SN_cont.fits'
+shoc579.spatial_masking('O3_4363A', param='SN_cont', contour_pctls=[93, 96, 99], fname=spatial_mask_SN_cont)
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_cont)
 
 # Line emission mask
-spatial_mask_SN_line = '../0_resources/results/SHOC579_mask_SN_line.fits'
-shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], output_address=spatial_mask_SN_line)
+spatial_mask_SN_line = data_folder/'results/SHOC579_mask_SN_line.fits'
+shoc579.spatial_masking('O3_4363A', param='SN_line', contour_pctls=[93, 96, 99], fname=spatial_mask_SN_line)
 shoc579.plot.cube('H1_6563A', masks_file=spatial_mask_SN_line)
 
 # Manually add/remove spaxels to the spatial mask

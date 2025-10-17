@@ -6,13 +6,12 @@ from astropy.io import fits
 from time import time
 from lmfit.models import PolynomialModel
 
-from lime import __version__
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
-from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, unit_conversion
-from lime.transitions import air_to_vacuum_function, label_decomposition, Line, check_lines_frame_units, lines_frame
+from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get
+from lime.transitions import Line, lines_frame
 from lime.rsrc_manager import lineDB
 from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
-from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf
+from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
 from lime.plotting.plots import spec_continuum_calculation
 
@@ -26,13 +25,12 @@ except ImportError:
 _logger = logging.getLogger('LiMe')
 
 
-def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_from_bands=True, user_err_from_bands=False):
+def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_source=True, user_err_from_bands=False):
 
     # Check if the line bands are provided
     if line.mask is None:
         _logger.warning(f"Line {line} was not found on the input bands database. It won't be measured")
         return None
-
 
     # Check if the line is within the w3, w4 limits
     limit_blue, limit_red = spec.wave.compressed()[0], spec.wave.compressed()[-1]
@@ -40,7 +38,6 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
         _logger.warning(f"Line {line} bands are outside spectrum wavelengh range: w3 < w_min_rest ({line.mask[2]} < {limit_blue}) or"
                                                                                f" w4 > w_max_rest ({line.mask[3]} > {limit_red})"
                                                                                f" it won't be measured")
-
         return None
 
     # Check if the spectrum does not have the error arr but the user has requested it
@@ -48,18 +45,20 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
         _logger.warning(f'The observation does not have an error spectrum but the fit command has requested not to use '
                         f'the adjacent bands to compute the uncertainty. Please set the "user_err_from_bands=True" to perform'
                         f' a measurement.')
-
         return None
 
     # Compute the line and adjacent continua indeces:
     idcsEmis, idcsCont = line.index_bands(spec.wave, spec.redshift)
+
+    # Logic for the bands source
+    cont_from_bands = True if user_cont_source == 'adjacent' else False
 
     # Check if all the flux entries are masked
     emis_flux, cont_flux = spec.flux[idcsEmis], spec.flux[idcsCont]
     if np.all(emis_flux.mask):
         _logger.warning(f"Line {line} flux is fully masked. It won't be measured")
         return None
-    if np.all(cont_flux.mask) and user_cont_from_bands:
+    if np.all(cont_flux.mask) and cont_from_bands:
         _logger.warning(f"Line {line} adjacent continua flux is fully masked. It won't be measured")
         return None
 
@@ -67,7 +66,7 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
     if not np.any(emis_flux):
         _logger.warning(f"Line {line} flux entries are all 0. It won't be measured")
         return None
-    if not np.any(cont_flux) and user_cont_from_bands:
+    if not np.any(cont_flux) and cont_from_bands:
         _logger.warning(f"Line {line} continuum flux entries are all 0. It won't be measured")
         return None
 
@@ -77,7 +76,7 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_fro
         return None
 
     # Check if the continua selection is too narrow
-    if (np.sum(~cont_flux.mask) < min_cont_pixels) and user_cont_from_bands:
+    if (np.sum(~cont_flux.mask) < min_cont_pixels) and cont_from_bands:
         _logger.warning(f"Line {line} continuum bands have only {np.sum(~cont_flux.mask)} pixels. It won't be measured")
         return None
 
@@ -215,124 +214,6 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
 
     return cont_fit
 
-
-# def line_bands(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', decimals=None,
-#                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, vacuum_label=False):
-#     """
-
-#     This function returns `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
-#     as a pandas dataframe.
-
-#     If the user provides a wavelength array (``wave_inter``) the output dataframe will be limited to the lines within
-#     this wavelength interval.
-
-#     Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-#     lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
-
-#     If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
-#     limited to the transitions at that observed range.
-
-#     The user can specify the desired wavelength units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
-#     or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_. The default value
-#     unit is angstroms.
-
-#     The argument ``sig_digits`` determines the number of decimal figures for the line labels.
-
-#     The user can request the output line labels and bands wavelengths in vacuum setting ``vacuum=True``. This conversion
-#     is done using the relation from `Greisen et al. (2006) <https://www.aanda.org/articles/aa/abs/2006/05/aa3818-05/aa3818-05.html>`_.
-
-#     Instead of the default LiMe database, the user can provide a ``ref_bands`` dataframe (or the dataframe file address)
-#     to use as the reference database.
-
-#     :param wave_intvl: Wavelength interval for output line transitions.
-#     :type wave_intvl: list, numpy.array, lime.Spectrum, lime.Cube, optional
-
-#     :param line_list: Line list for output line bands.
-#     :type line_list: list, numpy.array, optional
-
-#     :param particle_list: Particle list for output line bands.
-#     :type particle_list: list, numpy.array, optional
-
-#     :param redshift: Redshift interval for output line bands.
-#     :type redshift: list, numpy.array, optional
-
-#     :param units_wave: Labels and bands wavelength units. The default value is "A".
-#     :type units_wave: str, optional
-
-#     :param decimals: Number of decimal figures for the line labels.
-#     :type decimals: int, optional
-
-#     :param vacuum_waves: Set to True for vacuum wavelength values. The default value is False.
-#     :type vacuum_waves: bool, optional
-
-#     :param ref_bands: Reference bands dataframe. The default value is None.
-#     :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
-
-#     :return:
-#     """
-
-#     # Use the default lime mask if none provided
-#     if ref_bands is None:
-#         ref_bands = lineDB.frame.copy()
-#         units_database = lineDB.get_units()
-#     else:
-#         ref_bands = check_file_dataframe(ref_bands)
-#         units_database = check_lines_frame_units(ref_bands)
-
-#     # Convert to requested units
-#     if units_wave != units_database:
-#         wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-#         conversion_factor = unit_conversion(in_units=units_database, out_units=units_wave, wave_array=1)
-#         ref_bands.loc[:, wave_columns] = ref_bands.loc[:, wave_columns] * conversion_factor
-#         ref_bands['units_wave'] = units_wave
-#     else:
-#         conversion_factor = 1
-
-#     # First slice by wavelength and redshift
-#     idcs_rows = np.ones(ref_bands.index.size).astype(bool)
-#     if wave_intvl is not None:
-#         w_min, w_max = wave_intvl[0], wave_intvl[-1]
-
-#         # Account for redshift
-#         redshift = redshift if redshift is not None else 0
-#         if 'wavelength' in ref_bands.columns:
-#             wave_arr = ref_bands['wavelength'] * (1 + redshift)
-#         else:
-#             wave_arr = label_decomposition(ref_bands.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
-
-#         # Compare with wavelength values
-#         idcs_rows = idcs_rows & (wave_arr >= w_min) & (wave_arr <= w_max)
-
-#     # Second slice by particle
-#     if particle_list is not None:
-#         idcs_rows = idcs_rows & ref_bands.particle.isin(particle_list)
-
-#     # Finally slice by the name of the lines
-#     if line_list is not None:
-#         idcs_rows = idcs_rows & ref_bands.index.isin(line_list)
-
-#     # Final table
-#     bands_df = ref_bands.loc[idcs_rows]
-
-#     # Update the labels to reflect new wavelengths and units if necessary and user requests it
-#     if update_labels or vacuum_label:
-#         list_labels = [None] * bands_df.index.size
-#         for i, label in enumerate(bands_df.index):
-#             line = Line.from_transition(label, data_frame=bands_df)
-#             line.update_labels(decimals=decimals, bands_df=bands_df, update_latex=update_latex, vacuum_label=vacuum_label,
-#                                show_optional=False)
-#             if update_latex:
-#                 bands_df.loc[label, 'latex_label'] = line.latex_label[0]
-#             list_labels[i] = line.label
-#         bands_df.rename(index=dict(zip(bands_df.index, list_labels)), inplace=True)
-
-#     # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
-#     if vacuum_waves:
-#         bands_df['wavelength'] = bands_df['wave_vac']
-#         bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-#         bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
-
-#     return bands_df
 
 def res_power_approx(wavelength_arr):
 
@@ -550,9 +431,9 @@ class SpecRetriever:
 
         # Dictionary with parameters
         if 'footer' not in default_kwargs:
-            footer_dict = {'LiMe': f'v{__version__}',
+            footer_dict = {'LiMe': f'v{lime_cfg['metadata']["version"]}',
                             'units_wave': self._spec.units_wave, 'units_flux':  self._spec.units_flux,
-                           'redshift': self._spec.redshift, 'norm_flux': self._spec.norm_flux, 'id_label': self._spec.label}
+                            'redshift': self._spec.redshift, 'norm_flux': self._spec.norm_flux, 'id_label': self._spec.label}
             footer_str = "\n".join(f"{key}:{value}" for key, value in footer_dict.items())
             default_kwargs['footer'] = footer_str
 
@@ -567,6 +448,44 @@ class SpecRetriever:
 
         return output
 
+    def upper_line_limit(self, line, bands=None, signal_to_noise=8, err_from_bands=False, continua_sigma=True):
+
+        # Use frame if available
+        bands = self._spec.frame if bands is None else check_file_dataframe(bands)
+
+        # Check if line is avaible to calculations
+        if (bands is None) or (line not in bands.index):
+            raise LiMe_Error('Upper flux limit requires the line band. Please input the lines frame or include in the '
+                             'spec.lines_frame measurements' if bands is None else f'Line "{line}" not found in the input bands')
+
+        line = Line.from_transition(line, data_frame=bands)
+        idcs_central, idcs_continua = line.index_bands(self._spec.wave, self._spec.redshift)
+        lambda_central = line.wavelength * (1 + self._spec.redshift)
+
+        if err_from_bands:
+            sigma_cont = np.mean(self._spec.err_flux[idcs_central]) * self._spec.norm_flux
+        else:
+            sigma_cont = line.measurements.cont_err
+
+        print(line.measurements.intg_flux)
+        print(line.measurements.profile_flux)
+
+        delta_lambda = np.mean(np.diff(self._spec.wave[idcs_central]))
+
+        R_line = np.mean(self._spec.res_power[idcs_central])
+
+        g_const = np.sqrt(np.pi/(2*np.log(2)))
+
+        upper_flux = signal_to_noise * sigma_cont * np.sqrt(g_const * (lambda_central / R_line) * delta_lambda)
+
+        print('lambda_central', lambda_central)
+        print('delta_lambda',delta_lambda)
+        print('sigma_cont',sigma_cont)
+        print('R_line',R_line)
+        print('g_const',g_const)
+        print('upper_flux',upper_flux)
+
+        return upper_flux
 
 
 class SpecTreatment(LineFitting, RedshiftFitting):
@@ -583,98 +502,130 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self._n_lines = 0
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile=None, shape=None,
-              cont_from_bands=True, err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None,
+              cont_source='central', err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None,
               update_default=True):
 
         """
+        Fit a spectral line from defined bands (see :ref:`bands documentation <line-bands-doc>`.).
 
-        This function fits a line on the spectrum object from a given band.
+        This method performs a full line measurement and profile fitting. The line is query from the default
+        line database if no ``bands`` dataframe is provided.
 
-        The first input is the line ``label``. The user can provide a string with the default `LiMe notation
-        <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_. Otherwise, the user can
-        provide the transition wavelength in the same units as the spectrum and the transition will be queried from the
-        ``bands`` argument.
+        The function will also query the input ``fit_cfg`` dictionary if provided for the configuration settings.
 
-        The second input is the line ``bands`` this argument can be a six value array with the same units as the
-        spectrum wavelength specifying the line position and continua location. Otherwise, the ``bands`` can be a pandas
-        dataframe (or the frame address) and the wavelength array will be automatically query from it.
+        Parameters
+        ----------
+        label : str or float
+            Line label in `LiMe notation
+            <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_,
+            or a transition wavelength (in the same units as the spectrum).
+            If a numeric wavelength is given, the corresponding transition is
+            queried from the ``bands`` table (or falling back to the default database if not provided).
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Either:
+              * A bands DataFrame or file path to one.
+              * If ``None``, the default LiMe bands database is used.
+        fit_cfg : dict, str, or pathlib.Path, optional
+            A dictionary or a path to a .toml file.
+        min_method : str, optional
+            Minimization algorithm used by :mod:`lmfit`.
+            Supported methods are listed in the
+            `lmfit.minimizer.Minimizer.minimize
+            <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_
+            documentation. Default is ``"least_squares"``.
+        profile : str, optional
+            Profile type for fitting (e.g., ``"g"`` for Gaussian, ``"l"`` Lorentz, ...).
+            If none is provided, the algorithm will use the default profile from the lines' database.
+        shape : str, optional
+            Line shape for the fitted profiles: "emi" for emission or "abs" for absroption.
+            If none is provided, the algorithm will use the default shape from the lines' database.
+        cont_source : {'central', 'adjacent', 'fitted'}, optional
+            Method used to estimate the continuum level for line fitting.
+            - ``'central'`` — use the edges of the central line band (w₃–w₄).
+            - ``'adjacent'`` — use the adjacent continuum bands (w₁–w₂ and w₅–w₆).
+            - ``'fitted'`` — use a previously fitted continuum model from the spectrum.
+            The default is ``'central'``.
+        err_from_bands : bool or None, optional
+            If ``True``, estimate the pixel uncertainty from the continuum bands.
+            If ``None``, use the spectrum’s ``err_flux`` data or fall back to the
+            continuum regions if not available (False). The default value is None.
+        temp : float, optional
+            Electron temperature in Kelvin used to compute the thermal broadening
+            correction for the fitted lines. Default is 10,000 K.
+        default_cfg_prefix : str, optional
+            Section key prefix for the default configuration in ``fit_cfg``.
+            Default is ``"default"``.
+        obj_cfg_prefix : str, optional
+            Section key prefix for the object-specific configuration in ``fit_cfg``.
+        update_default : bool, optional
+            If ``True`` (default), merge parameters from ``obj_cfg_prefix`` into
+            ``default_cfg_prefix``. If ``False``, the object configuration is used falling back to the default if not available.
 
-        If the ``bands`` are not provided by the user, the default bands database will be used. You can learn more on
-        `the bands documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_.
+        Returns
+        -------
+        None
+            The results are stored in the spectrum’s internal ``frame`` attribute
+            and in ``self.line.measurements``.
 
-        The third input is a dictionary the fitting configuration ``fit_conf`` attribute. You can learn more on the
-        `profile fitting documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+        Notes
+        -----
+        - The method performs the following steps:
+          1. Parse or retrieve the line definition using :meth:`~lime.Line.from_transition`.
+          2. Select line and continuum regions based on the provided or default ``bands``.
+          3. Estimate the continuum level and its uncertainty.
+          4. Compute non-parametric line properties (e.g., integrated flux).
+          5. Perform optional profile fitting via :mod:`lmfit` using ``min_method``.
+          6. Apply instrumental and thermal corrections to measured line widths.
+          7. Recalculate the signal-to-noise ratio and store all results in the spectrum’s log frame.
+        - Continuum and error estimations are controlled via the
+          ``cont_from_bands`` and ``err_from_bands`` flags.
+        - Thermal broadening corrections use the provided ``temp`` parameter.
+        - All results are written to the current spectrum’s measurement log
+          and accessible through ``Spectrum.frame``.
 
-        The ``min_method`` argument provides the minimization algorithm for the `LmFit functions
-        <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+        Examples
+        --------
+        Fit a Gaussian emission line using the default configuration:
 
-        By default, the profile fitting assumes an emission Gaussian shape, with ``profile="g-emi"``. The profile keywords
-        are described on the `label documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+        >>> spec.bands("O3_5007A")
 
-        The ``cont_from_bands=True`` argument forces the continuum to be measured from the adjacent line bands. If
-        ``cont_from_bands=False`` the continuum gradient is calculated from the first and last pixel from the line band
-        (w3-w4)
+        Use a custom bands table and configuration dictionary:
 
-        For the calculation of the thermal broadening on the emission lines the user can include the line electron
-        temperature in Kelvin. The default value ``temp`` is 10000 K.
+        >>> spec.bands("H1_4861A", bands="my_bands.xlsx", fit_cfg=my_fit_cfg)
 
-        :param label: Line label or wavelength transition to be queried on the ``bands`` dataframe.
-        :type label: str, float, optional
+        Change the minimization algorithm and temperature:
 
-        :param bands: Bands six-value array, bands dataframe (or file address to the dataframe).
-        :type bands: np.array, pandas.dataframe, str, Path, optional
+        >>> spec.bands("O2_3726A", min_method="nelder", temp=12000)
 
-        :param fit_cfg: Fitting configuration.
-        :type fit_cfg: dict, optional
+        Fit a line providing the central wavelength directly:
 
-        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
-                            The default value is 'least_squares'
-        :type min_method: str, optional
-
-        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
-        :type profile: str, optional
-
-        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
-        :type cont_from_bands: bool, optional
-
-        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
-        :type temp: bool, optional
-
-        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_cfg_prefix: str, optional
-
-        :param obj_cfg_prefix: Label for the object configuration section in the ```fit_conf`` variable.
-        :type obj_cfg_prefix: str, optional
-
+        >>> spec.bands(5007.0, bands=my_bands_df)
         """
 
         # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
-        # User 2_guides override default behaviour for the pixel error and the continuum calculation # TODO is this right?
+        # User 2_guides override default behaviour for the pixel error and the continuum calculation
         err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
-        cont_from_bands = True if cont_from_bands is None else cont_from_bands
 
         # Interpret the input line
         if isinstance(label, str):
-            self.line = Line.from_transition(label,
-                                             input_conf,
+            self.line = Line.from_transition(label, input_conf,
                                              data_frame=lineDB.frame if bands is None else check_file_dataframe(bands, copy_input=False),
                                              def_shape=shape,
-                                             def_profile=profile
-                                             )
+                                             def_profile=profile)
         else:
             self.line = label
 
         # Check the line selection is valid
-        idcs_selection = review_bands(self._spec, self.line, user_cont_from_bands=cont_from_bands, user_err_from_bands=err_from_bands)
+        idcs_selection = review_bands(self._spec, self.line, user_cont_source=cont_source, user_err_from_bands=err_from_bands)
         if idcs_selection is not None:
 
             # Unpack the line selections
             idcs_line, idcs_continua = idcs_selection
 
             # Compute line continuum
-            self.continuum_calculation(idcs_line, idcs_continua, cont_from_bands)
+            self.continuum_calculation(idcs_line, idcs_continua, cont_source)
 
             # Compute line flux error
             pixel_err_arr = self.pixel_error_calculation(idcs_continua, err_from_bands)
@@ -686,7 +637,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, input_conf)
 
             # Profile fitting measurements
-            idcs_fitting = idcs_selection[0] + idcs_selection[1] if cont_from_bands else idcs_selection[0]
+            idcs_fitting = idcs_selection[0] + idcs_selection[1] if cont_source != 'central' else idcs_selection[0]
             self.profile_fitting(self.line,
                                  x_arr=self._spec.wave[idcs_fitting],
                                  y_arr=self._spec.flux[idcs_fitting],
@@ -707,83 +658,112 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         return
 
 
-    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_from_bands=None,
+    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_source='central',
               err_from_bands=None, temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None,
               update_default=True, line_detection=False, plot_fit=False, progress_output='bar'):
 
         """
+        Measure multiple spectral lines from a bands dataframe
+        (see :ref:`bands documentation <line-bands-doc>`).
 
-        This function measures multiple lines on the spectrum object from a bands dataframe.
+        This method automates the fitting of the lines on the input lines frame.
+        It iterates through all listed transitions,
+        performing continuum estimation, line detection (optional), and profile
+        fitting using the configuration provided in ``fit_cfg``.
 
-        The input ``bands_df`` can be a pandas.Dataframe or a link to its file.
+        Parameters
+        ----------
+        bands : pandas.DataFrame, str, or pathlib.Path
+            Bands table defining the line labels and bands limits (w1 to w6) for each line.
+        fit_cfg : dict, str, or pathlib.Path, optional
+            Fitting configuration dictionary or a path to a TOML configuration file.
+            See the `profile fitting documentation
+            <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+        min_method : str, optional
+            Minimization algorithm used by :mod:`lmfit`.
+            See the
+            `lmfit.minimizer.Minimizer.minimize
+            <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_
+            documentation for available options. Default is ``"least_squares"``.
+        profile : str, optional
+            Profile type for fitting (e.g., ``"g"`` for Gaussian, ``"l"`` for Lorentzian).
+            Defaults to the line database entry if omitted.
+        shape : str, optional
+            Line shape keyword (``"emi"`` for emission or ``"abs"`` for absorption).
+            Defaults to the line database entry if omitted.
+        cont_source : {'central', 'adjacent', 'fitted'}, optional
+            Method used to estimate the continuum level for line fitting.
+            - ``'central'`` — use the edges of the central line band (w₃–w₄).
+            - ``'adjacent'`` — use the adjacent continuum bands (w₁–w₂ and w₅–w₆).
+            - ``'fitted'`` — use a previously fitted continuum model from the spectrum.
+            The default is ``'central'``.
+        err_from_bands : bool or None, optional
+            If ``True``, estimate the pixel uncertainty from the continuum bands.
+            If ``None``, use the spectrum’s ``err_flux`` data or fall back to the
+            continuum regions if not available (False). The default value is None.
+        temp : float, optional
+            Electron temperature (K) used to compute the thermal broadening correction.
+            Default is 10,000 K.
+        line_list : list of str, optional
+            Subset of line labels from the bands table to process.
+            If ``None``, all entries in ``bands`` are measured.
+        default_cfg_prefix : str, optional
+            Section key prefix for the default configuration in ``fit_cfg``.
+            Default is ``"default"``.
+        obj_cfg_prefix : str, optional
+            Section key prefix for the object-specific configuration in ``fit_cfg``.
+        update_default : bool, optional
+            If ``True`` (default), merge parameters from ``obj_cfg_prefix`` into
+            ``default_cfg_prefix``. If ``False``, the object configuration is used falling back to the default if not available.
+        line_detection : bool, optional
+            If ``True``, run the continuum fitting and line threshodling to confirme the presence of lines before
+            measurements. The functions parameters must be specified in the ``fit_cfg`` (e.g., entries under ``"peaks_troughs"``, ``"continuum"``).
+            Default is ``False``.
+        plot_fit : bool, optional
+            If ``True``, display the profile fit after each iteration.
+        progress_output : {"bar", "counter", None}, optional
+            Controls progress display in the console.
+            - ``"bar"`` (default): show a dynamic progress bar.
+            - ``"counter"``: print current line number and label.
+            - ``None``: suppress console output.
 
-        The argument ``fit_conf`` provides the `profile-fitting configuration <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
+        Returns
+        -------
+        None
+            The resulting measurements are stored in the spectrum’s internal
+            ``frame`` attribute and in ``self.line.measurements``.
 
-        The ``min_method`` argument provides the minimization algorithm for the `LmFit functions
-        <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+        Notes
+        -----
+        - This method performs the following sequence for each line:
+          1. Optionally apply continuum and line detection preprocessing steps if enabled via ``line_detection=True`` and the appropicate keys are found at ``fit_cfg``.
+          2. Retrieve the line list from the ``bands`` table or the default database.
+          3. Estimate the continuum level and its uncertainty.
+          4. Perform non-parametric measurements (e.g., flux, EW, FWHM).
+          5. Run profile fitting using :mod:`lmfit` according to ``min_method``.
+          6. Apply instrumental and thermal width corrections (via ``Spectrum.res_power`` and ``temp``).
+          7. Recalculate SNR and store results in the spectrum’s log frame.
+        - Progress reporting is configurable through ``progress_output``.
+        - Use ``line_detection=True`` to automatically threshold and select
+          only detected lines before fitting.
 
-        By default, the profile fitting assumes an emission Gaussian shape, with ``profile="g-emi"``. The profile keywords
-        are described on the `label documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+        Examples
+        --------
+        Measure all lines from a bands file:
 
-        The ``cont_from_bands=True`` argument forces the continuum to be measured from the adjacent line bands. If
-        ``cont_from_bands=False`` the continuum gradient is calculated from the first and last pixel from the line band
-        (w3-w4).
+        >>> spec.frame("my_bands.xlsx", fit_cfg="my_fit_config.toml")
 
-        For the calculation of the thermal broadening on the emission lines the user can include the line electron
-        temperature in Kelvin. The default value ``temp`` is 10000 K.
+        Run the fit with a progress bar:
 
-        The user can limit the fitting to certain bands with the ``lines_list`` argument.
+        >>> spec.frame(bands_df, progress_output="bar")
 
-        If the input ``fit_conf`` has multiple sections, this function will read the parameters from the ``default_conf_key``
-        argument, whose default value is "default". If the input dictionary also has a section title with the
-        ``id_conf_label`` _line_fitting the ``default_conf_key`` _line_fitting parameters will be **updated** by the
-        object configuration.
+        Limit to a subset of lines:
 
-        If ``line_detection=True`` the input ``bands_df`` measurements will be limited to those bands with a line detection.
-        The local configuration for the line detection algorithm can be provided from the fit_conf entries.
+        >>> spec.frame(bands_df, line_list=["O3_5007A", "H1_4861A"])
 
-        If ``plot_fit=True`` this function will plot profile after each fitting.
+        Enable automatic line detection:
 
-        The ``progress_output`` argument determines the progress console message. A "bar" value will show a progress bar,
-        while a "counter" value will print a message with the current line being measured. Finally, a None value will not
-        show any message.
-
-        :param bands: Bands dataframe (or file address to the dataframe).
-        :type bands: pandas.Dataframe, str, path.Pathlib
-
-        :param fit_cfg: Fitting configuration.
-        :type fit_cfg: dict, optional
-
-        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
-                            The default value is 'least_squares'
-        :type min_method: str, optional
-
-        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
-        :type profile: str, optional
-
-        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
-        :type cont_from_bands: bool, optional
-
-        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
-        :type temp: bool, optional
-
-        :param line_list: Line list to measure from the bands dataframe.
-        :type line_list: list, optional
-
-        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_cfg_prefix: str, optional
-
-        :param obj_cfg_prefix: Label for the object configuration section in the ```fit_conf`` variable.
-        :type obj_cfg_prefix: str, optional
-
-        :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
-        :type line_detection: bool, optional
-
-        :param plot_fit: Set to True to plot the profile fitting at each iteration.
-        :type plot_fit: bool, optional
-
-        :param progress_output: Progress message output. The options are "bar" (default), "counter" and "None".
-        :type progress_output: str, optional
+        >>> spec.frame(bands_df, line_detection=True)
 
         """
 
@@ -847,7 +827,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                         pbar.output_message(self._i_line, self._n_lines, pre_text="", post_text=f'({line})')
 
                         # Fit the lines
-                        self.bands(line, bands, input_conf, min_method, profile, shape, cont_from_bands=cont_from_bands,
+                        self.bands(line, bands, input_conf, min_method, profile, shape, cont_source=cont_source,
                                    err_from_bands=err_from_bands, temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
@@ -866,33 +846,69 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                   **kwargs):
 
         """
+        Fit the spectrum continuum via polynomial clipping.
 
-        This function fits the spectrum continuum in an iterative process. The user specifies two parameters: the ``degree_list``
-        for the fitted polynomial and the ``threshold_list``` for the multiplicative standard deviation factor. At each
-        interation points beyond this flux threshold are excluded from the continuum current fittings. Consequently,
-        the user should aim towards more constrictive parameter values at each iteration.
+        This routine estimates the continuum by iteratively fitting polynomials and
+        sigma-clipping outliers above (emission) and below (absorption) a flux threshold.
+        At each iteration, points outside configurable residual thresholds are excluded
+        and the polynomial is refitted on the remaining pixels.
 
-        The user can specify a window length over which the spectrum will be smoothed before fitting the continuum using
-        the ``smooth_length`` parameter.
+        Parameters
+        ----------
+        degree_list : list of int
+            Polynomial degree to use at each iteration.
+            The number of iterations equals ``len(degree_list)``.
+        emis_threshold : list of float
+            Upper (emission-side) clipping factors, in units of number of residual standard
+            deviation for each iteration. Must have the same length as ``degree_list``.
+        abs_threshold : list of float, optional
+            Lower (absorption-side) clipping factors, also in units of number of residual
+            standard deviation. If ``None``, the values in ``emis_threshold`` are reused
+            for the lower limit. Must match the length of ``degree_list`` when provided.
+        smooth_scale : int, optional
+            Window size (in pixels) for a moving-average smoothing applied to the input
+            flux before fitting. If ``None``, no smoothing is applied.
+        plot_steps : bool, optional
+            If ``True``, display a diagnostic plot after each iteration showing the
+            current fit, clipping limits, and kept/rejected pixels.
+        **kwargs
+            Additional keyword arguments forwarded to the plotting helper if ``plot_steps=True``
+            (e.g., figure size, axis, title customization).
 
-        The user can visually inspect the fitting output graphically setting the parameter ``plot_steps=True``.
+        Returns
+        -------
+        None
+            The method updates the spectrum in place, setting:
+            - ``self._spec.cont`` : masked array of the final continuum model
+            - ``self._spec.cont_std`` : float, standard deviation of residuals on kept pixels
 
-        :param degree_list: Integer list with the degree of the continuum polynomial
-        :type degree_list: list
+        Notes
+        -----
+        - **Initialization:** The first iteration seeds the mask using the 16th–84th
+          percentile flux range of unmasked pixels, then fits the initial polynomial.
+        - **Clipping:** After each fit, residuals are computed and the standard
+          deviation is measured over currently kept pixels. New keep/reject limits are:
+          ``low = model - abs_threshold[i] * std`` and
+          ``high = model + emis_threshold[i] * std``.
+        - **Masking:** Existing pixel masks are honored; clipping only modifies the
+          continuum-selection mask on top of the original flux mask.
+        - **Smoothing:** When ``smooth_scale`` is provided, a boxcar (length
+          ``smooth_scale``) is convolved with the flux prior to fitting; the continuum
+          itself is always evaluated on the original wavelength grid.
 
-        :param emis_threshold: Float list for the multiplicative continuum standard deviation flux factor
-        :type emis_threshold: list
+        Examples
+        --------
+        Fit a three-iteration continuum with increasingly restrictive clipping:
 
-        :param smooth_length: Size of the smoothing window to convolve the spectrum. The default value is None.
-        :type smooth_length: integer, optional
+        >>> degrees = [1, 2, 2]
+        >>> thr_hi  = [5.0, 3.0, 2.0]     # emission-side thresholds (σ)
+        >>> thr_lo  = [5.0, 3.0, 2.0]     # absorption-side thresholds (σ)
+        >>> spec.fit.continuum(degrees, thr_hi, abs_threshold=thr_lo, smooth_scale=11)
 
-        :param plot_steps: Set to "True" to plot the fitted continuum at each iteration.
-        :type plot_steps: bool, optional
+        Show diagnostic plots at each iteration:
 
-        :return:
-
+        >>> spec.fit.continuum([2, 2], [3.0, 2.0], plot_steps=True, title="Continuum fit")
         """
-
         # Create a pre-Mask based on the original mask if available
         mask_cont = ~self._spec.flux.mask
         input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
@@ -949,100 +965,140 @@ class CubeTreatment(LineFitting):
         self._cube = cube
         self._spec = None
 
-    def spatial_mask(self, mask_file, output_address, bands=None, fit_cfg=None, mask_list=None, line_list=None,
-                     log_ext_suffix='_LINELOG', min_method='least_squares', profile=None, shape=None, cont_from_bands=True,
-                     temp=10000.0, default_cfg_prefix='default', update_default=True, line_detection=False, progress_output='bar',
-                     plot_fit=False, header=None, join_output_files=True):
+    def spatial_mask(self, mask_file, fname, bands=None, fit_cfg=None, mask_list=None, line_list=None,
+                     log_ext_suffix='_LINELOG', min_method='least_squares', profile=None, shape=None, cont_source='central',
+                     err_from_bands=False, temp=10000.0, default_cfg_prefix='default', update_default=True,
+                     line_detection=False, progress_output='bar', plot_fit=False, header=None, join_output_files=True):
 
         """
+        Measure lines across an IFS cube using one or more spatial masks.
 
-        This function measures lines on an IFS cube from an input binary spatial ``mask_file``.
+        This routine iterates over spaxels selected by binary masks (from ``mask_file``),
+        measures the requested lines for each spaxel, and writes the results to one or
+        more multi-extension FITS logs. Each spaxel’s measurements are saved in a
+        dedicated extension named ``"{j}-{i}{log_ext_suffix}"`` (e.g., ``"25-30_LINELOG"``).
 
-        The results are stored in a multipage ".fits" file, each page contains a measurements and it is named after the
-        spatial array coordinates and the ``log_ext_suffix`` (i.e. "idx_j-idx_i_LINELOG")
+        The bands to use for measurements can be supplied globally via ``bands`` or,
+        per-mask, via entries in ``fit_cfg``. Line-fitting behavior is configured via
+        ``fit_cfg`` with a multi-level override scheme (default → mask → spaxel).
 
-        The input ``bands`` can be a pandas.Dataframe or an address to the file. The user can specify one bands file
-        per mask page on the ``mask_file``. To do this, the ``fit_conf`` argument must include a section for every mask
-        on the ``mask_list`` (i.e. "Mask1_line_fitting"). This function will check for a key "bands" and load the
-        corresponding bands.
+        Parameters
+        ----------
+        mask_file : str or pathlib.Path or dict or numpy.ndarray
+            Source of spatial masks. Can be a FITS file produced by
+            :meth:`~lime.Cube.spatial_masking`, a dictionary mapping mask names to
+            boolean arrays, or a boolean array.
+        fname : str or pathlib.Path
+            Output path for the combined measurements log (or the base name, if generating one .fits file per mask).
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Bands table (or path) to use for all masks/spaxels. If ``None``, the
+            method will look for a per-mask bands path in ``fit_cfg``.
+        fit_cfg : dict or str or pathlib.Path, optional
+            Fitting configuration (dict or path to a TOML file). Supports a
+            three-level override hierarchy:
+              1) ``default_cfg_prefix`` section (global defaults),
+              2) mask-level section named after the mask (e.g., ``"MASK_A"``),
+              3) spaxel-level section named ``"{j}-{i}_line_fitting"``.
+        mask_list : list of str, optional
+            Subset of masks in ``mask_file`` to process. If ``None``, all masks are used.
+        line_list : list of str, optional
+            Subset of line labels to measure from the bands table. If ``None``,
+            all lines present in the bands are measured.
+        log_ext_suffix : str, optional
+            Suffix appended to each FITS extension name with results.
+            Default is ``"_LINELOG"``.
+        min_method : str, optional
+            Minimization algorithm used by :mod:`lmfit`. See
+            `lmfit.minimizer.Minimizer.minimize
+            <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
+            Default is ``"least_squares"``.
+        profile : str, optional
+            Profile identifier for fitting (e.g., ``"g"`` for Gaussian).
+            If ``None``, falls back to the line database defaults.
+        shape : str, optional
+            Line shape: ``"emi"`` for emission or ``"abs"`` for absorption.
+            If ``None``, falls back to database defaults.
+        cont_source : {'central', 'adjacent', 'fitted'}, optional
+            Method used to estimate the continuum level for line fitting.
+            - ``'central'`` — use the edges of the central line band (w₃–w₄).
+            - ``'adjacent'`` — use the adjacent continuum bands (w₁–w₂ and w₅–w₆).
+            - ``'fitted'`` — use a previously fitted continuum model from the spectrum.
+            The default is ``'central'``.
+        err_from_bands : bool or None, optional
+            If ``True``, estimate the pixel uncertainty from the continuum bands.
+            If ``None``, use the spectrum’s ``err_flux`` data or fall back to the
+            continuum regions if not available (False). The default value is None.
+        temp : float, optional
+            Electron temperature (K) for thermal broadening corrections.
+            Default is ``10000.0``.
+        default_cfg_prefix : str, optional
+            Section name in ``fit_cfg`` containing global defaults.
+            Default is ``"default"``.
+        update_default : bool, optional
+            If ``True`` (default), apply higher-level overrides by updating lower-level
+            dictionaries (shared keys only).
+        line_detection : bool, optional
+            If ``True``, run the continuum fitting and line threshodling to confirme the presence of lines before
+            measurements. The functions parameters must be specified in the ``fit_cfg`` (e.g., entries under ``"peaks_troughs"``, ``"continuum"``).
+            Default is ``False``.
+        progress_output : {"bar", "counter", None}, optional
+            Console progress reporting mode. Default is ``"bar"``.
+        plot_fit : bool, optional
+            If ``True``, render a plot of each spaxel’s fitted lines during processing.
+            Default is ``False``.
+        header : dict, optional
+            Extra FITS header keywords to add per spaxel page in the output logs.
+            If a key matching the extension name (e.g., ``"25-30_LINELOG"``) exists,
+            that dict is used; otherwise ``header`` is treated as a global header.
+        join_output_files : bool, optional
+            If multiple masks are processed, merge the per-mask logs into a single
+            FITS file named after ``fname``. When ``False``, keep one output file
+            per mask (named ``"{stem}_MASK-{mask}.fits"``). Default is ``True``.
 
-        The fitting configuration in the ``fit_conf`` argument accepts a three-level configuration. At the lowest level,
-        The ``default_conf_key`` points towards the default configuration for all the spaxels analyzed on the cube
-        (i.e. "default_line_fitting"). At an intermediate level, the parameters from the section with a name from the
-        ``mask_list`` (i.e. "Mask1_line_fitting") will be applied to the spaxels in the corresponding mask. Finally, at
-        the highest level, the user can provide a spaxel fitting configuration with the spatial array coordiantes
-        "50-28_LINELOG". In all these cases the higher level configurate **updates** the lower levels (only common entries
-        are replaced)
+        Returns
+        -------
+        None
+            Results are written to disk as one or more FITS files. Each spaxel’s
+            measurements are stored in a binary table extension.
 
-        .. attention::
-            In this multi-level configuration design, the higher level entries **update** the lower level entries:
-            only shared entries are overwritten, the final configuration will include all the entries from the
-            default mask and spaxel sections.
+        Notes
+        -----
+        - **Configuration hierarchy:** Values are resolved in the order
+          *default → mask → spaxel*. Higher levels **update** shared keys only if
+          ``update_default=True``. Otherwise, the method applies a fallback protocol
+          where only the parameters explicitly defined in each section are used.
+        - **WCS headers:** Spatial WCS keywords are added to each extension header when
+          available, using the parent cube’s WCS metadata.
 
-        If the ``line_detection`` is set to True the function proceeds to run the line detection algorithm prior to the
-        fitting of the lines. The user provide the configuration parameters for the line_detection function in the
-        ``fit_conf`` argument. At the default, mask or spaxel configuration the user needs to specify these entries with
-        the "function name" + "." + "function argument" (i.e. "line_detection.emission_type='emission'"). The multi-level
-        configuration described above will be applied to this function parameters as well.
+        Examples
+        --------
+        Use a single bands table for all masks and join outputs:
 
-        .. note::
-            The parameters for the ``line.detection`` can be found on the documentation. The user doesn't need to specify
-            a "lime_detection.bands" parameter. The input bands from the corresponding mask will be used.
+        >>> cube.obs.spatial_mask(
+        ...     mask_file="O3_masks.fits",
+        ...     fname="logs/o3_all_masks.fits",
+        ...     bands="my_bands.xlsx",
+        ...     fit_cfg="fit_config.toml",
+        ...     progress_output="bar",
+        ... )
 
-        :param mask_file: Address of binary spatial mask file
-        :type mask_file: str, pathlib.Path
+        Provide bands per mask via the configuration and keep files separate:
 
-        :param output_address: File address for the output measurements log.
-        :type output_address: str, pathlib.Path
+        >>> cube.obs.spatial_mask(
+        ...     mask_file="O3_masks.fits",
+        ...     fname="logs/o3_base.fits",
+        ...     fit_cfg="fit_config.toml",
+        ...     join_output_files=False,
+        ... )
 
-        :param bands: Bands dataframe (or file address to the dataframe).
-        :type bands: pandas.Dataframe, str, path.Pathlib
+        Limit measured lines and enable line detection:
 
-        :param fit_cfg: Fitting configuration.
-        :type fit_cfg: dict, optional
-
-        :param mask_list: Masks name list to explore on the ``masks_file``.
-        :type mask_list: list, optional
-
-        :param line_list: Line list to measure from the bands dataframe.
-        :type line_list: list, optional
-
-        :param log_ext_suffix: Suffix for the measurements log pages. The default value is "_LINELOG".
-        :type log_ext_suffix: str, optional.
-
-        :param min_method: `Minimization algorithm <https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer.minimize>`_.
-                            The default value is 'least_squares'
-        :type min_method: str, optional
-
-        :param profile: Profile type for the fitting. The default value ``g-emi`` (Gaussian-emission).
-        :type profile: str, optional
-
-        :param cont_from_bands: Check for continuum calculation from adjacent bands. The default value is True.
-        :type cont_from_bands: bool, optional
-
-        :param temp: Transition electron temperature for thermal broadening calculation. The default value is 10000K.
-        :type temp: bool, optional
-
-        :param default_cfg_prefix: Label for the default configuration section in the ```fit_conf`` variable.
-        :type default_cfg_prefix: str, optional
-
-        :param line_detection: Set to True to run the dectection line algorithm prior to line measurements.
-        :type line_detection: bool, optional
-
-        :param plot_fit: Set to True to plot the spectrum lines fitting at each iteration.
-        :type plot_fit: bool, optional
-
-        :param progress_output: Progress message output. The options are "bar" (default), "counter" and "None".
-        :type progress_output: str, optional
-
-        :param header: Dictionary for parameter ".fits" file headers.
-        :type header: dict, optional
-
-        :param join_output_files: In the case of multiple masks, join the individual output ".fits" files into a single
-                                  one. If set to False there will be one output file named per mask named after it. The
-                                  default value is True.
-        :type join_output_files: bool, optional
-
+        >>> cube.obs.spatial_mask(
+        ...     mask_file="masks.fits",
+        ...     fname="logs/selected_lines.fits",
+        ...     line_list=["O3_5007A", "H1_4861A"],
+        ...     line_detection=True,
+        ... )
         """
 
         if bands is not None:
@@ -1059,11 +1115,11 @@ class CubeTreatment(LineFitting):
                                     group_list=input_masks)
 
         # Check if the output log folder exists
-        output_address = Path(output_address)
-        address_dir = output_address.parent
+        fname = Path(fname)
+        address_dir = fname.parent
         if not address_dir.is_dir():
-            raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
-        address_stem = output_address.stem
+            raise LiMe_Error(f'The folder of the output log file does not exist at {fname}')
+        address_stem = fname.stem
 
         # Determine the spaxels to treat at each mask
         spax_counter, total_spaxels, spaxels_dict = 0, 0, {}
@@ -1132,7 +1188,8 @@ class CubeTreatment(LineFitting):
                 # Fit the lines
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, shape=shape,
-                                 cont_from_bands=cont_from_bands, temp=temp, progress_output=None, plot_fit=None,
+                                 cont_source=cont_source, err_from_bands=err_from_bands,
+                                 temp=temp, progress_output=None, plot_fit=None,
                                  obj_cfg_prefix=None, default_cfg_prefix=None, update_default=update_default)
 
                 # Count the number of measurements
@@ -1180,14 +1237,6 @@ class CubeTreatment(LineFitting):
             else:
                 print(f'\nJoining spatial log files ({",".join(mask_list)}) -> {output_comb_file}')
                 join_fits_files(mask_log_files_list, output_comb_file, delete_after_join=join_output_files)
-
-        # else:
-        #     # Just one mask and Join is False
-        #     if len(mask_list) == 1:
-        #         output_comb_file = f'{address_dir / address_stem}.fits'
-        #         mask_0_path = Path(mask_log_files_list[0])
-        #         mask_0_path.rename(Path(output_comb_file))
-
 
         return
 

@@ -37,6 +37,45 @@ PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'SN_cont': r'$\frac{S}{N}_{cont}$'}
 
 
+def bands_idcs_review(label, idcs, wave_rest, min_width_pixel = 1, min_sep_cont=2, correct_continua=True):
+
+    if correct_continua:
+        if idcs[1] > idcs[2]:
+            idcs[1] = idcs[2] - min_sep_cont
+        if idcs[0] >= idcs[1]:
+            idcs[0] = idcs[1] - (min_width_pixel + min_sep_cont)
+
+        if idcs[4] < idcs[3]:
+            idcs[4] = idcs[3] + min_sep_cont
+        if idcs[5] <= idcs[4]:
+            idcs[5] = idcs[4] + (min_width_pixel + min_sep_cont)
+
+    # Continua bands beyond the spectral wavelength range
+    if idcs[0] < 0:
+        idcs[0] = 0
+
+    if idcs[1] < 0:
+        idcs[1] = idcs[0] + min_width_pixel
+
+    if idcs[5] > wave_rest.size - 1:
+        idcs[5] = wave_rest.size - min_width_pixel
+
+    if idcs[4] > wave_rest.size - 1:
+        idcs[4] = idcs[5] - min_width_pixel
+
+    # One pixel bands width
+    if idcs[0] == idcs[1]:
+        idcs[1] = idcs[0] + min_width_pixel
+
+    if idcs[2] == idcs[3]:
+        idcs[3] = idcs[2] + min_width_pixel
+
+    if idcs[4] == idcs[5]:
+        idcs[4] = idcs[5] - min_width_pixel
+
+    return idcs
+
+
 def unique_line_arr(frame, return_index = False):
 
     idcs_s = frame.group_label == 'none'
@@ -76,7 +115,7 @@ def mult_err_propagation(nominal_array, err_array, result):
 
     return err_result
 
-# Number conversion to Roman style
+
 def int_to_roman(num):
     i, roman_num = 0, ''
     while num > 0:
@@ -439,33 +478,68 @@ def blended_label_from_log(line, log):
 def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispersion_units=None, decimals=None):
 
     """
+    Convert a wavelength or flux array from one physical unit to another.
 
-    This function converts the input array (wavelength or flux) ``in_units`` into the requested ``out_units``.
+    This function converts input quantities (wavelength or flux) from ``in_units`` to
+    ``out_units`` using the `Astropy Units module
+    <https://docs.astropy.org/en/stable/units/>`_.
+    For flux conversions, the user must also provide the corresponding wavelength array
+    and its dispersion units to correctly apply the spectral-density equivalency.
 
-    .. attention::
-        Due to the nature of the ``flux_array``, the user also needs to include the ``wave_array`` and its units in the
-        ``dispersion_units``. units
+    Parameters
+    ----------
+    in_units : str
+        Units of the input array. Must be a valid `Astropy unit string
+        <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_ (e.g.,
+        ``"Angstrom"``, ``"Hz"``, ``"Jy"``, ``"erg / (s cm2 Angstrom)"``).
+    out_units : str
+        Target units for the conversion. Must also be a valid Astropy unit string.
+    wave_array : numpy.ndarray, optional
+        Wavelength array. Required for flux conversions (``flux_array`` not ``None``).
+        Used to define the frequency–wavelength relationship in the conversion.
+    flux_array : numpy.ndarray, optional
+        Flux array to convert. If ``None``, the function assumes that the conversion
+        applies to ``wave_array`` instead.
+    dispersion_units : str, optional
+        Units of the wavelength array, required when converting flux densities (e.g.,
+        ``"Angstrom"`` or ``"Hz"``). Used to define the spectral density equivalency.
+    decimals : int, optional
+        Number of decimal places to round the output values. If ``None``, no rounding
+        is applied.
 
-    The user can also provide the number of ``decimals`` to round the output array.
+    Returns
+    -------
+    numpy.ndarray
+        Converted array (wavelength or flux) expressed in ``out_units`` and stripped
+        of unit metadata.
 
-    :param in_units: Input array units
-    :type in_units: str
+    Notes
+    -----
+    - The conversion is performed through `astropy.units.Unit` objects and their corresponding equivalencies:
+        * For wavelength conversions: ``astropy.units.spectral()``.
+        * For flux conversions: ``astropy.units.spectral_density(wave_array)``.
+    - Ensure that both input and output units are compatible for the desired
+      transformation (e.g., wavelength ↔ frequency or flux per unit wavelength ↔ flux per unit frequency).
+    - When converting flux densities, always provide both ``wave_array`` and
+      ``dispersion_units`` to avoid unit-equivalency errors.
 
-    :param out_units: Output array untis
-    :type out_units: str
+    Examples
+    --------
+    Convert wavelength from Angstroms to nanometers:
 
-    :param wave_array: Wavelength array
-    :type wave_array: numpy.array
+    >>> import numpy as np
+    >>> wave_nm = unit_conversion("Angstrom", "nm", wave_array=np.array([5000, 6000]))
+    >>> wave_nm
+    array([500., 600.])
 
-    :param flux_array: Flux array
-    :type flux_array: numpy.array
+    Convert flux density from Fλ (erg s⁻¹ cm⁻² Å⁻¹) to Fν (erg s⁻¹ cm⁻² Hz⁻¹):
 
-    :param dispersion_units:
-    :type dispersion_units:
-
-    :param decimals: Number of decimals.
-    :type decimals: int, optional
-
+    >>> flux_fnu = unit_conversion("erg / (s cm2 Angstrom)", "erg / (s cm2 Hz)",
+    ...                            wave_array=np.array([5000, 6000]),
+    ...                            flux_array=np.array([1e-14, 2e-14]),
+    ...                            dispersion_units="Angstrom", decimals=5)
+    >>> flux_fnu
+    array([3.33e-27, 6.67e-27])
     """
 
     # Converting the wavelength array
@@ -488,7 +562,7 @@ def unit_conversion(in_units, out_units, wave_array=None, flux_array=None, dispe
     return output_array
 
 
-def observation_unit_convertion(observation, wave_units_out, flux_units_out):
+def parse_unit_convertion(observation, wave_units_out, flux_units_out):
 
     # Recover the pixel mask
     pixel_mask = observation.flux.mask
@@ -671,64 +745,101 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
                         header=None, wcs=None):
 
     """
+    Convert the measurements from a cube FITS log into 2D parameter maps.
 
-    This function converts a line measurements log from an IFS cube, into a set of 2D parameter maps.
+    For each requested parameter in ``param_list`` and each line in ``line_list``,
+    this function builds a 2D image (spaxel grid) by reading the per-spaxel
+    measurement pages from ``lines_log_file``. The resulting images are written
+    as multi-extension FITS files to ``output_folder``—one output file per
+    parameter, with one ImageHDU page per line.
 
-    The parameter ".fits" files are saved into the ``output_folder``. These files are named after the parameters in the
-    ``param_list`` with the optional prefix from the ``output_file_prefix`` argument. These files will have one page per
-    line in the ``line_list`` argument.
+    Spaxels to include can be specified via a spatial mask FITS file
+    (``mask_file``). If multiple mask extensions exist, select a subset with
+    ``mask_list`` or use ``'all'`` to include all masks. If no mask is provided,
+    you must supply ``image_shape=(ny, nx)`` to define the output grid (this computation can be lengthy).
 
-    The user can provide a spatial mask file address from which to recover the spaxels with line measurements. If the
-    mask ``.fits`` file contains several pages, the user can provide a ``mask_list`` with the ones to explore. Otherwise,
-    all mask pages will be used.
+    Parameters
+    ----------
+    lines_log_file : str or pathlib.Path
+        Path to the FITS file containing per-spaxel line measurements.
+        Each spaxel must be stored in an extension named
+        ``"{j}-{i}{log_ext_suffix}"`` (e.g., ``"25-30_LINELOG"``).
+    output_folder : str or pathlib.Path
+        Existing directory where output parameter maps will be saved.
+    param_list : list of str
+        Measurement fields to extract and map (e.g., ``["flux", "EW", "v_med"]``).
+        These must be columns present in each spaxel page of ``lines_log_file``.
+    line_list : list of str
+        Line labels to include as pages in the output files. Each label must
+        appear in the spaxel log’s ``index`` (line name) column.
+    mask_file : str or pathlib.Path, optional
+        FITS file with one or more binary masks (nonzero→included). If provided,
+        only spaxels selected by the union of masks in ``mask_list`` are mapped.
+    mask_list : {'all'} or list of str, optional
+        Which mask extensions from ``mask_file`` to use. ``'all'`` (default)
+        includes every non-PRIMARY extension. Otherwise, provide a list of
+        extension names.
+    image_shape : tuple of int, optional
+        Output image shape ``(ny, nx)`` used when no ``mask_file`` is provided.
+        Required if ``mask_file`` is ``None``.
+    log_ext_suffix : str, optional
+        Suffix used in spaxel extension names inside ``lines_log_file``.
+        Default is ``"_LINELOG"``.
+    spaxel_fill_value : float, optional
+        Value used to fill pixels with missing data or spaxels not found in
+        the log. Default is ``numpy.nan``.
+    output_file_prefix : str, optional
+        Prefix prepended to each output filename. For parameter ``P``, the file
+        is saved as ``{prefix}{P}.fits``. Default is ``None`` (no prefix).
+    header : dict, optional
+        Extra header cards to add. If a key matching ``"{param}-{line}"`` exists,
+        that nested dict is used for that page; otherwise ``header`` is treated
+        as a global header for all pages of a parameter file.
+    wcs : astropy.wcs.WCS, optional
+        WCS used to populate spatial coordinate keywords in each ImageHDU header.
+        See `Astropy WCS <https://docs.astropy.org/en/stable/wcs/index.html>`_.
 
-    .. attention::
-        The user can provide an ``image_shape`` tuple to generate the output parameter map. However, for a large image
-        size this approach may require a long time to query the log file pages.
+    Returns
+    -------
+    None
+        Writes one FITS file per parameter to ``output_folder``. Each file
+        contains an ImageHDU per line in ``line_list``.
 
-    The expected page name in the input ``lines_log_file`` is "idx_j-idx_i_log_ext_suffix" where "idx_j" and "idx_i"
-    are the y and x array coordinates of the cube coordinates, by default ``log_ext_suffix='_LINELOG'``.
+    Notes
+    -----
+    - **Spaxel HDU naming:** The function expects pages in the ``lines_log_file`` to
+      be named exactly ``"{j}-{i}{log_ext_suffix}"`` where ``j`` and ``i`` are
+      integer **(row, column)** indices of the cube spaxel.
+    - **Mask handling:** When ``mask_file`` includes multiple mask extensions,
+      the selected masks are combined (logical OR) to form the spaxel set.
+    - **Headers:** Each page includes ``LINE`` (line label) and ``PARAM`` (parameter
+      name). WCS metadata are added if ``wcs`` is provided. Custom header cards
+      from ``header`` are merged afterward.
 
-    The output ``.fits`` parameter page header includes the ``PARAM`` and ``LINE`` entries with the line and parameter
-    labels respectively. The user should also include a ``wcs`` argument to export the astronomical coordinates to the
-    output files. The user can add additional information via the ``header`` argument.
+    Examples
+    --------
+    Create maps for flux and velocity dispersion of two lines, using all masks:
 
-    :param lines_log_file: Fits file with IFU cube line measurements.
-    :param lines_log_file: str, pathlib.Path
+    >>> save_parameter_maps(
+    ...     lines_log_file="linelog.fits",
+    ...     output_folder="maps/",
+    ...     param_list=["flux", "sigma"],
+    ...     line_list=["O3_5007A", "H1_6563A"],
+    ...     mask_file="spatial_masks.fits",
+    ...     mask_list="all",
+    ...     log_ext_suffix="_LINELOG",
+    ...     output_file_prefix="galaxy_"
+    ... )
 
-    :param param_list: List of parameters to map
-    :param param_list: list
+    Build maps without a mask file (provide image shape explicitly):
 
-    :param line_list: List of lines to map
-    :param line_list: list
-
-    :param output_folder: Output folder to save the maps
-    :param output_folder: str, pathlib.Path
-
-    :param mask_file: Address of binary spatial mask file
-    :type mask_file: str, pathlib.Path
-
-    :param mask_list: Mask name list to explore on the ``mask_file``.
-    :type mask_list: list, optional
-
-    :param image_shape: Array with the image spatial size.
-    :param image_shape: list, tuple, optional
-
-    :param spaxel_fill_value: Map filling value for empty pixels. The default value is "numpy.nan".
-    :param spaxel_fill_value: float, optional
-
-    :param log_ext_suffix: Suffix for the lines log extension. The default value is "_LINELOG"
-    :param log_ext_suffix: str, optional
-
-    :param output_file_prefix: Prefix for the output parameter ".fits" file. The default value is None.
-    :param output_file_prefix: str, optional
-
-    :param header: Dictionary for parameter ".fits" file header
-    :type header: dict, optional
-
-    :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
-    :type wcs: astropy WCS, optional
-
+    >>> save_parameter_maps(
+    ...     lines_log_file="linelog.fits",
+    ...     output_folder="maps/",
+    ...     param_list=["EW"],
+    ...     line_list=["H1_4861A"],
+    ...     image_shape=(74, 76)
+    ... )
     """
 
     assert Path(lines_log_file).is_file(), f'- ERROR: lines log at {lines_log_file} not found'
@@ -794,7 +905,7 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
             idx_j, idx_i = spaxel_list[i_spaxel]
             spaxel_ref = f'{idx_j}-{idx_i}{log_ext_suffix}'
 
-            post_text = f'of spaxels from file ({lines_log_file}) read ({n_spaxels} total spaxels)'
+            post_text = f'"{lines_log_file}" read ({n_spaxels} total)'
             pbar.output_message(i_spaxel, n_spaxels, pre_text="", post_text=post_text)
 
             # progress_bar(i_spaxel, n_spaxels, post_text=f'of spaxels from file ({lines_log_file}) read ({n_spaxels} total spaxels)')

@@ -1,8 +1,7 @@
 import numpy as np
-
-from matplotlib import pyplot as plt, rc_context
-from matplotlib import font_manager
 from pathlib import Path
+from matplotlib import pyplot as plt, rc_context, font_manager
+
 from lime.io import _LIME_FOLDER
 from lime.plotting.plots import theme
 from lime.fitting.lines import gaussian_model
@@ -19,10 +18,8 @@ def lime_log_function(output_path: Path = None, seed: int = 4, show: bool = Fals
         font_manager._load_fontmanager(try_read_cache=False)
 
         # Define curve parameters
-        curve_dict = {
-                'comp1': {'amp': 0.75, 'center': 1.00, 'sigma': 2.0},
-                'comp2': {'amp': 0.65, 'center': 6.80, 'sigma': 1.8}
-        }
+        curve_dict = {'comp1': {'amp': 0.75, 'center': 1.00, 'sigma': 2.0},
+                      'comp2': {'amp': 0.65, 'center': 6.80, 'sigma': 1.8}}
 
         cont = 0.6
         err = 0.025

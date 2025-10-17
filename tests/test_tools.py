@@ -11,8 +11,9 @@ from lime.fitting.lines import c_KMpS
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
-spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+spectra_folder = data_folder/'spectra'
+outputs_folder = data_folder/'results'
 
 file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
 lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
@@ -22,7 +23,6 @@ lines_log = lime.load_frame(lines_log_address)
 redshift = 0.0475
 norm_flux = 1e-17
 wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
-# pixel_mask = np.isnan(err_array)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)

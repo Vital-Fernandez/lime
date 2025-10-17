@@ -5,7 +5,9 @@ from lime.io import check_fit_conf
 from copy import deepcopy
 
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent.parent/'examples/0_resources/results/'
+
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+outputs_folder = data_folder/'results'
 
 conf_file_address = baseline_folder/'lime_tests.toml'
 lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
@@ -82,17 +84,17 @@ def test_cfg_levels():
 
 def test_save_cfg():
 
+    # Create new save
     save_file_address = outputs_folder/'new_manga.toml'
     copy_cfg = cfg.copy()
     copy_cfg['new_line_fitting'] = {'O3_5007A_kinem': "O3_4959A",
                                     'O3_5007A_k-1_kinem': "O3_4959A_k-1",
                                     'He1_5016A_center': "min:5014,max:5018",
                                     'He1_5016A_sigma': "min:1.0,max:2.0"}
-
     lime.save_cfg(copy_cfg, save_file_address)
 
+    # Reload and test
     new_cfg = lime.load_cfg(save_file_address)
-
     assert 'object_properties' in cfg
     assert 'default_line_fitting' in cfg
     assert '38-35_line_fitting' in cfg

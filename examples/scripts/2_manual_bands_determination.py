@@ -33,12 +33,12 @@ gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_corr
 #                     fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, maximize=True)
 #
 # # Interactive line and continua bands
-# gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_correction=True,
-#                     map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200,
-#                                      'N2_6548A': 200, 'N2_6583A': 200,
-#                                      'O3_4959A': 250, 'O3_5007A': 250},
-#                     fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, show_continua=True, maximize=True)
-#
+gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_correction=True,
+                    map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200,
+                                     'N2_6548A': 200, 'N2_6583A': 200,
+                                     'O3_4959A': 250, 'O3_5007A': 250},
+                    fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, show_continua=True, maximize=True)
+
 
 
 # # State the data files

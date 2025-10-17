@@ -1,3 +1,4 @@
+(installation-doc)=
 # Installation
 
 $\mathrm{LiMe}$ can be installed via [pip](https://pypi.org/project/lime-stable/). The following commands install $\mathrm{LiMe}$ 

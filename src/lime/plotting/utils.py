@@ -7,7 +7,7 @@ from matplotlib.colors import rgb2hex
 _logger = logging.getLogger('LiMe')
 
 
-def parse_bands_arguments(label, bands, log, norm_flux):
+def parse_bands_arguments(label, bands, log, norm_flux=None):
 
     line = None
     if label is None and (log.index.size > 0):

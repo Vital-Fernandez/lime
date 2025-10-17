@@ -339,7 +339,6 @@ def check_line_in_log(input_wave, log=None, tol=1):
                 _wave0, units_wave = check_units_from_wave(ref_waves[0])
                 ref_waves = np.char.strip(ref_waves, units_wave).astype(float)
 
-
             # Locate the best candidate
             idx_closest = np.argmin(np.abs(ref_waves - input_wave))
             label = log.iloc[idx_closest].name
@@ -473,34 +472,87 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
                         scalar_output=False, verbose=True):
 
     """
-    This function takes a ``lines_list`` and returns several arrays with the requested parameters.
+    Decompose LiMe line labels into requested physical/formatting parameters.
 
-    If the user provides a `bands dataframe <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
-    (``bands`` argument) dataframe and a `fitting documentation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
-    (``fit_conf`` argument) the function will use this information to compute the requested 3_explanations. Otherwise, only the
-    `line label <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_ will be used to derive
-    the information.
+    Given a list of line labels in LiMe notation, this function returns one or more
+    arrays (or scalars) with selected parameters such as the particle label, line
+    wavelength, LaTeX label, kinematic setup, profile, and transition information.
+    When a bands table and/or a fitting configuration are provided, they are used
+    (via :meth:`Line.from_transition`) to enrich or override defaults; otherwise,
+    values are derived from the label and LiMe's internal database.
 
-    The ``params_list`` argument establishes the output parameters arrays. The options available are: "particle",
-    "wavelength", "latex_label", "kinem", "profile_comp" and "transition_comp".
+    Parameters
+    ----------
+    lines_list : list of str
+        Sequence of line labels in LiMe notation (e.g., ``["O3_5007A", "H1_4861A"]``).
+    bands : pandas.DataFrame or str or pathlib.Path, optional
+        Bands table, or a file path to a readable bands table. When provided, its
+        information is used by :meth:`Line.from_transition` to refine wavelengths,
+        components, labels, etc.
+    fit_conf : dict, optional
+        Fitting configuration dictionary (e.g., parsed from TOML) used to override
+        defaults (wavelengths, blends, shapes/profiles).
+    params_list : tuple of {"particle", "wavelength", "latex_label", "kinem", "profile_comp", "transition_comp"}, optional
+        Ordered list of output parameters to return. Default is
+        ``("particle", "wavelength", "latex_label")``.
+    scalar_output : bool, optional
+        If ``True`` **and** only a single input label is provided, return scalars
+        instead of 1-D arrays. Default is ``False``.
+    verbose : bool, optional
+        If ``True``, propagate verbose behavior to :meth:`Line.from_transition`.
+        Default is ``True``.
 
-    If the ``lines_list`` argument only has one element the user can request an scalar output with ``scalar_output=True``.
+    Returns
+    -------
+    tuple
+        A tuple with the same length and order as ``params_list``. Each element is:
+        - For multiple input labels: a 1-D ``ndarray`` with one value per label.
+        - For a single input label and ``scalar_output=True``: a scalar value.
 
-    :param lines_list: Array of lines in LiMe notation.
-    :type lines_list: list
+        The possible entries are:
+        - ``"particle"`` : array of str — particle labels (e.g., ``"O3"``).
+        - ``"wavelength"`` : array of float — wavelengths.
+        - ``"latex_label"`` : array of str — LaTeX-formatted labels.
+        - ``"kinem"`` : array of objects — kinematic configuration per line.
+        - ``"profile_comp"`` : array of objects — line profile identifiers.
+        - ``"transition_comp"`` : array of objects — transition descriptors.
 
-    :param bands: Bands dataframe (or file address to the dataframe).
-    :type bands: pandas.Dataframe, str, path.Pathlib, optional
+    Notes
+    -----
+    - Each line is resolved through :meth:`Line.from_transition(label, fit_conf, bands, verbose=verbose)`.
+      Missing information is filled from LiMe’s default database where possible.
+    - The function constructs an internal DataFrame with columns:
+      ``["particle", "wavelength", "latex_label", "kinem", "profile_comp", "transition_comp"]``,
+      then extracts the columns requested by ``params_list``.
+    - Column ``"wavelength"`` is coerced to numeric.
 
-    :param fit_conf: Fitting configuration.
-    :type fit_conf: dict, optional
+    Examples
+    --------
+    Return particle, wavelength, and LaTeX label arrays for two lines:
 
-    :param params_list: List of output parameters. The default value is ('particle', 'wavelength', 'latex_label')
-    :type params_list: tuple, optional
+    >>> particles, waves, latex = label_decomposition(
+    ...     ["O3_5007A", "H1_4861A"],
+    ...     params_list=("particle", "wavelength", "latex_label")
+    ... )
 
-    :param scalar_output: Set to True for a Scalar output.
-    :type scalar_output: bool
+    Use a fitting configuration and bands table; request only wavelengths:
 
+    >>> (waves,) = label_decomposition(
+    ...     ["O2_3726A", "O2_3729A"],
+    ...     bands=bands_df,
+    ...     fit_conf=fit_cfg,
+    ...     params_list=("wavelength",)
+    ... )
+
+    Single label with scalar output:
+
+    >>> particle, wl = label_decomposition(
+    ...     ["O3_5007A"],
+    ...     params_list=("particle", "wavelength"),
+    ...     scalar_output=True
+    ... )
+    >>> isinstance(wl, float)
+    True
     """
 
     headers = ['particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp', 'transition_comp']
@@ -745,6 +797,92 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
 def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remove_empty_columns=False, index_dict=None,
                             bands_hdrs=None):
 
+    """
+    Re-constructs the lines frames from an output measurements lines frame consolidating the merged and blended lines.
+
+    Given a LiMe measurements table (or a path to one), this function produces a bands DataFrame with
+    wavelength limits (``w1``–``w6``), representative wavelength, grouping labels, and basic metadata
+    (units, particle, transition, LaTeX label). It supports both single-index and MultiIndex inputs and
+    handles merged/blended groups, including renaming and de-duplication logic.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame or str or pathlib.Path
+        Measurements table or a file path that can be read into a measurements DataFrame.
+        The table is validated/loaded via ``check_file_dataframe``.
+    sample_levels : list of str, optional
+        For MultiIndex inputs, the index levels that identify a line sample (e.g., ``["id", "line"]``).
+        Default is ``["id", "line"]``.
+    sort : bool, optional
+        If ``True``, sort the output by ``["wavelength", "group_label"]``. Default is ``True``.
+    remove_empty_columns : bool, optional
+        If ``True``, drop columns that are entirely ``NaN`` in the result. Default is ``False``.
+    index_dict : dict, optional
+        Mapping to rename output line labels. Applied at the end of processing.
+    bands_hdrs : sequence of str, optional
+        Column set for the output table. When not provided the default is
+        ``("wavelength","w1","w2","w3","w4","w5","w6","group_label","units_wave","particle","trans","latex_label")``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A bands table indexed by line labels (with ``_b`` suffix for blended groups and ``_m`` for merged
+        labels when applicable).
+
+    Notes
+    -----
+    - **Single-index frames:**
+
+      - Single lines are selected where ``group_label == "none"`` and copied directly.
+      - Grouped lines are consolidated by unique ``group_label``, and blended labels get a ``_b`` suffix
+        if they do not already end with ``"_m"``.
+
+    - **MultiIndex frames:**
+
+      - Unique line labels are retrieved from the given ``sample_levels``.
+      - For each line and each group in its rows, the band limits (``w1``–``w6``) are computed as the **median**
+        across matching entries.
+      - Labels are determined as:
+        - Single (``group == "none"``): the original line label.
+        - Merged: preserve the ``_m`` label.
+        - Blended: add ``_b`` to the label; if already present in the index, a disambiguated label like ``"{species}-{j}_{rest}_b"`` is created.
+
+      - A minimal single-row reference DataFrame is built and passed to :meth:`Line.from_transition`
+        to recover canonical metadata (wavelength, units, particle, LaTeX label, mask).
+      - The representative wavelength and units are taken from the line’s reference component; mask values
+        populate ``w1``–``w6``.
+
+    - **Blended lines with merged components:**
+
+      - Rows sharing identical band limits (``w1``–``w6``) and with ``group_label != "none"`` are considered duplicates.
+      - Duplicates are collapsed into a single blended entry. The surviving row’s ``group_label`` becomes the
+        ``"+"``-joined list of merged components, and its index is renamed with a ``_b`` suffix
+        (or from ``*_m`` → ``*_b``).
+      - If this auto-generated label isn’t in ``index_dict``, a warning is logged suggesting you add a stable rename.
+
+    - **Sorting and cleanup:** ``sort`` orders the result; ``remove_empty_columns`` prunes all-NaN columns;
+      ``index_dict`` renames the final index.
+
+    Examples
+    --------
+    From a single-index measurements table:
+
+    >>> bands = bands_from_measurements(frame)
+
+    With MultiIndex and custom sample levels, dropping empty columns:
+
+    >>> bands = bands_from_measurements(
+    ...     frame,
+    ...     sample_levels=["object_id", "line"],
+    ...     remove_empty_columns=True
+    ... )
+
+    Enforcing stable external IDs:
+
+    >>> rename_map = {"H1_6563A_b": "H1-N2_6563A_b"}
+    >>> bands = bands_from_measurements(frame, index_dict=rename_map)
+    """
+
     # Load the frame if necessary
     frame = check_file_dataframe(frame, sample_levels=sample_levels)
 
@@ -890,6 +1028,64 @@ def construct_classic_notation(line=None, line_params=None):
 
 class Particle:
 
+    """
+    Representation of an atomic or ionic species used in spectral line definitions.
+
+    A :class:`Particle` object encodes the physical identity of a species through its
+    label, atomic symbol, and ionization stage. It provides convenience methods for
+    reconstructing these attributes from a shorthand label (e.g., ``"O3"`` → oxygen,
+    doubly ionized).
+
+    Parameters
+    ----------
+    label : str, optional
+        Canonical particle label (e.g., ``"H1"``, ``"O3"``, ``"He2"``). This string
+        uniquely identifies the species and ionization stage within LiMe.
+    symbol : str, optional
+        Chemical symbol of the species (e.g., ``"O"`` for oxygen, ``"H"`` for hydrogen).
+    ionization : int, optional
+        Ionization stage of the particle, typically an integer where
+        ``1 = neutral``, ``2 = singly ionized``, etc.
+
+    Attributes
+    ----------
+    label : str
+        Canonical identifier for the species (e.g., ``"O3"``).
+    symbol : str
+        Atomic symbol.
+    ionization : int
+        Ionization stage (1 = neutral, 2 = singly ionized, ...).
+
+    Methods
+    -------
+    from_label(label)
+        Create a :class:`Particle` from a shorthand label string (e.g., ``"O3"``).
+    __eq__(other)
+        Return ``True`` if two particles (or a particle and a label string) are equivalent.
+    __ne__(other)
+        Return ``True`` if two particles are different.
+
+    Examples
+    --------
+    Create a particle manually:
+
+    >>> Particle(label="O3", symbol="O", ionization=3)
+    O3
+
+    Construct a particle automatically from a label string:
+
+    >>> Particle.from_label("He2")
+    He2
+
+    Compare particles:
+
+    >>> Particle.from_label("O3") == Particle.from_label("O3")
+    True
+    >>> Particle.from_label("O3") == "O2"
+    False
+    """
+
+
     def __init__(self, label: str = None, symbol: str = None, ionization: int = str):
 
         self.label = label
@@ -900,6 +1096,31 @@ class Particle:
 
     @classmethod
     def from_label(cls, label):
+
+        """
+        Create a :class:`Particle` instance from a shorthand label string.
+
+        This class method parses the label into its elemental symbol and ionization
+        stage using :func:`recover_ionization`.
+
+        Parameters
+        ----------
+        label : str
+            Species identifier string (e.g., ``"H1"``, ``"O3"``).
+
+        Returns
+        -------
+        Particle
+            A :class:`Particle` instance with the corresponding ``symbol`` and
+            ``ionization`` attributes.
+
+        Examples
+        --------
+        >>> Particle.from_label("O3")
+        O3
+        >>> Particle.from_label("He2").symbol
+        'He'
+        """
 
         symbol, ionization = recover_ionization(label)
 
@@ -995,6 +1216,94 @@ def check_measurements_table(df):
 
 class Line:
 
+    """
+
+    Spectral line container with metadata, grouping, and measurement hooks.
+
+    A ``Line`` holds the identifying metadata for a spectral feature (e.g., label,
+    particle/ion, rest wavelength), optional grouping information (for blends or
+    multiplets), and references to kinematics/transition/profile details used by LiMe.
+    For grouped lines, a *reference component* is tracked via ``ref_idx`` to define the
+    line’s representative wavelength.
+
+    Parameters
+    ----------
+    label : str
+        Human-readable identifier for the line (e.g., ``"H1_4861A"`` or ``"O3_5007A"``).
+    particle : str or Particle, optional
+        Species identifier. Converted to a :class:`Particle` via
+        ``Particle.from_label(particle)``.
+    wavelength : float, optional
+        Rest (or reference) wavelength of the line. Units given by ``units_wave``.
+    units_wave : str, optional
+        Wavelength units (e.g., ``"Angstrom"``).
+    latex_label : str, optional
+        LaTeX-formatted label for rendering in plots or tables.
+    core : Line, optional
+        Core component of a blended/grouped feature. If ``group == "b"`` (blend) and
+        ``core`` is included in ``list_comps``, its index is used as the reference.
+    group_label : str, optional
+        Group identifier for collections of related components (e.g., blend name).
+    group : str, optional
+        Group type flag. When ``"b"``, the line is treated as part of a blend and
+        the reference component is determined as described in **Notes**.
+    list_comps : list of Line, optional
+        Explicit list of component lines comprising a grouped feature. If ``None``,
+        a single-component list ``[self]`` is used.
+    mask : any, optional
+        User-defined mask/flag for downstream processing.
+    kinem : any, optional
+        Kinematic information (e.g., velocity/dispersion constraints) used by fitters.
+    trans : any, optional
+        Transition descriptor passed through ``recover_transition(self.particle, trans)``.
+    profile : any, optional
+        Line profile model identifier (e.g., Gaussian, Voigt).
+    shape : any, optional
+        Optional shape constraints or metadata for modeling.
+    pixel_mask : str or any, optional
+        Pixel mask mode/flag. Defaults to ``"no"`` when not provided.
+
+    Attributes
+    ----------
+    label : str
+    particle : Particle
+        Result of ``Particle.from_label(particle)``.
+    wavelength : float
+    units_wave : str
+    latex_label : str or None
+    core : Line or None
+    group_label : str or None
+    group : str or None
+    list_comps : list of Line
+        Component list; defaults to ``[self]`` when not provided.
+    ref_idx : int
+        Index of the reference component within ``list_comps``.
+    mask : any
+    pixel_mask : str or any
+        Defaults to ``"no"`` if not given.
+    kinem : any
+    trans : any
+        Result of ``recover_transition(self.particle, trans)``.
+    profile : any
+    shape : any
+    measurements : any or None
+        Placeholder for later measurement results (populated downstream).
+
+    Examples
+    --------
+    Single, standalone line:
+
+    >>> Hbeta = Line(label="H1_4861A", particle="H1", wavelength=4861.33, units_wave="Angstrom")
+
+    Blended feature with explicit core component:
+
+    >>> comp1 = Line(label="O2_3726A", particle="O2", wavelength=3726.03, units_wave="Angstrom")
+    >>> comp2 = Line(label="O2_3729A", particle="O2", wavelength=3728.82, units_wave="Angstrom")
+    >>> OII_blend = Line(label="O2_3726A", group="b", list_comps=[comp1, comp2], core=comp1)
+    >>> OII_blend.ref_idx  # uses core component index
+
+    """
+
     def __init__(self, label, particle=None, wavelength=None, units_wave=None, latex_label=None, core=None,
                  group_label=None, group=None, list_comps=None, mask=None, kinem=None, trans=None, profile=None,
                  shape=None, pixel_mask=None):
@@ -1060,6 +1369,102 @@ class Line:
     @classmethod
     def from_transition(cls, label, fit_cfg=None, data_frame=None, parent_group_label=None, norm_flux=None,
                         def_shape=None, def_profile=None, verbose=True, warn_missing_db=False):
+
+        """
+        Construct a :class:`Line` instance from transition label and optional user input fit_cfg and lines frame.
+
+        This class method compiles all relevant parameters for a spectral line following a defined hierarchy of input sources.
+        At the lowest level, default values are retrieved from LiMe’s internal line database. These can be overridden by entries
+        in the user-provided lines frame, which in turn are superseded by parameters in the fitting configuration (`fit_cfg`).
+        Finally, label suffixes take the highest precedence.
+
+        Grouped (blended or merged) lines are recursively reconstructed into the ``list_comps`` attribute.
+
+
+        Parameters
+        ----------
+        label : str
+            Identifier of the target spectral line (e.g., ``"O3_5007A"`` or ``"H1_4861A"``).
+        fit_cfg : dictionary, optional
+            Fitting configuration defining line metadata such as wavelength, particle,
+            and/or group components. This dictionary can be generated from a TOML file,
+            where each transition is defined by its label.
+            Example TOML snippet:
+
+        data_frame : pandas.DataFrame, optional
+            Table containing line measurement data.
+            The expected columns are:
+
+            ``"wavelength", "wave_vac", "w1", "w2", "w3", "w4", "w5", "w6", "latex_label", "units_wave", "particle", "trans"``
+
+            If any of these columns are missing, the function attempts to recover missing
+            information from LiMe’s default database at ``lime.lineDB``.
+
+        parent_group_label : str, optional
+            Label for the parent group when constructing component lines of a blend or merged group.
+            Used internally during recursive creation.
+
+        norm_flux : float, optional
+            Normalization factor for fluxes in the measurements table.
+
+        def_shape : str, optional
+            Default line shape to use if not provided in the configuration or database.
+            Defaults to ``rsrc_manager.lineDB.get_shape()``.
+
+        def_profile : str, optional
+            Default line profile model to use if not provided in the configuration or database.
+            Defaults to ``rsrc_manager.lineDB.get_profile()``.
+
+        verbose : bool, optional
+            If ``True``, print informative messages during line reconstruction.
+
+        warn_missing_db : bool, optional
+            If ``True``, issue warnings when the line label is not found in the LiMe database.
+
+        Returns
+        -------
+        Line
+            A fully constructed :class:`Line` instance. For grouped or blended transitions,
+            this object includes a populated ``list_comps`` of component :class:`Line` objects
+            and a combined ``latex_label``.
+
+        Notes
+        -----
+        - The function calls :func:`parse_container_data` to merge information from the
+          configuration, measurement table, and LiMe’s default database.
+        - If ``data_frame`` corresponds to a valid measurements table (verified via
+          :func:`check_measurements_table`), the resulting ``Line`` includes a
+          :class:`LineMeasurements` instance loaded with the corresponding data.
+        - Grouped transitions (blends) are recursively reconstructed via
+          :meth:`Line.from_transition` for each component listed in
+          ``line_params['list_comps']``.
+
+        Examples
+        --------
+        Create a single emission line directly from the database:
+
+        >>> Hbeta = Line.from_transition("H1_4861A")
+
+        If reading the configuration from a TOML file such as the one below:
+
+        .. code-block:: toml
+
+           transitions.O2_3726A_m.wavelength = 3728.484
+           transitions.O2_7325A_m.wavelength = 7325.000
+           transitions.O2_7325A_b.wavelength = 7325.000
+
+           O2_3726A_m = 'O2_3726A+O2_3729A'
+           O2_3726A_b = 'O2_3726A+O2_3729A'
+
+        The line can be generated as:
+
+        >>> fit_cfg_dict = Line.load_cfg("conf.toml")
+        >>> OII = Line.from_transition("O2_3726A_m", fit_cfg=fit_cfg_dict)
+
+        Or including a lines frame:
+
+        >>> line = Line.from_transition("O3_5007A", fit_cfg=fit_cfg_dict, data_frame="lines_table.txt")
+        """
 
         # Extract line parameters from the input containers
         line_params = parse_container_data(label,

@@ -10,14 +10,14 @@ from matplotlib.ticker import NullLocator
 from astropy.io import fits
 from re import sub
 
-from ..io import load_frame, save_frame, LiMe_Error, check_file_dataframe
-from .plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_parser,\
+from lime.io import load_frame, save_frame, LiMe_Error, check_file_dataframe
+from lime.plotting.plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_parser,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
                     image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme, line_band_plotter, spec_mask_plotter, \
                     line_band_scaler, spec_profile_plotter
 
-from lime.tools import pd_get, unique_line_arr
-from ..transitions import label_decomposition, Line
+from lime.tools import pd_get, unique_line_arr, bands_idcs_review
+from lime.transitions import label_decomposition, Line
 
 _logger = logging.getLogger('LiMe')
 
@@ -202,66 +202,90 @@ class BandsInspection:
               col_row_scale=(1, 0.5), fig_cfg=None, in_fig=None, maximize=False, **kwargs):
 
         """
-        This function launches an interactive plot from which to select the line bands on the observed spectrum. If this
-        function is run a second time, the user selections won't be overwritten.
+        Launch an interactive line-bands editor and save selections to a lines frame file.
 
-        The ``bands_file`` argument provides to the output database on which the user selections will be saved.
+        This tool opens a  plot grid, one per spectral line, allowing you to
+        **inspect** each region and **adjust the band central edges (w3–w4)** used for
+        measurements. Edits are written to ``fname`` (a bands table on disk). If you
+        run the editor again on the same file, **existing user selections are preserved**.
 
-        The ``ref_bands`` argument provides the reference database. The default database will be used if none is provided.
+        A reference lines frame with the candidate lines can be provided via ``bands`` the default LiMe bands database is used.
 
-        The ``y_scale`` sets the flux scale for the lines grid.
-        The default "auto" value automatically switches between the matplotlib `scale keywords
-        <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html>`_, otherwise the user can set a
-        uniform scale for all.
+        The function accepts the arguments from the :meth:`lime.Spectrum.retrieve.lines_frame` to adjust the default database
+        values.
 
-        If the user wants to adjust the observation redshift and save the new values the ``z_log_address`` sets an output
-        dataframe. The ``object_label`` and ``z_column`` provide the row and column indexes to save the new redshift.
+        If `show_continua=True`` the user can also adjust the continua bands region.
 
-        The default axes and plot titles can be modified via the ``ax_cfg``. These dictionary keys are "xlabel", "ylabel"
-        and "title". It is not necessary to include all the keys in this argument.
+        **Left-click and drag** within a subplot to adjust the wavelength band limits interactively.
 
-        The `online documentation <https://lime-stable.readthedocs.io/en/latest/tutorials/n_tutorial2_lines_inspection.html>`_
-        provides more details on the mechanics of this plot function.
+        A **middle-click** on a subplot to cycle through the line group types in the output bands file.
+        The available suffixes are: blended (``_b``), merged (``_m``), and single (no suffix). The line label in the
+        plot title updates accordingly.
 
-        :param bands_file: Output file address for user bands selection.
-        :type bands_file: str, pathlib.Path
+        A **right-click** adds/remove a line from the selection (exluded lines have a red background)
 
-        :param ref_bands: Reference bands dataframe or its file address. The default database will be used if none is provided.
-        :type ref_bands: pandas.Dataframe, str, pathlib.Path, optional
+        Parameters
+        ----------
+        fname : str or pathlib.Path
+            Output file path where the edited bands table will be saved.
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Reference bands table (or path) providing initial band limits for each line.
+            If ``None``, the default LiMe bands database is used. See
+            :ref:`bands documentation <line-bands-doc>`.
+        default_status : bool, optional
+            Initial selection status to apply **only** when a line has no existing entry
+            in ``fname`` (i.e., on first creation). Default is ``True``.
+        show_continua : bool, optional
+            If ``True``, draw the continuum side bands in each panel. Default ``False``.
+        y_scale : {"auto", "linear", "log"}, optional
+            Flux scale for all panels. ``"auto"`` chooses a sensible scale per panel;
+            otherwise force Matplotlib’s ``"linear"`` or ``"log"``. Default ``"auto"``.
+        n_cols : int, optional
+            Number of columns in the grid. Default ``6``.
+        n_rows : int, optional
+            Number of rows in the grid. If ``None``, it is inferred from the number of lines.
+        col_row_scale : tuple of (float, float), optional
+            Multiplicative factors for panel width and height (rough layout scaling).
+            Default ``(1, 0.5)``.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration (e.g., size, DPI). See `matplotlib.RcParams
+            <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing figure to plot into. If ``None``, a new figure is created.
+        maximize : bool, optional
+            If ``True``, maximize the window after rendering. Default ``False``.
+        **kwargs
+            Additional keyword arguments passed to :meth:`lime.Spectrum.retrieve.lines_frame`
 
-        :param y_scale: Matplotlib `scale keywords <https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html>`_.
-                        The default value is "auto".
-        :type y_scale: str, optional.
+        Notes
+        -----
+        - Band edits (w1–w6) are written to ``fname`` immediately when saved/closed.
+        - If no changes are performed the output ``fname`` will not be created.
+        - Existing entries in ``fname`` are **not overwritten**; new lines inherit
+          their initial state from ``default_status``.
+        - **Left-click and drag** within a subplot to adjust the wavelength band limits.
+        - **Right-click** on a line subplot to include or exclude the line from the output bands file.
+            Excluded lines are displayed with a red background.
+        - **Middle-click** on a subplot to cycle through the line group types in the output bands file.
+            The available suffixes are: blended (``_b``), merged (``_m``), and single (no suffix).
+            The line label in the plot title updates accordingly.
 
-        :param n_cols: Number of columns in plot grid. The default value is 6.
-        :type n_cols: int, optional.
+        Examples
+        --------
+        Start from the default database and save to a new file:
 
-        :param n_rows: Number of rows in plot grid.
-        :type n_rows: int, optional.
+        >>> spec.check.bands("my_bands.xlsx")
 
-        :param col_row_scale: Multiplicative factor for the grid plots width and height. The default value is (2, 1.5).
-        :type col_row_scale: tuple, optional.
+        Initialize from an existing bands table and show the continua bands for the selection:
 
-        :param z_log_address: Output address for redshift dataframe file.
-        :type z_log_address: str, pathlib.Path, optional
+        >>> spec.check.bands("session_bands.xlsx", bands="ref_bands.xlsx", show_continua=True)
 
-        :param object_label: Object label for redshift dataframe row indexing.
-        :type object_label: str, optional
+        Adjusting the initial ``bands`` generation with the arguments from the  with the
+        :meth:`lime.Spectrum.retrieve.lines_frame` function
 
-        :param z_column: Column label for redshift dataframe column indexing. The default value is "redshift".
-        :type z_column: str, optional
-
-        :param n_pixels: Maximum number of pixels for the bands correction slider. The default value is 10.
-        :type n_pixels: int, optional
-
-        :param fig_cfg: Dictionary with the matplotlib `rcParams parameters <https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-dynamic-rc-settings>`_ .
-        :type fig_cfg: dict, optional
-
-        :param ax_cfg: Dictionary with the plot "xlabel", "ylabel" and "title" values.
-        :type ax_cfg: dict, optional
-
-        :param maximize: Maximise plot window. The default value is False.
-        :type maximize:  bool, optional
+        >>> gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_correction=True,
+        >>>                     map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200, 'O3_4959A': 250, 'O3_5007A': 250},
+        >>>                     fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, show_continua=True, maximize=True)
 
         """
 
@@ -340,6 +364,9 @@ class BandsInspection:
         mask = self.log.loc[line, 'w1':'w6'].to_numpy() * self.z_corr
         idcs_band = np.searchsorted(self.wave_plot, mask)
 
+        # Review the bands edges
+        idcs_band = bands_idcs_review(line, idcs_band, self.wave_plot, correct_continua=True)
+
         # Just the center region is adjusted
         if self.show_continua:
             idxL = idcs_band[2] - 10 if idcs_band[2] - 10 > 0 else 0
@@ -356,7 +383,7 @@ class BandsInspection:
 
         # Continuum bands
         line_band_plotter(ax, self.wave_plot, self.flux_plot, self.z_corr, idcs_band, line, theme.colors,
-                          show_continua=self.show_continua)
+                          show_adjacent=self.show_continua)
 
         # Plot the masked pixels
         spec_mask_plotter(ax, self.idcs_mask[idxL:idxH], self.wave_plot[idxL:idxH], self.flux_plot[idxL:idxH],
@@ -833,112 +860,116 @@ class CubeInspection:
     def cube(self, line_bg, bands=None, line_fg=None, min_pctl_bg=60, cont_pctls_fg=(90, 95, 99), bg_cmap='gray',
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
-             lines_file=None, ext_frame_suffix='_LINELOG', maintain_y_zoom=True, wcs=None, spaxel_selection_button=1,
+             fname=None, ext_frame_suffix='_LINELOG', maintain_y_zoom=True, wcs=None, spaxel_selection_button=1,
              add_remove_button=3, maximize=False):
 
         """
+        Open an interactive cube viewer: image map (left) + spaxel spectrum (right).
 
-        This function opens an interactive plot to display and individual spaxel spectrum from the selection on the
-        image map.
+        The left panel shows a band-summed flux map for ``line_bg`` (bands from ``bands`` or
+        the default database). Optionally overlay **foreground contours** from ``line_fg``.
+        Clicking on a spaxel updates the right panel with that spaxel’s spectrum. If
+        a ``lines_file`` FITS log is provided, fitted profiles for the selected spaxel
+        are also displayed.
 
-        The left-hand side plot displays an image map with the flux sum of a line band as described on the
-        Cube.plot.cube documentation.
+        If a mask file is supplied (``masks_file``), a radio selector appears to toggle
+        which binary mask is active/visible. You can add/remove the currently selected
+        spaxel to/from the active mask using a configurable mouse button.
 
-        A right-click on a spaxel of the band image map will plot the selected spaxel spectrum on the right-hand side plot.
-        This will also mark the spaxel with a red cross.
+        Parameters
+        ----------
+        line_bg : str
+            Line label for the background image (band-summed flux). See :ref:`bands documentation <line-bands-doc>`.
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Bands table (or path). If ``None``, the default LiMe bands database is used.
+        line_fg : str, optional
+            Line label for foreground **contours**. If provided, contours are computed
+            from that line’s band-summed flux using ``cont_pctls_fg``.
+        min_pctl_bg : float, optional
+            Minimum percentile of the background band-summed flux used to set the lower
+            display limit when ``bg_norm`` is not supplied. Default is ``60``.
+        cont_pctls_fg : tuple of float, optional
+            Sorted percentiles for foreground contours. Default is ``(90, 95, 99)``.
+        bg_cmap : str, optional
+            Colormap name for the background image. Default is ``"gray"``.
+        fg_cmap : str, optional
+            Colormap name for the foreground contours. Default is ``"viridis"``.
+        bg_norm : matplotlib.colors.Normalize, optional
+            Normalization for the background image. If ``None``, a symmetric-log style
+            normalization is used (sensible defaults for wide dynamic ranges).
+        fg_norm : matplotlib.colors.Normalize, optional
+            Normalization for the foreground contours. If ``None``, a logarithmic
+            normalization is used.
+        masks_file : str or pathlib.Path, optional
+            Path to a FITS file with binary spatial masks to overlay and edit.
+        masks_cmap : str, optional
+            Colormap used to render masks. Default is ``"viridis_r"``.
+        masks_alpha : float, optional
+            Alpha transparency for mask overlays (0–1). Default is ``0.2``.
+        rest_frame : bool, optional
+            If ``True``, show the spectrum panel in rest-frame wavelengths. Default ``False``.
+        log_scale : bool, optional
+            If ``True``, plot the spectrum panel with a logarithmic flux scale. Default ``False``.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing figure to plot into. If ``None``, a new figure is created.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration (e.g., size, DPI). See `matplotlib.RcParams
+            <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        ax_cfg_image : dict, optional
+            Axes label/title overrides for the **image** panel; keys may include
+            ``"xlabel"``, ``"ylabel"``, and ``"title"``.
+        ax_cfg_spec : dict, optional
+            Axes label/title overrides for the **spectrum** panel; keys may include
+            ``"xlabel"``, ``"ylabel"``, and ``"title"``.
+        fname : str or pathlib.Path, optional
+            Path to a FITS lines-log file. If provided, fitted profiles for the selected
+            spaxel are displayed when available. Each spaxel page must be named
+            ``"{j}-{i}{ext_frame_suffix}"`` (e.g., ``"25-30_LINELOG"``).
+        ext_frame_suffix : str, optional
+            Suffix used to match spaxel pages inside ``lines_file``. Default ``"_LINELOG"``.
+        maintain_y_zoom : bool, optional
+            If ``True`` (default), preserve the current y-axis zoom on the spectrum panel
+            when selecting different spaxels; if ``False``, autoscale on each selection.
+        wcs : astropy.wcs.WCS, optional
+            WCS to use for the image panel. If ``None``, the cube’s WCS is used when available.
+            See `Astropy WCS <https://docs.astropy.org/en/stable/wcs/index.html>`_.
+        spaxel_selection_button : int, optional
+            Mouse button used to **select/preview** a spaxel on the image panel.
+            Default is ``1`` (LEFT). Matplotlib button mapping: LEFT=1, MIDDLE=2, RIGHT=3,
+            BACK=8, FORWARD=9.
+        add_remove_button : int, optional
+            Mouse button used to **add/remove** the selected spaxel to/from the active mask.
+            Default is ``3`` (RIGHT). Matplotlib button mapping: LEFT=1, MIDDLE=2, RIGHT=3,
+            BACK=8, FORWARD=9.
+        maximize : bool, optional
+            If ``True``, maximize the window after rendering. Default ``False``.
 
-        If the user provides a ``masks_file`` the plot window will include a dot mask selector. Activating one mask will
-        overplotted on the image band. A middle button click on the image band will add/remove a spaxel to the current
-        pixel selected masks. If the spaxel was part of another mask it will be removed from the previous mask region.
+        Notes
+        -----
+        - **Interactivity:**
+          - Click the image panel with ``spaxel_selection_button`` to update the spectrum panel.
+          - Click the image panel with ``add_remove_button`` to toggle the selected spaxel in the active mask (when ``masks_file`` is provided).
+          - A round button selection changes the active mask.
+        - **Fitted profiles:** If :mod:`mplcursors` is installed and a fitted profile is
+          displayed, left-click shows fit parameters and right-click removes the tooltip.
+        - **Dynamic range tip:** With large flux dynamic ranges, percentile-based contour
+          levels may appear non-linear in visual spacing.
+        - **WCS handling:** If a valid WCS is provided (or available from the cube),
+          the image panel uses WCS projection and labeled axes.
 
-        If the user provides a ``lines_log_file`` .fits file, the fitted profiles will be included on its corresponding
-        spaxel spectrum plot. The measurements logs on this ".fits" file must be named using the spaxel array coordinate
-        and the suffix on the ``ext_log`` argument.
+        Examples
+        --------
+        Basic interactive viewer with contours:
 
-        If the user has installed the library `mplcursors <https://mplcursors.readthedocs.io/en/stable/>`_, a left-click
-        on a fitted profile will pop-up properties of the fitting, right-click to delete the annotation.
+        >>> cube.plot.cube("O3_5007A", line_fg="H1_6563A")
 
-        By default the left mouse button selects the displayed spaxel (if you use the zoom tool the first click
-        will switch the spaxel). The right mouse button will add/remove pixels from the current mask. You can switch the
-        mouse buttons for these operations using the Matplotlib classification: LEFT = 1, MIDDLE = 2, RIGHT = 3, BACK = 8
-        and FORWARD = 9
+        Use a masks file and RIGHT-click to add/remove spaxels from the active mask:
 
+        >>> cube.plot.cube("H1_6563A", masks_file="halpha_masks.fits", add_remove_button=3)
 
-        :param line_bg: Line label for the spatial map background image.
-        :type line_bg: str
+        Show fitted profiles from a measurements log:
 
-        :param bands: Bands dataframe (or file address to the dataframe).
-        :type bands: pandas.Dataframe, str, path.Pathlib, optional
-
-        :param line_fg: Line label for the spatial map background image contours
-        :type line_fg: str, optional
-
-        :param min_pctl_bg: Minimum band flux percentile for spatial map background image. The default value is 60.
-        :type min_pctl_bg: float, optional
-
-        :param cont_pctls_fg: Band flux percentiles for foreground ``line_fg`` contours. The default value is (90, 95, 99)
-        :type cont_pctls_fg: tuple, optional
-
-        :param bg_cmap: Background image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-                        The default value is "gray".
-        :type bg_cmap: str, optional
-
-        :param fg_cmap: Foreground image flux `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-                        The default value is "viridis".
-        :type fg_cmap: str, optional
-
-        :param bg_norm: Background image `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-                        The default value is `SymLogNorm <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-        :type bg_norm: Normalization from matplotlib.colors, optional
-
-        :param fg_norm: Foreground contours `color normalization <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-                        The default value is `LogNorm <https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.LogNorm.html>`_.
-        :type fg_norm: Normalization from matplotlib.colors, optional
-
-        :param masks_file: File address for binary spatial masks
-        :type masks_file: str, optional
-
-        :param masks_cmap: Binary masks `color map <https://matplotlib.org/stable/gallery/images_contours_and_fields/colormap_normalizations.html>`_.
-        :type masks_cmap: str, optional
-
-        :param masks_alpha: Transparency alpha value. The default value is 0.2 (0 to 1 scale).
-        :type masks_alpha: float, optional
-
-        :param rest_frame: Set to True for a display in rest frame. The default value is False
-        :type rest_frame: bool, optional
-
-        :param log_scale: Set to True for a display with a logarithmic scale flux. The default value is False
-        :type log_scale: bool, optional
-
-        :param fig_cfg: `Matplotlib RcParams <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_
-                        parameters for the figure format
-        :type fig_cfg: dict, optional
-
-        :param ax_cfg_image: Dictionary with the image band flux plot "xlabel", "ylabel" and "title" values.
-        :type ax_cfg_image: dict, optional
-
-        :param ax_cfg_spec: Dictionary with the spaxel spectrum plot "xlabel", "ylabel" and "title" values.
-        :type ax_cfg_spec: dict, optional
-
-        :param lines_file: Address for the line measurements log ".fits" file.
-        :type lines_file: str, pathlib.Path, optional
-
-        :param ext_frame_suffix: Suffix for the line measurements log spaxel page name
-        :type ext_frame_suffix: str, optional
-
-        :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
-        :type wcs: astropy WCS, optional
-
-        :param spaxel_selection_button: Mouse button for switching displayed spaxel. The default value is 1 (left button).
-        :type spaxel_selection_button: int, optional
-
-        :param add_remove_button: Mouse button to add/remove spaxels from the current mask. The default value is 2 (right button).
-        :type add_remove_button: int, optional
-
-        :param maximize: Maximise plot window. The default value is False.
-        :type maximize:  bool, optional
-
-
+        >>> cube.plot.cube("O3_5007A", fname="linelog.fits", ext_frame_suffix="_LINELOG")
         """
 
         self.ext_log = ext_frame_suffix
@@ -979,11 +1010,11 @@ class CubeInspection:
         self.key_coords = int(self._cube.flux.shape[1]/2), int(self._cube.flux.shape[2]/2)
 
         # Load the complete fits lines log if input
-        if lines_file is not None:
-            if Path(lines_file).is_file():
-                self.hdul_linelog = fits.open(lines_file, lazy_load_hdus=False)
+        if fname is not None:
+            if Path(fname).is_file():
+                self.hdul_linelog = fits.open(fname, lazy_load_hdus=False)
             else:
-                _logger.info(f'The lines log at {lines_file} was not found.')
+                _logger.info(f'The lines log at {fname} was not found.')
 
         # Get figure configuration
         fig_conf = theme.fig_defaults(fig_cfg, fig_type='cube_interactive')

@@ -12,12 +12,13 @@ tolerance_rms = 3
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent.parent /'examples/0_resources/results/'
-spectra_folder = Path(__file__).parent.parent/'examples/0_resources/spectra'
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+spectra_folder = data_folder/'spectra'
+outputs_folder = data_folder/'results'
 
 # Fitting example for text fil
-redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531, 'ceers1027': 7.8189, 'NGC6552':0.0266,
-                 'MRK209': 0.000932}
+redshift_dict = {'SHOC579': 0.0475, 'Izw18': 0.00095, 'gp121903': 0.19531,
+                 'ceers1027': 7.8189, 'NGC6552':0.0266, 'MRK209': 0.000932}
 
 
 class TestOpenFits:
@@ -189,7 +190,7 @@ class TestOpenFits:
         assert ceers1027.redshift == redshift_dict['ceers1027']
         assert ceers1027.units_wave == 'um'
         assert ceers1027.units_flux.scale == 1
-        assert ceers1027.units_flux.bases[0] == 'MJy'
+        assert ceers1027.units_flux.bases[0] == 'Jy'
         assert ceers1027.norm_flux == 1
 
         return

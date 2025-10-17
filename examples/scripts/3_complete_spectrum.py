@@ -1,11 +1,13 @@
+from pathlib import Path
 import lime
 
 # State the data files
-data_folder = '../0_resources/spectra'
-obsFitsFile = f'{data_folder}/gp121903_osiris.fits'
-lineBandsFile = '../0_resources/bands/gp121903_bands.txt'
-cfgFile = '../0_resources/long_slit.toml'
-osiris_gp_df_path = '../0_resources/bands/osiris_green_peas_linesDF.txt'
+data_folder = Path('../doc_notebooks/0_resources/')
+obsFitsFile = f'{data_folder}/spectra/gp121903_osiris.fits'
+lineBandsFile = f'{data_folder}/bands/gp121903_bands.txt'
+
+cfgFile = f'{data_folder}/long_slit.toml'
+osiris_gp_df_path =  f'{data_folder}/bands/osiris_green_peas_linesDF.txt'
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)
@@ -23,7 +25,7 @@ match_bands = gp_spec.infer.peaks_troughs(lineBandsFile, emission_shape=True, si
 
 # Fit the lines
 gp_spec.fit.frame(match_bands, obs_cfg, obj_cfg_prefix='gp121903_osiris', update_default=True)
-gp_spec.plot.spectrum()
+gp_spec.plot.spectrum(log_scale=True)
 
 # Instrument - file dictionary
 files_dict = {'osiris': 'gp121903_osiris.fits', 'isis': 'IZW18_isis.fits',
@@ -36,7 +38,7 @@ object_dict = {'osiris':'gp121903', 'nirspec':'ceers1027', 'isis':'Izw18', 'sdss
 for i, items in enumerate(object_dict.items()):
 
     inst, obj = items
-    file_path = f'{data_folder}/{files_dict[inst]}'
+    file_path = f'{data_folder}/spectra/{files_dict[inst]}'
     redshift = obs_cfg[inst][obj]['z']
     print('\n', obj, inst, redshift)
 
@@ -56,10 +58,10 @@ for i, items in enumerate(object_dict.items()):
                                            automatic_grouping=True, ref_bands=osiris_gp_df_path)
 
     # Fit the lines and plot the measurements
-    spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix=f'{obj}_{inst}', line_detection=True, cont_from_bands=False)
+    spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix=f'{obj}_{inst}', line_detection=True)
 
     # Save the measurements
-    spec.save_frame(f'../0_resources/results/{obj}_{inst}_line_frame.txt')
+    spec.save_frame(f'{data_folder}/results/{obj}_{inst}_line_frame.txt')
 
     # Plot the profiles.plot.grid()
     spec.plot.grid()

@@ -26,7 +26,7 @@ def test_gaussian():
 
     y_array = gaussian_array + cont_array + noise_array
     spec = lime.Spectrum(x_array, y_array, redshift=0, norm_flux=1)
-    spec.fit.bands('H1_4861A')
+    spec.fit.bands('H1_4861A', cont_source='adjacent')
 
     assert np.allclose(spec.fit.line.measurements.amp, amp, rtol=0.01)
     assert np.allclose(spec.fit.line.measurements.center, mu, rtol=0.01)

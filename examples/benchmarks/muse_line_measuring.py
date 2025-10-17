@@ -49,4 +49,4 @@ cgcg007 = lime.Cube(wave_array, flux_cube, err_cube, redshift=z_obj, norm_flux=n
 cgcg007.check.cube('H1_6563A', masks_file=mask_file, rest_frame=True)
 
 # Perform the measurements
-cgcg007.fit.spatial_mask(mask_file, line_detection=True, output_address=log_file, fit_cfg=cfg)
+cgcg007.fit.spatial_mask(mask_file, line_detection=True, fname=log_file, fit_cfg=cfg)

@@ -69,7 +69,6 @@ class Themer:
         self.set_style(style)
 
 
-
         return
 
 

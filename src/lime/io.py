@@ -8,7 +8,8 @@ __all__ = [
     'log_to_HDU',
     '_LOG_EXPORT_RECARR',
     '_LOG_EXPORT',
-    '_LOG_COLUMNS']
+    '_LOG_COLUMNS',
+    'lime_cfg']
 
 import os
 import configparser
@@ -56,7 +57,17 @@ _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
 _PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep=r'\s+', header=0, index_col=0)
 
-# _LINES_DATABASE_FILE = _LIME_FOLDER/'resources/lines_database_v2.0.0.txt'
+# Read lime configuration .toml
+_conf_path = _LIME_FOLDER/'lime.toml'
+with open(_conf_path, mode="rb") as fp:
+    lime_cfg = tomllib.load(fp)
+
+# Convert null entries to None
+for obs_type in ('long_slit', 'cube'):
+    for inst in lime_cfg[f'instrument_params'][obs_type].keys():
+        for param, value in lime_cfg[f'instrument_params'][obs_type][inst].items():
+            if value == 'null':
+                lime_cfg[f'instrument_params'][obs_type][inst][param] = None
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
