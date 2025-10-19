@@ -1,5 +1,4 @@
-# from lime.io import load_frame, _LIME_FOLDER
-# from lime.transitions import line_bands
+# File for LiMe databases the user can interface with
 
 lineDB = None
 

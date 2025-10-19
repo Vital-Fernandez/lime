@@ -597,7 +597,6 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
         # Advance Scientific Storage Format
         elif file_type == '.asdf':
-            # TODO review this one and add the metadata
             tree = {page: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
 
             # Create new file

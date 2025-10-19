@@ -7,15 +7,15 @@ __all__ = ['unit_conversion',
 import logging
 import numpy as np
 import pandas as pd
-
-from .io import LiMe_Error, load_frame, log_to_HDU
 from sys import stdout
+from pathlib import Path
 
 from astropy import units as au
 from astropy.units.core import CompositeUnit, IrreducibleUnit, Unit
 
 from astropy.io import fits
-from pathlib import Path
+
+from lime.io import LiMe_Error, load_frame, log_to_HDU
 
 _logger = logging.getLogger('LiMe')
 

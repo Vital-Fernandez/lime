@@ -42,7 +42,7 @@ map_band_vsigma.S3_9531A = 70
 map_band_vsigma.H1_9546A = 70
 
 grouped_lines = ['O2_3726A_b', 'Fe3_4658A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b', 'O1_6300A_b']
-rejected_lines = ['S3_3722A', 'Fe3_4008A', 'S2_4076A', 'Fe2_4287A', 'Fe2_4358A', 'Fe3_4881A', 'Ar3_5192A']
+rejected_lines = ['H1_3722A', 'H1_3734A', 'Fe3_4008A', 'S2_4076A', 'Fe2_4287A', 'Fe2_4358A', 'Fe3_4881A', 'Ar3_5192A']
 
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [3, 2, 1.5]

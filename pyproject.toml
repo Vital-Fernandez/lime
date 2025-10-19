@@ -17,7 +17,6 @@ dependencies = ["astropy~=7.1",
                 "numpy~=2.3",
                 "pandas~=2.2",
                 "scipy~=1.16",
-                "aspect-stable~=0.4.1",
                 "tomli >= 2.0.0 ; python_version < '3.11'"]
 
 classifiers = ["Programming Language :: Python :: 3",
@@ -25,6 +24,7 @@ classifiers = ["Programming Language :: Python :: 3",
 
 [project.optional-dependencies]
 full = ["asdf~=4.1",
+        "aspect-stable~=0.4.1",
         "bokeh~=3.8",
         "mplcursors~=0.6",
         "openpyxl~=3.1",

@@ -7,7 +7,7 @@ from lime.plotting.plots import frame_mask_switch, line_profile_generator
 from lime.plotting.utils import color_selector
 from lime.io import check_file_dataframe, LiMe_Error
 from lime.plotting.utils import parse_bands_arguments
-from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation
+from lime.fitting.lines import profiles_computation, linear_continuum_computation
 
 try:
     from bokeh import plotting

@@ -6,6 +6,7 @@ try:
 except ImportError:
     aspect_check = False
 
+
 if not aspect_check:
     class FeatureDetection(LineFinder):
         def __init__(self, spectrum):

@@ -23,8 +23,8 @@ def parse_bands_arguments(label, bands, log, norm_flux=None):
         line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
 
     elif label is not None and label in lineDB.frame.index:
-        # line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
         line = Line.from_transition(label)
+        # line = Line(label, band=lineDB.frame.loc[label, 'w1':'w6'].to_numpy())
 
     else:
         _logger.warning(f'Line {label} has not been measured')

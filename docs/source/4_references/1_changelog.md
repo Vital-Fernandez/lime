@@ -113,3 +113,4 @@
 - Creating a spectrum object where all the entries are masked now produces a critical warning instead of raising an error.
 - By default line_bands.
 - Added bands_from_log function
+- Change "output_address" argument name to "fname" across functions

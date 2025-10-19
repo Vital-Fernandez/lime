@@ -5,7 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 from numpy.core.fromnumeric import argmin
 
-from lime.io import _LOG_EXPORT, _LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame, _LIME_FOLDER
+from lime.io import _LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame, _LIME_FOLDER
 from lime.tools import pd_get, au, unit_conversion
 from lime import rsrc_manager
 

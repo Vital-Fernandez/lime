@@ -81,34 +81,6 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
                     raise LiMe_Error(f'The automatic grouping did not find the components for the {comp}={group_label}. '
                                      f'Please check the configuration dictionary')
 
-
-                # # Homogeneous group
-                # if '_m' not in group_label:
-                #     lines_i = group_label.split('+')
-                #     groups_i = [True] * (len(lines_i) - 1) if comp[-2:] == '_b' else [False] * (len(lines_i) - 1)
-                #
-                # # Mixed group (merged child line in the blended parent group)
-                # else:
-                #     lines_i, groups_i = [], []
-                #     for i, line in enumerate(group_label.split('+')):
-                #         if line[-2:] != '_m':       # Single line
-                #             lines_i.append(line)
-                #             groups_i.append(0)
-                #         else:                       # Merged line
-                #             sub_group_label = fit_conf.get(line)
-                #             if sub_group_label:
-                #                 items = sub_group_label.split('+')
-                #                 lines_i += items
-                #                 groups_i += [i] * len(items)
-                #             else:
-                #                 raise LiMe_Error(f'The merged line: "{line}" in grouped line: "{comp}={group_label}" '
-                #                                  f'is not specified.\nPlease define a "{line}=LineA+LineB" '
-                #                                  f'in your configuration file.')
-                #
-                #     # Convert the sub_group_type to the relation
-                #     groups_i = np.diff(groups_i).astype(bool)
-
-                    # Not components with blended kinematics only:
                 # Only components with more than one kinematic component
                 if len(groups_i) > 0:
 
@@ -197,11 +169,6 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False)
         line = Line.from_transition(new_label, fit_cfg=fit_cfg)
         old_label = line.list_comps[line.ref_idx].core
 
-        # unique_comp_list = list(np.unique(line.param_arr('core')))
-
-        # for trans in line.list_comps:
-        #     if trans.kinem == 0:
-        #         unique_comp_list += list(trans.param_arr('core'))
         # Extract the single components from the sub-transitions if necessary
         unique_comp_list = []
         for trans in line.list_comps: unique_comp_list += list(trans.param_arr('core'))

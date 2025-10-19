@@ -8,13 +8,6 @@ from lime.io import check_file_dataframe, LiMe_Error
 from lime.transitions import label_decomposition
 from lime.plotting.plots import spec_peak_calculation
 
-try:
-    import joblib
-    joblib_check = True
-except ImportError:
-    joblib_check = False
-
-
 _logger = logging.getLogger('LiMe')
 
 MACHINE_PATH = None

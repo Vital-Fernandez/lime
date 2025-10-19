@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import pandas as pd
+from re import sub
 
 from pathlib import Path
 from matplotlib import pyplot as plt, rc_context
@@ -8,7 +9,6 @@ from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from matplotlib.ticker import NullLocator
 from astropy.io import fits
-from re import sub
 
 from lime.io import load_frame, save_frame, LiMe_Error, check_file_dataframe
 from lime.plotting.plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_parser,\

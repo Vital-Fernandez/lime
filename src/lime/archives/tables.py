@@ -9,12 +9,12 @@ except ImportError:
     pylatex_check = False
 
 
-def numberStringFormat(value, cifras=4):
+def numberStringFormat(value, sig_digits=4):
 
     if value > 0.001:
-        newFormat = f'{value:.{cifras}f}'
+        newFormat = f'{value:.{sig_digits}f}'
     else:
-        newFormat = f'{value:.{cifras}e}'
+        newFormat = f'{value:.{sig_digits}e}'
 
     return newFormat
 

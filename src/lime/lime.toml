@@ -2,9 +2,9 @@
 name = 'lime-stable'
 version = "2.0.1"
 
-# ============================================================
+# =====================
 # Spectrum / Long-slit
-# ============================================================
+# =====================
 
 [instrument_params.long_slit]
 nirspec.norm_flux = 'null'
@@ -63,9 +63,9 @@ text.units_flux = "FLAM"
 text.pixel_mask = 'null'
 text.id_label = 'null'
 
-# ============================================================
+# =======================
 # Cube / IFU Instruments
-# ============================================================
+# =======================
 
 [instrument_params.cube]
 manga.norm_flux = 'null'

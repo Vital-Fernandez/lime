@@ -2,9 +2,9 @@ import logging
 import numpy as np
 from scipy.optimize import minimize, linear_sum_assignment
 
-from ..io import LiMe_Error
+from lime.io import LiMe_Error
 from lime.fitting.lines import compute_inst_sigma_array, gaussian_model
-from ..plotting.plots import redshift_key_evaluation, redshift_permu_evaluation
+from lime.plotting.plots import redshift_key_evaluation, redshift_permu_evaluation
 
 try:
     import aspect

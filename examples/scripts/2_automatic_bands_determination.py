@@ -13,7 +13,7 @@ norm_flux = obs_cfg['osiris']['norm_flux']
 
 # Template with spectra
 osiris_gp_df = lime.lines_frame(wave_intvl=[3000, 10000],
-                                rejected_lines=['S3_3722A', 'Fe3_4008A', 'S2_4076A',
+                                rejected_lines=['H1_3722A', 'H1_3734A', 'Fe3_4008A', 'S2_4076A',
                                                'Fe2_4358A', 'Fe3_4881A', 'Ar3_5192A'])
 lime.save_frame(osiris_gp_df_path, osiris_gp_df)
 
@@ -75,7 +75,7 @@ lime.save_frame(lineBandsFile, obj_linesDF)
 #                                         default_cfg_prefix='default', obj_cfg_prefix='gp121903_osiris',
 #                                         automatic_grouping=True,
 #                                         grouped_lines=obs_cfg['gp121903_osiris_line_fitting'],
-#                                         exclude_lines=['S3_3722A', 'Fe3_4008A', 'S2_4076A',
+#                                         exclude_lines=['H1_3722A', 'H1_3734A', 'Fe3_4008A', 'S2_4076A',
 #                                                        'Fe2_4358A', 'Fe3_4881A', 'Ar3_5192A'])
 # print(lines_df)
 # gp_spec.plot.spectrum(bands=lines_df, log_scale=True)

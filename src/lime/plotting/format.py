@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
-from lime.io import load_cfg
 from copy import deepcopy
+from lime.io import load_cfg
 
 _logger = logging.getLogger('LiMe')
 

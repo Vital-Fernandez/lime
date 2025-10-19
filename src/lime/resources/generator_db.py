@@ -12,8 +12,7 @@ current_file_folder = Path(__file__).resolve().parent
 PARENT_DATABASE = current_file_folder/'Lines_database_18_01_2025.xlsx'
 CHILD_DATABASE = current_file_folder/'lines_database_v2.0.1.txt'
 
-def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, continua_center_width=200,
-                          continua_width=70, delta_lambda_inst=0):
+def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, continua_center_width=200, delta_lambda_inst=0):
 
     # Adjust previous database
     df_lines = pd.read_excel(PARENT_DATABASE, header=0, index_col=0)
@@ -119,7 +118,6 @@ def format_lines_database(redshift=0, band_velocity_sigma=100, n_sigma=4, contin
 
 
 if __name__ == "__main__":
-    # lime.save_frame(CHILD_DATABASE, format_lines_database())
 
     PARENT_DATABASE = current_file_folder / 'lines_database_v2.0.0.txt'
     CHILD_DATABASE = current_file_folder / 'lines_database_v2.0.0.txt'

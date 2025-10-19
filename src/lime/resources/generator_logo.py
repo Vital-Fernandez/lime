@@ -75,5 +75,6 @@ def lime_log_function(output_path: Path = None, seed: int = 4, show: bool = Fals
 
 
 if __name__ == "__main__":
+
         lime_log_function(LOGO_ADDRESS, show=True, style='default')
         lime_log_function(LOGO_ADDRESS_DARK, show=True, style='dark')

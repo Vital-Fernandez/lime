@@ -316,21 +316,32 @@ def load_txt(text_address, **kwargs):
 def load_fits(fits_address, data_ext_list=None, hdr_ext_list=None, url_check=False):
 
     """
+    Open a FITS file and return the requested data and header extensions.
 
-    This method opens a fits file and returns the request extensions data and headers.
+    This method reads the input FITS file and extracts the specified data and/or header
+    extensions. The user can request extensions either by their numerical index or by name.
+    Both single values and lists of extensions are supported.
 
-    :param fits_address: File location address for the observation .fits file.
-    :type fits_address: str, Path
+    Parameters
+    ----------
+    fits_address : str or pathlib.Path
+        Path to the input observation FITS file.
+    data_ext_list : int, str, or list of (int or str), optional
+        Data extension(s) to extract from the FITS file. Extensions can be specified by
+        index (e.g., 0, 1, 2) or by name (e.g., "SCI", "FLUX").
+    hdr_ext_list : int, str, or list of (int or str), optional
+        Header extension(s) to extract from the FITS file. Similar syntax applies as for
+        `data_ext_list`.
 
-    :param data_ext_list: Data extension number or name to extract from the .fits file.
-    :type fits_address: int, str or list of either, optional
-
-    :param hdr_ext_list: header extension number or name to extract from the .fits file.
-    :type hdr_ext_list: int, str or list of either, optional
-
-    :return: list of extensions data, list of extensions headers
+    Returns
+    -------
+    list
+        List of extracted data extensions.
+    list
+        List of corresponding header objects for each extracted extension.
 
     """
+
 
     # Parse as numpy array
     data_ext_list, hdr_ext_list = np.atleast_1d(data_ext_list), np.atleast_1d(hdr_ext_list)

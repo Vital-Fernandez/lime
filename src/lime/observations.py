@@ -5,7 +5,6 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-import lime
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
     parse_unit_convertion
 
@@ -15,8 +14,8 @@ from lime.plotting.plots_interactive import SpectrumCheck, CubeCheck, SampleChec
 from lime.plotting.bokeh_plots import BokehFigures
 from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame, lime_cfg
 
-from lime.archives.read_fits import OpenFits
 from lime.transitions import Line
+from lime.archives.read_fits import OpenFits
 from lime.workflow import SpecTreatment, CubeTreatment, SpecRetriever
 
 # Log variable
@@ -1891,7 +1890,7 @@ class Sample(UserDict, OpenFits):
         # Instrument load function
         else:
             fname_obj = root_address / obs_idx[log_df.index.names.index('file')]
-            class_obj = lime.Spectrum if self.spectrum_check else lime.Cube
+            class_obj = Spectrum if self.spectrum_check else Cube
             return class_obj.from_file(fname_obj, instrument=instrument, **kwargs)
 
 

@@ -14,7 +14,7 @@ import re
 _logger = logging.getLogger('LiMe')
 _VERBOSE_WARNINGS = 'ignore'
 
-c_KMpS = 299792.458  # Speed of light in Km/s (https://en.wikipedia.org/wiki/Speed_of_light)
+c_KMpS = 299792.458  # Speed of light in Km/s
 
 k_GaussArea = np.sqrt(2 * np.pi)
 sqrt2 = np.sqrt(2)

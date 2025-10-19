@@ -98,9 +98,8 @@ release = "2.0.1"
 
 # -- General configuration ---------------------------------------------------
 _lib_path = Path(__file__).parents[2]/'src'
-sys.path.insert(0, os.path.abspath(_lib_path))        # adjust to your project root
-sys.path.insert(1, '/home/vital/PycharmProjects/aspect/src')        # adjust to your project root
-# sys.path.append(_lib_path.as_posix())
+sys.path.insert(0, os.path.abspath(_lib_path))
+sys.path.insert(1, '/home/vital/PycharmProjects/aspect/src')
 
 extensions = ['myst_nb',
               'sphinx_togglebutton',
@@ -116,15 +115,13 @@ extensions = ['myst_nb',
               ]
 
 # Markdown configuration
-myst_enable_extensions = [
-    "amsmath",     # for \begin{equation} … \end{equation} support
-    "dollarmath",  # for inline math with $…$ or $$…$$
-    "colon_fence",
-    "html_admonition",
-    "html_image",
-    "deflist",
-    "smartquotes",
-]
+myst_enable_extensions = ["amsmath",
+                          "dollarmath",
+                          "colon_fence",
+                          "html_admonition",
+                          "html_image",
+                          "deflist",
+                          "smartquotes"]
 
 # Auto-generate heading anchors up to this level
 myst_heading_anchors = 2
@@ -177,15 +174,11 @@ imgmath_use_preview = True
 
 # html_theme = 'sphinx_rtd_theme'
 html_theme = 'sphinx_book_theme'
-# html_static_path = ['_static']
-html_static_path = []
+html_static_path = [] # ['_static']
 
 html_theme_options = {"logo": {"image_light": "0_resources/images/LiMe2_logo_white_transparent.png",
                                "image_dark":  "0_resources/images/LiMe2_logo_dark_transparent.png",
-                               "alt_text":    "LiMe Documentation",
-                                # "text":        "Documentation-",
-                              },
-
+                               "alt_text":    "LiMe Documentation"},
                       "secondary_sidebar_items": [], # Hide right contents sidebar
                      }
 

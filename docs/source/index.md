@@ -12,14 +12,7 @@
 :class: only-dark
 ```
 
-This library provides a comprehensive set of tools for fitting spectral lines in astronomical data. It is designed to 
-offer a **user-friendly workflow** that scales seamlessly from **single spectra** to **large datasets**.  
-
-The package includes modules for **masking data**, **line detection**, **profile fitting**, and **storing results** in 
-multiple formats.  
-
-If you found LiMe useful, please remember to cite our [A&A publication](https://doi.org/10.1051/0004-6361/202449224) 📝.
-
+z
 ## ✨ Key features
 
 - Integrated and profile-dependent measurements of emission and absorption line fluxes.  

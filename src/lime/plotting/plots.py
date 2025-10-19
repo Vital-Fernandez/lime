@@ -1,7 +1,7 @@
 import logging
 
 import numpy as np
-from matplotlib import pyplot as plt, gridspec, patches, rc_context, cm, colors, lines as mlines, figure
+from matplotlib import pyplot as plt, gridspec, patches, rc_context, colors, lines as mlines, figure
 from pathlib import Path
 
 from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
@@ -38,34 +38,6 @@ if mplcursors_check:
 
 # Sentinel object for non input figures
 _NO_FIG = object()
-
-# def parse_bands_arguments(label, bands, log, norm_flux=None):
-#
-#     line = None
-#     if label is None and (log.index.size > 0):
-#         label = log.index[-1]
-#         line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
-#
-#     # The user provided a reference band to check the region use it
-#     elif label is not None and bands is not None:
-#         if isinstance(bands, (pd.DataFrame)):
-#             line = Line.from_transition(label, data_frame=bands)
-#         elif isinstance(bands, (list, np.ndarray)):
-#             line = Line.from_transition(label, data_frame=log)
-#             line.w1, line.w2, line.w3, line.w4, line.w5, line.w6 = bands
-#         else:
-#             raise LiMe_Error(f'Bands for {label} have a not recognized format: {bands}')
-#     # Line has been measured before
-#     elif label is not None and (log.index.size > 0):
-#         line = Line.from_transition(label, data_frame=log, norm_flux=norm_flux)
-#
-#     elif label is not None and label in lineDB.frame.index:
-#         line = Line.from_transition(label)
-#
-#     else:
-#         _logger.warning(f'Line {label} has not been measured')
-#
-#     return line
 
 
 def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):

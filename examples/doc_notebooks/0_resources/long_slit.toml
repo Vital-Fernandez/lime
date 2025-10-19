@@ -44,7 +44,7 @@ peaks_troughs.sigma_threshold = 3
 
 [gp121903_osiris_line_fitting]
 grouped_lines = ['O3_5007A_b', 'O3_4959A_b']
-rejected_lines = ['S3_3722A', 'Fe3_4008A', 'S2_4076A','Fe2_4358A', 'Fe3_4881A',
+rejected_lines = ['H1_3722A', 'H1_3734A', 'Fe3_4008A', 'S2_4076A','Fe2_4358A', 'Fe3_4881A',
                   'Fe3_4881A', 'Fe3_4986A', 'He1_5016A','Ar3_5192A', 'H1_8392A',
                   'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
 
