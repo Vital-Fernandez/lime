@@ -8,7 +8,8 @@ __all__ = [
     'log_to_HDU',
     '_LOG_EXPORT_RECARR',
     '_LOG_EXPORT',
-    '_LOG_COLUMNS']
+    '_LOG_COLUMNS',
+    'lime_cfg']
 
 import os
 import configparser
@@ -21,8 +22,7 @@ from pathlib import Path
 from collections.abc import Sequence
 
 from astropy.io import fits
-from .tables import table_fluxes
-from . import Error
+from lime.archives.tables import table_fluxes
 
 try:
     import openpyxl
@@ -55,14 +55,19 @@ _logger = logging.getLogger('LiMe')
 # Reading file with the format and export status for the measurements
 _LIME_FOLDER = Path(__file__).parent
 _params_table_file = _LIME_FOLDER/'resources/types_params.txt'
-_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep='\s+', header=0, index_col=0)
+_PARAMS_CONF_TABLE = pd.read_csv(_params_table_file, sep=r'\s+', header=0, index_col=0)
 
-_LINES_DATABASE_FILE = _LIME_FOLDER/'resources/parent_bands.txt'
-# _CONF_FILE = _LIME_FOLDER/'config.toml'
+# Read lime configuration .toml
+_conf_path = _LIME_FOLDER/'lime.toml'
+with open(_conf_path, mode="rb") as fp:
+    lime_cfg = tomllib.load(fp)
 
-# # Read lime configuration file
-# with open(_CONF_FILE, mode="rb") as fp:
-#     _cfg_lime = tomllib.load(fp)
+# Convert null entries to None
+for obs_type in ('long_slit', 'cube'):
+    for inst in lime_cfg[f'instrument_params'][obs_type].keys():
+        for param, value in lime_cfg[f'instrument_params'][obs_type][inst].items():
+            if value == 'null':
+                lime_cfg[f'instrument_params'][obs_type][inst][param] = None
 
 # Dictionary with the parameter formart
 _LOG_COLUMNS = dict(zip(_PARAMS_CONF_TABLE.index.values,
@@ -153,24 +158,47 @@ def parse_lime_cfg(toml_cfg, fit_cfg_suffix='_line_fitting'):
 def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
     """
+    Load a LiMe configuration file (TOML) and normalize LiMe-specific sections.
 
-    This function reads a configuration file with the `toml format <https://toml.io/en/>`_.
+    This reads a TOML configuration file and, for any section whose name ends
+    with `fit_cfg_suffix`, converts its key/value pairs to the formats expected
+    by LiMe's line-fitting routines.
 
-    If one of the file sections has the suffix specified by the ``fit_cfg_suffix`` argument, the function will query its items and
-    convert their values to the format expected by `LiMe functions <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_.
-    The default suffix is "_line_fitting".
+    Parameters
+    ----------
+    file_address : str or pathlib.Path
+        Path to the input configuration file (.toml).
+    fit_cfg_suffix : str, optional
+        Section-name suffix that identifies LiMe line-fitting configuration
+        blocks to be normalized. Default is ``"_line_fitting"``.
 
-    The function will show a critical warning if it fails to convert an item in a ``fit_cfg_suffix`` section.
+    Returns
+    -------
+    dict
+        Parsed configuration mapping with LiMe sections converted where
+        applicable.
 
-    :param file_address: Input configuration file address.
-    :type file_address: str, pathlib.Path
+    Raises
+    ------
+    LiMe_Error
+        If the file does not exist at `file_address`.
+    tomllib.TOMLDecodeError
+        If the TOML file cannot be parsed.
 
-    :param fit_cfg_suffix: Suffix for LiMe configuration sections. The default value is "_line_fitting".
-    :type fit_cfg_suffix:  str
+    Notes
+    -----
+    - Sections ending with `fit_cfg_suffix` are passed to
+      ``parse_lime_cfg`` for normalization.
+    - If an item within a `fit_cfg_suffix` section cannot be converted,
+      a critical warning is emitted (handled inside ``parse_lime_cfg``),
+      but the rest of the configuration is still returned when possible.
+    - Requires Python 3.11+ for ``tomllib``.
 
-    :return: Parsed configuration data
-    :type: dict
-
+    Examples
+    --------
+    >>> cfg = load_cfg("settings.toml")
+    >>> cfg["my_model_line_fitting"]["method"]
+    'gaussian'
     """
 
     file_path = Path(file_address)
@@ -276,27 +304,61 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
 def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
 
     """
-    This function reads the input ``file_address`` as a pandas dataframe.
+    Loads a lines frame (pandas.DataFrame) from various file formats.
 
-    The expected file types are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx". The dataframes expected format is discussed
-    on the `line bands <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_ and `measurements <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs4_fit_configuration.html>`_ documentation.
+    Supported inputs include plain text tables, CSV, FITS HDUs, Excel sheets, ASDF nodes,
+    and Streamlit ``UploadedFile`` objects. If the resulting table contains the columns
+    listed in ``levels``, a MultiIndex is reconstructed by setting those columns as the
+    index.
 
-    For ".fits" and ".xlsx" files the user can provide a page name ``ext`` for the HDU/sheet. The default name is "_LINELOG".
+    Parameters
+    ----------
+    fname : str or pathlib.Path or UploadedFile
+        Path to the lines log file or a Streamlit ``UploadedFile``. When a path is
+        provided, the file type is inferred from the suffix.
+    page : str, optional
+        HDU name (FITS) / sheet name (Excel) / node key (ASDF) to read from.
+        Used only for ``.fits``, ``.xlsx``/``.xls``, and ``.asdf`` inputs.
+        Default is ``"FRAME"``.
+    levels : list of str, optional
+        Column names to use for reconstructing a MultiIndex via ``DataFrame.set_index``.
+        If all names in ``levels`` are present as columns, they are set as the index.
+        Default is ``["id", "line"]``.
 
-    To reconstruct a `MultiIndex dataframe <https://pandas.pydata.org/docs/user_guide/advanced.html#advanced-hierarchical>`_
-    the user needs to specify the ``sample_levels``.
+    Returns
+    -------
+    pandas.DataFrame
+        The loaded lines log. For text/CSV/Excel/ASDF the first column is treated
+        as the initial index during read; if all ``levels`` are present as columns,
+        they are set as a MultiIndex on return.
 
-    :param fname: Lines frame file address.
-    :type fname: str, Path
+    Raises
+    ------
+    LiMe_Error
+        If ``fname`` is a path and the file does not exist.
+    SystemExit
+        If the file exists but cannot be opened/parsed (wraps a ``ValueError``).
 
-    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files. The default value is "_LINELOG".
-    :type page: str, optional
+    Notes
+    -----
+    Detected formats and readers:
+      * ``.fits``: read via ``hdu_to_log_df(log_path, page)``.
+      * ``.xlsx`` / ``.xls``: read via ``pandas.read_excel(..., sheet_name=page, header=0, index_col=0)``.
+      * ``.asdf``: read node ``page`` and build a DataFrame from records; index set from the
+        ``"index"`` field.
+      * ``.txt``: whitespace-separated via ``pandas.read_csv(..., sep=r"\\s+", header=0, index_col=0, comment="#")``.
+      * ``.csv``: comma-separated via ``pandas.read_csv(..., sep=",", header=0, index_col=0, comment="#")``.
+      * ``UploadedFile`` (Streamlit): treated like a whitespace-separated text table.
 
-    :param levels: Indexes name list for MultiIndex dataframes. The default value is ['id', 'line'].
-    :type levels: list, optional
+    Examples
+    --------
+    Load an Excel sheet named ``FRAME`` and restore a MultiIndex of (``id``, ``line``):
 
-    :return: lines log table
-    :rtype: pandas.DataFrame
+    >>> df = load_frame("lines.xlsx", page="FRAME", levels=["id", "line"])
+
+    Load a FITS HDU named ``FRAME``:
+
+    >>> df = load_frame("lines.fits", page="FRAME")
 
     """
 
@@ -335,18 +397,18 @@ def load_frame(fname, page: str = 'FRAME', levels: list = ['id', 'line']):
 
         # Text file
         elif file_type == '.txt':
-            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0, comment='#')
+            log = pd.read_csv(log_path, sep=r'\s+', header=0, index_col=0, comment='#')
 
         # Uploaded file from streamlit
         elif file_type == 'UploadedFile':
-            log = pd.read_csv(file_name, sep='\s+', header=0, index_col=0, comment='#')
+            log = pd.read_csv(file_name, sep=r'\s+', header=0, index_col=0, comment='#')
 
         elif file_type == '.csv':
             log = pd.read_csv(log_path, sep=',', header=0, index_col=0, comment='#')
 
         else:
             _logger.warning(f'File type {file_type} is not recognized. This can cause issues reading the log.')
-            log = pd.read_csv(log_path, sep='\s+', header=0, index_col=0)
+            log = pd.read_csv(log_path, sep=r'\s+', header=0, index_col=0)
 
     except ValueError as e:
         exit(f'\nERROR: LiMe could not open {file_type} file at {log_path}\n{e}')
@@ -362,44 +424,62 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
                safe_version=True, **kwargs):
 
     """
+    Save a lines frame (pandas.DataFrame) to disk in one of several supported formats.
 
-    This function saves the input ``dataframe`` at the ``fname`` provided by the user.
+    The output format is inferred from the file extension. Supported formats include
+    plain text tables, FITS HDUs, ASDF trees, and Excel sheets. Optional metadata such
+    as FITS/ASDF headers and custom column data types can be provided.
 
-    The accepted extensions are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
+    Parameters
+    ----------
+    fname : str or pathlib.Path
+        Destination file path. The extension determines the file format.
+        Supported extensions are ``.txt``, ``.fits``, ``.asdf``, and ``.xlsx``.
+    dataframe : pandas.DataFrame
+        Lines log to be saved.
+    parameters : list or {"all"}, optional
+        Columns to include in the output. If ``"all"``, all DataFrame columns are written.
+        Default is ``"all"``.
+    page : str, optional
+        HDU name (for FITS) or sheet name (for Excel) to use when writing.
+        Default is ``"FRAME"``.
+    header : dict, optional
+        Additional metadata to include in the output file. For FITS and ASDF files,
+        this dictionary is added to the file header.
+    column_dtypes : str, type, or dict, optional
+        Data type conversion mapping for the output FITS record array.
+        - If a string or type, all columns are cast to that type.
+        - If a dictionary, specify a mapping of column names or indices (zero-indexed) to their desired data types.
+        This argument overrides LiMe’s default FITS formatting.
+    safe_version : bool, optional
+        If ``True``, the current LiMe version is saved as a footnote or page header
+        in the output log. Default is ``True``.
 
-    For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-    The default name is "FRAME".
+    Raises
+    ------
+    ValueError
+        If the file extension is unsupported or the DataFrame cannot be written
+        in the specified format.
 
-    The user can specify the ``parameters`` to be saved in the output file.
+    Notes
+    -----
+    - For FITS and Excel outputs, the target HDU or sheet is named according to ``page``.
+    - FITS headers can be extended using ``header``.
+    - Custom column data types can be enforced via ``column_dtypes``.
+    - The function ensures compatibility with LiMe’s internal data formats.
 
-    For ".fits" files the user can provide a dictionary to add to the ``fits_header``. The user can provide a ``column_dtypes``
-    string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
-    same columns as the file names.
+    Examples
+    --------
+    Save a DataFrame to a FITS file with a custom header:
 
-    :param fname: Lines frame file address.
-    :type fname: str, Path
+    >>> header = {"OBSERVER": "V. Pérez", "INSTRUME": "MEGARA"}
+    >>> save_frame("lines.fits", df, header=header)
 
-    :param dataframe: Lines dataframe.
-    :type dataframe: pandas.DataFrame
+    Save selected columns to an Excel sheet named ``FRAME``:
 
-    :param parameters: Output parameters list. The default value is "all"
-    :type parameters: list
-
-    :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
-    :type page: str, optional
-
-    :param header: Dictionary for ".fits" and ".asdf" file headers.
-    :type header: dict, optional
-
-    :param column_dtypes: Conversion variable for the `records array <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html>`.
-                          for the output fits file. If a string or type, the data type to store all columns. If a dictionary, a mapping of column
-                          names and indices (zero-indexed) to specific data types.
-    :type column_dtypes: str, dict, optional
-
-    :param safe_version: Save LiMe version as footnote or page header on the output log. The default value is True.
-    :type safe_version: bool, optional
-
+    >>> save_frame("lines.xlsx", df, parameters=["profile_flux", "profile_flux_err", "eqw"], page="FRAME")
     """
+
 
     # Confirm file path exits
     log_path = Path(fname)
@@ -415,13 +495,14 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
             log = dataframe
 
         # Slice the log if the user provides a list of columns
-        if parameters != 'all':
+        if parameters != 'all': # TODO change this to None
             if isinstance(dataframe.index, pd.MultiIndex):
                 parameters_list = np.atleast_1d(list(dataframe.index.names) + list(parameters))
             else:
                 parameters_list = np.atleast_1d(parameters)
 
-            lines_log = log[parameters_list]
+            # lines_log = log[parameters_list]
+            lines_log = log[log.columns.intersection(parameters_list)]
 
         else:
             lines_log = log
@@ -451,8 +532,8 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
                 output_file.write(string_DF.encode('UTF-8'))
 
         # Pdf fluxes table
-        elif file_type == '.pdf':
-            table_fluxes(lines_log, log_path.parent / log_path.stem, header_format_latex=_LOG_COLUMNS_LATEX,
+        elif file_type == '.pdf' or  file_type == '.tex':
+            table_fluxes(lines_log, log_path.parent / log_path.stem, table_type=file_type[1:],  header_format_latex=_LOG_COLUMNS_LATEX,
                          lines_notation=log.latex_label.values, **kwargs)
 
         # Log in a fits format
@@ -468,7 +549,7 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
                 lineLogHDU = log_to_HDU(lines_log, ext_name=page, column_dtypes=column_dtypes, header_dict=header)
 
-                if log_path.is_file(): # TODO this strategy is slow for many inputs
+                if log_path.is_file(): # TODO this strategy is slow for many 2_guides
                     try:
                         fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
                     except KeyError:
@@ -516,7 +597,6 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
         # Advance Scientific Storage Format
         elif file_type == '.asdf':
-            # TODO review this one and add the metadata
             tree = {page: lines_log.to_records(index=True, column_dtypes=_LOG_TYPES_DICT, index_dtypes='<U50')}
 
             # Create new file
@@ -544,21 +624,31 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 def results_to_log(line, log, norm_flux):
 
     # Loop through the line components
-    for i, comp in enumerate(line.list_comps):
+    for i, comp in enumerate(line.list_comps if line.group == 'b' else [line]):
+
+        # Identifiers
+        log.at[comp.label, 'particle'] = comp.particle.label
+        log.at[comp.label, 'wavelength'] = comp.wavelength
+        log.at[comp.label, 'latex_label'] = comp.latex_label
+        log.at[comp.label, 'group_label'] = 'none' if comp.group_label is None else comp.group_label
+        log.at[comp.label, 'profile'] = comp.profile
+        log.at[comp.label, 'shape'] = comp.shape
 
         # Add bands wavelengths
-        log.at[comp, 'w1'] = line.mask[0]
-        log.at[comp, 'w2'] = line.mask[1]
-        log.at[comp, 'w3'] = line.mask[2]
-        log.at[comp, 'w4'] = line.mask[3]
-        log.at[comp, 'w5'] = line.mask[4]
-        log.at[comp, 'w6'] = line.mask[5]
+        log.at[comp.label, 'w1'] = line.mask[0]
+        log.at[comp.label, 'w2'] = line.mask[1]
+        log.at[comp.label, 'w3'] = line.mask[2]
+        log.at[comp.label, 'w4'] = line.mask[3]
+        log.at[comp.label, 'w5'] = line.mask[4]
+        log.at[comp.label, 'w6'] = line.mask[5]
+
+        # Pixel mask
+        log.at[comp.label, 'pixel_mask'] = line.pixel_mask
 
         # Treat every line
         for j in _RANGE_ATTRIBUTES_FIT:
-
             param = _ATTRIBUTES_FIT[j]
-            param_value = line.__getattribute__(param)
+            param_value = line.measurements.__getattribute__(param)
 
             # Get component parameter
             if _LOG_COLUMNS[param][3] and (param_value is not None):
@@ -569,22 +659,14 @@ def results_to_log(line, log, norm_flux):
                 if param_value is not None:
                     param_value = param_value * norm_flux
 
-            # Just string for particle
-            if j == 7:
-                param_value = param_value.label
-
-            # Converting None entries to str (9 = group_label)
-            if j == 9:
-                if param_value is None:
-                    param_value = 'none'
-
-            # print(comp, param, param_value)
-            log.at[comp, param] = param_value
+            # Store in dataframe
+            log.at[comp.label, param] = param_value
 
     return
 
 
-def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=['id', 'line'], copy_input=True):
+def check_file_dataframe(df_variable, variable_type=pd.DataFrame, ext='FRAME', sample_levels=['id', 'line'],
+                         copy_input=True, verbose=True):
 
     if isinstance(df_variable, variable_type):
         if copy_input:
@@ -597,16 +679,17 @@ def check_file_dataframe(df_variable, variable_type, ext='FRAME', sample_levels=
         if input_path.is_file():
             output = load_frame(df_variable, page=ext, levels=sample_levels)
         else:
-            _logger.warning(f'Lines bands file not found at {df_variable}')
+            if verbose:
+                _logger.warning(f'Lines bands file not found at {df_variable}')
             output = None
-
     else:
         output = df_variable
 
     return output
 
 
-def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_suffix='_line_fitting', line_detection=False):
+def check_fit_conf(fit_conf, default_key, obj_key, update_default=True, group_list=None, fit_cfg_suffix='_line_fitting',
+                   line_detection=False):
 
     # Check that there is an input configuration
     if fit_conf is not None:
@@ -639,33 +722,30 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
 
         # Recover the configuration expected for the object
         default_cfg = input_cfg.get(f'{default_key}_line_fitting') if default_key is not None else None
-        mask_cfg = input_cfg.get(f'{group_key}_line_fitting') if group_key is not None else None
+        custom_cfg = input_cfg.get(f'{obj_key}_line_fitting') if obj_key is not None else None
 
-        # Case there are not leveled entries
-        if (default_cfg is None) and (mask_cfg is None):
+        # Case there are not level entries
+        if (default_cfg is None) and (custom_cfg is None):
             output_cfg = input_cfg
 
         # Proceed to update the levels
         else:
 
             # Default configuration
-            output_cfg = {} if default_cfg is None else default_cfg
-            default_detect = output_cfg.get('line_detection')
+            default_cfg = {} if default_cfg is None else default_cfg
+            default_detect = default_cfg.get('line_detection', {})
 
-            # Mask conf
-            mask_conf = {} if mask_cfg is None else mask_cfg
-            mask_detect = mask_conf.get('line_detection')
+            # Custom configuration
+            custom_cfg = {} if custom_cfg is None else custom_cfg
+            custom_detect = custom_cfg.get('line_detection', {})
 
-            # Update the levels
-            output_cfg = {**output_cfg, **mask_conf}
+            # Update default configuration if requested else use only custom
+            output_cfg = {**default_cfg, **custom_cfg} if update_default else (custom_cfg if custom_cfg else default_cfg)
 
-            # If no line detection don't add it # TODO this is wrong lower should update upper
-            if mask_detect is not None:
-                output_cfg['line_detection'] = mask_detect
-            elif default_detect is not None:
-                output_cfg['line_detection'] = default_detect
-            else:
-                pass
+            # Update default detection if requested else use only custom
+            if line_detection:
+                output_cfg['line_detection'] = default_detect.update(custom_detect) if update_default else\
+                                                                    (custom_detect if custom_detect else default_detect)
 
     else:
         output_cfg = {}
@@ -684,19 +764,7 @@ def check_fit_conf(fit_conf, default_key, group_key, group_list=None, fit_cfg_su
             _logger.critical(f'Automatic line detection but the input configuration does not include a '
                              f'"continuum" entry with a "degree_list" and "emis_threshold" keys')
 
-        # if output_cfg.get('line_detection') is not None: # TODO need to rethink if we need this one... masks are always provided
-        #     if output_cfg['line_detection'].get('bands') is None:
-        #         _logger.critical(f'Automatic line detection but the input configuration does not include a '
-        #                          f'"bands" entry')
-        # else:
-        #     _logger.critical(f'The fitting requires automatic line detection but the input configuration does not include a '
-        #                      f' a "line_detection" entry with a "bands" key')
-
     return output_cfg
-
-
-_parent_bands_file = Path(__file__).parent/'resources/parent_bands.txt'
-_PARENT_BANDS = load_frame(_parent_bands_file)
 
 
 def check_numeric_value(s):
@@ -846,21 +914,6 @@ def formatStringOutput(value, key, section_label=None, float_format=None, nan_fo
     return formatted_value
 
 
-# def progress_bar(i, i_max, post_text, n_bar=10):
-#
-#     # Size of progress bar
-#     j = i/i_max
-#     stdout.write('\r')
-#     message = f"[{'=' * int(n_bar * j):{n_bar}s}] {int(100 * j)}% {post_text}"
-#     stdout.write(message)
-#     stdout.flush()
-#
-#     return
-
-
-
-
-
 def load_spatial_mask(mask_file, mask_list=None, return_coords=False):
 
     # Masks array container
@@ -916,7 +969,7 @@ def check_file_array_mask(var, mask_list=None):
         if input.is_file():
             mask_dict = load_spatial_mask(var, mask_list)
         else:
-            raise Error(f'No spatial mask file at {Path(var).as_posix()}')
+            raise LiMe_Error(f'No spatial mask file at {Path(var).as_posix()}')
 
     # Array
     elif isinstance(var, (np.ndarray, list)):
@@ -949,11 +1002,12 @@ def check_file_array_mask(var, mask_list=None):
 
     else:
 
-        raise Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
+        raise LiMe_Error(f'Input mask format {type(input)} is not recognized for a mask file. Please declare a fits file, a'
                     f' numpy array or a list/array of numpy arrays')
 
     return mask_dict
 
 
+# _PARENT_BANDS = load_frame(_LINES_DATABASE_FILE)
 
 

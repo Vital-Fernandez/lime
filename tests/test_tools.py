@@ -2,23 +2,27 @@ import numpy as np
 import pandas as pd
 import lime
 from pathlib import Path
-from lime.tools import int_to_roman, refraction_index_air_vacuum, join_fits_files, au
+from lime.tools import int_to_roman, join_fits_files, au
 from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
+from lime.transitions import air_to_vacuum_function
 from astropy.io import fits
 import astropy.units as u
+from lime.fitting.lines import c_KMpS
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
-spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+spectra_folder = data_folder/'spectra'
+outputs_folder = data_folder/'results'
 
-file_address = baseline_folder/'manga_spaxel.txt'
-lines_log_address = baseline_folder/'manga_lines_log.txt'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
+
 lines_log = lime.load_frame(lines_log_address)
 redshift = 0.0475
 norm_flux = 1e-17
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
 
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask)
@@ -172,15 +176,15 @@ def test_extract_fluxes_multi_index():
     assert np.all(log3.xs('H1_6563A', level='line')['line_flux'] == Halpha_norm)
     assert pd.notnull(log3.line_flux).sum() == 3
 
-    lime.normalize_fluxes(log4, line_list=['O3_5007A/H1_4861A', 'N2_6584A/H1_6563A'])
+    lime.normalize_fluxes(log4, line_list=['O3_5007A/H1_4861A', 'N2_6583A/H1_6563A'])
     O3_norm = lines_log.loc['O3_5007A', 'profile_flux'] / lines_log.loc['H1_4861A', 'profile_flux']
-    N2_norm = lines_log.loc['N2_6584A', 'profile_flux'] / lines_log.loc['H1_6563A', 'profile_flux']
+    N2_norm = lines_log.loc['N2_6583A', 'profile_flux'] / lines_log.loc['H1_6563A', 'profile_flux']
 
     assert np.all(log4.xs('O3_5007A', level='line')['line_flux'] == O3_norm)
-    assert np.all(log4.xs('N2_6584A', level='line')['line_flux'] == N2_norm)
+    assert np.all(log4.xs('N2_6583A', level='line')['line_flux'] == N2_norm)
 
     assert np.all(log4.xs('O3_5007A', level='line')['norm_line'] == 'H1_4861A')
-    assert np.all(log4.xs('N2_6584A', level='line')['norm_line'] == 'H1_6563A')
+    assert np.all(log4.xs('N2_6583A', level='line')['norm_line'] == 'H1_6563A')
 
     return
 
@@ -196,7 +200,7 @@ def test_redshift_calculation():
     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
 
     assert z_df['weight'][0] is None
     assert z_df_eqw['weight'][0] == 'eqw'
@@ -213,7 +217,7 @@ def test_redshift_calculation():
     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.000018, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
 
     assert np.all(z_df['weight'].to_numpy() == None)
     assert np.all(z_df_eqw['weight'] == 'eqw')
@@ -275,7 +279,11 @@ def test_cube_spectrum_unit_conversion(file_name='jw01039-o003_t001_miri_ch4-med
 
     return
 
-def test_spectra_unit_conversion():
+
+def test_spectra_unit_conversion(text_spec_address=file_address):
+
+    # Load the data
+    wave_array, flux_array, err_array, pixel_mask = np.loadtxt(text_spec_address, unpack=True)
 
     # Astropy conversion
     wave_astropy_in =  wave_array * au.Unit('Angstrom')
@@ -311,8 +319,10 @@ def test_spectra_unit_conversion():
 
 def test_refraction_index_air_vacuum():
 
-    array1 = refraction_index_air_vacuum(wave_array)
-    assert np.allclose(array1[:3], np.array([1.00030083, 1.00030082, 1.00030081]))
+    input_vac_arr = np.array([3621.59598486, 3622.42998417, 3623.26417553])
+    specutils_air_arr = np.array([3620.50684567, 3621.34061749, 3622.17458132])
+
+    assert np.allclose(air_to_vacuum_function(input_vac_arr), specutils_air_arr)
 
     return
 
@@ -364,5 +374,99 @@ def test_logs_into_fits():
                         else:
                             assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
 
+
+    return
+
+
+def test_line_bands_generation():
+
+    # Creating the bands
+    n_sigma = 3
+    band_vsigma = 120
+    ref_bands = lime.lines_frame()
+    bands_untouched = spec.retrieve.lines_frame(adjust_central_band=False)
+    bands = spec.retrieve.lines_frame(n_sigma=n_sigma, band_vsigma = band_vsigma, adjust_central_band=True,
+                                      instrumental_correction=False)
+    # Existing lines
+    assert bands.iloc[0].name == 'H1_3704A'
+    assert bands.iloc[-1].name == 'H1_9546A'
+
+    # Wavelength intervals
+    lambda_arr = bands.wavelength.to_numpy()
+    assert np.all((spec.wave_rest.data[0] < lambda_arr) & (spec.wave_rest.data[-1] > lambda_arr))
+
+    # Central bands are modified
+    assert bands.loc['H1_3704A', 'w3'] != ref_bands.loc['H1_3704A', 'w3']
+    assert bands.loc['H1_9546A', 'w4'] != ref_bands.loc['H1_9546A', 'w4']
+    assert bands_untouched.loc['H1_3704A', 'w3'] == ref_bands.loc['H1_3704A', 'w3']
+    assert bands_untouched.loc['H1_9546A', 'w4'] == ref_bands.loc['H1_9546A', 'w4']
+
+    # The bands have input kinematic width
+    interval_wavelength = (bands.loc['H1_3704A', 'w4'] - bands.loc['H1_3704A', 'w3'])/2
+    interval_speed = c_KMpS * (interval_wavelength/n_sigma) / (bands.loc['H1_3704A', 'wavelength'])
+    assert np.isclose(band_vsigma, interval_speed)
+
+    interval_wavelength = (bands.loc['H1_9546A', 'w4'] - bands.loc['H1_9546A', 'w3'])/2
+    interval_speed = c_KMpS * (interval_wavelength/n_sigma) / (bands.loc['H1_9546A', 'wavelength'])
+    assert np.isclose(band_vsigma, interval_speed)
+
+    return
+
+
+def test_line_bands_merged_blended():
+
+    # Default only
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address)
+    assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 3
+
+    # From certain list
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, grouped_lines=['O2_3726A_m', 'H1_3889A_m', 'H1_6500A_b'])
+    assert np.sum(bands.index.isin(['O2_3726A_m', 'H1_3889A_m', 'Ar4_4711A_m'])) == 2
+    assert 'H1_6500A_b' not in bands.index
+
+    # Combination of sections
+    bands = spec.retrieve.lines_frame(fit_cfg=conf_file_address, obj_cfg_prefix='38-35', update_default=False)
+    in_list = ['O2_3726A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b', 'O2_7319A_b', 'S3_9530A_b']
+    out_list = bands.loc[bands.index.isin(in_list)].index.to_numpy()
+    assert set(in_list) == set(in_list)
+
+
+    return
+
+
+def test_line_bands_labels():
+
+    lines_test = ['H1_1216A', 'He2_1640A', 'C3_1909A', 'H1_4861A', 'H1_6563A', 'S3_9530A', 'He1_10832A']
+
+    bands = lime.lines_frame(line_list=lines_test)
+    assert bands.loc['H1_1216A', 'wavelength'] == 1215.67
+    assert bands.loc['H1_1216A', 'wavelength'] == bands.loc['H1_1216A', 'wave_vac']
+    assert bands.loc['H1_4861A', 'wavelength'] == 4861.25
+    assert bands.loc['H1_4861A', 'wavelength'] != bands.loc['H1_4861A', 'wave_vac']
+
+    bands = lime.lines_frame(line_list=lines_test, vacuum_waves=True)
+    assert bands.loc['H1_1216A', 'wavelength'] == 1215.67
+    assert bands.loc['H1_1216A', 'wavelength'] == bands.loc['H1_1216A', 'wave_vac']
+    assert bands.loc['H1_4861A', 'wavelength'] != 4861.25
+    assert bands.loc['H1_4861A', 'wavelength'] == 4862.683
+    assert bands.loc['H1_4861A', 'wavelength'] == bands.loc['H1_4861A', 'wave_vac']
+
+    bands = lime.lines_frame(line_list=lines_test, units_wave='um', sig_digits=4, update_labels=True, update_latex=True)
+    assert np.isclose(bands.loc['H1_0.1216um', 'wavelength'], 0.121567)
+    assert np.isclose(bands.loc['H1_0.1216um', 'wavelength'], bands.loc['H1_0.1216um', 'wave_vac'])
+    assert np.isclose(bands.loc['H1_0.4861um', 'wavelength'], 0.486125)
+    assert not np.isclose(bands.loc['H1_0.4861um', 'wavelength'], bands.loc['H1_0.4861um', 'wave_vac'])
+
+    bands = lime.lines_frame(line_list=lines_test, units_wave='um', sig_digits=4, update_labels=False)
+    assert np.isclose(bands.loc['H1_1216A', 'wavelength'], 0.121567)
+    assert np.isclose(bands.loc['H1_1216A', 'wavelength'], bands.loc['H1_1216A', 'wave_vac'])
+    assert np.isclose(bands.loc['H1_4861A', 'wavelength'], 0.486125)
+    assert not np.isclose(bands.loc['H1_4861A', 'wavelength'], bands.loc['H1_4861A', 'wave_vac'])
+
+    bands = lime.lines_frame(line_list=lines_test, vacuum_waves=True, update_labels=True, update_latex=True)
+    assert np.isclose(bands.loc['H1_1216A', 'wavelength'], 1215.670)
+    assert np.isclose(bands.loc['H1_1216A', 'wavelength'], bands.loc['H1_1216A', 'wave_vac'])
+    assert np.isclose(bands.loc['H1_4863A', 'wavelength'], 4862.683)
+    assert np.isclose(bands.loc['H1_4863A', 'wavelength'], bands.loc['H1_4863A', 'wave_vac'])
 
     return

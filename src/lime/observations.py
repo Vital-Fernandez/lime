@@ -5,21 +5,18 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
-from openpyxl.styles.builtins import output
+from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
+    parse_unit_convertion
 
-from .tools import unit_conversion, extract_fluxes, normalize_fluxes, ProgressBar, check_units, au, extract_wcs_header, \
-    observation_unit_convertion
+from lime.inference.detection import FeatureDetection
+from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures
+from lime.plotting.plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
+from lime.plotting.bokeh_plots import BokehFigures
+from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame, lime_cfg
 
-from .recognition import LineFinder, DetectionInference
-from .plots import SpectrumFigures, SampleFigures, CubeFigures
-from .plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
-from .io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, _PARENT_BANDS, \
-    check_file_array_mask, load_frame
-
-from .read_fits import OpenFits, SPECTRUM_FITS_PARAMS
-from .transitions import Line, latex_from_label, air_to_vacuum_function
-from .workflow import SpecTreatment, CubeTreatment, SpecRetriever
-from . import Error, __version__
+from lime.transitions import Line
+from lime.archives.read_fits import OpenFits
+from lime.workflow import SpecTreatment, CubeTreatment, SpecRetriever
 
 # Log variable
 _logger = logging.getLogger('LiMe')
@@ -29,12 +26,6 @@ try:
     mplcursors_check = True
 except ImportError:
     mplcursors_check = False
-
-try:
-    from aspect import SpectrumDetector
-    aspect_check = True
-except ImportError:
-    aspect_check = False
 
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
@@ -130,7 +121,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
                                          f'1D flux arrays for the Spectrum objects \n'
                                          f'and 3D flux arrays Cube objects.')
                 else:
-                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}')
+                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}:{value_arr}')
 
                 # Check for unmasked nan and inf entries
                 if i < 3:
@@ -150,7 +141,7 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
     # Check not all the pixels are masked
     if mask_check:
         if np.all(output_pixel_mask):
-            raise LiMe_Error(f'All the input observation pixels are masked. Please check that only bad pixels entries'
+            _logger.critical(f'All the input observation pixels are masked. Please check that only bad pixels entries'
                              f' are masked (in numpy arrays flux_arr[pixel_mask] = bad_entries)')
 
     return output_pixel_mask
@@ -173,7 +164,7 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux-np.nanmin(flux_array))) - norm_factor)
                 else:
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux)) - norm_factor)
-
+                # TODO add note for unit_conversion
                 _logger.info(f'The observation does not include a normalization but the mean flux value is '
                              f'below {min_flux_scale}. The flux will be automatically normalized by {norm_flux}.')
             else:
@@ -273,83 +264,143 @@ def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, re
     flux = flux if flux is None else flux/norm_flux
     err_flux = err_flux if err_flux is None else err_flux/norm_flux
 
-    # Mask the data
-    if pixel_mask is not None:
+    # Add all False mask if none provided
+    pixel_mask = pixel_mask if pixel_mask is not None else np.zeros(flux.shape).astype(bool)
 
-        # Confirm boolean mask
-        bool_mask = pixel_mask.astype(bool)
+    # Wavelength masking 1D arrays
+    if len(pixel_mask.shape) == 1:
+        wave = np.ma.masked_array(wave, pixel_mask)
+        wave_rest = np.ma.masked_array(wave_rest, pixel_mask)
 
-        # Check for non-1D arrays
-        if len(pixel_mask.shape) == 1:
-            wave = np.ma.masked_array(wave, bool_mask)
-            wave_rest = np.ma.masked_array(wave_rest, bool_mask)
+    # Cube wavelength masking (all flux entries in one plane must be masked)
+    else:
+        wave_mask = np.all(pixel_mask, axis=(1, 2))
+        wave = np.ma.masked_array(wave, wave_mask)
+        wave_rest = np.ma.masked_array(wave_rest, wave_mask)
 
-        # Spectrum or Cube spectral masking
-        flux = np.ma.masked_array(flux, bool_mask)
-        err_flux = None if err_flux is None else np.ma.masked_array(err_flux, bool_mask)
+    # Spectrum or Cube spectral masking
+    flux = np.ma.masked_array(flux, pixel_mask)
+    err_flux = None if err_flux is None else np.ma.masked_array(err_flux, pixel_mask)
 
     return wave, wave_rest, flux, err_flux
 
 
-class Spectrum(LineFinder):
+class Spectrum:
 
     """
-    This class creates a long-slit spectroscopic observation.
+    Long-slit spectrum container with utilities for fitting, plotting, and retrieving measurements.
 
-    The user needs to provide wavelength and flux arrays. Additionally, the user can include a flux uncertainty
-    array. This uncertainty must be in the same units as the flux. The cube should include its ``redshift``.
+    A :class:`Spectrum` holds wavelength, flux, and optional uncertainty, arrays for a
+    single long-slit observation.
 
-    If the flux units result in very small magnitudes, the user should also provide a normalization to make the flux
-    magnitude well above zero. Otherwise, the profile fittings are likely to fail. This normalization is removed in the
-    output measurements.
+    The user can provide a flux normalization (otherwise the algorithm will compute one if the input flux median <0.0001),
+    pixel masking (to exclude bad pixels), and the observation redshift (if none is provided, it is assumed z = 0),
+    wavelength/flux units, and instrumental resolving power.
 
-    The user can provide a ``pixel_mask`` boolean array with the pixels **to be excluded** from the measurements.
+    Parameters
+    ----------
+    input_wave : numpy.ndarray, optional
+        Observed frame wavelength array.
+    input_flux : numpy.ndarray, optional
+        Flux array aligned with ``input_wave``.
+    input_err : numpy.ndarray, optional
+        1σ flux uncertainty array (same shape and units as ``input_flux``).
+    redshift : float, optional
+        Observation redshift ``z``.
+    norm_flux : float, optional
+        Flux normalization factor. Useful when flux magnitudes are very small; applied
+        internally for fitting and removed in reported measurements.
+    crop_waves : tuple or numpy.ndarray, optional
+        Two-element ``(min, max)`` wavelength range used to crop the input arrays.
+    res_power : float or numpy.ndarray, optional
+        Instrument resolving power :math:`R = \\lambda/\\Delta\\lambda`. If provided,
+        it can be used to compute and apply an instrumental broadening correction
+        (``sigma_instr``) during analysis.
+    units_wave : str, optional
+        Wavelength units. Accepts any valid `Astropy units string
+        <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_,
+        such as ``"Angstrom"``, ``"nm"``, ``"um"``, ``"mm"``, ``"cm"``, or ``"Hz"``.
+        Default is ``"Angstrom"`` (equivalent to ``"AA"``, ``"A"``).
+    units_flux : str, optional
+        Flux units. Accepts any valid `Astropy units string
+        <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_,
+        such as ``"erg / (s cm2 Angstrom)"``, ``"erg / (s cm2 Hz)"``, ``"Jy"``,
+        ``"mJy"``, or ``"nJy"``.
+        Default is ``"erg / (s cm2 Angstrom)"`` (equivalent to ``"FLAM"``).
+    pixel_mask : numpy.ndarray of bool, optional
+        Boolean mask with **True for pixels to exclude** from measurements (same length
+        as ``input_wave``).
+    id_label : str, optional
+        Identifier for this spectrum (e.g., object name).
+    review_inputs : bool, optional
+        If ``True`` (default), validate and assign inputs via ``_set_attributes`` on init.
 
-    The default ``units_wave`` are angtroms (Å), additional options are: um, nm, Hz, cm, mm
+    Attributes
+    ----------
+    label : str or None
+        Canonical internal name for the spectrum (may be derived from ``id_label``).
+    wave : numpy.ndarray
+        Observed‐frame wavelength array (after any cropping).
+    wave_rest : numpy.ndarray
+        Rest-frame wavelength array, if ``redshift`` is set.
+    flux : numpy.ndarray
+        Flux array (after any normalization handling).
+    err_flux : numpy.ndarray or None
+        1σ flux uncertainty.
+    cont, cont_std : numpy.ndarray or None
+        Continuum and its scatter (filled by downstream steps if applicable).
+    frame : pandas.DataFrame or None
+        Internal per-pixel frame, if/when constructed.
+    redshift, norm_flux, res_power : float or None
+        Stored metadata as described in *Parameters*.
+    units_wave, units_flux : str
+        Stored unit labels.
 
-    The default ``units_flux`` are Flam (erg s^-1 cm^-2 Å^-1), additional options are: Fnu, Jy, mJy, nJy
+    Analysis helpers
+    ----------------
+    fit : :class:`lime.workflow.SpecTreatment`
+        Fitting interface (line/profile fitting, corrections, etc.).
+    infer : :class:`lime.workflow.FeatureDetection`
+        Feature detection utilities.
+    retrieve : :class:`lime.workflow.SpecRetriever`
+        Tools for retreiven spectrum data.
 
-    The user can also specify an instrument resolving power (``res_power``), so it can be used to compute a sigma correction (sigma_instr) on the results.
+    Plotting
+    --------
+    plot : :class:`lime.plots.SpectrumFigures`
+        Matplotlib figures.
+    check : :class:`lime.plots.SpectrumCheck`
+        Interactive figures to review/modify the input data.
+    bokeh : :class:`lime.plots.BokehFigures`
+        Bokeh figures.
 
-    The user can provide a ``pixel_mask`` boolean array with the pixels **to be excluded** from the measurements.
+    Notes
+    -----
+    - If flux magnitudes are extremely small, set ``norm_flux`` to rescale the spectrum
+      and ensure numerical stability during fitting. LiMe automatically removes this
+      normalization from the final reported measurements. Similarly, if the wavelength
+      array varies only by a few decimal places, the fitting routines may fail due to
+      insufficient numerical precision.
+    - ``pixel_mask`` follows NumPy’s masking convention: ``True`` entries mark pixels
+      **to be excluded** from fitting and measurements.
+    - Default units are ``"AA"`` (Angstrom) for wavelength and ``"FLAM"`` (erg s⁻¹ cm⁻² Å⁻¹)
+      for flux. Ensure that your input arrays are consistent with the declared units.
 
-    :cvar fit: Fitting function instance from  :class:`lime.workflow.SpecTreatment`.
 
-    :cvar plot: Plotting function instance from :class:`lime.plots.SpectrumFigures`.
+    Examples
+    --------
+    Create a spectrum with uncertainties and a pixel mask:
 
-    :param input_wave: wavelength array.
-    :type input_wave: numpy.array
+    >>> spec = Spectrum(input_wave=wave, input_flux=flux, input_err=err,
+    ...                 redshift=0.0132, units_wave="AA", units_flux="FLAM")
 
-    :param input_flux: flux array.
-    :type input_flux: numpy.array
+    Apply a normalization for very small fluxes:
 
-    :param input_err: flux sigma uncertainty array.
-    :type input_err: numpy.array, optional
+    >>> spec = Spectrum(input_wave=wave, input_flux=flux, redshift=0, norm_flux=1e-16)
 
-    :param redshift: observation redshift.
-    :type redshift: float, optional
+    Provide instrument resolving power for sigma correction:
 
-    :param norm_flux: spectrum flux normalization.
-    :type norm_flux: float, optional
-
-    :param crop_waves: spectrum (minimum, maximum) values
-    :type crop_waves: np.array, tuple, optional
-
-    :param res_power: Instrument resolving power.
-    :type res_power: float, np.array, optional
-
-    :param units_wave: Wavelength array units. The default value is "A".
-    :type units_wave: str, optional
-
-    :param units_flux: Flux array physical units. The default value is "Flam".
-    :type units_flux: str, optional
-
-    :param pixel_mask: Boolean array with True values for rejected pixels.
-    :type pixel_mask: np.array, optional
-
-    :param id_label: identity label for the spectrum object
-    :type id_label: str, optional
-
+    >>> spec = Spectrum(input_wave=wave, input_flux=flux, redshift=0, res_power=6000)
     """
 
     # File manager for a Cube created from an observation file
@@ -357,9 +408,6 @@ class Spectrum(LineFinder):
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
-
-        # Load parent classes
-        LineFinder.__init__(self)
 
         # Class attributes
         self.label = None
@@ -380,14 +428,13 @@ class Spectrum(LineFinder):
 
         # Treatments objects
         self.fit = SpecTreatment(self)
+        self.infer = FeatureDetection(self)
         self.retrieve = SpecRetriever(self)
-
-        if aspect_check:
-            self.features = SpectrumDetector(self)
 
         # Plotting objects
         self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
+        self.bokeh = BokehFigures(self)
 
         # Review and assign the attibutes data
         if review_inputs:
@@ -399,13 +446,53 @@ class Spectrum(LineFinder):
     @classmethod
     def from_cube(cls, cube, idx_j, idx_i, label=None):
 
+        """
+        Create a :class:`~lime.Spectrum` from a :class:`~lime.Cube` spaxel
+
+        This class method extracts a one-dimensional spectrum (wavelength, flux, and
+        associated metadata) from a LiMe cube at the specified pixel
+        coordinates (these are the numpy arry coordiantes).
+
+        Parameters
+        ----------
+        cube : lime.Cube
+            Parent LiMe cube object containing 3D arrays of flux and wavelength data.
+        idx_j : int
+            Spatial pixel index along the cube’s Y-axis (row).
+        idx_i : int
+            Spatial pixel index along the cube’s X-axis (column).
+        label : str, optional
+            Identifier label for the extracted spectrum (e.g., ``"spaxel_45_32"``).
+
+        Returns
+        -------
+        Spectrum
+            A :class:`~lime.transitions.Spectrum` instance representing the 1D spectrum
+            at the specified spatial position.
+
+        Notes
+        -----
+        - The extracted spectrum inherits:
+          * ``flux`` and optional ``err_flux`` from ``cube.flux`` and ``cube.err_flux``.
+          * ``wave`` and ``wave_rest`` from the cube’s wavelength arrays, applying the same flux mask.
+          * ``redshift``, ``norm_flux``, ``res_power``, ``units_wave``, and ``units_flux`` directly from the parent cube metadata.
+        - The resulting object is initialized with ``review_inputs=False`` to avoid re-validation of already-processed arrays.
+        - The method returns a new :class:`Spectrum` that can be analyzed or fitted independently of the cube.
+        - For more information about masked arrays, see `numpy.ma.MaskedArray <https://numpy.org/doc/stable/reference/maskedarray.generic.html>`_.
+
+        Examples
+        --------
+        Extract a single-spaxel spectrum from a cube:
+
+        >>> spec = Spectrum.from_cube(cube, idx_j=45, idx_i=32, label="spaxel_45_32")
+        >>> spec.plot.show_spectrum()
+        """
+
         # Load parent classes
         spec = cls(review_inputs=False)
 
         # Class attributes
         spec.label = label
-        spec.wave = cube.wave
-        spec.wave_rest = cube.wave_rest
         spec.flux = cube.flux[:, idx_j, idx_i]
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
@@ -415,56 +502,120 @@ class Spectrum(LineFinder):
         spec.units_wave = cube.units_wave
         spec.units_flux = cube.units_flux
 
-        # Check if masked array
-        if np.ma.isMaskedArray(spec.flux):
-            spec.wave = np.ma.masked_array(spec.wave, cube.flux[:, idx_j, idx_i].mask)
-            spec.wave_rest = np.ma.masked_array(cube.wave_rest, cube.flux[:, idx_j, idx_i].mask)
+        # Use the flux mask for the wavelength
+        spec.wave = np.ma.MaskedArray(cube.wave.data, spec.flux.mask)
+        spec.wave_rest = np.ma.MaskedArray(cube.wave_rest.data, spec.flux.mask)
 
         return spec
 
     @classmethod
-    def from_file(cls, file_address, instrument, mask_flux_entries=None, **kwargs):
+    def from_file(cls, fname, instrument, redshift=None, norm_flux=None, crop_waves=None, res_power=None,
+                  units_wave=None, units_flux=None, pixel_mask=None, id_label=None, wcs=None, **kwargs):
 
         """
+        Create a :class:`~lime.transitions.Spectrum` instance from an observational FITS file or .txt file.
 
-        This method creates a lime.Spectrum object from an observational (.fits) file. The user needs to introduce the
-        file address location and the name of the instrument of survey.
+        This constructor reads a 1D spectroscopic observation from a supported instrument or survey
+        and converts it into a fully initialized :class:`Spectrum` object. The function automatically
+        interprets the file structure from the instrument template.
 
-        Currently, this method supports NIRSPEC, ISIS, OSIRIS and SDSS as input instrument sources. This method will
-        lower case the input instrument or survey name.
+        To view the list of supported instruments and their configurations, use :func:`show_instrument_cfg`.
 
-        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
-        user introduces [np.nan, 'negative'] the output spectrum will mask np.nan entries and negative fluxes.
+        Parameters
+        ----------
+        fname : str or pathlib.Path
+            Path to the observational FITS file to read.
+        instrument : str
+            Name of the instrument or survey. The value is case-insensitive and
+            is automatically converted to lowercase.
+            Currently supported options include:
+            ``"nirspec"``, ``"isis"``, ``"osiris"``, and ``"sdss"``.
+        redshift : float, optional
+            Source or observation redshift.
+        norm_flux : float, optional
+            Flux normalization factor. If provided, the spectrum is scaled internally
+            for fitting stability, and the normalization is removed from the output
+            measurements.
+        crop_waves : tuple or numpy.ndarray, optional
+            Two-element ``(min, max)`` wavelength range to crop the extracted spectrum.
+        res_power : float or numpy.ndarray, optional
+            Instrument resolving power (R = λ/Δλ). Used to compute the instrumental
+            broadening correction in subsequent analysis.
+        units_wave : str, optional
+            Wavelength units. Accepts any valid `Astropy units string
+            <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_,
+            such as ``"Angstrom"``, ``"nm"``, or ``"um"``.
+            Default is determined automatically from the instrument configuration.
+        units_flux : str, optional
+            Flux units. Accepts any valid `Astropy units string
+            <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_,
+            such as ``"erg / (s cm2 Angstrom)"``, ``"Jy"``, or ``"mJy"``.
+            Default is determined automatically from the instrument configuration.
+        pixel_mask : numpy.ndarray of bool or list, optional
+            Boolean mask or a list of flux criteria used to exclude pixels from
+            measurements.
+            For example, ``[np.nan, "negative"]`` masks pixels with NaN values or
+            negative fluxes in the input file.
+        id_label : str, optional
+            Identifier label for the resulting :class:`Spectrum` object.
+        wcs : object, optional
+            Optional WCS information for spatially-calibrated FITS files.
+        **kwargs
+            Additional keyword arguments passed directly to the :class:`Spectrum`
+            initializer.
 
-        This method provides the instrument observational units and normalization but the user should introduce
-        the additional LiMe.Spectrum arguments (such as the observation redshift).
+        Returns
+        -------
+        Spectrum
+            A fully initialized :class:`Spectrum` object containing
+            wavelength, flux, uncertainty (if available), and metadata from the FITS file.
 
-        :param file_address: Input file location address.
-        :type file_address: Path, string
+        Notes
+        -----
+        - The method automatically detects the appropriate *.fits* file parser based on the
+          ``instrument`` keyword.
+        - For text files (``instrument="text"``), the ``**kwargs`` arguments are passed directly to
+          the `numpy.loadtxt <https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html>`_
+          function.
+        - Flux units and wavelength calibration are derived from the instrument
+          configuration and FITS. This assumes a standard calibration pipeline. Please check the units match your
+          observation.
+        - The user can override any automatically instrument parameter by explicitly passing the corresponding argument.
 
-        :param instrument: Input file instrument or survey name
-        :type instrument: str
+        Examples
+        --------
+        Load an OSIRIS FITS spectrum and set the observation redshift:
 
-        :param mask_flux_entries: List of pixel values to mask from flux array
-        :type mask_flux_entries: list
+        >>> spec = Spectrum.from_file("osiris_obs.fits", instrument="osiris", redshift=0.013)
 
-        :param kwargs: lime.Spectrum arguments.
+        Load an SDSS spectrum and mask invalid pixels:
 
-        :return: lime.Spectrum
+        >>> spec = Spectrum.from_file("spec-12345.fits", instrument="sdss",
+        ...                            pixel_mask=[np.nan, "negative"])
 
+        Apply normalization and restrict the wavelength range:
+
+        >>> spec = Spectrum.from_file("isis_star.fits", instrument="isis",
+        ...                            norm_flux=1e-16, crop_waves=(4000, 7000))
         """
 
         # Create file manager object to administrate the file source and observation properties
-        cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
+        cls._fitsMgr = OpenFits(fname, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, mask_flux_entries)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, pixel_mask, **kwargs)
 
-        # Update the parameters file parameters with the user parameters
-        obs_args = {**fits_args, **kwargs}
+        # Update the file parameters with the user parameters
+        input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, res_power=res_power,
+                            units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
+
+        if cls._fitsMgr.spectrum_check:
+            input_args.pop('wcs')
+
+        input_args = {**fits_args, **{k: v for k, v in input_args.items() if v is not None}}
 
         # Create the LiMe object
-        return cls(**obs_args)
+        return cls(**input_args)
 
     @classmethod
     def from_survey(cls, target_id, survey, mask_flux_entries=None, **kwargs):
@@ -513,7 +664,7 @@ class Spectrum(LineFinder):
         # Class attributes
         self.label = label
 
-        # Review the inputs
+        # Review the 2_guides
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Checks units
@@ -535,39 +686,66 @@ class Spectrum(LineFinder):
         self.frame = pd.DataFrame(np.empty(0, dtype=_LOG_EXPORT_RECARR))
 
         # Set the instrumental sigma correction
-        self.res_power = np.nan if res_power is None else res_power
-
+        self.res_power = res_power
 
         return
 
     def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None):
 
         """
+        Convert the spectrum dispersion, energy density, and energy uncertainty units of the .
 
-        This function converts spectrum dispersion and/or flux array units.
+        This method updates the internal data arrays of the :class:`~lime.Spectrum` instance to new physical units.
+        Conversions are handled by the `Astropy Units module
+        <https://docs.astropy.org/en/stable/units/>`_. The function will remove the existing normalization and apply
+        the new ``norm_flux`` if provided.
 
-        The user can specify the desired units using the `astropy string format <https://docs.astropy.org/en/stable/units/ref_api.html>`_
-        or introducing the `astropy unit variable  <https://docs.astropy.org/en/stable/units/index.html>`_.
+        Parameters
+        ----------
+        wave_units_out : str or astropy.units.Unit, optional
+            Target wavelength units. Accepts any valid `Astropy unit string
+            <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_ (e.g.,
+            ``"Angstrom"``, ``"nm"``, ``"um"``, ``"Hz"``) or an ``astropy.units.Unit``
+            object. If ``None``, the current wavelength units are preserved.
+        flux_units_out : str or astropy.units.Unit, optional
+            Target flux units. Accepts any valid Astropy unit string or
+            ``astropy.units.Unit`` object. Common shortcuts include:
+            ``"FLAM"`` (erg s⁻¹ cm⁻² Å⁻¹), ``"FNU"`` (erg s⁻¹ cm⁻² Hz⁻¹),
+            ``"PHOTLAM"`` (photon s⁻¹ cm⁻² Å⁻¹), and ``"PHOTNU"`` (photon s⁻¹ cm⁻² Hz⁻¹).
+            Lowercase equivalents (``"flam"``, ``"fnu"``, etc.) are also accepted.
+            If ``None``, the flux units are preserved.
+        norm_flux : float, optional
+            Flux normalization factor to apply after conversion. If provided,
+            the flux and uncertainty arrays are scaled accordingly, and the new
+            normalization is stored in ``self.norm_flux``.
 
-        Additionally, the user can use FLAM (erg/s/cm^2/AA), FNU (erg/s/cm^2/Hz,), PHOTLAM (photon/s/cm^2/AA), PHOTNU (photon/s/cm^2/Hz)
-        or in lowercase (flam, fun, photlam, photnu)
+        Returns
+        -------
+        None
+            The method modifies the current :class:`Spectrum` instance in place,
+            updating the arrays:
+            ``wave``, ``wave_rest``, ``flux``, ``err_flux``,
+            and the attributes ``units_wave``, ``units_flux``, and ``norm_flux``.
 
-        The user can also provide a flux normalization for the new flux units.
+        Examples
+        --------
+        Convert wavelength from (current) Angstrom to nanometers:
 
-        :param wave_units_out: Output wavelength array units
-        :type wave_units_out: str, optional
+        >>> spec.unit_conversion(wave_units_out="nm")
 
-        :param flux_units_out: Output flux array units
-        :type flux_units_out: str, optional
+        Convert flux from Fλ to Fν and apply normalization:
 
-        :param norm_flux: Flux normalization
-        :type norm_flux: float, optional
+        >>> spec.unit_conversion(flux_units_out="FNU", norm_flux=1e-16)
 
+        Using Astropy unit objects directly:
+
+        >>> import astropy.units as u
+        >>> spec.unit_conversion(wave_units_out=u.um, flux_units_out=u.Jy)
         """
 
         # Extract the new values
-        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = observation_unit_convertion(self,
-                                                                                         wave_units_out, flux_units_out)
+        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = parse_unit_convertion(self,
+                                                                                                                 wave_units_out, flux_units_out)
 
         # Reassign the units and normalization
         self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
@@ -579,93 +757,142 @@ class Spectrum(LineFinder):
         return
 
     def save_frame(self, fname, page='FRAME', param_list='all', header=None, column_dtypes=None,
-                   safe_version=True):
-
+                   safe_version=True, skip_failed=False):
 
         """
+        Save the spectrum line measurements to disk in one of several supported formats.
 
-        This function saves the spectrum measurements at the ``file_address`` provided by the user.
+        This method exports the current spectrum’s measurements to a table file. The output format is inferred
+        from the filename extension. Supported formats include plain text tables, .fits, ASDF trees, and Excel sheets and
+        pdf files.
 
-        The accepted extensions  are ".txt", ".pdf", ".fits", ".asdf" and ".xlsx".
+        Parameters
+        ----------
+        fname : str or pathlib.Path
+            Destination file path. The extension determines the output format.
+            Supported extensions are ``.txt``, ``.fits``, ``.asdf``, ``.pdf``, and ``.xlsx``.
+        page : str, optional
+            Name of the HDU (for FITS) or sheet (for Excel) where the data will be
+            written. Default is ``"FRAME"``.
+        param_list : list or {"all"}, optional
+            List of parameter columns to include in the output. If ``"all"``, all available measurements are written. Default is ``"all"``.
+        header : dict, optional
+            Optional metadata dictionary to include in the output file. For FITS and ASDF formats, this is added to the primary header.
+        column_dtypes : str, type, or dict, optional
+            Conversion rule for the output record array used in FITS files.
+            - If a string or type, the specified type is applied to all columns.
+            - If a dictionary, keys or indices define column-specific types. See the `pandas.DataFrame.to_records` documentation for details: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html
+        safe_version : bool, optional
+            If ``True`` (default), append the current LiMe version number as a footnote
+            or header annotation in the exported log.
+        skip_failed : bool, optional
+            If ``True``, skip over measurements that failed or could not be saved
+            (e.g., missing flux values). Default is ``False``.
 
-        For ".fits" and ".xlsx" files the user can provide a page name for the HDU/sheet with the ``ext`` argument.
-        The default name is "LINESFRAME".
+        Returns
+        -------
+        None
+            The file is written to disk. No value is returned.
 
-        The user can specify the ``parameters`` to be saved in the output file.
+        Examples
+        --------
+        Save the current spectrum’s line measurements to a FITS table:
 
-        For ".fits" files the user can provide a dictionary to add to the ``fits_header``. The user can provide a ``column_dtypes``
-        string or dictionary for the output fits file record array. This overwrites LiMe deafult formatting and it must have the
-        same columns as the file names.
+        >>> spec.save_frame("lines.fits", header={"OBSERVER": "V. Pérez"})
 
+        Save selected columns to an Excel file:
 
-        :param fname: Output log address.
-        :type fname: str, Path
+        >>> spec.save_frame("lines.xlsx", page="FRAME",
+        ...                 param_list=["id", "line", "flux", "err_flux"])
 
-        :param param_list: Output parameters list. The default value is "all"
-        :type param_list: list
+        Export to a text file and skip failed lines:
 
-        :param page: Name for the HDU/sheet for ".fits"/".xlsx" files.
-        :type page: str, optional
-
-        :param header: Dictionary for ".fits" and ".asdf" files.
-        :type header: dict, optional
-
-        :param column_dtypes: Conversion variable for the `records array <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_records.html>`.
-                          for the output fits file. If a string or type, the data type to store all columns. If a dictionary, a mapping of column
-                          names and indices (zero-indexed) to specific data types.
-        :type column_dtypes: str, dict, optional
-
-        :param safe_version: Save LiMe version as footnote or page header on the output log. The default value is True.
-        :type safe_version: bool, optional
-
+        >>> spec.save_frame("lines.txt", skip_failed=True)
         """
 
         # Meta parameters from the observations
-        meta_params = {'LiMe':       __version__,
+        meta_params = {'LiMe':       lime_cfg['metadata']["version"],
                        'u_wave':     self.units_wave.to_string(),
                        'u_flux':     self.units_flux.to_string(),
                        'redshift':   self.redshift,
                        'id':         self.label}
 
-        # Save the file
-        save_frame(fname, self.frame, page, param_list, header, column_dtypes=column_dtypes,
-                   safe_version=safe_version, **meta_params)
+        # Exclude the failed fittings from the output log
+        out_put_frame = self.frame if skip_failed is False else self.frame.loc[self.frame['observations'] != 'No_errorbars']
+
+        # Save the dataframe
+        save_frame(fname, out_put_frame, page, param_list, header, column_dtypes=column_dtypes, safe_version=safe_version,
+                   **meta_params)
 
         return
 
     def load_frame(self, fname, page='LINESFRAME'):
 
         """
+        Load a lines frame into the spectrum.
 
-        This function loads a lines measurements log as a lime.Spectrum.log variable.
+        This method reads a previously saved line–measurement table (e.g., produced by
+        :meth:`~lime.Spectrum.save_frame`) and attaches it to the current
+        :class:`Spectrum` instance as the ``frame`` attribute. Any flux-dependent
+        quantities are renormalized according to the spectrum’s current
+        normalization (``norm_flux``).
 
-        The appropriate variables are normalized by the current spectrum flux normalization.
+        Parameters
+        ----------
+        fname : str or pathlib.Path
+            Path to the input file containing the line measurements log.
+            Supported formats include ``.txt``, ``.fits``, ``.asdf``, and ``.xlsx``.
+        page : str, optional
+            Name of the HDU (for FITS) or sheet (for Excel) from which to load the
+            data. Default is ``"LINESFRAME"``.
 
-        :param fname: Input log address.
-        :type fname: str, Path
+        Returns
+        -------
+        None
+            The method updates the current :class:`Spectrum` instance in place,
+            assigning the loaded data to ``self.frame``.
 
-        :param page: Name of the HDU/sheet for ".fits"/".xlsx" files.
-        :type page: str, optional
+        Notes
+        -----
+        - The file format is inferred automatically from its extension.
+        - The table is normalized using the current spectrum’s ``norm_flux`` so that
+          the loaded measurements remain consistent with the flux scaling in memory.
+        - For FITS and Excel files, the ``page`` argument selects the HDU/sheet name
+          to read from.
+        - This method is complementary to :meth:`~lime.transitions.Spectrum.save_frame`.
 
+        Examples
+        --------
+        Load a previously saved text line log:
+
+        >>> spec.load_frame("lines.txt")
+
+        Load from an Excel sheet named ``LINESFRAME``:
+
+        >>> spec.load_frame("lines.fits", page="LINESFRAME")
+
+        After loading, the line measurements are accessible via:
+
+        >>> spec.frame.head()
         """
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(fname, pd.DataFrame, ext=page)
+        log_df = check_file_dataframe(fname, ext=page)
 
         # Security checks:
-        if log_df.index.size > 0:
+        if log_df is not None and log_df.index.size > 0:
             line_list = log_df.index.values
 
             # Get the first line in the log
-            line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
+            line_0 = Line.from_transition(line_list[0], data_frame=log_df, norm_flux=self.norm_flux)
 
             # Confirm the lines in the log match the one of the spectrum
-            if line_0.units_wave[0] != self.units_wave:
+            if line_0.units_wave != self.units_wave:
                 _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
                                 f' in {line_0.units_wave[0]}')
 
             # Confirm all the log lines have the same units
-            au_str = 'A' if line_0.units_wave[0] == 'Angstrom' else str(line_0.units_wave)
+            au_str = 'A' if line_0.units_wave == 'Angstrom' else str(line_0.units_wave)
             same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), au_str) != -1).size == line_list.size
             if not same_units_check:
                 _logger.warning(f'The log has lines with different units')
@@ -680,17 +907,52 @@ class Spectrum(LineFinder):
 
     def update_redshift(self, redshift):
 
+        """
+        Update the spectrum's redshift and recompute its rest-frame wavelength.
+
+        The normalization is preserved, and masked pixels remain unchanged.
+
+        Parameters
+        ----------
+        redshift : float
+            New redshift value to assign to the spectrum. The value should represent
+            the observed-to-rest-frame wavelength scaling factor
+            (:math:`1 + z = \\lambda_\\mathrm{obs} / \\lambda_\\mathrm{rest}`).
+
+        Returns
+        -------
+        None
+            The method updates the spectrum in place, modifying the attributes:
+            ``redshift``, ``wave_rest``.
+
+        Notes
+        -----
+        - Internally, this method reuses the existing data arrays stored in
+          ``self.wave``, ``self.flux``, and ``self.err_flux``.
+        - The pixel mask (``flux.mask``) is preserved and applied consistently
+          to the updated arrays.
+        - The update is performed through :func:`lime.spec_normalization_masking`,
+          which handles normalization, masking, and wavelength conversion.
+        - The normalization factor is fixed to unity (``norm_flux=1``) for this
+          operation.
+
+        Examples
+        --------
+        Update a spectrum to a new redshift:
+
+        >>> spec.update_redshift(0.0145)
+        >>> spec.wave_rest[:5]
+        array([4932.1, 4932.9, 4933.8, 4934.6, 4935.5])
+
+        The observed-frame wavelength array (``wave``) remains unchanged,
+        while the rest-frame array (``wave_rest``) is updated accordingly.
+        """
+
         # Check if it is a masked array
-        if np.ma.isMaskedArray(self.wave):
-            input_wave = self.wave.data
-            input_flux = self.flux.data
-            input_err = self.err_flux.data
-            pixel_mask = self.wave.mask
-        else:
-            input_wave = self.wave
-            input_flux = self.flux
-            input_err = self.err_flux
-            pixel_mask = None
+        input_wave = self.wave.data
+        input_flux = self.flux.data
+        input_err = self.err_flux.data
+        pixel_mask = self.flux.mask
 
         # Normalization and masking
         self.redshift = redshift
@@ -700,67 +962,123 @@ class Spectrum(LineFinder):
 
         return
 
+    def line_detection(self, *args, **kwargs):
+
+        raise LiMe_Error(f'The line_detection functionality has been moved an rebranded. Please use:\n'
+                         f'Spectrum.infer.peaks_troughs()')
+    
+    def clear_data(self):
+
+        """
+        Clear the spectrum’s measurements frame.
+
+        This method removes all entries from the internal ``frame`` attribute,
+        effectively resetting the stored measurements while preserving the
+        dataframe structure (columns and metadata).
+
+        Returns
+        -------
+        None
+            The method modifies the current :class:`Spectrum` instance in place.
+
+        Notes
+        -----
+        - The operation is equivalent to reassigning ``self.frame = self.frame[0:0]``,
+          which clears all rows but keeps column definitions intact.
+        - Use this method to reset the spectrum’s measurement results before
+          reprocessing or refitting without recreating the object.
+
+        Examples
+        --------
+        >>> spec.frame.shape
+        (25, 10)
+        >>> spec.clear_data()
+        >>> spec.frame.shape
+        (0, 10)
+        """
+
+        self.frame = self.frame[0:0]
+
+        return
+
 
 class Cube:
 
     """
+    Create a data cube for an integral-field spectroscopic observation.
 
-    This class creates an astronomical cube for an integral field spectrograph observation.
+    The `Cube` class represents a three-dimensional spectroscopic dataset, typically
+    from an **integral field spectrograph (IFS)** observation. The cube combines a 1D
+    wavelength axis with 2D spatial dimensions (x, y), producing a 3D flux array
+    (wavelength × y × x). Optionally, a matching 3D uncertainty array and pixel mask
+    can be provided.
 
-    The user needs to provide 1D wavelength and 3D flux arrays. Additionally, the user can include a 3D flux uncertainty
-    array. This uncertainty must be in the same units as the flux. The cube should include its ``redshift``.
+    Parameters
+    ----------
+    input_wave : numpy.ndarray
+        One-dimensional wavelength array in physical units.
+    input_flux : numpy.ndarray
+        Three-dimensional flux array (wavelength × y × x).
+    input_err : numpy.ndarray, optional
+        Three-dimensional uncertainty array (same shape as `input_flux`),
+        in the same flux units.
+    redshift : float, optional
+        Redshift of the observed target. Used to compute the rest-frame wavelength axis.
+    norm_flux : float, optional
+        Flux normalization factor. Useful when flux magnitudes are very small to
+        ensure numerical stability during line profile fitting. The normalization
+        is removed from final reported measurements.
+    crop_waves : array-like or tuple, optional
+        Minimum and maximum wavelength limits to crop the cube.
+    res_power : float or numpy.ndarray, optional
+        Instrument resolving power (:math:`R = \\lambda / \\Delta\\lambda`), used
+        to compute instrumental broadening corrections.
+    units_wave : str or `astropy.units.Unit`, optional
+        Wavelength units (default: ``"AA"`` for Angstroms). Accepts
+        `Astropy unit strings <https://docs.astropy.org/en/stable/units/index.html>`_,
+        e.g. ``"nm"``, ``"um"``, ``"Hz"``, ``"cm"``, ``"mm"``.
+    units_flux : str or `astropy.units.Unit`, optional
+        Flux units (default: ``"FLAM"`` → erg s⁻¹ cm⁻² Å⁻¹). Accepts any valid
+        Astropy unit string, such as ``"FNU"``, ``"Jy"``, ``"mJy"``, or ``"nJy"``.
+    pixel_mask : numpy.ndarray, optional
+        Boolean 3D array (same shape as `input_flux`) marking pixels **to be excluded**
+        from analysis. `True` values indicate excluded pixels.
+    id_label : str, optional
+        Identifier or label for the cube object.
+    wcs : astropy.wcs.WCS, optional
+        World Coordinate System object describing the spatial coordinates of the cube.
+        See the `Astropy WCS documentation <https://docs.astropy.org/en/stable/wcs/index.html>`_.
 
-    If the flux units result in very small magnitudes, the user should also provide a normalization to make the flux
-    magnitude well above zero. Otherwise, the profile fittings are likely to fail. This normalization is removed in the
-    output measurements.
+    Attributes
+    ----------
+    fit : lime.cube.CubeTreatment
+        Handler for fitting and measurement procedures.
+    plot : lime.plots.CubeFigures
+        Plotting interface for visualization.
+    check : lime.check.CubeCheck
+        Quality control and validation utilities.
 
-    The default ``units_wave`` are angtroms (Å), additional options are: um, nm, Hz, cm, mm
+    Notes
+    -----
+    - A pixel mask can be used to exclude bad or flagged spaxels from analysis.
+    - The resolving power (`res_power`) enables automatic line-width corrections
+      when fitting emission lines.
+    - Unit conversions are managed via the `Astropy Units` framework.
+    - If the flux values are very small (< 0.0001), consider setting a `norm_flux` value
+      to improve numerical stability the fitting minimization.
 
-    The default ``units_flux`` are Flam (erg s^-1 cm^-2 Å^-1), additional options are: Fnu, Jy, mJy, nJy
+    Examples
+    --------
+    Create a cube with a wavelength axis, flux data, uncertainty, redshift and WCS:
 
-    The user can also specify an instrument revolving power (``res_power``),  so it can be used to compute a sigma correction (sigma_instr) on the results.
+    >>> from astropy.wcs import WCS
+    >>> cube = Cube(input_wave=wave, input_flux=flux, input_err=err_flux,
+    ...             redshift=0.01, norm_flux=1e-17, wcs=WCS(header))
 
-    The user can provide a ``pixel_mask`` boolean 3D array with the pixels **to be excluded** from the measurements.
+    Crop the wavelength range and specify custom units:
 
-    The observation object should include an astropy World Coordinate System (``wcs``) to export the spatial coordinate
-    system to the measurement files.
-
-    :param input_wave: wavelength 1D array
-    :type input_wave: numpy.array
-
-    :param input_flux: flux 3D array
-    :type input_flux: numpy.array
-
-    :param input_err: flux sigma uncertainty 3D array.
-    :type input_err: numpy.array, optional
-
-    :param redshift: observation redshift.
-    :type redshift: float, optional
-
-    :param norm_flux: spectrum flux normalization
-    :type norm_flux: float, optional
-
-    :param crop_waves: spectrum (minimum, maximum) values
-    :type crop_waves: np.array, tuple, optional
-
-    :param res_power: Instrument resolving power power.
-    :type res_power: float, np.array, optional
-
-    :param units_wave: Wavelength units. The default value is "A"
-    :type units_wave: str, optional
-
-    :param units_flux: Flux array physical units. The default value is "Flam"
-    :type units_flux: str, optional
-
-    :param pixel_mask: Boolean 3D array with True values for rejected pixels.
-    :type pixel_mask: np.array, optional
-
-    :param id_label: identity label for the spectrum object
-    :type id_label: str, optional
-
-    :param wcs: Observation `world coordinate system <https://docs.astropy.org/en/stable/wcs/index.html>`_.
-    :type wcs: astropy WCS, optional
-
+    >>> cube = Cube(input_wave=wave, input_flux=flux, redshift=0.01, crop_waves=(4800, 5100),
+    ...             units_wave="nm", units_flux="Jy")
     """
 
     # File manager for a Cube created from an observation file
@@ -769,7 +1087,7 @@ class Cube:
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
 
-        # Review the inputs
+        # Review the 2_guides
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Class attributes
@@ -778,7 +1096,7 @@ class Cube:
         self.wave_rest = None
         self.flux = None
         self.err_flux = None
-        self.res_power = np.nan if res_power is None else res_power
+        self.res_power = res_power
         self.wcs = wcs
 
         # Treatments objects
@@ -806,114 +1124,212 @@ class Cube:
         return
 
     @classmethod
-    def from_file(cls, file_address, instrument, mask_flux_entries=None, **kwargs):
+    def from_file(cls, file_address, instrument, redshift=None, norm_flux=None, crop_waves=None, res_power=None,
+                  units_wave=None, units_flux=None, pixel_mask=None, wcs=None, id_label=None, **kwargs):
 
         """
+        Create a :class:`lime.Cube` instance from an observational FITS file.
 
-        This method creates a lime.Cube object from an observational (.fits) file.  The user needs to introduce the
-        file address location and the name of the instrument of survey.
+        This class method reads a 3D spectroscopic data cube from a FITS file and constructs
+        a :class:`lime.Cube` object. The user must provide the file path and the name of the
+        **instrument** or survey used for the observation.
 
-        Currently, this method supports MANGA and MUSE input instrument sources. This method will lower case the input
-        instrument or survey name.
+        You can check the list of supported instruments and their configurations using:
+        ``lime.show_instrument_cfg()``.
 
-        The user can include list of pixel values to generate a mask from the input file flux entries. For example, if the
-        user introduces ["nan", "negative"] the output spectrum will mask np.nan entries and negative fluxes.
+        The method automatically retrieves wavelength, flux, uncertainty (if available),
+        normalization, and WCS information from the FITS file based on the instrument’s
+        configuration. These default values can be overridden by passing explicit arguments
+        such as ``redshift``, ``norm_flux``, or ``units_wave``.
 
-        This method procures the instrument observations units, normalization and wcs but the user should introduce the
-        LiMe.Spectrum arguments (such as the observation redshift).
+        Users can also specify a 3D boolean ``pixel_mask`` to exclude unwanted pixels or
+        spaxels from subsequent analysis.
 
-        :param file_address: Input file location address.
-        :type file_address: Path, string
 
-        :param instrument: Input file instrument or survey name
-        :type instrument: str
+        Parameters
+        ----------
+        file_address : str or pathlib.Path
+            Path to the observational FITS file.
+        instrument : str
+            Instrument or survey name (e.g., ``"MUSE"``, ``"MANGA"``). The name is
+            case-insensitive.
+        redshift : float, optional
+            Redshift of the observed target. Used to compute the rest-frame wavelength axis.
+        norm_flux : float, optional
+            Flux normalization factor. Useful when flux magnitudes are very small to
+            improve numerical stability during line fitting. The normalization is
+            removed in output measurements.
+        crop_waves : array-like or tuple, optional
+            Minimum and maximum wavelength limits to crop the cube before loading.
+        res_power : float or numpy.ndarray, optional
+            Instrument resolving power (:math:`R = \\lambda / \\Delta\\lambda`), used
+            to compute instrumental broadening corrections.
+        units_wave : str or `astropy.units.Unit`, optional
+            Wavelength units. Default is None. Accepts
+            `Astropy-compatible unit strings
+            <https://docs.astropy.org/en/stable/units/index.html>`_
+        units_flux : str or `astropy.units.Unit`, optional
+            Energy density units. Default is None. Accepts `Astropy-compatible unit strings
+            <https://docs.astropy.org/en/stable/units/index.html>`_
+        pixel_mask : numpy.ndarray, optional
+            Boolean 3D array (same shape as the flux cube) marking pixels **to be excluded**
+            from analysis. ``True`` entries correspond to rejected pixels.
+        wcs : astropy.wcs.WCS, optional
+            World Coordinate System describing the spatial axes of the cube.
+            See the `Astropy WCS documentation
+            <https://docs.astropy.org/en/stable/wcs/index.html>`_.
+        id_label : str, optional
+            Identifier or label for the cube object.
+        **kwargs
+            Additional keyword arguments passed to the :class:`OpenFits.parse_data_from_file` function.
 
-        :param mask_flux_entries: List of pixel values to mask from flux array
-        :type mask_flux_entries: list
+        Returns
+        -------
+        lime.Cube
+            A fully constructed :class:`lime.Cube` object containing the wavelength array,
+            flux cube, uncertainty data (if available), and WCS metadata.
 
-        :param kwargs: lime.Cube arguments.
+        Notes
+        -----
+        - The method uses the :class:`lime.io.OpenFits` manager to interpret the FITS
+          structure and extract instrument-specific metadata.
+        - The instrument configuration defines which FITS extensions and data formats
+          are read for wavelength, flux, error, and WCS.
+        - The FITS file is read in memory; the original file is not modified.
 
-        :return: lime.Cube
+        Examples
+        --------
+        Load a MUSE data cube from file:
 
+        >>> cube = Cube.from_file("muse_cube.fits", instrument="MUSE")
+
+        Load a MaNGA cube and apply a custom normalization and redshift:
+
+        >>> cube = Cube.from_file("manga_cube.fits", instrument="MANGA",
+        ...                       redshift=0.015, norm_flux=1e-16)
+
+        Crop the wavelength range and set custom output units:
+
+        >>> cube = Cube.from_file("muse_cube.fits", instrument="MUSE",
+        ...                       crop_waves=(4800, 5100), units_wave="nm", units_flux="Jy")
         """
 
-        # TODO kwargs are not passing
         # Create file manager object to administrate the file source and observation properties
         cls._fitsMgr = OpenFits(file_address, instrument, cls.__name__)
 
         # Load the scientific data from the file
-        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, mask_flux_entries)
+        fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, pixel_mask, **kwargs)
+
+        # Update the file parameters with the user parameters
+        input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, res_power=res_power,
+                            units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
 
         # Update the parameters file parameters with the user parameters
-        obs_args = {**fits_args, **kwargs}
+        input_args = {**fits_args, **{k: v for k, v in input_args.items() if v is not None}}
 
         # Create the LiMe object
-        return cls(**obs_args)
+        return cls(**input_args)
 
-    def spatial_masking(self, line, bands=None, param='flux', contour_pctls=(90, 95, 99), output_address=None,
+    def spatial_masking(self, line, fname=None, bands=None, param='flux', contour_pctls=(90, 95, 99),
                         mask_label_prefix=None, header=None):
 
         """
+        Generate a spatial binary mask for a given line.
 
-        This function generates a spatial binary mask for an input ``line``.
+        This method creates one or more **binary spatial masks** based on the flux or
+        signal-to-noise distribution of a specified spectral line across the data cube.
+        Each mask corresponds to a percentile contour level in the input parameter
+        (e.g., total flux or S/N).
 
-        The ``line`` argument provides the label for the mask spatial image. The bands are read from the ``bands``
-        dataframe argument.
+        The ``line`` argument identifies the target line. If no custom ``bands``
+        are provided, the default bands database is used to locate the line and continuum
+        wavelength intervals.
 
-        The mask calculation can be done as a function of three parameters as a function of the ``param`` argument: "flux"
-        is the sum of the flux on input band, "SN_line" is the signal-to-noise ratio for an emission line and "SN_cont"
-        is the signal-to-noise of the continuum. The latter two parameters use the `Rola et al. (1994)
-        <https://ui.adsabs.harvard.edu/abs/1994A%26A...287..676R/abstract>`_ definition.
+        The parameter used for the mask calculation is controlled by ``param``:
+        - ``"flux"`` → integrates the flux over the line region.
+        - ``"SN_line"`` → computes the line signal-to-noise ratio using the definition from `Rola et al. (1994) <https://ui.adsabs.harvard.edu/abs/1994A%26A...287..676R/abstract>`_.
+        - ``"SN_cont"`` → computes the continuum signal-to-noise ratio from the adjacent continuum bands.
 
-        The number and spread of the binary masks is determined from percentile levels in the ``contour_pctls`` argument.
+        The method generates multiple masks based on percentile thresholds defined in
+        ``contour_pctls`` (e.g., 90, 95, 99). Higher percentiles correspond to smaller,
+        brighter regions of emission. Masks can be saved as a multi-extension FITS file
+        or returned as an ``astropy.io.fits.HDUList`` object.
 
-        If the user provides an ``output_address`` this function will be saved as a ".fits" file. If none is provided the
-        function will return and HDUL variable.
+        Parameters
+        ----------
+        line : str
+            Label of the emission line to analyze (in `LiMe notation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_).
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Bands dataframe or file path defining the wavelength intervals for the line and continua. If not provided, the default LiMe bands database is used.
+        param : {'flux', 'SN_line', 'SN_cont'}, optional
+            Parameter for mask generation. Determines the property used to compute percentile contours:
+              * ``'flux'`` — integrated flux over the emission-line band.
+              * ``'SN_line'`` — emission-line signal-to-noise ratio (Rola et al. 1994).
+              * ``'SN_cont'`` — continuum signal-to-noise ratio.
 
-        By default, the masks are saved in a ".fits" file with the extension name "MASK_0", "MASK_1"... The user can add a
-        prefix to these names witht he ```mask_label_prefix`` argument.
+            Default is ``'flux'``.
+        contour_pctls : array-like, optional
+            Sorted percentile values for mask generation (in increasing order). Default is ``(90, 95, 99)``.
+        fname : str or pathlib.Path, optional
+            File path to save the output FITS file. If not provided, the function returns an :class:`astropy.io.fits.HDUList` object instead.
+        mask_label_prefix : str, optional
+            Prefix added to the FITS extension names for each mask. By default, masks are labeled as ``MASK_0``, ``MASK_1``, etc.
+        header : dict, optional
+            Dictionary of header metadata to include in the output FITS extensions.
+            Keys correspond to mask names (e.g., ``'mask_0'``) or a global header.
 
-        :param line: Line label for the spatial image.
-        :param type: str
+        Returns
+        -------
+        astropy.io.fits.HDUList or None
+            - Returns an HDUList containing the generated masks if ``fname=None``.
+            - Writes the masks to a FITS file and returns ``None`` otherwise.
 
-        :param bands: Bands dataframe (or file address to the dataframe).
-        :type bands: pandas.Dataframe, str, path.Pathlib, optional
+        Notes
+        -----
+        - Each mask corresponds to a percentile contour level of the input ``param`` image.
+        - Pixels with all-NaN flux values across the wavelength dimension are automatically
+          excluded from the masks.
+        - If the FITS file output path is invalid, the function raises a :class:`LiMe_Error`.
+        - The FITS header for each mask have the following keys:
+            * ``PARAM`` — the parameter used (e.g., flux or SN_line)
+            * ``PARAMIDX`` — percentile level
+            * ``PARAMVAL`` — threshold parameter value
+            * ``NUMSPAXE`` — number of unmasked spaxels
 
-        :param param: Parameter label for mask calculation. The default value is 'flux'.
-        :type param: str
+        - The output FITS file retains the cube’s spatial WCS coordinates using
+          :func:`lime.io.extract_wcs_header`.
 
-        :param contour_pctls: Sorted percentile values for the binary mask calculation.
-        :type contour_pctls: np.array
+        Examples
+        --------
+        Generate flux-based spatial masks for Hα at 90th, 95th, and 99th percentiles:
 
-        :param mask_label_prefix: Prefix for the mask page name in output file
-        :type mask_label_prefix: str, optional
+        >>> hdul = cube.spatial_masking("H1_6563A", bands="default_bands.xlsx")
 
-        :param output_address: File location to store the mask.
-        :type output_address: str, optional
+        Save the masks as a FITS file:
 
-        :param header: Dictionary for mask ".fits" file header
-        :type header: dict, optional
+        >>> cube.spatial_masking("O3_5007A", fname="O3_masks.fits")
 
-        :return:
+        Compute masks based on the line signal-to-noise ratio:
 
+        >>> cube.spatial_masking("H1_4861A", param="SN_line", contour_pctls=[80, 90, 95])
         """
 
-        # Check the function inputs
+        # Check the function 2_guides
         contour_pctls = np.atleast_1d(contour_pctls)
         if not np.all(np.diff(contour_pctls) > 0):
-            raise Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
+            raise LiMe_Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
         inver_percentiles = np.flip(contour_pctls)
 
         if not param in ['flux', 'SN_line', 'SN_cont']:
-            raise Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
+            raise LiMe_Error(f'The mask calculation parameter ({param}) is not recognised. Please use "flux", "SN_line", "SN_cont"')
 
         # Line for the background image
-        line_bg = Line(line, bands)
+        line_bg = Line.from_transition(line, data_frame=bands)
 
         # Get the band indexes
         idcsEmis, idcsCont = line_bg.index_bands(self.wave, self.redshift)
         signal_slice = self.flux[idcsEmis, :, :]
-        signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
+        signal_slice = signal_slice.data
 
         # Get indeces all nan entries to exclude them from the analysis
         idcs_all_nan = np.all(np.isnan(signal_slice.data), axis=0)
@@ -930,8 +1346,8 @@ class Cube:
         # S/N line
         elif param == 'SN_line':
             n_pixels = np.sum(idcsCont)
-            cont_slice = self.flux[idcsCont, :, :]
-            cont_slice = cont_slice if not np.ma.isMaskedArray(cont_slice) else cont_slice.data
+            cont_slice = self.flux[idcsCont, :, :].data
+            cont_slice = cont_slice.data
 
             Amp_image = np.nanmax(signal_slice, axis=0) - np.nanmean(cont_slice, axis=0)
             std_image = np.nanstd(cont_slice, axis=0)
@@ -981,8 +1397,6 @@ class Cube:
             region_label, region_mask = region_items
 
             # Metadata for the fits page
-            signal_slice = signal_slice if not np.ma.isMaskedArray(signal_slice) else signal_slice.data
-
             hdr_i = fits.Header({'PARAM': param,
                                  'PARAMIDX': boundary_dict[region_label],
                                  'PARAMVAL': param_level[region_label],
@@ -1006,15 +1420,15 @@ class Cube:
             hdul.append(mask_hdu)
 
         # Output folder computed from the output address
-        output_address = Path(output_address) if output_address is not None else None
+        fname = Path(fname) if fname is not None else None
 
         # Return an array with the masks
-        if output_address is not None:
-            if output_address.parent.is_dir():
-                hdul.writeto(output_address, overwrite=True, output_verify='fix')
+        if fname is not None:
+            if fname.parent.is_dir():
+                hdul.writeto(fname, overwrite=True, output_verify='fix')
                 output_func = None
             else:
-                raise LiMe_Error(f'Mask could not be saved. Folder not found: {output_address.parent.as_posix()}')
+                raise LiMe_Error(f'Mask could not be saved. Folder not found: {fname.parent.as_posix()}')
 
         # Return the hdul
         else:
@@ -1025,29 +1439,62 @@ class Cube:
     def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None):
 
         """
+        Convert the cube’s wavelength and/or flux units.
 
-        This function converts spectrum wavelength array, the flux array or both arrays units.
+        This method updates the units of the cube’s wavelength axis and flux cube using
+        the `Astropy Units module <https://docs.astropy.org/en/stable/units/index.html>`_.
+        Both string representations (e.g., ``"AA"``, ``"Jy"``) and `astropy.units.Unit`
+        objects are accepted.
 
-        The user can also provide a flux normalization for the spectrum flux array.
+        The conversion applies consistently across all spaxels in the data cube and
+        automatically updates the internal attributes ``units_wave`` and ``units_flux``.
+        The user may also specify a new flux normalization factor with ``norm_flux``,
+        which rescales the flux and uncertainty arrays accordingly.
 
-        The wavelength units available are AA (angstroms), um, nm, Hz, cm, mm
+        Parameters
+        ----------
+        wave_units_out : str or astropy.units.Unit, optional
+            Target wavelength units. Accepts any valid `Astropy unit string
+            <https://docs.astropy.org/en/stable/units/#module-astropy.units>`_ (e.g.,
+            ``"Angstrom"``, ``"nm"``, ``"um"``, ``"Hz"``) or an ``astropy.units.Unit``
+            object. If ``None``, the current wavelength units are preserved.
+        flux_units_out : str or astropy.units.Unit, optional
+            Target flux units. Accepts any valid Astropy unit string or
+            ``astropy.units.Unit`` object. Common shortcuts include:
+            ``"FLAM"`` (erg s⁻¹ cm⁻² Å⁻¹), ``"FNU"`` (erg s⁻¹ cm⁻² Hz⁻¹),
+            ``"PHOTLAM"`` (photon s⁻¹ cm⁻² Å⁻¹), and ``"PHOTNU"`` (photon s⁻¹ cm⁻² Hz⁻¹).
+            Lowercase equivalents (``"flam"``, ``"fnu"``, etc.) are also accepted.
+            If ``None``, the flux units are preserved.
+        norm_flux : float, optional
+            Flux normalization factor to apply after conversion. If provided,
+            the flux and uncertainty arrays are scaled accordingly, and the new
+            normalization is stored in ``self.norm_flux``.
 
-        The flux units available are Flam (erg s^-1 cm^-2 Å^-1), Fnu (erg s^-1 cm^-2 Hz^-1), Jy, mJy, nJy
+        Notes
+        -----
+        - The function removes any normalization present on the energy density units, althought it will apply one if ``norm_flux=None`` and the mean flux is < 0.0001.
+        - The conversion is handled using `Astropy’s Unit equivalencies <https://docs.astropy.org/en/stable/units/equivalencies.html>`_, ensuring
+          consistent transformations between flux–density and wavelength/frequency units.
+        - The conversion preserves the cube’s redshift and mask structure.
 
-        :param wave_units_out: Wavelength array units
-        :type wave_units_out: str, optional
+        Examples
+        --------
+        Convert the cube’s wavelength to nanometers:
 
-        :param flux_units_out: Flux array units
-        :type flux_units_out: str, optional
+        >>> cube.unit_conversion(wave_units_out="nm")
 
-        :param norm_flux: Flux normalization
-        :type norm_flux: float, optional
+        Convert both wavelength and flux to frequency-based units:
 
+        >>> cube.unit_conversion(wave_units_out="Hz", flux_units_out="FNU")
+
+        Apply a normalization after the unit conversion
+
+        >>> cube.unit_conversion(flux_units_out="FLAM", norm_flux=1e-16)
         """
 
         # Extract the new values
-        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = observation_unit_convertion(self,
-                                                                                         wave_units_out, flux_units_out)
+        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = parse_unit_convertion(self,
+                                                                                                                 wave_units_out, flux_units_out)
 
         # Reassign the units and normalization
         self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
@@ -1061,23 +1508,117 @@ class Cube:
     def get_spectrum(self, idx_j, idx_i, id_label=None):
 
         """
+        Extract a single spaxel spectrum from the data cube.
 
-        This function returns a lime.Spectrum object from the input array coordinates
+        This method returns a :class:`lime.Spectrum` object corresponding to the
+        spaxel located at the given spatial indices ``(idx_j, idx_i)`` in the cube.
+        The extracted spectrum preserves the cube’s wavelength, flux normalization,
+        redshift, instrumental resolution, and physical units.
 
-        :param idx_j: y-axis array coordinate
-        :type idx_j: int
+        Parameters
+        ----------
+        idx_j : int
+            Spatial index along the cube’s **y-axis** (array row coordinate).
+        idx_i : int
+            Spatial index along the cube’s **x-axis** (array column coordinate).
+        id_label : str, optional
+            Identifier for the extracted spectrum. If not provided, a default label
+            is assigned based on the spaxel indices.
 
-        :param idx_i: x-axis array coordinate
-        :type idx_i: int
+        Returns
+        -------
+        lime.Spectrum
 
-        :param id_label: Identity label for spectrum object
-        :type id_label: str, optional
+        Notes
+        -----
+        - The coordiantes correspond to the indexes in the numpy array.
+        - This method is a convenience wrapper around
+          :meth:`lime.Spectrum.from_cube`.
+
+        Examples
+        --------
+        Extract a single spaxel spectrum from a cube:
+
+        >>> spec = cube.spectrum_from_indices(25, 30)
 
         """
 
         return Spectrum.from_cube(self, idx_j, idx_i, id_label)
 
-    def export_spaxels(self, output_address, mask_file, mask_list=None, log_ext_suffix='_LINELOG', progress_output='bar'):
+    def export_spaxels(self, fname, mask_file, mask_list=None, log_ext_suffix='_SPEC', progress_output='bar'):
+
+        """
+        Export individual spaxel spectra to a ``fname`` from a cube based on spatial masks ``mask_file`` calculated
+        in advance.
+
+        This method extracts and saves the flux (and uncertainty if available) spectra
+        for all spaxels included in one or more spatial masks. Each selected spaxel
+        is stored as an individual table extension within a single multi-extension
+        FITS file, allowing direct integration with subsequent LiMe analysis routines.
+
+        The input masks can be provided either as:
+          * A **FITS file** produced by :meth:`~lime.Cube.spatial_masking`, or
+          * A **dictionary or array** containing binary mask data.
+
+        Each FITS extension in the output corresponds to one spaxel, labeled by its
+        2D position in the cube (e.g., ``'25-40_SPEC'``). The exported spectra
+        retain the cube’s flux normalization, units, and coordinate metadata.
+
+        Parameters
+        ----------
+        fname : str or pathlib.Path
+            Path to the output FITS file where all spaxel spectra will be saved.
+            The parent directory must already exist.
+        mask_file : str, pathlib.Path, numpy.ndarray, or dict
+            Input mask(s) specifying which spaxels to export. Supported inputs:
+              * Path to a FITS file containing binary masks (e.g., from
+                :meth:`~lime.Cube.spatial_masking`).
+              * Numpy array of boolean masks.
+              * Dictionary mapping mask labels to mask data arrays.
+        mask_list : list of str, optional
+            Subset of mask names to process from ``mask_file``. If not provided,
+            all masks on ``mask_file`` are used.
+        log_ext_suffix : str, optional
+            Suffix appended to each FITS extension name. Default is ``"_LINELOG"``.
+        progress_output : {'bar', 'counter', None}, optional
+            Controls how progress is displayed during export:
+              * ``'bar'`` — shows a progress bar (default).
+              * ``'counter'`` — prints textual progress updates.
+              * ``None`` — disables all progress messages.
+
+        Returns
+        -------
+        None
+            The function writes the extracted spaxel spectra to a FITS file at
+            ``output_address``.
+
+        Notes
+        -----
+        - Each exported spaxel is saved as a binary table HDU with fields:
+            * ``flux`` — observed flux values (normalized).
+            * ``flux_err`` — flux uncertainty values (if available).
+        - The WCS spatial coordinates are added to each FITS extension header if
+          the cube includes valid WCS metadata.
+        - The FITS file can be directly reopened using :mod:`astropy.io.fits` for
+          subsequent analysis or visualization.
+
+        Examples
+        --------
+        Export all spaxel spectra from a given spatial mask file:
+
+        >>> cube.export_spaxels("outputs/O3_spaxels.fits", mask_file="O3_masks.fits")
+
+        Export only specific masks (e.g., ``mask_0`` and ``mask_1``):
+
+        >>> cube.export_spaxels("outputs/O3_selected_spaxels.fits",
+        ...                     mask_file="O3_masks.fits",
+        ...                     mask_list=["mask_0", "mask_1"])
+
+        Disable progress display during export:
+
+        >>> cube.export_spaxels("outputs/O3_spaxels.fits", "O3_masks.fits",
+        ...                     progress_output=None)
+        """
 
         # Check if the mask variable is a file or an array
         mask_dict = check_file_array_mask(mask_file, mask_list)
@@ -1088,10 +1629,10 @@ class Cube:
 
         # Checks for the data type
         err_check = False if self.err_flux is None else True
-        masked_check = False if np.ma.isMaskedArray(self.flux) is False else True
+        # masked_check = False if np.ma.isMaskedArray(self.flux) is False else True
 
         # Check if the output log folder exists
-        output_address = Path(output_address)
+        output_address = Path(fname)
         if not output_address.parent.is_dir():
             raise LiMe_Error(f'The folder of the output log file does not exist at {output_address}')
 
@@ -1142,9 +1683,8 @@ class Cube:
                 spec_err_flux = self.err_flux[:, idx_j, idx_i] * self.norm_flux if err_check else None
 
                 # Remove mask
-                if masked_check:
-                    spec_flux = spec_flux.data
-                    spec_err_flux = spec_err_flux.data if err_check else None
+                spec_flux = spec_flux.data
+                spec_err_flux = spec_err_flux.data if err_check else None
 
                 # Convert to table-HDU format
                 if err_check:
@@ -1234,13 +1774,14 @@ class Sample(UserDict, OpenFits):
         # Checks units
         self.units_wave, self.units_flux = check_units(units_wave, units_flux)
 
-        self.frame = check_file_dataframe(sample_log, pd.DataFrame, sample_levels=self.levels)
+        self.frame = check_file_dataframe(sample_log, sample_levels=self.levels)
         self._load_function = load_function
         self.load_params = kwargs
 
         # Functionality objects
         self.plot = SampleFigures(self)
         self.check = SampleCheck(self)
+        self.instrument = instrument
 
         # Check if there is not a log
         if self.frame is None:
@@ -1328,43 +1869,54 @@ class Sample(UserDict, OpenFits):
                 log_i = load_frame(log_list[i], page_name, levels)
                 df_list.append(review_sample_levels(log_i, id_spec, file_spec))
             else:
-                log_i = pd.DataFrame(columns=["id", "file"], data=(id_spec, file_spec))
+                log_i = pd.DataFrame(columns=["id", "file"], data=[[id_spec, file_spec]])
                 log_i.set_index(["id", "file"], inplace=True)
+                df_list.append(log_i)
 
         sample_log = pd.concat(df_list)
 
         return cls(sample_log, levels, load_function, instrument, folder_obs, **kwargs)
 
-    def load_function(self, log_df, obs_idx, root_address, **kwargs):
+    def load_function(self, log_df, obs_idx, root_address, instrument=None, **kwargs):
 
-        # Use loading function
+        # User load function
         if self._load_function is not None:
             load_function_output = self._load_function(log_df, obs_idx, root_address, **kwargs)
-        else:
-            load_function_output = {}
-
-        # Proceed to create the LiMe object if necessary
-        if isinstance(load_function_output, dict):
-
-            # Get address of observation
-            file_spec = root_address / obs_idx[log_df.index.names.index('file')]
-
-            # User provides a data parser
-            if self.fits_reader is not None:
-                spec_data = self.fits_reader(file_spec)
-                fits_args = {'input_wave': spec_data[0], 'input_flux': spec_data[1], 'input_err': spec_data[2],
-                             **spec_data[4]}
+            if isinstance(load_function_output, (Spectrum, Cube)):
+                return load_function_output
             else:
-                fits_args = {}
+                return Spectrum(**load_function_output) if self.spectrum_check else Cube(**load_function_output)
 
-            # Create observation
-            obs_args = {**fits_args, **load_function_output}
-            obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-
+        # Instrument load function
         else:
-            obs = load_function_output
+            fname_obj = root_address / obs_idx[log_df.index.names.index('file')]
+            class_obj = Spectrum if self.spectrum_check else Cube
+            return class_obj.from_file(fname_obj, instrument=instrument, **kwargs)
 
-        return obs
+
+        # # Proceed to create the LiMe object if necessary
+        # if isinstance(load_function_output, dict):
+        #
+        #     # Get address of observation
+        #     file_spec = root_address / obs_idx[log_df.index.names.index('file')]
+        #
+        #     # User provides a data parser
+        #     if self.fits_reader is not None:
+        #         spec_data = self.fits_reader(file_spec)
+        #         fits_args = {'input_wave': spec_data[0], 'input_flux': spec_data[1], 'input_err': spec_data[2],
+        #                      **spec_data[4]}
+        #     else:
+        #         fits_args = {}
+        #
+        #     # Create observation
+        #     obs_args = {**fits_args, **load_function_output}
+        #     obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
+        #
+        # else:
+        #     obs = load_function_output
+        #
+        #
+        # return obs
 
     def __getitem__(self, id_key):
 
@@ -1470,7 +2022,7 @@ class Sample(UserDict, OpenFits):
     def load_frame(self, dataframe, ext='LINESFRAME', sample_levels=['id', 'line']):
 
         # Load the log file if it is a log file
-        log_df = check_file_dataframe(dataframe, pd.DataFrame, ext=ext, sample_levels=sample_levels)
+        log_df = check_file_dataframe(dataframe, ext=ext, sample_levels=sample_levels)
 
         # Security checks:
         if log_df.index.size > 0:
@@ -1479,7 +2031,7 @@ class Sample(UserDict, OpenFits):
                 line_list = log_df.index.values
 
                 # Get the first line in the log
-                line_0 = Line.from_log(line_list[0], log_df, norm_flux=self.norm_flux)
+                line_0 = Line.from_transition(line_list[0], data_frame=log_df, norm_flux=self.norm_flux)
 
                 # Confirm the lines in the log match the one of the spectrum
                 # TODO we need something more advance for the line_0 units
@@ -1542,70 +2094,4 @@ class Sample(UserDict, OpenFits):
         return check
 
 
-# class ObsManager(OpenFits):
-#
-#     def __init__(self, file_address, file_source, lime_object, load_function=None, **kwargs):
-#
-#         # Initialize the .fits reading class
-#         OpenFits.__init__(self, file_address, file_source, lime_object, load_function)
-#
-#         # Define attribute
-#         self.spectrum_check = False
-#         self.load_function = None
-#         self.user_params = None
-#
-#         # Store the user arguments for the spectra
-#         self.user_params = kwargs
-#
-#         # State the type of spectra
-#         if file_source is None:
-#             self.spectrum_check = True
-#         else:
-#             self.spectrum_check = True if self.source in list(SPECTRUM_FITS_PARAMS.keys()) else False
-#
-#         # Assign input load function
-#         if load_function is not None:
-#             self.load_function = load_function
-#
-#         # Assign the
-#         elif (file_source is not None) and (self.fits_reader is not None):
-#             self.load_function = self.default_file_parser
-#
-#         # No load function nor instrument
-#         else:
-#             raise LiMe_Error(f'To create a Sample object you need to provide "load_function" or provide a "instrument" '
-#                              f'supported by LiMe')
-#
-#         return
-#
-#     def load_function(self, file_spec, log_df=None, id_spec=None, **kwargs):
-#
-#         default_args = self.fits_reader(file_spec) if self.fits_reader is not None else {}
-#         user_args = self.user_params if self.user_params is not None else {}
-#
-#         # Recover the user params
-#         user_args = user_args if user_args is not None else self.user_params
-#
-#         # Update with the default arguments
-#         default_args = {**default_args, **user_args}
-#
-#         # Run the load function
-#         load_function_output = self.load_function(file_spec, log_df, id_spec, **default_args)
-#
-#         # Proceed to create LiMe object if necessary
-#         if isinstance(load_function_output, dict):
-#             obs_args = {**default_args, **load_function_output}
-#             obs = Spectrum(**obs_args) if self.spectrum_check else Cube(**obs_args)
-#         else:
-#             obs = load_function_output
-#
-#         return obs
-#
-#     def default_file_parser(self, log_df=None, id_spec=None, **kwargs):
-#
-#         file_spec = self.id_spec[log_df.index.names.index('file')]
-#
-#         fits_args = self.fits_reader(file_spec)
-#
-#         return fits_args
 

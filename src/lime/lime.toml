@@ -1,0 +1,104 @@
+[metadata]
+name = 'lime-stable'
+version = "2.0.1"
+
+# =====================
+# Spectrum / Long-slit
+# =====================
+
+[instrument_params.long_slit]
+nirspec.norm_flux = 'null'
+nirspec.res_power = 'null'
+nirspec.units_wave = "um"
+nirspec.units_flux = "Jy"
+nirspec.pixel_mask = "nan"
+nirspec.id_label = 'null'
+
+nirspec_grizli.norm_flux = 'null'
+nirspec_grizli.res_power = 'null'
+nirspec_grizli.units_wave = "um"
+nirspec_grizli.units_flux = "uJy"
+nirspec_grizli.pixel_mask = "nan"
+nirspec_grizli.id_label = 'null'
+
+isis.norm_flux = 'null'
+isis.res_power = 'null'
+isis.units_wave = "Angstrom"
+isis.units_flux = "FLAM"
+isis.pixel_mask = "nan"
+isis.id_label = 'null'
+
+osiris.norm_flux = 'null'
+osiris.res_power = 'null'
+osiris.units_wave = "Angstrom"
+osiris.units_flux = "FLAM"
+osiris.pixel_mask = "nan"
+osiris.id_label = 'null'
+
+cos.norm_flux = 'null'
+cos.res_power = 'null'
+cos.units_wave = "Angstrom"
+cos.units_flux = "FLAM"
+cos.pixel_mask = "nan"
+cos.id_label = 'null'
+
+sdss.norm_flux = 'null'
+sdss.res_power = 'null'
+sdss.units_wave = "Angstrom"
+sdss.units_flux = "1e-17*FLAM"
+sdss.pixel_mask = "nan"
+sdss.id_label = 'null'
+
+desi.norm_flux = 'null'
+desi.res_power = 'null'
+desi.units_wave = "Angstrom"
+desi.units_flux = "1e-17*FLAM"
+desi.pixel_mask = "nan"
+desi.id_label = 'null'
+
+text.norm_flux = 'null'
+text.res_power = 'null'
+text.units_wave = "Angstrom"
+text.units_flux = "FLAM"
+text.pixel_mask = 'null'
+text.id_label = 'null'
+
+# =======================
+# Cube / IFU Instruments
+# =======================
+
+[instrument_params.cube]
+manga.norm_flux = 'null'
+manga.res_power = 'null'
+manga.units_wave = "Angstrom"
+manga.units_flux = "1e-17*FLAM"
+manga.pixel_mask = "nan"
+manga.id_label = 'null'
+
+muse.norm_flux = 'null'
+muse.res_power = 'null'
+muse.units_wave = "Angstrom"
+muse.units_flux = "1e-20*FLAM"
+muse.pixel_mask = "nan"
+muse.id_label = 'null'
+
+megara.norm_flux = 'null'
+megara.res_power = 'null'
+megara.units_wave = "Angstrom"
+megara.units_flux = "Jy"
+megara.pixel_mask = "nan"
+megara.id_label = 'null'
+
+miri.norm_flux = 'null'
+miri.res_power = 'null'
+miri.units_wave = "um"
+miri.units_flux = "MJy"
+miri.pixel_mask = "nan"
+miri.id_label = 'null'
+
+kcwi.norm_flux = 'null'
+kcwi.res_power = 'null'
+kcwi.units_wave = "AA"
+kcwi.units_flux = "1e-16*FLAM"
+kcwi.pixel_mask = "nan"
+kcwi.id_label = 'null'

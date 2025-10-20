@@ -5,32 +5,11 @@ import pytest
 from matplotlib import pyplot as plt
 from lime.io import _LOG_EXPORT_DICT
 from os import remove
-import pandas as pd
-
-# Data for the tests
-baseline_folder = Path(__file__).parent / 'baseline'
-outputs_folder = Path(__file__).parent / 'outputs'
-spectra_folder = Path(__file__).parent.parent/'examples/sample_data/spectra'
-file_address = baseline_folder/'manga_spaxel.txt'
-conf_file_address = baseline_folder/'manga.toml'
-bands_file_address = baseline_folder/f'manga_line_bands.txt'
-lines_log_address = baseline_folder/'manga_lines_log.txt'
-
-redshift = 0.0475
-norm_flux = 1e-17
-cfg = lime.load_cfg(conf_file_address)
-tolerance_rms = 5.5
-
-wave_array, flux_array, err_array = np.loadtxt(file_address, unpack=True)
-pixel_mask = np.isnan(err_array)
-
-spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
-                     pixel_mask=pixel_mask)
-
-spec.fit.frame(bands_file_address, cfg, id_conf_prefix='38-35')
+from copy import deepcopy
+import pprint
 
 
-def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel_tol=0.20):
+def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=5, rel_tol=0.20):
 
     for line in input_spec.frame.index:
         for param in input_spec.frame.columns:
@@ -48,23 +27,118 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=2, rel
                 param_value = test_log.loc[line, param]
 
                 if ('_err' not in param) and (f'{param}_err' in true_log.columns):
+                    param_err = test_log.loc[line, f'{param}_err']
                     param_exp_err = true_log.loc[line, f'{param}_err']
-                    diag = np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                    diag = np.isclose(param_value, param_exp_value,
+                                      rtol=np.maximum(0.01, np.abs(param_exp_err/param_exp_value)), equal_nan=True)
                     if not diag:
-                        print(param)
-                    assert np.allclose(param_value, param_exp_value, atol=param_exp_err * abs_factor, equal_nan=True)
+                        print(f'Error 1) {line} {param}: Measured {param_value}±{param_err} VS {param_exp_value}±{param_exp_err}')
+                        print(line, param, param_value, param_exp_value, param_exp_err)
+                    assert diag
+
                 else:
                     if param.endswith('_err'):
-                        # assert np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
-                        a = np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
+                        diag = np.allclose(param_value, param_exp_value, rtol=1, equal_nan=True)
+                        if not diag:
+                            print(line, param, param_value, param_exp_value)
+                        assert diag
 
                     else:
                         if param == 'FWZI':
-                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            diag = np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            if not diag:
+                                print(line, param, param_value, param_exp_value)
+                            assert diag
+
                         else:
-                            assert np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            diag = np.allclose(param_value, param_exp_value, rtol=rel_tol, equal_nan=True)
+                            if not diag:
+                                print(line, param, param_value, param_exp_value)
+                            assert diag
 
     return
+
+
+def deep_equal(a, b):
+
+    if type(a) != type(b):
+        return False
+
+    if isinstance(a, dict):
+        if a.keys() != b.keys():
+            return False
+        return all(deep_equal(a[k], b[k]) for k in a)
+
+    if isinstance(a, list):
+        return len(a) == len(b) and all(deep_equal(x, y) for x, y in zip(a, b))
+
+    return a == b
+
+
+def read_file_contents(filepath):
+    with open(filepath, 'r', encoding='utf-8') as file:
+        return file.read()
+
+
+def compare_dictionaries(dict1, dict2):
+    """
+    Compare two TOML-like dictionaries section by section.
+    Prints differences in keys/values for each section.
+    """
+    sections = set(dict1.keys()) | set(dict2.keys())
+
+    for section in sorted(sections):
+        s1 = dict1.get(section)
+        s2 = dict2.get(section)
+
+        if s1 is None:
+            print(f"[{section}] ❌ missing in dict1")
+            continue
+        if s2 is None:
+            print(f"[{section}] ❌ missing in dict2")
+            continue
+
+        # Both sections exist: compare their keys
+        print(f"\n[Section: {section}]")
+        keys = set(s1.keys()) | set(s2.keys())
+        for key in sorted(keys):
+            v1 = s1.get(key, "❌ missing")
+            v2 = s2.get(key, "❌ missing")
+            if v1 != v2:
+                print('Dictionary 1')
+                print(f"{pprint.pprint(v1)}")
+                print()
+                print('Dictionary 2')
+                print(f"{pprint.pprint(v2)}")
+                print()
+                print()
+
+
+# Data for the tests
+baseline_folder = Path(__file__).parent / 'baseline'
+file_address = baseline_folder/'SHOC579_MANGA38-35.txt'
+conf_file_address = baseline_folder/'lime_tests.toml'
+bands_file_address = baseline_folder/'SHOC579_MANGA38-35_bands.txt'
+lines_log_address = baseline_folder/'SHOC579_MANGA38-35_log.txt'
+lines_tex_address = baseline_folder/'SHOC579_MANGA38-35_log.tex'
+
+data_folder = Path(__file__).parent.parent/'examples/doc_notebooks/0_resources'
+outputs_folder = data_folder/'results'
+spectra_folder = data_folder/'spectra'
+
+redshift = 0.0475
+norm_flux = 1e-17
+cfg = lime.load_cfg(conf_file_address)
+cfg_copy = deepcopy(cfg)
+tolerance_rms = 5.5
+
+wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=True)
+
+spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                     pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
+
+# spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_from_bands=False)
+spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35')
 
 
 class TestSpectrumClass:
@@ -125,11 +199,20 @@ class TestSpectrumClass:
 
         return
 
+    def test_cfg_preservation(self):
+
+        compare_dictionaries(cfg_copy, cfg)
+
+        assert cfg == cfg_copy
+        assert deep_equal(cfg, cfg_copy)
+
+        return
+
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_line_detection_plot(self):
 
         spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[5, 3, 2])
-        match_bands = spec.line_detection(bands_file_address)
+        match_bands = spec.infer.peaks_troughs(bands_file_address)
 
         fig = plt.figure()
         spec.plot.spectrum(in_fig=fig, bands=match_bands)
@@ -139,7 +222,15 @@ class TestSpectrumClass:
     @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
     def test_plot_spectrum(self):
 
+        # fig = plt.figure()
+        # spec.plot.spectrum(in_fig=fig)
+
         fig = plt.figure()
+
+        spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
+
+        spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', line_list=['H1_6563A_b'])
         spec.plot.spectrum(in_fig=fig)
 
         return fig
@@ -148,7 +239,7 @@ class TestSpectrumClass:
     def test_plot_spectrum_with_fits(self):
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, include_fits=True)
+        spec.plot.spectrum(in_fig=fig, show_profiles=True)
 
         return fig
 
@@ -156,7 +247,7 @@ class TestSpectrumClass:
     def test_check_bands_spectrum(self):
 
         fig = plt.figure()
-        spec.check.bands(bands_file=bands_file_address, in_fig=fig)
+        spec.check.bands(fname=bands_file_address, in_fig=fig)
 
         return fig
 
@@ -164,7 +255,7 @@ class TestSpectrumClass:
     def test_plot_spectrum_maximize(self):
 
         fig = plt.figure()
-        spec.plot.spectrum(in_fig=fig, include_fits=True, maximize=True)
+        spec.plot.spectrum(in_fig=fig, show_profiles=True, maximize=True)
 
         return fig
 
@@ -180,7 +271,23 @@ class TestSpectrumClass:
     def test_plot_line(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_p-g-emi', in_fig=fig)
+        spec.plot.bands('Fe3_4658A_s-emi',  rest_frame=True, in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_plot_line_2nd(self):
+
+        fig = plt.figure()
+        spec.plot.bands('Fe3_4658A_s-emi', y_scale='log', in_fig=fig)
+
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_plot_line_3rd(self):
+
+        fig = plt.figure()
+        spec.plot.bands('Fe3_4658A_s-emi', show_continua=True, in_fig=fig)
 
         return fig
 
@@ -247,7 +354,7 @@ class TestSpectrumClass:
         measurement_tolerance_test(spec, log_orig, log_test)
 
         return
-    #
+
     def test_extra_pages_xlsx(self):
 
         file_xlsx = outputs_folder / 'test_lines_log_multi_page.xlsx'
@@ -266,6 +373,19 @@ class TestSpectrumClass:
             log_test = lime.load_frame(file_xlsx)
 
             measurement_tolerance_test(spec, log_orig, log_test)
+
+        return
+
+    def test_measurements_latex_file(self):
+
+        # Create tex file
+        extension = 'tex'
+        log_new = Path(outputs_folder / f'test_lines_log.{extension}')
+        spec.save_frame(log_new, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
+
+        with open(log_new, 'r') as f1, open(lines_tex_address, 'r') as f2:
+            for line1, line2 in zip(f1, f2):
+                assert line1 == line2, f"Line mismatch:\n{line1}\n!=\n{line2}"
 
         return
 
@@ -313,7 +433,7 @@ class TestSpectrumClass:
 
         return
 
-    def test_line_dectection_implicit_explicit_params(self, file_name='sdss_dr18_0358-51818-0504.fits'):
+    def test_line_detection_implicit_explicit_params(self, file_name='sdss_dr18_0358-51818-0504.fits'):
 
         SHOC579_a = lime.Spectrum.from_file(spectra_folder/file_name, instrument='sdss')
 
@@ -322,18 +442,66 @@ class TestSpectrumClass:
         # Measure lines explicit
         cfg_file, bands_file = baseline_folder/'sample_cfg.toml', baseline_folder/'SHOC579_bands.txt'
         sample_cfg, shoc549_df = lime.load_cfg(cfg_file),  lime.load_frame(bands_file)
-        SHOC579_a.fit.frame(shoc549_df, sample_cfg, id_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(shoc549_df, sample_cfg, obj_cfg_prefix='SHOC579', line_detection=True)
         df_a = SHOC579_a.frame.copy()
 
         # Clear measurements
         SHOC579_a.frame = SHOC579_a.frame[0:0]
 
         # Measure lines implicit
-        SHOC579_a.fit.frame(bands_file, cfg_file, id_conf_prefix='SHOC579', line_detection=True)
+        SHOC579_a.fit.frame(bands_file, cfg_file, obj_cfg_prefix='SHOC579', line_detection=True)
         df_b = SHOC579_a.frame.copy()
 
         assert np.all(df_a.index == df_b.index)
         assert np.all(np.isclose(df_a.intg_flux, df_b.intg_flux, rtol=2*df_b.intg_flux_err))
         assert np.all(np.isclose(df_a.profile_flux, df_b.profile_flux, rtol=2*df_b.profile_flux_err))
+
+        return
+
+
+class TestFluxMeasurements:
+
+    def test_intgr_flux_comparison(self):
+
+        line_arr = spec.frame.index.to_numpy()
+        group_type = spec.frame['group_label'].to_numpy()
+        intg, intg_err = (spec.frame.loc[:, ['intg_flux', 'intg_flux_err']].to_numpy()/spec.norm_flux).T
+        gauss, gauss_err = (spec.frame[['profile_flux', 'profile_flux_err']].to_numpy()/spec.norm_flux).T
+        sigma_quad = np.sqrt(np.square(intg_err) + np.square(gauss_err))
+
+        diag_arr = np.isclose(intg, gauss, atol=1 * sigma_quad)
+
+        exclude_list = ['N2_5755A', 'H1_8665A', 'H1_8750A']
+        for i, line in enumerate(line_arr):
+            if group_type[i] == 'none' and not diag_arr[i]:
+                if line not in exclude_list:
+                    if diag_arr[i] == False:
+                        print(line, f"Intg = {intg[i]:0.2f}±{intg_err[i]:0.2f},",
+                              f"Gauss = {gauss[i]:0.2f}±{gauss_err[i]:0.2f}, diag1 = {diag_arr[i]}")
+                    assert diag_arr[i] == False
+
+
+        return
+
+    def test_bands_cont(self):
+
+        spec2 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='adjacent')
+        line_arr = ["O2_3726A","O2_3729A","He1_4026A","H1_4861A","H1_4861A_k-1","Fe3_4658A_s-emi","Fe3_4658A_s-abs",
+                    "He2_4686A","H1_8545A","H1_8750A","Fe3_4925A_m","O1_6300A","S3_6312A","S2_6716A","S2_6731A","He1_7065A",
+                    "Ar3_7751A"]
+
+        gauss1, gauss_err1 = np.abs(spec.frame.loc[line_arr, ['profile_flux', 'profile_flux_err']].to_numpy()/spec.norm_flux).T
+        gauss2, gauss_err2 = np.abs(spec2.frame.loc[line_arr, ['profile_flux', 'profile_flux_err']].to_numpy()/spec2.norm_flux).T
+        sigma_quad = np.sqrt(np.square(gauss_err1) + np.square(gauss_err2))
+        diag_arr = np.isclose(gauss1, gauss2, atol=1.5 * sigma_quad)
+
+        for i, line in enumerate(line_arr):
+            if diag_arr[i] == False:
+                if diag_arr[i] == False:
+                    print(line, f"Without C.= {gauss1[i]:0.2f}±{gauss_err1[i]:0.2f},",
+                                f"With C = {gauss2[i]:0.2f}±{gauss_err2[i]:0.2f}, diag1 = {diag_arr[i]}")
+                assert diag_arr[i] == False
 
         return

@@ -1,0 +1,109 @@
+[osiris]
+norm_flux =  1e-17 # Instrument parameters
+gp121903.z = 0.19531 # Green Pea 121903 data
+
+[nirspec]
+ceers1027.z = 7.8189 # CEERS 1027 data
+
+[isis]
+Izw18.z = 0.0026 # IZwicky18 data
+
+[sdss]
+SHOC579.z = 0.0475 # SHOC579 data
+
+[default_line_fitting]
+transitions.O2_3726A_m.wavelength = 3728.484
+transitions.O2_7325A_m.wavelength = 7325.000
+transitions.O2_7325A_b.wavelength = 7325.000
+
+O2_3726A_m = 'O2_3726A+O2_3729A'
+O2_3726A_b = 'O2_3726A+O2_3729A'
+H1_3889A_m = "H1_3889A+He1_3889A"
+Ne3_3968A_m = "Ne3_3968A+H1_3970A"
+Ar4_4711A_m = "Ar4_4711A+He1_4713A"
+Fe3_4925A_m= 'He1_4922A+Fe3_4925A'
+O3_5007A_m = 'O3_4959A+O3_5007A'
+O3_5007A_b = 'O3_4959A+O3_5007A'
+N1_5198A_m = "N1_5198A+N1_5200A"
+O1_6300A_b = "O1_6300A+S3_6312A"
+H1_6563A_m = "H1_6563A+N2_6583A+N2_6548A"
+H1_6563A_b = "H1_6563A+N2_6583A+N2_6548A"
+S2_6716A_b = "S2_6716A+S2_6731A"
+S2_6716A_m = "S2_6716A+S2_6731A"
+O2_7325A_b = "O2_7319A_m+O2_7330A_m"
+O2_7325A_m = "O2_7319A_m+O2_7330A_m"
+O2_7319A_m = "O2_7319A+O2_7320A"
+O2_7330A_m = "O2_7330A+O2_7331A"
+
+# Configuration for the continuum fitting
+continuum.degree_list = [3, 6, 6]
+continuum.emis_threshold = [3, 2, 1.5]
+
+# Intensity threshold fitting
+peaks_troughs.sigma_threshold = 3
+
+[gp121903_osiris_line_fitting]
+grouped_lines = ['O3_5007A_b', 'O3_4959A_b']
+rejected_lines = ['H1_3722A', 'H1_3734A', 'Fe3_4008A', 'S2_4076A','Fe2_4358A', 'Fe3_4881A',
+                  'Fe3_4881A', 'Fe3_4986A', 'He1_5016A','Ar3_5192A', 'H1_8392A',
+                  'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
+
+map_band_vsigma.H1_4861A = 200
+map_band_vsigma.H1_6563A = 200
+map_band_vsigma.N2_6548A = 200
+map_band_vsigma.N2_6583A = 200
+map_band_vsigma.O3_4959A = 250
+map_band_vsigma.O3_5007A = 250
+
+O3_4959A_b = 'O3_4959A+O3_4959A_k-1'
+O3_4959A_k-1_amp = "expr:<100.0*O3_4959A_amp,min:0"
+O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
+O3_5007A_b = 'O3_5007A+O3_5007A_k-1'
+O3_5007A_k-1_amp = "expr:<100.0*O3_5007A_amp,min:0"
+O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
+
+H1_6563A_b = "H1_6563A+N2_6583A+N2_6548A"
+N2_6548A_amp = "expr:N2_6583A_amp/2.94"
+N2_6548A_kinem = "N2_6583A"
+
+S2_6716A_b = "S2_6716A+S2_6731A"
+S2_6731A_kinem = "S2_6716A"
+O2_7330A_m_kinem = "O2_7319A_m"
+
+[ceers1027_nirspec_line_fitting]
+rejected_lines = ['Fe3_4986A', 'He1_5016A', 'H1_8392A', 'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
+
+[Izw18_isis_line_fitting]
+O3_5007A_b = 'O3_5007A+He1_5016A'
+
+H1_6563A_b = 'H1_6563A+N2_6583A+N2_6548A'
+H1_6563A_k-1_sigma = 'expr:>1.1*H1_6563A_sigma'
+N2_6548A_amp = 'expr:N2_6583A_amp/2.94'
+N2_6583A_kinem = 'H1_6563A'
+N2_6548A_kinem = 'H1_6563A'
+
+rejected_lines = ['Fe3_4986A', 'He1_5016A', 'H1_8392A', 'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
+grouped_lines = ['O2_7325A_m']
+
+[SHOC579_sdss_line_fitting]
+rejected_lines = ['Fe3_4986A', 'H1_8392A', 'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
+grouped_lines = ['H1_6563A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b']
+
+O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
+O2_3726A_kinem = "O2_3729A"
+H1_3712A_kinem = "H1_3734A"
+
+H1_4861A_b = 'H1_4861A+H1_4861A_k-1'
+H1_4861A_k-1_sigma = 'min:0,expr:>1.0*H1_4861A_sigma'
+
+O3_4959A_b = 'O3_4959A+O3_4959A_k-1'
+O3_4959A_k-1_sigma = "expr:>2.0*O3_4959A_sigma"
+
+O3_5007A_b = 'O3_5007A+O3_5007A_k-1+He1_5016A'
+O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
+
+H1_6563A_b = 'H1_6563A+H1_6563A_k-1+N2_6583A+N2_6548A'
+N2_6548A_amp = 'expr:N2_6583A_amp/2.94'
+N2_6548A_kinem = 'N2_6583A'
+H1_6563A_k-1_center = 'value:6562,min:6561,max:6563'
+H1_6563A_k-1_sigma = 'expr:>1.0*H1_6563A_sigma'

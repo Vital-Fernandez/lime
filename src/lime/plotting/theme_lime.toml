@@ -1,0 +1,135 @@
+[matplotlib] # Figure format
+default."figure.dpi" = 200
+default."figure.figsize" = [4.85, 3]
+default."axes.titlesize" = 9
+default."axes.labelsize" = 9
+default."legend.fontsize" = 7
+default."xtick.labelsize" = 8
+default."ytick.labelsize" = 8
+default."font.size" = 5
+
+[matplotlib.size] # Figure elements size
+default."single_width" = '1.5'
+default."comp_width" = '1'
+default."err_width" = '2'
+default."cont_width" = '0.5'
+default."spectrum_width" = '0.75'
+default."textsize_notes" = 4
+
+[matplotlib.colors] # Theme format
+"figure.facecolor" = "bg"
+"axes.facecolor" = "bg"
+"axes.edgecolor" = "fg"
+"axes.labelcolor" = "fg"
+"xtick.labelcolor" = "fg"
+"ytick.labelcolor" = "fg"
+'xtick.color'= "fg"
+'ytick.color'= "fg"
+"text.color" = "fg"
+"legend.edgecolor" = "inherit"
+"legend.facecolor" = "inherit"
+
+[matplotlib.figure.bands] # Individual figure format
+"axes.labelsize" = 8
+"legend.fontsize" = 5
+
+[matplotlib.figure.cube_interactive] # Individual figure format
+'figure.figsize' = [6.85, 3]
+'axes.titlesize' = 6
+'legend.fontsize' = 6
+'axes.labelsize' = 6
+'xtick.labelsize' = 4
+'ytick.labelsize' = 4
+"contour.linewidth" = 0.75
+"axes.labelpad" = 1
+
+[matplotlib.figure.grid] # Individual figure format
+"axes.titlesize" = 6
+"axes.titlepad" = 1
+
+[matplotlib.figure.cube]
+"legend.fontsize" = 5
+"axes.titlesize" = 6
+"axes.labelsize" = 6
+"xtick.labelsize" = 4
+"ytick.labelsize" = 4
+
+[bokeh]
+default."width" = 600
+default."height" = 300
+default."tools" = 'fullscreen,pan,wheel_zoom,box_zoom,xzoom_in,yzoom_in,reset,save'
+
+
+[bokeh.size] # Figure elements size
+default."single_width" = '1'
+default."comp_width" = '0.75'
+default."err_width" = '2'
+default."cont_width" = '0.5'
+default."spectrum_width" = '0.75'
+default."textsize_notes" = 4
+
+[bokeh.colors]
+background_fill_color = "bg"
+border_fill_color = "bg"
+
+outline_line_color = "fg"
+xaxis.axis_label_text_color = "fg"
+yaxis.axis_label_text_color = "fg"
+xaxis.major_label_text_color = "fg"
+yaxis.major_label_text_color = "fg"
+
+xaxis.axis_line_color = "fg"
+yaxis.axis_line_color = "fg"
+xaxis.major_tick_line_color = "fg"
+yaxis.major_tick_line_color = "fg"
+xaxis.minor_tick_line_color = "fg"
+yaxis.minor_tick_line_color = "fg"
+
+title.text_color = "fg"
+xgrid.grid_line_color = "None"
+ygrid.grid_line_color = "None"
+
+[colors.default] # Default theme
+bg = '#FFFFFF'
+fg = '#000000'
+cont_band = '#8c564b'
+line_band = '#b5bd61'
+color_cycle = ['#279e68', '#d62728', '#aa40fc', '#8c564b',  '#e377c2', '#7f7f7f',
+               '#b5bd61', '#17becf', '#1f77b4', '#ff7f0e']
+match_line = '#b5bd61'
+peak = '#7FFFD4'
+rejected_peak = '#8C000F'
+trough = '#7f7f7f'
+profile = '#1f77b4'
+cont = '#ff7f0e'
+error = '#FF0000'
+mask_map = 'viridis'
+comps_map = 'Dark2'
+mask_marker = '#FF0000'
+line_selected = '#FFFFFF'
+line_removed = '#ff796c'
+inspection_uncertainty = '#ff796c' # 'xkcd:salmon'
+fade_fg = "#FFE5B4"
+err_area = "#00FF00"
+
+[colors.dark] # Dark theme
+bg = "#2B2B2B"
+fg = "#CCCCCC"
+cont_band = '#e7298a'
+line_band = '#8fff9f'
+color_cycle = ['#66c2a5', '#fc8d62', '#e68ac3', '#a6d854',  '#ffd92f', '#e5c494',
+               '#8dcbe2', '#e7298a', '#332288', '#88ccee']
+match_line = '#8fff9f'
+peak = '#7FFFD4'
+rejected_peak = '#8C000F'
+trough = '#7f7f7f'
+profile = '#ddcc77'
+cont = '#ff7f0e'
+error = '#FF0000'
+mask_map = 'viridis'
+comps_map = 'PuRd'
+mask_marker = '#FF0000'
+inspection_positive = "#2B2B2B"
+inspection_uncertainty = '#ff796c' # 'xkcd:salmon'  other '#840000'
+fade_fg = "#73879B"
+err_area = "#00FF00"

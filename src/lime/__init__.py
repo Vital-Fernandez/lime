@@ -2,10 +2,8 @@
 LiMe - A python package for measuring lines in astronomical spectra
 """
 
-import os
 import sys
 import logging
-from pathlib import Path
 
 try:
     import tomllib
@@ -21,30 +19,21 @@ consoleHandle = logging.StreamHandler()
 consoleHandle.setFormatter(logging.Formatter('%(name)s %(levelname)s: %(message)s'))
 _logger.addHandler(consoleHandle)
 
+from lime.observations import Spectrum, Sample, Cube
+from lime.io import *
+from lime.tools import *
+from lime.plotting.plots import theme
+from lime.archives.read_fits import OpenFits, show_instrument_cfg
+from lime.transitions import label_decomposition, lines_frame, bands_from_measurements, Line, Particle
+from lime.rsrc_manager import lineDB
+from lime.fitting.lines import show_profile_parameters
+
 # Get python version being used
 __python_version__ = sys.version_info
 
-# Read lime configuration .toml
-_inst_dir = Path(__file__).parent
-_conf_path = _inst_dir/'config.toml'
-with open(_conf_path, mode="rb") as fp:
-    _setup_cfg = tomllib.load(fp)
-
-__version__ = _setup_cfg['metadata']['version']
-_lines_database_path = (os.path.join(_inst_dir, 'resources/parent_bands.txt'))
+# Library version
+__version__ = lime_cfg['metadata']['version']
 
 # Logging configuration
 _logger.debug(f'Launching LiMe {__version__} in Python {__python_version__}')
 
-
-class Error(Exception):
-    """LiMe exception function"""
-
-from .observations import Spectrum, Sample, Cube
-from .io import *
-from .tools import *
-from .transitions import Line, label_decomposition, bands_from_frame
-from .read_fits import OpenFits, show_instrument_cfg
-from .recognition import detection_function
-from .plots import theme
-from .workflow import line_bands

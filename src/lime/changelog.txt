@@ -85,3 +85,30 @@ LiMe medium update - 1.3.0 - 10/29/2024
     - The lime.Sample.check.redshift "title_label" argument has been renamed -> "title" for consistency
     - The air_to_vacuum_function now only applies the theoretical relation, its inputs and outputs are wavelength arrays.
     - The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.
+
+LiMe Mayor update - 2.0.0 - XX/XX/XXXX
+    - Change installer convention from "setup.py + requirements.txt" to pyproject.toml
+    - Updated dependencies to current version of packages and for python 3.12
+    - Renamed cfg.toml to lime.toml
+    - Arrange library .py files into folder structure reproducing the .fit, .infer, .retrieve, .plot functions. The functions related to file types are are located in archives folder.
+    - Added new mechanic to compute the lines continuum from the line band edges or the continua bands.
+    - Added new mechanic to compute the pixel uncertainty from the provided uncertainty flux or the adjacent continua bands.
+    - Fix error where the error from the line profile center and sigma parameters was uncertainty was 0 if the line kinematics were imported from a previously measured line.
+    - Added support for bokeh plots.
+    - The theme configuration parameters are stored now in the src/plotting/theme_lime.toml.
+    - The .fit.report function now formats the output report to include the component label name and has the argument return_text=False to give the option to return the report message as a variable instead of printing on the terminal.
+    - Fix a bug where the kinematics export function was not applying the correct rest frame wavelength length on the radial velocity calculation.
+    - New ".infer" to host high level functions to predict spectroscopic features
+    - The "Spectrum.line_detection()" has been moved to "Spectrum.infer.peaks_troughs()". The old function now raises and error moving to the new function.
+    - Now the observations wave, flux, err_flux and wave_rest arrays are always masked arrays
+    - The lines database name has been changed from parent_bands.txt to "lines_database_v2.0.0.txt". The wavelength are based on van Hoof, P.A.M., 2018, Galaxies, 6, 63 and Roueff+ (2019).
+    - The central wavelenght bands are now calculated assuming a bands_vsigma=70 and n_sigma=4
+    - The function lime.Spectrum.retrieve.spectrum() returns the spectrum axes as a recarray or saves it into a text file if the user provides a file address.
+    - lime.Spectrum.from_file("fname", instrument='text') can now read the file from a text file following the format from the lime.Spectrum.retrieve.spectrum() function.
+    - Bug the .plot.spectrum(include_fittings) does not show the combined profile
+    - Rename term "_conf" to "_cfg" across function names and arguments for uniformity
+    - Fitting functions now have the update_default=True argument. In the default behaviour the default configuration updates the default one. If set to update_default=False only the obj_cfg is used if available else the default one.
+    - Creating a spectrum object where all the entries are masked now produces a critical warning instead of raising an error.
+    - By default line_bands.
+    - Added bands_from_log function
+    - Change "output_address" argument name to "fname" across functions

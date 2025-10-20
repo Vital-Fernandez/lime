@@ -4,17 +4,7 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-# -- Path setup --------------------------------------------------------------
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-
-# Adding library path to the compilation for the autodoc documentation
 import sys
 import os
 import shutil
@@ -27,7 +17,6 @@ def all_but_ipynb(dir, contents):
         if os.path.isfile(os.path.join(dir, c)) and (not c.endswith(".py")):
             result += [c]
     return result
-
 
 def create_rst_from_changelog(input_file, output_file):
 
@@ -61,12 +50,41 @@ def create_rst_from_changelog(input_file, output_file):
     with open(output_file, 'w') as file:
         file.writelines(rst_content)
 
+def create_md_from_changelog(input_file, output_file):
 
-_lib_path = Path(__file__).parents[2]/'src'
-_doc_folder = Path(__file__).parents[2]/'docs/source'
-_examples_path = Path(__file__).parents[2]/'examples'
-sys.path.append(_lib_path.as_posix())
-sys.path.append(_examples_path.as_posix())
+    with open(input_file, 'r') as file:
+        lines = file.readlines()
+
+    # Start the Markdown file content
+    md_content = ["# Changelog\n\n"]
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith("LiMe") and "LiMe" in stripped:
+            # Expect format like: LiMe - v2.0 - 2025-08-01
+            version_type, version_number, version_date = stripped.split('-')
+            version_header = f"## {version_number.strip()} {version_type.strip()} ({version_date.strip()})\n"
+            md_content.append(version_header)
+
+        elif stripped.startswith("-"):
+            # Bullet point
+            md_content.append(f"- {stripped[1:].strip()}\n")
+
+        elif stripped:
+            # Any other non-empty line: highlight as bold
+            md_content.append(f"**{stripped}**\n")
+
+        else:
+            # Preserve empty lines
+            md_content.append("\n")
+
+    # Write to output markdown file
+    with open(output_file, 'w') as file:
+        file.writelines(md_content)
+
+    return
+
 
 
 # -- Project information -----------------------------------------------------
@@ -76,60 +94,113 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = '1.3.0'
+release = "2.0.1"
 
 # -- General configuration ---------------------------------------------------
+_lib_path = Path(__file__).parents[2]/'src'
+sys.path.insert(0, os.path.abspath(_lib_path))
+sys.path.insert(1, '/home/vital/PycharmProjects/aspect/src')
 
-# Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
-# ones.
-extensions = [
-    'sphinx.ext.duration',
-    'sphinx.ext.doctest',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.imgmath',
-    'matplotlib.sphinxext.plot_directive',
-    'sphinx.ext.imgmath',
-    'nbsphinx']
+extensions = ['myst_nb',
+              'sphinx_togglebutton',
+              'sphinx.ext.duration',
+              'sphinx.ext.doctest',
+              'sphinx.ext.autodoc',
+              'sphinx.ext.napoleon',
+              'sphinx.ext.viewcode',
+              'sphinx.ext.autosummary',
+              'sphinx.ext.intersphinx',
+              'sphinx.ext.mathjax',
+              'matplotlib.sphinxext.plot_directive',
+              ]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates', '_build']
+# Markdown configuration
+myst_enable_extensions = ["amsmath",
+                          "dollarmath",
+                          "colon_fence",
+                          "html_admonition",
+                          "html_image",
+                          "deflist",
+                          "smartquotes"]
 
+# Auto-generate heading anchors up to this level
+myst_heading_anchors = 2
+
+source_suffix = {'.rst': 'restructuredtext',
+                 '.ipynb': 'myst-nb',
+                 '.myst': 'myst-nb',
+                 '.md': 'myst-nb'}
+
+# Jupyter notebooks settings
+nbsphinx_markdown = True
+nbsphinx_allow_errors = True
+nbsphinx_execute = 'always'
+
+# Autodoc options
 autodoc_member_order = 'bysource'
 autodoc_default_options = {"imported-members": True}
 
-# List of patterns, relative to source directory, that match files and
-# directories to ignore when looking for source files.
-# This pattern also affects html_static_path and html_extra_path.
+# Set to True to output parameter types (like `str` or `dict`) clearly.
+# napoleon_use_param = False
+# napoleon_use_rtype = False
+# napoleon_use_ivar = False
+# napoleon_include_init_with_doc = False   # don’t merge __init__ doc into class doc
+# napoleon_attr_annotations = False
+
+# Template paths
+templates_path = ['_templates', '_build']
+
+# Exclude patterns
 exclude_patterns = []
 
+# Cell execution in case of documentation testing
+nb_execution_mode = "off"
 
-# -- Options for HTML output -------------------------------------------------
+# -- MathJax configuration ---------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
-html_theme = 'sphinx_rtd_theme'
+mathjax3_config = {
+    "tex": {
+        "macros": {
+            "textsc": ["{\\small \\uppercase{#1}}", 1]
+        }
+    }
+}
 
-imgmath_latex_preamble = r'\usepackage[active]{preview}' # + other custom stuff for inline math, such as non-default math fonts etc.
+imgmath_latex_preamble = r'\usepackage[active]{preview}'
 imgmath_use_preview = True
 
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
 
-shutil.rmtree(_doc_folder/'images', ignore_errors=True)
-shutil.rmtree(_doc_folder/'inputs', ignore_errors=True)
-shutil.rmtree(_doc_folder/'outputs', ignore_errors=True)
-shutil.rmtree(_doc_folder/'sample_data', ignore_errors=True)
-shutil.rmtree(_doc_folder/'tutorials', ignore_errors=True)
-shutil.copytree(_examples_path, _doc_folder, dirs_exist_ok=True)
+# -- HTML output configuration -----------------------------------------------
+
+# html_theme = 'sphinx_rtd_theme'
+html_theme = 'sphinx_book_theme'
+html_static_path = [] # ['_static']
+
+html_theme_options = {"logo": {"image_light": "0_resources/images/LiMe2_logo_white_transparent.png",
+                               "image_dark":  "0_resources/images/LiMe2_logo_dark_transparent.png",
+                               "alt_text":    "LiMe Documentation"},
+                      "secondary_sidebar_items": [], # Hide right contents sidebar
+                     }
+
+# -- Folder cleanup and example copy -----------------------------------------
+
+# Paths to the documentation and the notebooks (examples) folder
+_doc_folder = Path(__file__).parents[2]/'docs/source'
+_examples_path = Path(__file__).parents[2]/'examples/doc_notebooks'
+_examples_path.mkdir(parents=True, exist_ok=True)
+
+# sys.path.append(_lib_path.as_posix())
+sys.path.append(_examples_path.as_posix())
+
+# Delete existing files and copy the new versions
+list_folders = ['0_resources', '1_introduction', '2_guides', '3_explanations', '4_references']
+for sub_folder in list_folders: shutil.rmtree(_examples_path/sub_folder, ignore_errors=True)
+for sub_folder in list_folders: shutil.copytree(_doc_folder/sub_folder, _examples_path/sub_folder, dirs_exist_ok=True)
+
+
+# -- Changelog compiler ------------------------------------------------------
 
 # Compile the changelog page
 input_txt_changelog = _lib_path/'lime/changelog.txt'  # Path to the uploaded changelog file
-output_rst_changelog = _doc_folder/'introduction/changelog.rst'  # Output rst file
-create_rst_from_changelog(input_txt_changelog, output_rst_changelog)
+output_rst_changelog = _doc_folder/'4_references/1_changelog.md'  # Output md file
+create_md_from_changelog(input_txt_changelog, output_rst_changelog)
