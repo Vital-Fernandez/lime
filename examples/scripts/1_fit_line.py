@@ -1,5 +1,6 @@
 import lime
 from pathlib import Path
+
 print(f'Version data')
 print(lime.__version__)
 lime.show_instrument_cfg()
@@ -20,11 +21,10 @@ gp_spec.plot.spectrum()
 gp_spec.plot.bands('H1_6563A')
 
 # Fit the Halpha line
-gp_spec.fit.bands('H1_6563A')
+gp_spec.fit.bands('H1_6563A', cont_source='adjacent')
 
 # Plot the fitted line profile (since we do not specify a line, it will display the last measurement)
 gp_spec.plot.bands()
-
 
 # These result is not very good. Let's start by adjusting the width of the bands for this line
 obj_bands = gp_spec.retrieve.lines_frame(band_vsigma = 450) # km / s
@@ -34,12 +34,18 @@ gp_spec.fit.bands('H1_6563A', obj_bands)
 gp_spec.plot.bands()
 
 # Fit configuration
-gp_spec.clear_data()
-fit_conf = {'H1_6563A_b': 'H1_6563A+N2_6584A+N2_6548A',
-            'N2_6548A_amp': {'expr': 'N2_6584A_amp/2.94'},
-            'N2_6548A_kinem': 'N2_6584A'}
-gp_spec.fit.bands('H1_6563A_b', obj_bands, fit_cfg=fit_conf)
+line = 'H1_6563A_b'
+fit_conf = {'H1_6563A_b': 'H1_6563A+H1_6563A_k-1+N2_6584A+N2_6548A',        # Line components of the line
+            'N2_6548A_amp': {'expr': 'N2_6584A_amp/2.94'},                  # [NII] amplitude constrained by the emissivity ratio
+            'N2_6548A_kinem': 'N2_6584A',                                   # Tie the kinematics of the [NII] doublet
+            'H1_6563A_k-1_center': {'value':6562, 'min': 6561, 'max':6563}, # Range for the wide Hα value
+            'H1_6563A_k-1_sigma': {'expr':'>1.0*H1_6563A_sigma'}}           # Second Hα sigma must be higher than first sigma
+
+# Second attempt including the fit configuration
+gp_spec.fit.bands(line, obj_bands, fit_conf)
 gp_spec.plot.bands()
+
+# Velocity
 gp_spec.plot.velocity_profile('H1_6563A')
 
 # You can also save the fitting plot to a file

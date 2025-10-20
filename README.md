@@ -37,4 +37,4 @@ addition to the functions and measurements descriptions, you can download the do
 
 # Citing
 
-If you found LiMe useful, please remember to cite our [Fernández et al (2024)](https://doi.org/10.1051/0004-6361/202449224) 📝.
+If you found LiMe useful, please remember to cite [Fernández et al (2024)](https://doi.org/10.1051/0004-6361/202449224) 📝.

@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use LiMe in your research or software, please cite the following paper."
+title: "LiMe: A Line Measuring library"
+authors:
+  - family-names: Fernández
+    given-names: Vital
+repository-code: "https://github.com/Vital-Fernandez/lime"
+url: "https://lime-stable.readthedocs.io/"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Fernández
+      given-names: V.
+    - family-names: Amorín
+      given-names: R.
+    - family-names: Firpo
+      given-names: V.
+    - family-names: Morisset
+      given-names: C.
+  title: "LIME: A LIne MEasuring library for large and complex spectroscopic data sets. I. Implementation of a virtual observatory for JWST spectra"
+  journal: "Astronomy & Astrophysics"
+  year: 2024
+  volume: "688"
+  article-number: "A69"
+  doi: "10.1051/0004-6361/202449224"
+  url: "https://www.aanda.org/articles/aa/full_html/2024/08/aa49224-24/aa49224-24.html"
+  notes: "Also available as arXiv:2405.15072"
