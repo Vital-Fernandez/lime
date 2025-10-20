@@ -1767,7 +1767,7 @@ class SpectrumFigures:
             display_check = False if in_fig is not None else True
 
             # Check if the line has measuring data
-            show_profile = show_profile and (line.measurements.profile_flux is not None)
+            show_profile = show_profile and (line.measurements.intg_flux is not None)
 
             # Adjust the default theme
             plt_cfg = theme.fig_defaults(fig_cfg, fig_type='bands')
