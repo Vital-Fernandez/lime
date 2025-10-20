@@ -1159,7 +1159,7 @@ class CubeTreatment(LineFitting):
                     err_msg = (f'Bands file not found at: {bands_file}.'
                                f'\n- Resolving from log section - entry: '
                                f'\n [{mask_name}_line_fitting]'
-                               f'\n bands = {mask_conf['bands']}')
+                               f'\n bands = {mask_conf["bands"]}')
                     raise LiMe_Error(err_msg)
             else:
                 bands_in = bands
