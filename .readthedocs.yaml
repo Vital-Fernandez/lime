@@ -6,16 +6,13 @@ build:
     python: "3.11"
 
 sphinx:
-  configuration: docs/conf.py
-  fail_on_warning: true
+  configuration: docs/source/conf.py
+  fail_on_warning: true  # flip to false if you need to inspect warnings first
 
 python:
   install:
     - method: pip
       path: .
       extra_requirements:
-        - full
         - docs
-
-formats:
-  - pdf
+        - full
