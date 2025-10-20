@@ -8,7 +8,8 @@ version = "2.0.1"
 readme = "README.rst"
 requires-python = ">=3.11"
 license = {text = "GPL-3.0-or-later"}
-classifiers = ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]
+classifiers = ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+               "Programming Language :: Python :: 3.11"]
 
 authors = [{name = "Vital Fernández", email = "vgf@stsci.edu"}]
 description = "Line measuring algorithm for astronomical spectra"
@@ -20,9 +21,6 @@ dependencies = ["astropy~=7.1",
                 "pandas~=2.2",
                 "scipy~=1.16",
                 "tomli >= 2.0.0 ; python_version < '3.11'"]
-
-classifiers = ["Programming Language :: Python :: 3",
-               "Programming Language :: Python :: 3.11"]
 
 [project.optional-dependencies]
 full = ["asdf~=4.1",
