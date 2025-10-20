@@ -116,7 +116,6 @@ class TestCubeClass:
 
     def test_fit_spatial_mask(self):
 
-        # cfg['MASK_0_line_fitting']['bands'] = bands_file_address.as_posix()
         cube.fit.spatial_mask(spatial_mask_address, fit_cfg=cfg, line_detection=True, mask_list=['MASK_0'],
                               fname=spatial_log_address)
 

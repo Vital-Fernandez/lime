@@ -6,19 +6,21 @@ orbs:
 jobs:
   test-LiMe:
     docker:
-      - image: cimg/python:3.11.9
+      - image: cimg/python:3.11.9   # matches requires-python >=3.11
     steps:
       - checkout
+
       - run:
-          name: Install package + test deps
+          name: Install package + test dependencies
           command: |
             python -m pip install --upgrade pip setuptools wheel
-            # installs your package + pytest/pytest-cov/pytest-mpl from the `tests` extra
-            pip install ".[tests]"
+            pip install ".[tests]"   # installs pytest, pytest-cov, pytest-mpl, etc.
+
       - run:
           name: Run tests and collect coverage
           command: |
-            pytest tests --cov --cov-report=xml --mpl
+            pytest tests --quiet --cov --mpl --cov-report=xml
+
       - codecov/upload
 
 workflows:

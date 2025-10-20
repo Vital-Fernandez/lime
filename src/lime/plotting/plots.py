@@ -1508,7 +1508,7 @@ class SpectrumFigures:
                                    color=theme.colors['inspection_uncertainty'])
 
             # Show components
-            if show_components:
+            if show_components and hasattr(self._spec.infer, "pred_arr"):
                 legend_check = False
                 spec_components_plotter(self._spec, self.ax, wave_plot, flux_plot, z_corr)
 
