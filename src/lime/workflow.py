@@ -431,7 +431,7 @@ class SpecRetriever:
 
         # Dictionary with parameters
         if 'footer' not in default_kwargs:
-            footer_dict = {'LiMe': f'v{lime_cfg['metadata']["version"]}',
+            footer_dict = {'LiMe': f"v{lime_cfg['metadata']['version']}",
                             'units_wave': self._spec.units_wave, 'units_flux':  self._spec.units_flux,
                             'redshift': self._spec.redshift, 'norm_flux': self._spec.norm_flux, 'id_label': self._spec.label}
             footer_str = "\n".join(f"{key}:{value}" for key, value in footer_dict.items())
