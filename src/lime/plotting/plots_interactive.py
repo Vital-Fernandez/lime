@@ -278,14 +278,14 @@ class BandsInspection:
 
         Initialize from an existing bands table and show the continua bands for the selection:
 
-        >>> spec.check.bands("session_bands.xlsx", bands="ref_bands.xlsx", show_continua=True)
+        >>> spec.check.bands("session_bands.xlsx", bands="ref_bands.xlsx", show_bands=True)
 
         Adjusting the initial ``bands`` generation with the arguments from the  with the
         :meth:`lime.Spectrum.retrieve.lines_frame` function
 
         >>> gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_correction=True,
         >>>                     map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200, 'O3_4959A': 250, 'O3_5007A': 250},
-        >>>                     fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, show_continua=True, maximize=True)
+        >>>                     fit_cfg=obs_cfg, ref_bands=osiris_gp_df_path, show_bands=True, maximize=True)
 
         """
 

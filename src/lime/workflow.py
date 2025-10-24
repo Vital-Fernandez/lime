@@ -25,7 +25,7 @@ except ImportError:
 _logger = logging.getLogger('LiMe')
 
 
-def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_source=True, user_err_from_bands=False):
+def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_source='central', user_err_from_bands=False):
 
     # Check if the line bands are provided
     if line.mask is None:
@@ -49,6 +49,12 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_sou
 
     # Compute the line and adjacent continua indeces:
     idcsEmis, idcsCont = line.index_bands(spec.wave, spec.redshift)
+
+    if user_cont_source == 'fit':
+        if spec.cont is None:
+            raise LiMe_Error(f"The continuum has not been fit. Please run 'Spectrum.fit.continuum' before measuring lines"
+                             f"or change the 'user_cont_source'.")
+            idcsCont = idcsEmis
 
     # Logic for the bands source
     cont_from_bands = True if user_cont_source == 'adjacent' else False
@@ -625,23 +631,25 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             idcs_line, idcs_continua = idcs_selection
 
             # Compute line continuum
-            self.continuum_calculation(idcs_line, idcs_continua, cont_source)
+            cont_arr = self.continuum_calculation(idcs_line, idcs_continua, cont_source, err_from_bands)
 
             # Compute line flux error
             pixel_err_arr = self.pixel_error_calculation(idcs_continua, err_from_bands)
 
             # Non-parametric measurements
-            self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line], pixel_err_arr[idcs_line])
+            self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line],
+                                       pixel_err_arr[idcs_line], cont_arr[idcs_line])
 
             # Import kinematics if requested
             import_line_kinematics(self.line, 1 + self._spec.redshift, self._spec.frame, input_conf)
 
             # Profile fitting measurements
-            idcs_fitting = idcs_selection[0] + idcs_selection[1] if cont_source != 'central' else idcs_selection[0]
+            idcs_fitting = idcs_selection[0] if cont_source == 'central' else idcs_selection[0] + idcs_selection[1]
             self.profile_fitting(self.line,
                                  x_arr=self._spec.wave[idcs_fitting],
                                  y_arr=self._spec.flux[idcs_fitting],
-                                 err_arr= pixel_err_arr[idcs_fitting],
+                                 err_arr=pixel_err_arr[idcs_fitting],
+                                 cont_arr=cont_arr[idcs_fitting] if cont_source == 'fit' else None,
                                  user_conf=input_conf, fit_method=min_method)
 
             # Instrumental and thermal corrections for the lines

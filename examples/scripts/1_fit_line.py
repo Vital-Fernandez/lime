@@ -15,18 +15,18 @@ z_obj = 0.19531
 
 # Generate a spectrum variable from the observation file
 gp_spec = lime.Spectrum.from_file(fits_file, instrument='osiris', redshift=z_obj)
-gp_spec.plot.spectrum()
+# gp_spec.plot.spectrum()
+#
+# # Plot the spectrum
+# gp_spec.plot.bands('H1_6563A')
 
-# Plot the spectrum
-gp_spec.plot.bands('H1_6563A')
-
-# Fit the Halpha line
-gp_spec.fit.bands('H1_6563A', cont_source='adjacent')
-
-# Plot the fitted line profile (since we do not specify a line, it will display the last measurement)
-gp_spec.plot.bands()
-
-# These result is not very good. Let's start by adjusting the width of the bands for this line
+# # Fit the Halpha line
+# gp_spec.fit.bands('H1_6563A', cont_source='adjacent')
+#
+# # Plot the fitted line profile (since we do not specify a line, it will display the last measurement)
+# gp_spec.plot.bands()
+#
+# # These result is not very good. Let's start by adjusting the width of the bands for this line
 obj_bands = gp_spec.retrieve.lines_frame(band_vsigma = 450) # km / s
 
 # Fit the line

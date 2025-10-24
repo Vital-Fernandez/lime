@@ -22,7 +22,7 @@ O3_5007A_k-1_amp = "expr:<10.0*O3_5007A_amp"
 O3_5007A_k-1_sigma = "expr:>2.0*O3_5007A_sigma"
 
 [MASK_0_line_fitting]
-bands = "../doc_notebooks/0_resources/bands/SHOC579_MASK0_bands.txt"
+bands = "../0_resources/bands/SHOC579_MASK0_bands.txt"
 
 O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
 H1_4861A_b = "H1_4861A+H1_4861A_k-1"
@@ -49,7 +49,7 @@ N2_6548A_kinem = "N2_6584A"
 H1_9548A_sigma = "min:1.0,max:2.0"
 
 [MASK_1_line_fitting]
-bands = "../doc_notebooks/0_resources/bands/SHOC579_MASK1_bands.txt"
+bands = "../0_resources/bands/SHOC579_MASK1_bands.txt"
 
 O2_3726A_b = "O2_3726A+O2_3729A"
 H1_6563A_b = "H1_6563A+N2_6584A+N2_6548A"
@@ -67,4 +67,4 @@ S3_9531A_cont_intercept = "vary:False"
 H1_9548A_sigma = "min:1.0,max:2.0"
 
 [MASK_2_line_fitting]
-bands = "../doc_notebooks/0_resources/bands/SHOC579_MASK2_bands.txt"
+bands = "../0_resources/bands/SHOC579_MASK2_bands.txt"

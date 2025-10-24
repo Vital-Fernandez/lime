@@ -43,3 +43,4 @@ class TestSpectrumClass:
                            ax_cfg={'title': 'Test err * 10', 'xlabel': 'Dipersion axis'})
 
         return fig
+

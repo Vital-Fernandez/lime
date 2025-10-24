@@ -69,6 +69,28 @@ _SLOPE_FREE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None
 _INTER_FREE_PAR = dict(value=None, min=-np.inf, max=np.inf, vary=True, expr=None)
 
 
+def const_cont_model(cont_array, prefix='cont_', allow_scale=False):
+    """
+    Build a Model that returns the supplied continuum array.
+    If allow_scale=True, include a 'scale' parameter (free by default).
+    If allow_scale=False, include 'scale' but freeze it at 1.0 so it's constant.
+    """
+    cont_array = np.asarray(cont_array)
+
+    def array_component(x, scale=1.0):
+        # x is ignored for values, but we check shape for safety
+        if np.shape(x) != np.shape(cont_array):
+            raise ValueError("continuum array and x must have the same shape")
+        return scale * cont_array
+
+    m = Model(array_component, prefix=prefix)
+    params = m.make_params(scale=1.0)
+
+    if not allow_scale:
+        params[f'{prefix}scale'].set(vary=False)
+        # freeze at 1.0 -> truly constant
+    return m, params
+
 def linear_model(x, m_cont, n_cont):
     """Linear line formulation"""
     return m_cont * x + n_cont
@@ -512,7 +534,7 @@ def compute_inst_sigma_array(wave_arr, res_power=None):
 
 class ProfileModelCompiler:
 
-    def __init__(self, line, redshift, user_conf, y, narrow_check=False):
+    def __init__(self, line, redshift, user_conf, y, cont_arr=None, narrow_check=False):
 
         self.model = None
         self.params = None
@@ -531,12 +553,16 @@ class ProfileModelCompiler:
             self.ref_wave = line.param_arr('wavelength') * (1 + redshift)
 
         # Continuum model
-        self.model = Model(linear_model)
-        self.model.prefix = f'line0_'
+        if cont_arr is None:
+            self.model = Model(linear_model)
+            self.model.prefix = 'line0_'
 
-        # Fix or not the continuum
-        self.define_param(0, line, 'm_cont', line.measurements.m_cont, _SLOPE_FIX_PAR, user_conf)
-        self.define_param(0, line, 'n_cont', line.measurements.n_cont, _INTER_FIX_PAR, user_conf)
+            # Fix or not the continuum
+            self.define_param(0, line, 'm_cont', line.measurements.m_cont, _SLOPE_FIX_PAR, user_conf)
+            self.define_param(0, line, 'n_cont', line.measurements.n_cont, _INTER_FIX_PAR, user_conf)
+
+        else:
+            self.model = const_cont_model(cont_arr, 'line0_')[0]
 
         # Add one gaussian models per component
         for idx, comp in enumerate(self.lcomps):
@@ -659,13 +685,15 @@ class ProfileModelCompiler:
 
     def measurements_calc(self, line, user_conf, redshift):
 
-        # Assign continuum values
-        for j, param in enumerate(['m_cont', 'n_cont']):
-            param_fit = self.output.params.get(f'line0_{param}', None)
-            param_value = np.nan if param_fit is None else param_fit.value
-            param_err = np.nan if param_fit is None else param_fit.stderr
-            setattr(line.measurements, param, param_value)
-            setattr(line.measurements, f'{param}_err', param_err)
+        # Assign continuum values (If not already available from the fit)
+        if getattr(line.measurements, 'm_cont') is not None:
+            for j, param in enumerate(['m_cont', 'n_cont']):
+                param_fit = self.output.params.get(f'line0_{param}', None)
+                if param_fit is not None:
+                    param_value = np.nan if param_fit is None else param_fit.value
+                    param_err = np.nan if param_fit is None else param_fit.stderr
+                    setattr(line.measurements, param, param_value)
+                    setattr(line.measurements, f'{param}_err', param_err)
 
         # Loop through the line components and assign profile params
         for i, comp_label in enumerate(self.lcomps):
@@ -701,7 +729,6 @@ class ProfileModelCompiler:
             if np.signbit(line.measurements.amp_err[i]):
                 line.measurements.amp_err[i] = np.nan
                 _logger.warning(f'Negative scale value for amplitude at {comp_label}')
-
 
             profile_flux_dist = AREA_FUNCTIONS[comp_label.profile](line.measurements, i, 1000)
             line.measurements.profile_flux[i] = np.mean(profile_flux_dist)
@@ -886,7 +913,7 @@ class LineFitting:
 
         return
 
-    def integrated_properties(self, line, emis_wave, emis_flux, emis_err, n_steps=1000, min_array_dim=15):
+    def integrated_properties(self, line, emis_wave, emis_flux, emis_err, cont_arr, n_steps=1000, min_array_dim=15):
 
         # Use default line shape
         match line.shape:
@@ -911,11 +938,9 @@ class LineFitting:
         line.measurements.peak_wave = emis_wave[peakIdx]
         line.measurements.peak_flux = emis_flux[peakIdx]
         line.measurements.pixelWidth = np.diff(emis_wave).mean()
-        line.measurements.cont = line.measurements.peak_wave * line.measurements.m_cont + line.measurements.n_cont
+        # line.measurements.cont = line.measurements.peak_wave * line.measurements.m_cont + line.measurements.n_cont
+        line.measurements.cont = cont_arr[peakIdx]
         line.measurements.cont_err = emis_err[peakIdx]
-
-        # Continuum calculation for the line region
-        cont_arr = emis_wave * line.measurements.m_cont + line.measurements.n_cont
 
         # Warning if continuum above or below line peak/through
         if emission_check and (cont_arr[peakIdx] > emis_flux[peakIdx]):
@@ -950,10 +975,7 @@ class LineFitting:
             self.velocity_profile_calc(line.measurements, peakIdx, emis_wave, emis_flux, cont_arr, emission_check,
                                        min_array_dim=min_array_dim)
 
-        # # Pixel velocity # TODO we are not using this one
-        # line.measurements.pixel_vel = c_KMpS * line.measurements.pixelWidth/line.peak_wave
-
-        # Equivalent width computation (it must be an 1d array to avoid conflict in blended lines)
+        # Equivalent width computation (it must be a 1d array to avoid conflict in blended lines)
         lineContinuumMatrix = cont_arr + normalNoise
         eqwMatrix = areasArray / lineContinuumMatrix.mean(axis=1)
 
@@ -962,10 +984,10 @@ class LineFitting:
 
         return
 
-    def profile_fitting(self, line, x_arr, y_arr, err_arr, user_conf, fit_method='leastsq'):
+    def profile_fitting(self, line, x_arr, y_arr, err_arr, cont_arr, user_conf, fit_method='leastsq'):
 
         # Compile the Lmfit component models
-        self.profile = ProfileModelCompiler(line, self._spec.redshift, user_conf, y_arr, self._narrow_check)
+        self.profile = ProfileModelCompiler(line, self._spec.redshift, user_conf, y_arr, cont_arr, self._narrow_check)
 
         # Fit the models
         self.profile.fit(line, x_arr, y_arr, err_arr, fit_method)
@@ -975,41 +997,61 @@ class LineFitting:
 
         return
 
-    # noinspection PyTupleAssignmentBalance
-    def continuum_calculation(self, idcs_emis, idcs_cont, user_cont_source):
+    def continuum_calculation(self, idcs_emis, idcs_cont, user_cont_source, err_from_bands):
 
         # Use the continuum bands for the calculation
-        if user_cont_source == 'adjacent':
+        match user_cont_source:
 
-            # Fit the model, including uncertainties
-            params, covariance = curve_fit(linear_model,
-                                           xdata=self._spec.wave[idcs_cont].compressed(),
-                                           ydata=self._spec.flux[idcs_cont].compressed(),
-                                           sigma=self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else None,
-                                           absolute_sigma=True, check_finite=False)
+            case 'adjacent':
 
-            self.line.measurements.m_cont, self.line.measurements.n_cont = params
-            self.line.measurements.m_cont_err_intg, self.line.measurements.n_cont_err_intg = np.sqrt(np.diag(covariance))
+                # Check for zero err
+                err_cont = self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else None
+                err_cont = err_cont if np.any(err_cont) else None
 
-        # Use the continua bands
-        elif user_cont_source == 'central':
-            x, y = self._spec.wave[idcs_emis].compressed(), self._spec.flux[idcs_emis].compressed()
-            err = self._spec.err_flux[idcs_emis].compressed() if self._spec.err_flux is not None else [0, 0]
+                # Fit the model, including uncertainties
+                params, covariance = curve_fit(linear_model,
+                                               xdata=self._spec.wave[idcs_cont].compressed(),
+                                               ydata=self._spec.flux[idcs_cont].compressed(),
+                                               sigma=err_cont,
+                                               absolute_sigma=True, check_finite=False)
 
-            self.line.measurements.m_cont = (y[-1] - y[0]) / (x[-1] - x[0])
-            self.line.measurements.n_cont =  y[0] - self.line.measurements.m_cont * x[0]
+                self.line.measurements.m_cont, self.line.measurements.n_cont = params
+                self.line.measurements.m_cont_err_intg, self.line.measurements.n_cont_err_intg = np.sqrt(np.diag(covariance))
+                cont_arr = self._spec.wave * self.line.measurements.m_cont + self.line.measurements.n_cont
 
-            self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
-            self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+            case 'central':
 
-        # New methods
-        else:
-            raise(LiMe_Error(f'Continuum source "{user_cont_source}" is not recognized. Please use "central" or "adjacent".'))
+                x, y = self._spec.wave[idcs_emis].compressed(), self._spec.flux[idcs_emis].compressed()
+                err = self._spec.err_flux[idcs_emis].compressed() if self._spec.err_flux is not None else [0, 0]
 
-        # Initial continuum level value
-        self.line.measurements.cont = self.line.measurements.m_cont * (self._spec.wave[idcs_emis].compressed().mean()) + self.line.measurements.n_cont
+                self.line.measurements.m_cont = (y[-1] - y[0]) / (x[-1] - x[0])
+                self.line.measurements.n_cont =  y[0] - self.line.measurements.m_cont * x[0]
 
-        return
+                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
+                self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+                cont_arr = self._spec.wave * self.line.measurements.m_cont + self.line.measurements.n_cont
+
+            case 'fit':
+
+                x, y = self._spec.wave[idcs_cont].compressed(), self._spec.cont[idcs_cont].compressed()
+                err = self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else [0, 0]
+
+                self.line.measurements.m_cont = (y[-1] - y[0]) / (x[-1] - x[0])
+                self.line.measurements.n_cont =  y[0] - self.line.measurements.m_cont * x[0]
+
+                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
+                self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+                cont_arr = self._spec.cont
+
+            case _:
+                raise LiMe_Error(f'Continuum source "{user_cont_source}" is not recognized. '
+                                 f'Please use "central", "adjacent" and "fit".')
+
+        # # Initial continuum level value
+        # self.line.measurements.cont = (self.line.measurements.m_cont * self._spec.wave[idcs_emis].compressed().mean() +
+        #                                self.line.measurements.n_cont)
+
+        return cont_arr
 
     def pixel_error_calculation(self, idcs_continua, user_error_from_bands):
 

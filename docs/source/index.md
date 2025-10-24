@@ -101,7 +101,7 @@ caption: Introduction
 1_introduction/1_observations
 1_introduction/2_line_labels
 1_introduction/3_line_bands
-1_introduction/4_lines_database
+🆕 Line database <1_introduction/4_lines_database>
 1_introduction/5_fitting_configuration
 ```
 
@@ -112,10 +112,11 @@ maxdepth: 2
 caption: Guides
 ---
 2_guides/0_creating_observations
-2_guides/1_prepare_line_bands
+🆕 Automatic bands <2_guides/1_prepare_line_bands>
 2_guides/2_manual_bands_adjustement
-2_guides/3_continuum_fitting
+🆕 Line Continuum <2_guides/3_continuum_fitting>
 2_guides/4_line_detection
+2_guides/5_line_continuum
 2_guides/5_multifile-line
 2_guides/6_ifu_spatial_masking
 2_guides/7_ifu_line_fitting
