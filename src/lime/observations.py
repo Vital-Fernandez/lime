@@ -121,7 +121,8 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
                                          f'1D flux arrays for the Spectrum objects \n'
                                          f'and 3D flux arrays Cube objects.')
                 else:
-                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. The input variable type is a {type(value_arr)}:{value_arr}')
+                    raise LiMe_Error(f'The input {name_arr} array must be numpy array. '
+                                     f'The input variable type is a {type(value_arr)}:{value_arr}')
 
                 # Check for unmasked nan and inf entries
                 if i < 3:
@@ -138,18 +139,25 @@ def check_inputs_arrays(wave, flux, err_flux, pixel_mask, lime_object):
     # Assign the output mask
     output_pixel_mask = pixel_mask if mask_check else output_pixel_mask
 
-    # Check not all the pixels are masked
-    if mask_check:
-        if np.all(output_pixel_mask):
-            _logger.critical(f'All the input observation pixels are masked. Please check that only bad pixels entries'
-                             f' are masked (in numpy arrays flux_arr[pixel_mask] = bad_entries)')
-
     return output_pixel_mask
 
 
-def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1, min_flux_scale=0.001):
+def check_spectra_arrays(observation):
 
-    if redshift is None: # TODO add case nan or inf
+    if np.all(observation.flux.mask):
+        _logger.critical(f'All the input {observation.__class__.__name__} pixels are masked. Please check that only bad '
+                         f'pixels entries are masked (in numpy arrays flux_arr[pixel_mask] = bad_entries)')
+
+    if observation.err_flux is not None:
+        if observation.err_flux.data.sum() == 0:
+            _logger.warning(f'All the {observation.__class__.__name__} flux uncertainty entries are 0.'
+                            f' This can cause some measurements to fail.')
+
+    return
+
+def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1, min_flux_scale=0.001, max_flux_scale=1e50):
+
+    if (redshift is None) or np.isnan(redshift) or np.isinf(redshift):
         _logger.warning(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
         redshift = 0
 
@@ -164,7 +172,6 @@ def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux-np.nanmin(flux_array))) - norm_factor)
                 else:
                     norm_flux = np.power(10, np.floor(np.log10(mean_flux)) - norm_factor)
-                # TODO add note for unit_conversion
                 _logger.info(f'The observation does not include a normalization but the mean flux value is '
                              f'below {min_flux_scale}. The flux will be automatically normalized by {norm_flux}.')
             else:
@@ -506,6 +513,9 @@ class Spectrum:
         spec.wave = np.ma.MaskedArray(cube.wave.data, spec.flux.mask)
         spec.wave_rest = np.ma.MaskedArray(cube.wave_rest.data, spec.flux.mask)
 
+        # Check the input arrays
+        check_spectra_arrays(spec)
+
         return spec
 
     @classmethod
@@ -687,6 +697,9 @@ class Spectrum:
 
         # Set the instrumental sigma correction
         self.res_power = res_power
+
+        # Review the final data
+        check_spectra_arrays(self)
 
         return
 
@@ -1120,6 +1133,8 @@ class Cube:
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
                                                                                          input_err, pixel_mask,
                                                                                          self.redshift, self.norm_flux)
+        # Review the final data
+        check_spectra_arrays(self)
 
         return
 

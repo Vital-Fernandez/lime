@@ -1100,30 +1100,31 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
     w4 = bands.w4.values * (1 + redshift)
     idcs_bands = np.searchsorted(x, np.array([w3, w4]))
 
-    # Loop through the detections and plot the names
+    # Loop through the detections and plot the names # TODO add reviewer here
     for i, line_label in enumerate(bands.index):
         line = Line.from_transition(line_label, data_frame=bands, verbose=False)
+        try:
 
-        # Get the max flux on the region making the exception for 1 pixel bands
-        idx_w3, idx_w4 = idcs_bands[:, i]
-        max_region = np.max(y[idx_w3:idx_w4]) if idx_w3 != idx_w4 else y[idx_w3]
-        x_region = x[idx_w3:idx_w4]
+            # Get the max flux on the region making the exception for 1 pixel bands
+            idx_w3, idx_w4 = idcs_bands[:, i]
+            max_region = np.max(y[idx_w3:idx_w4]) if idx_w3 != idx_w4 else y[idx_w3]
+            x_region = x[idx_w3:idx_w4]
 
-        # Band shade area
-        label = 'Matched line' if i == 0 else '_'
-        ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color)
+            # Band shade area
+            label = 'Matched line' if i == 0 else '_'
+            ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color)
 
-        # Label area
-        # text = line_label
-        x_text = line.wavelength * (1 + redshift) / z_corr
-        y_text = max_region * 0.9 * z_corr
-        # ax.text(x_text, y_text, text, rotation=270)
-        # print('seguro', text)
+            # Label area
+            # text = line_label
+            x_text = line.wavelength * (1 + redshift) / z_corr
+            y_text = max_region * 0.9 * z_corr
+            # ax.text(x_text, y_text, text, rotation=270)
+            # print('seguro', text)
 
-        ax.annotate(line_label, xy=(line.wavelength * (1 + redshift) / z_corr, max_region * z_corr),
-                    xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", rotation=270)
-
-
+            ax.annotate(line_label, xy=(line.wavelength * (1 + redshift) / z_corr, max_region * z_corr),
+                        xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", rotation=270)
+        except:
+            print(LiMe_Error(f"Error plotting the band for line {line}"))
 
     # Plot the detected line peaks
     if 'signal_peak' in bands.columns:
@@ -1682,7 +1683,7 @@ class SpectrumFigures:
         return
 
     def bands(self, label=None, bands=None, fname=None, rest_frame=False, y_scale='auto', show_profile=True,
-              show_err=False, show_continua=True, fig_cfg=None, ax_cfg=None, in_fig=None, maximize=False):
+              show_err=False, show_bands=True, show_cont=False, fig_cfg=None, ax_cfg=None, in_fig=None, maximize=False):
 
         """
         Plot a single spectral line with optional profile fit and continua bands.
@@ -1715,7 +1716,7 @@ class SpectrumFigures:
         show_err : bool, optional
             If ``True``, fill a shaded band showing the flux uncertainty (``err_flux``)
             within the central line region. Default is ``False``.
-        show_continua : bool, optional
+        show_bands : bool, optional
             If ``True`` (default), draw the central and continuum bands for reference.
         fig_cfg : dict, optional
             Matplotlib figure configuration (e.g., size, DPI). See
@@ -1802,7 +1803,11 @@ class SpectrumFigures:
                 # Line bands
                 if show_profile:
                     line_band_plotter(self.ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
-                                      show_central=True, show_adjacent=show_continua)
+                                      show_central=True, show_adjacent=show_bands)
+
+                    # Central point
+                    self.ax[0].scatter(line.measurements.peak_wave/z_corr, line.measurements.cont*z_corr/self._spec.norm_flux,
+                                       marker='+', facecolor=theme.colors['fg'], linewidth=float(theme.plt['spectrum_width'])/2)
 
                 # Plot the uncertainty
                 if show_err and (self._spec.err_flux is not None):
@@ -1844,6 +1849,18 @@ class SpectrumFigures:
 
                 # Mask plotter
                 # spec_mask_plotter(self.)
+
+
+                if show_cont:
+                    if self._spec.cont is not None:
+                        # Plot the spectrum default."cont_width" = '0.5' cont
+                        self.ax[0].plot(wave_plot[idcs_bands[0]:idcs_bands[5]] / z_corr,
+                                        self._spec.cont[idcs_bands[0]:idcs_bands[5]] * z_corr,
+                                        color=theme.colors['cont'], linewidth=2,
+                                        linestyle="dashed", label='fitted continuum')
+
+                    else:
+                        _logger.info('The input spectrum does not have have a fitted continuum')
 
                 # By default, plot on screen unless an output address is provided
                 save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)

@@ -1,6 +1,6 @@
 [metadata]
 name = 'lime-stable'
-version = "2.0.1"
+version = "2.0.2"
 
 # =====================
 # Spectrum / Long-slit
@@ -99,6 +99,6 @@ miri.id_label = 'null'
 kcwi.norm_flux = 'null'
 kcwi.res_power = 'null'
 kcwi.units_wave = "AA"
-kcwi.units_flux = "1e-16*FLAM"
+kcwi.units_flux = "1e16*FLAM"
 kcwi.pixel_mask = "nan"
 kcwi.id_label = 'null'

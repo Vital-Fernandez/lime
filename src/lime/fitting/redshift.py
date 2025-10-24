@@ -292,19 +292,19 @@ class RedshiftFitting:
 
         # Set the type of fitting and the components to use
         if mode == 'key':
-            components = components if components is not None else ['emission', 'doublet']
+            components = components if components is not None else ['emission', 'doublet-em']
             components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
             z_infer = redshift_key_method(self._spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
                                           sig_digits=sig_digits, detection_only=detection_only, plot_results=plot_results)
 
         elif mode == 'permute':
-            components = components if components is not None else ['emission', 'doublet', 'absorption']
+            components = components if components is not None else ['emission', 'doublet-em', 'absorption']
             components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
             z_infer = redshift_permutation_method(self._spec, bands, z_min, z_max, pred_arr, components_number,
                                                   plot_results=plot_results)
 
         elif mode == 'xor':
-            components = components if components is not None else ['emission', 'doublet', 'absorption']
+            components = components if components is not None else ['emission', 'doublet-em', 'absorption']
             components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
             z_infer = redshift_xor_method(self._spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
                                           sig_digits=sig_digits, plot_results=plot_results)

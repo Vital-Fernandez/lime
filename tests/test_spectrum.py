@@ -137,6 +137,11 @@ wave_array, flux_array, err_array, pixel_mask = np.loadtxt(file_address, unpack=
 spec = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                      pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
 
+spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5])
+
+# spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5])
+# spec.plot.spectrum(show_cont=True, log_scale=True)
+
 # spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_from_bands=False)
 spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35')
 
@@ -287,7 +292,7 @@ class TestSpectrumClass:
     def test_plot_line_3rd(self):
 
         fig = plt.figure()
-        spec.plot.bands('Fe3_4658A_s-emi', show_continua=True, in_fig=fig)
+        spec.plot.bands('Fe3_4658A_s-emi', show_bands=True, in_fig=fig)
 
         return fig
 
@@ -505,3 +510,53 @@ class TestFluxMeasurements:
                 assert diag_arr[i] == False
 
         return
+
+    def test_fit_cont(self):
+
+        spec2 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
+                             pixel_mask=pixel_mask, id_label='SHOC579_Manga38-35')
+
+        spec2.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5])
+
+        line = lime.Line.from_transition('O1_6300A_b', cfg['default_line_fitting'], spec.frame,
+                                         norm_flux=spec.norm_flux)
+
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='central', line_list=['O1_6300A_b'])
+        # spec2.plot.bands(show_cont=True)
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.01)
+
+        spec2.clear_data()
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='adjacent', line_list=['O1_6300A_b'])
+        # spec2.plot.bands(show_cont=True)
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.05)
+
+        spec2.clear_data()
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='fit', line_list=['O1_6300A_b'])
+        # spec2.plot.bands(show_cont=True)
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.10)
+
+        line = lime.Line.from_transition('O2_3726A_b', cfg['default_line_fitting'], spec.frame,
+                                         norm_flux=spec.norm_flux)
+
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='central', line_list=['O2_3726A_b'])
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.01)
+
+        spec2.clear_data()
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='adjacent', line_list=['O2_3726A_b'])
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.30)
+
+        spec2.clear_data()
+        spec2.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='fit', line_list=['O2_3726A_b'])
+        assert np.isclose(line.measurements.cont, spec2.fit.line.measurements.cont, rtol=0.30)
+
+        return
+
+    @pytest.mark.mpl_image_compare(tolerance=tolerance_rms)
+    def test_cont_in_bands(self):
+
+        spec.fit.frame(bands_file_address, cfg, obj_cfg_prefix='38-35', cont_source='central', line_list=['O2_3726A_b'])
+
+        fig = plt.figure()
+        spec.plot.bands(show_cont=True, in_fig=fig)
+
+        return fig
