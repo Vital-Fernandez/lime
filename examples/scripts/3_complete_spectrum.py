@@ -18,10 +18,10 @@ norm_flux = obs_cfg['osiris']['norm_flux']
 gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
 
 # Fit the continuum
-gp_spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5], smooth_scale=2, plot_steps=False)
+gp_spec.fit.continuum(degree_list=[3, 6, 6], emis_threshold=[3, 2, 1.5], smooth_scale=2, plot_steps=True)
 
 # Confirm present lines
-match_bands = gp_spec.infer.peaks_troughs(lineBandsFile, emission_shape=True, sigma_threshold=3, plot_steps=False)
+match_bands = gp_spec.infer.peaks_troughs(lineBandsFile, emission_shape=True, sigma_threshold=3, plot_steps=True)
 
 # Fit the lines
 gp_spec.fit.frame(match_bands, obs_cfg, obj_cfg_prefix='gp121903_osiris', update_default=True)

@@ -59,7 +59,6 @@ default."width" = 600
 default."height" = 300
 default."tools" = 'fullscreen,pan,wheel_zoom,box_zoom,xzoom_in,yzoom_in,reset,save'
 
-
 [bokeh.size] # Figure elements size
 default."single_width" = '1'
 default."comp_width" = '0.75'
@@ -129,6 +128,8 @@ error = '#FF0000'
 mask_map = 'viridis'
 comps_map = 'PuRd'
 mask_marker = '#FF0000'
+line_selected = '#FFFFFF'
+line_removed = '#ff796c'
 inspection_positive = "#2B2B2B"
 inspection_uncertainty = '#ff796c' # 'xkcd:salmon'  other '#840000'
 fade_fg = "#73879B"

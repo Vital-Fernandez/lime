@@ -960,7 +960,7 @@ class OpenFits:
         return wave_array, flux_cube, err_cube, header_list, fits_params
 
     @staticmethod
-    def kcwi(fits_address, data_ext_list=(1, 2), hdr_ext_list=(1,2), **kwargs):
+    def kcwi(fits_address, data_ext_list=(0, 1, 2), hdr_ext_list=(1,2), **kwargs):
 
         """
 
@@ -994,12 +994,13 @@ class OpenFits:
 
         flux_cube = data_list[0]
         err_cube = data_list[1]
-        pixel_mask_cube = np.isnan(flux_cube)
+        mask_cube = (data_list[2] == 1) | np.isnan(flux_cube)
+        # mask_cube = np.isnan(flux_cube)
 
         wcs = WCS(header_list[0])
 
         # Fits properties
-        fits_params = {**CUBE_FITS_PARAMS['kcwi'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
+        fits_params = {**CUBE_FITS_PARAMS['kcwi'], 'pixel_mask': mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
 

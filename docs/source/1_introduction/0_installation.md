@@ -9,6 +9,13 @@ pip install lime-stable
 pip install lime-stable[full]
 ```
 
+:::{warning}
+Depending on the terminal shell language, you may need to use quotes in the command with the dependencies:
+```bash
+pip install "lime-stable[full]"
+```
+:::
+
 ## Core Dependencies
 
 The following packages are essential for $\mathrm{LiMe}$'s operation:
