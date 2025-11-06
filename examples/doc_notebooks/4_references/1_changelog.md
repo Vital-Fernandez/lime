@@ -88,7 +88,7 @@
 - The air_to_vacuum_function now only applies the theoretical relation, its inputs and outputs are wavelength arrays.
 - The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.
 
-## 2.0.0 LiMe Mayor update (XX/XX/XXXX)
+## 2.0.1 LiMe Mayor update (XX/XX/XXXX)
 - Change installer convention from "setup.py + requirements.txt" to pyproject.toml
 - Updated dependencies to current version of packages and for python 3.12
 - Renamed cfg.toml to lime.toml
@@ -114,3 +114,7 @@
 - By default line_bands.
 - Added bands_from_log function
 - Change "output_address" argument name to "fname" across functions
+- Now the ``cont_source`` argument in the ``.fit`` functions gives the option to fit the line continuum using the ``central`` and ``adjacent`` bands in addition to the ``fit`` continuum.
+
+## 2.0.2 LiMe Mayor update (XX/XX/XXXX)
+- Updated the documentation to show the line continua fitting options.

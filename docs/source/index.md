@@ -33,7 +33,12 @@
 ## ✨ LiMe v2 release:
 
 After a year of improvements, we’re releasing LiMe v2, featuring line database support and a robust band-generation 
-model for a more streamlined workflow.:
+model for a more streamlined workflow:
+
+```{image} 0_resources/images/lime_workflow_dark.jpg
+:align: center
+:class: only-dark
+```
 
 ```python
 import lime
@@ -114,9 +119,9 @@ caption: Guides
 2_guides/0_creating_observations
 🆕 Automatic bands <2_guides/1_prepare_line_bands>
 2_guides/2_manual_bands_adjustement
-🆕 Line Continuum <2_guides/3_continuum_fitting>
+Spectrum Continuum <2_guides/3_continuum_fitting>
 2_guides/4_line_detection
-2_guides/5_line_continuum
+🆕 Line Continuum <2_guides/5_line_continuum>
 2_guides/5_multifile-line
 2_guides/6_ifu_spatial_masking
 2_guides/7_ifu_line_fitting

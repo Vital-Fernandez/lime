@@ -1,4 +1,6 @@
 import logging
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -501,6 +503,11 @@ class Spectrum:
         # Class attributes
         spec.label = label
         spec.flux = cube.flux[:, idx_j, idx_i]
+        # from matplotlib import pyplot as plt
+        # fig, ax = plt.subplots()
+        # ax.imshow(cube.err_flux[500, :, :].data)
+        # plt.show()
+
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
         spec.redshift = cube.redshift
@@ -674,7 +681,7 @@ class Spectrum:
         # Class attributes
         self.label = label
 
-        # Review the 2_guides
+        # Review the arrays data
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Checks units

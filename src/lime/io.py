@@ -122,19 +122,6 @@ def hdu_to_log_df(file_path, page_name):
         hdu_log = hdul[page_name].data
 
     df_log = pd.DataFrame.from_records(data=hdu_log, index='index')
-    #
-    # # Change 'nan' to np.nan
-    # if 'group_label' in df_log:
-    #     idcs_nan_str = df_log['group_label'] == 'nan'
-    #     df_log.loc[idcs_nan_str, 'group_label'] = np.nan
-
-    # log_df = Table.read(file_path, page_name, character_as_bytes=False).to_pandas()
-    # log_df.set_index('index', inplace=True)
-    #
-    # # Change 'nan' to np.nan
-    # if 'group_label' in log_df:
-    #     idcs_nan_str = log_df['group_label'] == 'nan'
-    #     log_df.loc[idcs_nan_str, 'group_label'] = np.nan
 
     return df_log
 

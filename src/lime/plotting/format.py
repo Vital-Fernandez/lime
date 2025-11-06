@@ -34,7 +34,7 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library='
 
     # Flux axis units
     norm_flux = units_flux.scale if norm_flux is None else norm_flux
-    norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(1 / norm_flux))
+    norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(norm_flux))
 
     y_label = f"Flux {units_flux.to_string('latex')}"
     y_label = y_label.replace(r'$\mathrm{', r'$\left(')
