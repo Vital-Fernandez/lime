@@ -16,8 +16,8 @@ from lime.plotting.plots import Plotter, frame_mask_switch, save_close_fig_swict
                     image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme, line_band_plotter, spec_mask_plotter, \
                     line_band_scaler, spec_profile_plotter
 
-from lime.tools import pd_get, unique_line_arr, bands_idcs_review
-from lime.transitions import label_decomposition, Line
+from lime.tools import pd_get, unique_line_arr
+from lime.transitions import label_decomposition, Line, check_continua_bands
 
 _logger = logging.getLogger('LiMe')
 
@@ -365,7 +365,7 @@ class BandsInspection:
         idcs_band = np.searchsorted(self.wave_plot, mask)
 
         # Review the bands edges
-        idcs_band = bands_idcs_review(line, idcs_band, self.wave_plot, correct_continua=True)
+        idcs_band = check_continua_bands(idcs_band, self.wave_plot, reset_w2_w5=True)
 
         # Just the center region is adjusted
         if self.show_continua:

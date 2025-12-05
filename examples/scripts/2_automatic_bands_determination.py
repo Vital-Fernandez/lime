@@ -1,10 +1,13 @@
+from pathlib import Path
 import lime
 
 # State the data files
-obsFitsFile = '../0_resources/spectra/gp121903_osiris.fits'
-lineBandsFile = '../0_resources/bands/gp121903_bands.txt'
-cfgFile = '../0_resources/long_slit.toml'
-osiris_gp_df_path = '../0_resources/bands/osiris_green_peas_linesDF.txt'
+data_folder = Path('../doc_notebooks/0_resources/')
+
+obsFitsFile = data_folder/'spectra/gp121903_osiris.fits'
+lineBandsFile = data_folder/'bands/gp121903_bands.txt'
+cfgFile = data_folder/'long_slit.toml'
+osiris_gp_df_path = data_folder/'bands/osiris_green_peas_linesDF.txt'
 
 # Load configuration
 obs_cfg = lime.load_cfg(cfgFile)
@@ -20,25 +23,24 @@ lime.save_frame(osiris_gp_df_path, osiris_gp_df)
 # Declare LiMe spectrum
 gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_obj, norm_flux=norm_flux)
 
-
 # Generate the object lines table from the previous template
-# obj_linesDF = gp_spec.retrieve.lines_frame(band_vsigma=100, n_sigma=4, instrumental_correction=True,
-#                                            map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200,
-#                                                             'N2_6548A': 200, 'N2_6583A': 200,
-#                                                             'O3_4959A': 250, 'O3_5007A': 250},
-#                                            fit_cfg=      {'O2_3726A_m': 'O2_3726A+O2_3729A',
-#                                                           'H1_3889A_m': "H1_3889A+He1_3889A",
-#                                                           'Ne3_3968A_m': "Ne3_3968A+H1_3970A",
-#                                                           'Ar4_4711A_m': "Ar4_4711A+He1_4713A",
-#                                                           'Fe3_4925A_m': 'He1_4922A+Fe3_4925A',
-#                                                           'N1_5198A_m': "N1_5198A+N1_5200A",
-#                                                           'O1_6300A_b': "O1_6300A+S3_6312A",
-#                                                           'H1_6563A_b': "H1_6563A+N2_6583A+N2_6548A",
-#                                                           'S2_6716A_b': "S2_6716A+S2_6731A"},
-#                                            exclude_lines = ['Ne5_3426A', 'N2_5755A', 'He1_5016A'],
-#                                            grouped_lines = ['O2_3726A_m', 'O1_6300A_b', 'S2_6716A_b'],
-#                                            ref_bands=osiris_gp_df_path)
-# gp_spec.plot.spectrum(bands=obj_linesDF, log_scale=True, rest_frame=True)
+obj_linesDF = gp_spec.retrieve.lines_frame(band_vsigma=100, n_sigma=4, instrumental_correction=True,
+                                           map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200,
+                                                            'N2_6548A': 200, 'N2_6583A': 200,
+                                                            'O3_4959A': 250, 'O3_5007A': 250},
+                                           fit_cfg=      {'O2_3726A_m': 'O2_3726A+O2_3729A',
+                                                          'H1_3889A_m': "H1_3889A+He1_3889A",
+                                                          'Ne3_3968A_m': "Ne3_3968A+H1_3970A",
+                                                          'Ar4_4711A_m': "Ar4_4711A+He1_4713A",
+                                                          'Fe3_4925A_m': 'He1_4922A+Fe3_4925A',
+                                                          'N1_5198A_m': "N1_5198A+N1_5200A",
+                                                          'O1_6300A_b': "O1_6300A+S3_6312A",
+                                                          'H1_6563A_b': "H1_6563A+N2_6583A+N2_6548A",
+                                                          'S2_6716A_b': "S2_6716A+S2_6731A"},
+                                           rejected_lines = ['Ne5_3426A', 'N2_5755A', 'He1_5016A'],
+                                           grouped_lines = ['O2_3726A_m', 'O1_6300A_b', 'S2_6716A_b'],
+                                           ref_bands=osiris_gp_df_path)
+gp_spec.plot.spectrum(bands=obj_linesDF, log_scale=True, rest_frame=True)
 
 
 # # Generate the object lines table from the previous template

@@ -5,7 +5,8 @@ import pandas as pd
 from pandas import DataFrame
 from numpy.core.fromnumeric import argmin
 
-from lime.io import _LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame, _LIME_FOLDER
+from lime.io import (_LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame,
+                     _LIME_FOLDER)
 from lime.tools import pd_get, au, unit_conversion
 from lime import rsrc_manager
 
@@ -1024,6 +1025,45 @@ def construct_classic_notation(line=None, line_params=None):
         line_params['latex_label'] = f'{particle_str}{wavelength_str}{units_str}$'
 
     return
+
+
+def check_continua_bands(idcs, wave_rest, min_width_pixel = 1, min_sep_cont=2, reset_w2_w5=False):
+
+    if reset_w2_w5:
+        if idcs[1] > idcs[2]:
+            idcs[1] = idcs[2] - min_sep_cont
+        if idcs[0] >= idcs[1]:
+            idcs[0] = idcs[1] - (min_width_pixel + min_sep_cont)
+
+        if idcs[4] < idcs[3]:
+            idcs[4] = idcs[3] + min_sep_cont
+        if idcs[5] <= idcs[4]:
+            idcs[5] = idcs[4] + (min_width_pixel + min_sep_cont)
+
+    # Continua bands beyond the spectral wavelength range
+    if idcs[0] < 0:
+        idcs[0] = 0
+
+    if idcs[1] < 0:
+        idcs[1] = idcs[0] + min_width_pixel
+
+    if idcs[5] > wave_rest.size - 1:
+        idcs[5] = wave_rest.size - min_width_pixel
+
+    if idcs[4] > wave_rest.size - 1:
+        idcs[4] = idcs[5] - min_width_pixel
+
+    # One pixel bands width
+    if idcs[0] == idcs[1]:
+        idcs[1] = idcs[0] + min_width_pixel
+
+    if idcs[2] == idcs[3]:
+        idcs[3] = idcs[2] + min_width_pixel
+
+    if idcs[4] == idcs[5]:
+        idcs[4] = idcs[5] - min_width_pixel
+
+    return idcs
 
 
 class Particle:

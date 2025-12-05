@@ -14,6 +14,7 @@ from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
 from lime.plotting.plots import spec_continuum_calculation
+from scipy import stats
 
 try:
     import aspect
@@ -242,7 +243,7 @@ class SpecRetriever:
                     exclude_bands_masked=True, map_band_vsigma=None, grouped_lines=None, automatic_grouping=False,
                     Rayleigh_threshold=2, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
                     update_default=True, line_list=None, particle_list=None, sig_digits=4, ref_bands=None,
-                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None,
+                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None, components=None,
                     save_group_label=False):
 
         # Remove the mask from the wavelength array if necessary
@@ -318,29 +319,33 @@ class SpecRetriever:
             # Apply the changes
             groupify_lines_df(bands, in_cfg, groups_dict, self._spec, save_group_label)
 
-        # # Filter the table to match the line detections
-        # if components_detection:
-        #     if self._spec.infer.pred_arr is not None:
-        #
-        #         # Create masks for all intervals
-        #         starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
-        #         ends = bands.w4.to_numpy()[:, None] * (1 + self._spec.redshift)
-        #
-        #         # Check if x values fall within each interval
-        #         in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
-        #
-        #         # Check where y equals the target category
-        #         is_target_category = np.isin(self._spec.infer.pred_arr, (3, 7, 9))
-        #
-        #         # Combine the masks to count target_category occurrences in each interval
-        #         counts = np.sum(in_intervals & is_target_category, axis=1)
-        #
-        #         # Check which intervals satisfy the minimum count condition
-        #         idcs = counts >= 3
-        #         bands = bands.loc[idcs]
-        #
-        #     else:
-        #         _logger.warning(f'The observations has an empty preduction array. Please run the components detection')
+        # Filter the table to match the line detections
+        if components:
+            if aspect_check:
+                if self._spec.infer.pred_arr is not None:
+
+                    # Create masks for all intervals
+                    starts = bands.w3.to_numpy()[:, None] * (1 + self._spec.redshift)
+                    ends = bands.w4.to_numpy()[:, None] * (1 + self._spec.redshift)
+
+                    # Check if x values fall within each interval
+                    in_intervals = (self._spec.wave.data >= starts) & (self._spec.wave.data < ends)
+
+                    # Check where y equals the target category
+                    shape_indexes = [aspect.cfg['shape_number'][comp] for comp in components]
+                    is_target_category = np.isin(self._spec.infer.pred_arr, shape_indexes)
+
+                    # Combine the masks to count target_category occurrences in each interval
+                    counts = np.sum(in_intervals & is_target_category, axis=1)
+
+                    # Check which intervals satisfy the minimum count condition
+                    idcs = counts >= 4
+                    bands = bands.loc[idcs]
+
+                else:
+                    raise LiMe_Error(f'No components data. Please run the components detection algorithm')
+            else:
+                raise LiMe_Error(f'Aspect is not installed')
 
         return bands
 
@@ -453,6 +458,139 @@ class SpecRetriever:
             output = None
 
         return output
+
+    def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, constant_pixel_width=True):
+
+        """
+        Rebin the spectrum onto a new dispersion grid and return binned flux (and errors).
+
+        Exactly **one** of ``disp_intvl``, ``pixel_width``, or ``pixel_number`` must be
+        provided to define the target bins:
+
+        - ``disp_intvl``: explicit bin **edges** (1D array, strictly increasing).
+        - ``pixel_width``: constant bin width (same units as wavelength); bins span the
+          full observed range ``[wave[0], wave[-1])``.
+        - ``pixel_number``: group pixels by this integer factor. If ``constant_pixel_width``
+          is ``True`` (default), uses an average native dispersion to build uniform-width
+          bins; otherwise, takes every ``pixel_number``-th native wavelength as an edge
+          (non-uniform bin widths).
+
+        The binned flux is the mean flux per bin. If an uncertainty array is available,
+        per-bin errors are combined as the square-root of the sum of variances divided
+        by the number of contributing samples.
+
+        Parameters
+        ----------
+        disp_intvl : array-like, optional
+            Monotonic array of bin **edges** for the target dispersion grid. If provided,
+            it overrides the other arguments. Values outside the native spectral range
+            will trigger a warning.
+        pixel_width : float, optional
+            Desired constant bin width (in wavelength units). Used to generate uniform
+            bin edges covering the full native wavelength range.
+        pixel_number : int, optional
+            Number of native pixels to aggregate per bin. Must be ``>= 2``. If a
+            non-integer is given, it is rounded and a message is logged.
+        constant_pixel_width : bool, optional
+            When rebinned by ``pixel_number``:
+            - If ``True`` (default), compute a uniform bin width as the average native
+              spacing times ``pixel_number``.
+            - If ``False``, construct edges by taking every ``pixel_number``-th native
+              wavelength (non-uniform bins).
+
+        Returns
+        -------
+        disp_centers : numpy.ndarray
+            Bin **centers** of the rebinned dispersion grid (same units as input wavelength).
+        flux_binned : numpy.ndarray
+            Mean flux per bin.
+        err_binned : numpy.ndarray or None
+            Per-bin flux uncertainty. If the spectrum has an error array, returns
+            ``sqrt(sum(err^2))/N`` for each bin; otherwise ``None``.
+
+        Raises
+        ------
+        ValueError
+            If none or more than one of ``disp_intvl``, ``pixel_width``, ``pixel_number``
+            are provided, or if ``pixel_number < 2``.
+
+        Notes
+        -----
+        - ``disp_intvl`` is interpreted as **edges** (length = ``nbins + 1``); the
+          returned ``disp_centers`` are computed as edge midpoints.
+        - Binning uses ``scipy.stats.binned_statistic(..., statistic='mean')`` for flux.
+        - If the spectrum contains masked or NaN values, ensure they are appropriately
+          handled upstream; NaNs within a bin will propagate to the mean.
+        """
+
+        # Check only one approach is necessary
+        provided = {"dispersion inteval": disp_intvl, "pixel width": pixel_width, "pixel number": pixel_number}
+        active = [name for name, val in provided.items() if val is not None]
+
+        # Enforce only one rebinning array
+        if len(active) == 0:
+            raise ValueError("No arguments were provided to compute the new spectral resolution")
+
+        if len(active) > 1:
+            raise ValueError(f"Arguments {active} are mutually exclusive. Please only one.")
+
+        # Extract the spectrum data
+        mask_arr = self._spec.wave.mask
+        wave_arr = self._spec.wave.data
+        flux_arr = self._spec.flux.data
+
+        # Check the input disespersion interval
+        if disp_intvl is not None:
+
+            # Limit warnings
+            if disp_intvl[0] < wave_arr[0]:
+                _logger.warning(f'The input lower dispersion value is below the spectral range: disp_intvl {disp_intvl[0]} < {wave_arr[0]}')
+            if disp_intvl[-1] > wave_arr[-1]:
+                _logger.warning(f'The input higher dispersion value is above the spectral range: disp_intvl {disp_intvl[-1]} > {wave_arr[-1]}')
+            bin_width = np.nanmean(np.diff(disp_intvl))
+
+        else:
+
+            # Compute the wavelength range based on the pixel width
+            if pixel_width is not None:
+                disp_intvl = np.arange(wave_arr[0], wave_arr[-1], pixel_width)
+                bin_width = pixel_width
+
+            # Compute the wavelength range based on a number of pixels
+            else:
+
+                # Make sure the inputs make sense good values
+                if pixel_number is not None and pixel_number >= 2:
+                    if not float(pixel_number).is_integer():
+                        _logger.info(f'The input pixel number has been rounded from {pixel_number} to {round(pixel_number)}')
+                    pixel_number = round(pixel_number)
+                else:
+                    raise ValueError(f" In the number of pixels rebinning you need the input value must be above 1.")
+
+                # Calculate the difference:
+                if constant_pixel_width:
+                    bin_width = np.nanmean(np.diff(wave_arr)) * pixel_number
+                    disp_intvl = np.arange(wave_arr[0], wave_arr[-1], bin_width)
+                else:
+                    disp_intvl = wave_arr[pixel_number::pixel_number]
+                    bin_width = disp_intvl[-1] - disp_intvl[-2]
+
+        # Make the binning calculation
+        flux_binned, edges, binnumber = stats.binned_statistic(wave_arr, flux_arr, statistic='mean', bins=disp_intvl)
+        disp_intvl = disp_intvl[:-1] + bin_width/2
+
+        if self._spec.err_flux is not None:
+            err_arr = self._spec.err_flux.data
+            sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
+            bin_counts = np.bincount(binnumber)
+            N_bins = flux_binned.size
+            sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
+            bin_counts_filtered = bin_counts[1: N_bins + 1]
+            err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
+        else:
+            err_binned = None
+
+        return disp_intvl, flux_binned, err_binned
 
     def upper_line_limit(self, line, bands=None, signal_to_noise=8, err_from_bands=False, continua_sigma=True):
 
@@ -1224,7 +1362,7 @@ class CubeTreatment(LineFitting):
 
                 # Plot the fittings if requested:
                 if plot_fit:
-                    spaxel.plot.spectrum(include_fits=True, rest_frame=True)
+                    spaxel.plot.spectrum(rest_frame=True)
 
             # Save the log at each new mask
             hdul_log.writeto(mask_log_files_list[i], overwrite=True, output_verify='ignore')

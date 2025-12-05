@@ -993,7 +993,7 @@ class OpenFits:
         wave_array = np.linspace(w_min, w_max, pixels, endpoint=False)
 
         flux_cube = data_list[0]
-        err_cube = data_list[1]
+        err_cube = np.sqrt(data_list[1])
         mask_cube = (data_list[2] == 1) | np.isnan(flux_cube)
         # mask_cube = np.isnan(flux_cube)
 

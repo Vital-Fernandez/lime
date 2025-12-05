@@ -8,15 +8,10 @@ from matplotlib import pyplot as plt
 # State the data location
 data_folder = Path('../doc_notebooks/0_resources/')
 cfg_file = data_folder/'ifu_manga.toml'
-# cube_address = '../0_resources/spectra/manga-8626-12704-LOGCUBE.fits.gz'
-# bands_file_0 = '../0_resources/bands/SHOC579_MASK0_bands.txt'
-# spatial_mask_file = '../0_resources/results/SHOC579_mask_SN_line.fits'
-# output_lines_log_file = '../0_resources/SHOC579_log.fits'
 cube_address = data_folder/'spectra/manga-8626-12704-LOGCUBE.fits.gz'
 bands_file_0 = data_folder/'bands/SHOC579_MASK0_bands.txt'
 spatial_mask_file = data_folder/'results/SHOC579_mask_SN_line.fits'
 output_lines_log_file = data_folder/'results/SHOC579_log.fits'
-
 
 # Load the configuration file:
 obs_cfg = lime.load_cfg(cfg_file)

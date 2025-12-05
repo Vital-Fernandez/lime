@@ -299,33 +299,36 @@ def spatial_mask_plot(ax, masks_dict, mask_color, mask_alpha, units_flux, mask_l
 
         if (len(mask_list) == 0) or (mask_name in mask_list):
 
-            mask_param = mask_header['PARAM']
-            param_idx = mask_header['PARAMIDX']
-            param_val = mask_header['PARAMVAL']
-            n_spaxels = mask_header['NUMSPAXE']
-
             # Inverse the mask array for the plot
             inv_mask_array = np.ma.masked_array(mask_data, ~mask_data)
 
-            # Create the legend label
-            legend_i = f'{mask_name}, ' + PARAMETER_LATEX_DICT.get(mask_param, f'${mask_param}$')
-
-            # Add units if using the flux
-            if mask_param == units_flux:
-                units_text = f'{units_flux:latex}'
-                legend_i += r'$\left({}\right)$'.format(units_text[1:-1])
-
-            # Add percentile number
-            legend_i += r', $P_{{{}th}}$ = '.format(param_idx)
-
-            # Add percentile value and number voxels
-            legend_i += f'${latex_science_float(param_val, dec=3)}$ ({n_spaxels} spaxels)'
-
+            # Plot the data
             cm_i = colors.ListedColormap([cmap_contours(idx_mask)])
-
-            legend_list[idx_mask] = patches.Patch(color=cmap_contours(idx_mask), label=legend_i)
-
             ax.imshow(inv_mask_array, cmap=cm_i, vmin=0, vmax=1, alpha=mask_alpha)
+
+            mask_param = mask_header['PARAM']
+            param_idx = mask_header.get('PARAMIDX')
+            param_val = mask_header.get('PARAMVAL')
+            n_spaxels = mask_header.get('NUMSPAXE')
+
+            if param_idx and param_val and n_spaxels:
+
+                # Create the legend label
+                legend_i = f'{mask_name}, ' + PARAMETER_LATEX_DICT.get(mask_param, f'${mask_param}$')
+
+                # Add units if using the flux
+                if mask_param == units_flux:
+                    units_text = f'{units_flux:latex}'
+                    legend_i += r'$\left({}\right)$'.format(units_text[1:-1])
+
+                # Add percentile number
+                legend_i += r', $P_{{{}th}}$ = '.format(param_idx)
+
+                # Add percentile value and number voxels
+                legend_i += f'${latex_science_float(param_val, dec=3)}$ ({n_spaxels} spaxels)'
+
+
+                legend_list[idx_mask] = patches.Patch(color=cmap_contours(idx_mask), label=legend_i)
 
     return legend_list
 
@@ -547,14 +550,11 @@ def label_generator(idx_sample, log, legend_handle):
     return spec_label
 
 
-def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None,
+def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None,
                             ax_cfg=None, label=None, rest_frame=True):
 
     # Display check for the user figures
     display_check = True if in_fig is None else False
-
-    # Set figure format with the user 2_guides overwriting the default conf
-    legend_check = True if label is not None else False
 
     # Adjust the default theme
     PLT_CONF = theme.fig_defaults(fig_cfg)
@@ -564,13 +564,6 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
     with (rc_context(PLT_CONF)):
 
         # Generate the figure object and figures
-        # if in_fig is None:
-        #     in_fig, in_ax = plt.subplots()
-        # else:
-        #     in_ax = in_fig.add_subplot()
-        # ax2 = in_ax.twinx()
-
-        # Generate the figure object and figures
         if in_fig is None:
             in_fig = plt.figure()
 
@@ -578,9 +571,6 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
         ax1 = plt.subplot(grid_ax[0])
         ax2 = ax1.twinx()
         ax3 = plt.subplot(grid_ax[1])
-        # in_ax = (spec_ax, resid_ax)
-
-        ax1.set(**AXES_CONF)
 
         # Reference _frame for the plot
         wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spectrum, rest_frame)
@@ -591,22 +581,28 @@ def redshift_key_evaluation(spectrum, z_infered, data_mask, gauss_arr, z_arr, fl
 
         # Plot the bands
         ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.plt['spectrum_width'])
-        ax2.set_ylim(0, 1)
 
         # Plot the data used for the masks
         y_arr = np.full(flux_plot.size, np.nan)
         y_arr[data_mask] = flux_plot[data_mask]
-        ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red',
-                   linewidth=theme.plt['spectrum_width'])
+        ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red', linewidth=theme.plt['spectrum_width'])
 
         # Plot the spectrum sum
-        title = r'$z_{prediction} = $' + f'{z_infered:0.3f}'
         ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), color=theme.colors['fg'], where='mid', linewidth=theme.plt['spectrum_width'])
-        ax3.update({'xlabel': 'Redshift range', 'ylabel':r'$\frac{F_{sum, bands}}{max(F_{sum, bands})}$', 'title':title})
-        ax3.set_yticks([0, 1])
 
         # Plot peack
         ax3.scatter(z_infered, 1, marker='o', color='red')
+
+        # Wording and formatting
+        ax1.set(**AXES_CONF)
+
+        ax2.set_ylim(0, 1)
+        ax2.axis('off')
+
+        ax3.update({'xlabel': 'Redshift range',
+                    'ylabel': r'$\frac{{F_{{sum, {band}}}}}{{max(F_{{sum, {band}}})}}$'.format(band='pixels' if mode == 'xor' else 'flux'),
+                    'title': r'$z_{{prediction, {mode}}} = $'.format(mode=mode) + f'{z_infered:0.3f}'})
+        ax3.set_yticks([0, 1])
 
         # By default, plot on screen unless an output address is provided
         output_address, maximize = None, False
@@ -1112,7 +1108,7 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
 
             # Band shade area
             label = 'Matched line' if i == 0 else '_'
-            ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color)
+            span = ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color, ec='none')
 
             # Label area
             # text = line_label
@@ -1486,8 +1482,8 @@ class SpectrumFigures:
 
             # Plot bands if provided
             if bands is not None:
-                match_log = check_file_dataframe(bands)
-                spec_bands_plotter(self.ax, match_log, wave_plot, flux_plot, z_corr, self._spec.redshift)
+                spec_bands_plotter(self.ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr,
+                                   self._spec.redshift)
 
             # Plot the fittings
             if show_profiles and self._spec.frame.size > 0:
