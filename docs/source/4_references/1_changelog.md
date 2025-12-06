@@ -71,7 +71,7 @@
 - Corrected bug on the latex label generation in the lime.line_bands command not reproducing the expected format
 - The unit_conversion function for Cube observations now uses the format from the previous update.
 
-## 1.3.0 LiMe medium update (10/29/2024)
+## 1.3.0 LiMe medium update (12/10/2024)
 - This update includes ASPECT as an optional dependency and has adapted several functions to include the possibility to use its predictions
 - Added the Spectrum.retrieve attribute to group tasks which return data for the user related to the spectrum
 - Added the Spectrum.retrieve.line_bands to return the line bands which match the observation redshift, wave interval and components detection.
@@ -88,7 +88,7 @@
 - The air_to_vacuum_function now only applies the theoretical relation, its inputs and outputs are wavelength arrays.
 - The new lime.Line.update_label function can be used to update the line label by reviewing the line properties.
 
-## 2.0.1 LiMe Mayor update (XX/XX/XXXX)
+## 2.0.1 LiMe Mayor update (10/20/2025)
 - Change installer convention from "setup.py + requirements.txt" to pyproject.toml
 - Updated dependencies to current version of packages and for python 3.12
 - Renamed cfg.toml to lime.toml
@@ -116,5 +116,12 @@
 - Change "output_address" argument name to "fname" across functions
 - Now the ``cont_source`` argument in the ``.fit`` functions gives the option to fit the line continuum using the ``central`` and ``adjacent`` bands in addition to the ``fit`` continuum.
 
-## 2.0.2 LiMe Mayor update (XX/XX/XXXX)
-- Updated the documentation to show the line continua fitting options.
+## 2.0.4 LiMe minor update (12/05/2025)
+- Added function to rebinned spectrum given a wavelength range, a number of pixels, or a pixel width (no documenation entry yet): lime.Spectrum.retrieve.rebinned
+- The lime.save_cfg function first two arguments have changed order (first file location and the file name)
+- The default colors for the continuum fitting plots and peak dectection plots have changed
+- Added suport for KCWI cubes
+- Further development for the functions involving redshift a line fitting using aspect
+- The spatial masking functions should not require the 'PARAM', 'PARAMIDX', 'PARAMVAL' and 'NUMSPAXE' in the .fits headers to plot the mask overlays
+
+
