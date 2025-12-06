@@ -91,7 +91,7 @@ def test_save_cfg():
                                     'O3_5007A_k-1_kinem': "O3_4959A_k-1",
                                     'He1_5016A_center': "min:5014,max:5018",
                                     'He1_5016A_sigma': "min:1.0,max:2.0"}
-    lime.save_cfg(copy_cfg, save_file_address)
+    lime.save_cfg(save_file_address, copy_cfg)
 
     # Reload and test
     new_cfg = lime.load_cfg(save_file_address)

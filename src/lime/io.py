@@ -207,7 +207,7 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
 
 # Function to save SpecSyzer configuration file
-def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
+def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
 
     """
     This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
@@ -218,11 +218,13 @@ def save_cfg(param_dict, output_file, section_name=None, clear_section=False):
     output_path = Path(output_file)
 
     if output_path.suffix == '.toml':
+
         # TODO review convert numpy arrays and floats64
         if toml_check:
-            toml_str = toml.dumps(param_dict)
-            with open(output_path, "w") as f:
-                f.write(toml_str)
+            toml_dict = param_dict if section_name is None else {section_name: param_dict}
+            with open(output_file, "w") as f:
+                toml.dump(toml_dict, f)
+
         else:
             raise LiMe_Error(f'toml library is not installed. Toml files cannot be saved')
 

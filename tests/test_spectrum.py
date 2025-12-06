@@ -386,7 +386,7 @@ class TestSpectrumClass:
         # Create tex file
         extension = 'tex'
         log_new = Path(outputs_folder / f'test_lines_log.{extension}')
-        spec.save_frame(log_new, param_list=['particle', 'wavelength', 'group_label', 'latex_label'])
+        spec.save_frame(log_new, param_list=['particle', 'wavelength', 'group_label', 'latex_label'], safe_version=False)
 
         with open(log_new, 'r') as f1, open(lines_tex_address, 'r') as f2:
             for line1, line2 in zip(f1, f2):

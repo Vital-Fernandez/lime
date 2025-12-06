@@ -37,45 +37,6 @@ PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
                         'SN_cont': r'$\frac{S}{N}_{cont}$'}
 
 
-def bands_idcs_review(label, idcs, wave_rest, min_width_pixel = 1, min_sep_cont=2, correct_continua=True):
-
-    if correct_continua:
-        if idcs[1] > idcs[2]:
-            idcs[1] = idcs[2] - min_sep_cont
-        if idcs[0] >= idcs[1]:
-            idcs[0] = idcs[1] - (min_width_pixel + min_sep_cont)
-
-        if idcs[4] < idcs[3]:
-            idcs[4] = idcs[3] + min_sep_cont
-        if idcs[5] <= idcs[4]:
-            idcs[5] = idcs[4] + (min_width_pixel + min_sep_cont)
-
-    # Continua bands beyond the spectral wavelength range
-    if idcs[0] < 0:
-        idcs[0] = 0
-
-    if idcs[1] < 0:
-        idcs[1] = idcs[0] + min_width_pixel
-
-    if idcs[5] > wave_rest.size - 1:
-        idcs[5] = wave_rest.size - min_width_pixel
-
-    if idcs[4] > wave_rest.size - 1:
-        idcs[4] = idcs[5] - min_width_pixel
-
-    # One pixel bands width
-    if idcs[0] == idcs[1]:
-        idcs[1] = idcs[0] + min_width_pixel
-
-    if idcs[2] == idcs[3]:
-        idcs[3] = idcs[2] + min_width_pixel
-
-    if idcs[4] == idcs[5]:
-        idcs[4] = idcs[5] - min_width_pixel
-
-    return idcs
-
-
 def unique_line_arr(frame, return_index = False):
 
     idcs_s = frame.group_label == 'none'

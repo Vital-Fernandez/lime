@@ -1,4 +1,6 @@
 import logging
+
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import minimize, linear_sum_assignment
 
@@ -14,21 +16,28 @@ except ImportError:
 
 _logger = logging.getLogger('LiMe')
 
+c_KMpS = 299792.458
+k_gFWHM = 2 * np.sqrt(2 * np.log(2))
 
-def compute_gaussian_ridges(redshift, lines_lambda, wave_matrix, amp_arr, sigma_arr):
+
+def comp_counter(arr_mask: np.ndarray) -> int:
+    return np.sum(~arr_mask[:-1] & arr_mask[1:]) + arr_mask[0]
+
+
+def compute_gaussian_ridges(redshift, lines_lambda, wave_matrix, amp_arr, band_vsigma, resol_arr, n_sigma=3):
 
     # Compute the observed line wavelengths
     obs_lambda = lines_lambda * (1 + redshift)
     obs_lambda = obs_lambda[(obs_lambda > wave_matrix[0, 0]) & (obs_lambda < wave_matrix[0, -1])]
 
-    if obs_lambda.size > 0:
+    if obs_lambda.size > 1:
 
-        # Compute indexes ion array
+        # Compute Gaussian centroids
         idcs_obs = np.searchsorted(wave_matrix[0, :], obs_lambda)
-
-        # Compute lambda arrays:
-        sigma_lines = sigma_arr[idcs_obs]
         mu_lines = wave_matrix[0, :][idcs_obs]
+
+        # Compute Gaussian sigmas
+        sigma_lines = mu_lines * (band_vsigma / c_KMpS) + mu_lines / (resol_arr[idcs_obs] * k_gFWHM)
 
         # Compute the Gaussian bands
         x_matrix = wave_matrix[:idcs_obs.size, :]
@@ -45,8 +54,65 @@ def compute_gaussian_ridges(redshift, lines_lambda, wave_matrix, amp_arr, sigma_
     return gauss_arr
 
 
-def redshift_xor_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
-                        sig_digits=2, plot_results=False):
+# def redshift_xor_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
+#                         sig_digits=2, plot_results=False):
+#
+#     # Use the detection bands if provided
+#     if (pred_arr is not None) and (components_number is not None):
+#         idcs_lines = np.isin(pred_arr, components_number)
+#     else:
+#         idcs_lines = None
+#
+#     # Continue with measurement
+#     if idcs_lines is not None:
+#
+#         # Extract the data
+#         pixel_mask = spec.flux.mask
+#         wave_arr = spec.wave.data
+#         flux_arr = spec.flux.data
+#
+#         # Loop throught the redshift steps
+#         if not np.all(pixel_mask):
+#
+#             # Compute the resolution params
+#             sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
+#             sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
+#
+#             # Lines selection
+#             theo_lambda = bands.wavelength.to_numpy()
+#
+#             # Parameters for the brute analysis
+#             z_arr = np.linspace(z_min, z_max, z_nsteps)
+#             wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
+#             xor_sum = np.zeros(z_arr.size)
+#
+#             # Invert the mask
+#             data_mask = ~pixel_mask
+#
+#             # Revert the data
+#             for i, z_i in enumerate(z_arr):
+#                 gauss_arr = compute_gaussian_ridges(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
+#                 xor_sum[i] = 0 if gauss_arr is None else np.sum(idcs_lines[data_mask] * gauss_arr[data_mask])
+#
+#             z_infer = np.round(z_arr[np.argmax(xor_sum)], decimals=sig_digits)
+#
+#         # No lines or all masked
+#         else:
+#             z_infer = None
+#
+#         if plot_results and (z_infer is not None):
+#             gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
+#             redshift_key_evaluation(spec, z_infer, data_mask, gauss_arr_max, z_arr, xor_sum)
+#
+#     # Do not attempt measurement
+#     else:
+#         z_infer = None
+#
+#     return z_infer
+
+
+def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components_number, band_vsigma,
+                        method, sig_digits=2, detection_only=True, plot_results=False):
 
     # Use the detection bands if provided
     if (pred_arr is not None) and (components_number is not None):
@@ -54,116 +120,84 @@ def redshift_xor_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, component
     else:
         idcs_lines = None
 
-    # Continue with measurement
-    if idcs_lines is not None:
-
-        # Extract the data
-        pixel_mask = spec.flux.mask
-        wave_arr = spec.wave.data
-        flux_arr = spec.flux.data
-
-        # Loop throught the redshift steps
-        if not np.all(pixel_mask):
-
-            # Compute the resolution params
-            sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
-            sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
-
-            # Lines selection
-            theo_lambda = bands.wavelength.to_numpy()
-
-            # Parameters for the brute analysis
-            z_arr = np.linspace(z_min, z_max, z_nsteps)
-            wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
-            xor_sum = np.zeros(z_arr.size)
-
-            # Invert the mask
-            data_mask = ~pixel_mask
-
-            # Revert the data
-            for i, z_i in enumerate(z_arr):
-                gauss_arr = compute_gaussian_ridges(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
-                xor_sum[i] = 0 if gauss_arr is None else np.sum(idcs_lines[data_mask] * gauss_arr[data_mask])
-
-            z_infer = np.round(z_arr[np.argmax(xor_sum)], decimals=sig_digits)
-
-        # No lines or all masked
-        else:
-            z_infer = None
-
-        if plot_results and (z_infer is not None):
-            gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
-            redshift_key_evaluation(spec, z_infer, data_mask, gauss_arr_max, z_arr, xor_sum)
-
-    # Do not attempt measurement
-    else:
-        z_infer = None
-
-    return z_infer
-
-
-def redshift_key_method(spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
-                        sig_digits=2, detection_only=True, plot_results=False):
-
-    # Use the detection bands if provided
-    if (pred_arr is not None) and (components_number is not None):
-        idcs_lines = np.isin(pred_arr, components_number)
-    else:
-        idcs_lines = None
-
-    # Decide if proceed
-    if detection_only is False:
-        measure_check = True
+    # For flux method give the option for fitting redshift without detection
+    method_flux = True if method == 'key' else False
+    if method_flux and not detection_only:
         idcs_lines = np.ones(idcs_lines.shape).astype(bool)
     else:
-        measure_check = True if np.any(idcs_lines) else False
+        if np.all(idcs_lines):
+            _logger.warning('All the spectrum pixels match the input redshift components criteria')
 
     # Continue with measurement
-    if measure_check:
+    z_infer = None
+    if idcs_lines is not None:
+
+        # If there is only one line return nan
+        if not (method_flux and not detection_only):
+            # match np.count_nonzero(np.diff(np.r_[False, idcs_lines])):
+            match comp_counter(idcs_lines):
+                case 0:
+                    return None # No components
+                case 1:
+                    return np.nan # No components
 
         # Extract the data
-        pixel_mask = spec.flux.mask
         wave_arr = spec.wave.data
         flux_arr = spec.flux.data
-        data_mask = ~pixel_mask
 
-        # Compute the resolution params
-        sigma_arr = compute_inst_sigma_array(wave_arr, res_power)
-        sigma_arr = sigma_arr if sigma_factor is None else sigma_arr * sigma_factor
+        # Compute the resolving power if necessary
+        if spec.res_power is not None:
+            res_power = spec.res_power
+        else:
+            # wave_arr / np.r_[np.diff(wave_arr), np.diff(wave_arr)[-1]]
+            # alpha_lambda = np.diff(wave_arr)
+            # res_power = wave_arr / np.r_[alpha_lambda, alpha_lambda[-1]]
+            delta_lambda = np.ediff1d(wave_arr, to_end=0)
+            delta_lambda[-1] = delta_lambda[-2]
+            res_power = wave_arr / delta_lambda
 
         # Lines selection
         theo_lambda = bands.wavelength.to_numpy()
 
+        # Compute the redshift range
+        if delta_z is None:
+            delta_arr = np.diff(wave_arr)
+            delta_z = np.median(delta_arr)/np.median(wave_arr)
+        z_arr = np.arange(z_min, z_max + 0.5 * delta_z, delta_z)
+
         # Parameters for the brute analysis
-        z_arr = np.linspace(z_min, z_max, z_nsteps)
+        # z_arr = np.linspace(z_min, z_max, z_nsteps)
+        # z_arr = np.arange(z_min, z_max, step=0.005)
         wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
         flux_sum = np.zeros(z_arr.size)
 
         # Combine line and pixel_mask
-        mask = data_mask & idcs_lines
+        mask = ~spec.flux.mask & idcs_lines
 
-        # Loop throught the redshift steps
-        if not np.all(~mask):
-            for i, z_i in enumerate(z_arr):
-                # Generate the redshift key
-                gauss_arr = compute_gaussian_ridges(z_i, theo_lambda, wave_matrix, 1, sigma_arr)
+        # Loop through the redshift steps
+        for i, z_i in enumerate(z_arr):
 
-                # Compute flux cumulative sum
-                flux_sum[i] = 0 if gauss_arr is None else np.sum(flux_arr[mask] * gauss_arr[mask])
+            # Generate the redshift key
+            gauss_arr = compute_gaussian_ridges(z_i, theo_lambda, wave_matrix, 1, band_vsigma, res_power)
 
-            z_infer = np.round(z_arr[np.argmax(flux_sum)], decimals=sig_digits)
+            # Null gauss case
+            if gauss_arr is None:
+                flux_sum[i] = 0
 
-        # No lines or all masked
-        else:
-            z_infer = None
+            # Compute cumulative flux or pixel-number sum
+            else:
+                # Check more than one line
+                if comp_counter((gauss_arr * mask) > 0.001) >= 2:
+                    if method_flux:
+                        flux_sum[i] = np.sum(flux_arr[mask] * gauss_arr[mask])
+                    else:
+                        flux_sum[i] = np.sum(idcs_lines[mask] * gauss_arr[mask])
 
-        if plot_results and (z_infer is not None):
-            gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
-            redshift_key_evaluation(spec, z_infer, mask, gauss_arr_max, z_arr, flux_sum)
+        z_infer = np.round(z_arr[np.argmax(flux_sum)], decimals=sig_digits)
 
-    # Do not attempt measurement
-    else:
-        z_infer = None
+    if plot_results and (z_infer is not None):
+        gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, band_vsigma, res_power)
+        redshift_key_evaluation(spec, method, z_infer, mask, gauss_arr_max, z_arr, flux_sum)
 
     return z_infer
 
@@ -176,6 +210,8 @@ def permutation_objective_function(redshift, obs_arr, theo_arr):
     # Find the best matching subset using linear sum assignment
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
     residual = np.sum(cost_matrix[row_ind, col_ind])
+
+    return
 
 
 def permutation_residual(redshift, obs_arr, theo_arr):
@@ -263,17 +299,13 @@ class RedshiftFitting:
 
         return
 
-    def redshift(self, bands, z_min=0, z_max=10, z_nsteps=2000,  mode='key', res_power=None, detection_only=True,
-                 components=None, sigma_factor=None, sig_digits=2, plot_results=False):
+    def redshift(self, bands, z_min=0, z_max=12, delta_z=None,  mode='key', comps_list=['emission', 'doublet-em'],
+                 res_power=None, detection_only=True, band_vsigma=70, sig_digits=2, plot_results=False):
 
         '''
         bands, z_min, z_max, z_nsteps, idcs_lines, res_power, sigma_factor, sig_digits=2,
                                 detection_only=True, plot_results=False
         '''
-
-        # Limits
-        z_min = 0 if z_min is None else z_min
-        z_max = 12 if z_max is None else z_max
 
         # Check that ASPECT is available
         if not aspect_check:
@@ -290,28 +322,22 @@ class RedshiftFitting:
         # Resolving power # TODO this should be read at another point...
         res_power = self._spec.res_power if res_power is None else res_power
 
+        # Get the reference for the components
+        components_number = np.empty(len(comps_list)).astype(int)
+        for i, comp in enumerate(comps_list):
+            components_number[i] = aspect.cfg['shape_number'][comp]
+
         # Set the type of fitting and the components to use
-        if mode == 'key':
-            components = components if components is not None else ['emission', 'doublet-em']
-            components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
-            z_infer = redshift_key_method(self._spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
-                                          sig_digits=sig_digits, detection_only=detection_only, plot_results=plot_results)
-
-        elif mode == 'permute':
-            components = components if components is not None else ['emission', 'doublet-em', 'absorption']
-            components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
-            z_infer = redshift_permutation_method(self._spec, bands, z_min, z_max, pred_arr, components_number,
-                                                  plot_results=plot_results)
-
-        elif mode == 'xor':
-            components = components if components is not None else ['emission', 'doublet-em', 'absorption']
-            components_number = np.array([aspect.cfg['shape_number'][comp] for comp in components])
-            z_infer = redshift_xor_method(self._spec, bands, z_min, z_max, z_nsteps, pred_arr, components_number, res_power, sigma_factor,
-                                          sig_digits=sig_digits, plot_results=plot_results)
-
-        else:
-            _logger.critical(f'Input redshift technique "{mode}" is not recognized, please use: "key" or "permute"')
-            raise LiMe_Error
-
+        match mode:
+            case 'key' | 'xor':
+                z_infer = redshift_key_method(self._spec, bands, z_min, z_max, delta_z, pred_arr, components_number,
+                                              band_vsigma, mode, sig_digits=sig_digits,
+                                              detection_only=detection_only, plot_results=plot_results)
+            case 'permute':
+                z_infer = redshift_permutation_method(self._spec, bands, z_min, z_max, pred_arr, components_number,
+                                                      plot_results=plot_results)
+            case _:
+                raise KeyError(f'Input redshift fitting technique "{mode}" is not recognized, please use: '
+                                 f'"key" or "xor"')
 
         return z_infer

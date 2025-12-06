@@ -147,7 +147,10 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
                             # Establish the observed grouping of the lines
                             w3_arr = idx3_arr[idcs_i]
                             w4_arr = idx4_arr[idcs_i]
-                            obs_group_blend_chek = deblend_criteria(mu_arr=(w3_arr + w4_arr) / 2,
+                            # w3_arr = spec.wave_rest.data[idx3_arr[idcs_i]]
+                            # w4_arr = spec.wave_rest.data[idx4_arr[idcs_i]]
+                            mu_arr = np.searchsorted(spec.wave_rest.data, bands.loc[line_list[idcs_i], 'wavelength'].to_numpy())
+                            obs_group_blend_chek = deblend_criteria(mu_arr=mu_arr,
                                                                     sigma_arr=(w4_arr - w3_arr) / (n_sigma * 2),
                                                                     Rayleigh_threshold= Rayleigh_threshold)
 
