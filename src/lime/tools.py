@@ -99,7 +99,7 @@ def pd_get(df, row, column, default=None, transform=None, nan_to_none=False):
     if transform is not None:
         cell = default if cell == transform else cell
 
-    # Transform nan to None
+    # Transform nan to None # TODO is this all necessary
     if nan_to_none and (cell is not None):
         if isinstance(cell, float):
             cell = None if np.isnan(cell) else cell

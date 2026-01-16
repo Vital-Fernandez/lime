@@ -194,7 +194,7 @@ def recover_level_conf(fit_cfg, mask_key, default_key):
 def check_compound_line_exclusion(line, lines_df):
 
     # Confirm the dataframe includes the group of lines
-    group_label = pd_get(lines_df, line, 'group_label', transform='none')
+    group_label = pd_get(lines_df, line, 'group_label', transform='none', nan_to_none=True)
 
     # Confirm if the line is in the group of lines
     if group_label is not None:

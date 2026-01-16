@@ -71,12 +71,22 @@ def update_bokeh_figure(figure_obj, config_dict):
 
         # Single value entries
         else:
-            if key != 'tools':
-                setattr(figure_obj, key, value)
+            if value is not None:
+                match key:
+                    case 'tools':
+                        pass
+                    case 'active_scroll':
+                        figure_obj.toolbar.active_scroll = figure_obj.select_one(getattr(models, value))
+                    case 'active_drag':
+                        figure_obj.toolbar.active_drag = figure_obj.select_one(getattr(models, value))
+                    case 'active_tap':
+                        figure_obj.toolbar.active_tap = figure_obj.select_one(getattr(models, value))
+                    case _ :
+                        setattr(figure_obj, key, value)
 
-    # Set zoom and pan as active
-    figure_obj.toolbar.active_scroll = figure_obj.select_one(WheelZoomTool)  # Activate zoom wheel
-    figure_obj.toolbar.active_drag = figure_obj.select_one(PanTool)  # Activate pan tool
+    # # Set zoom and pan as active
+    # figure_obj.toolbar.active_scroll = figure_obj.select_one(WheelZoomTool)  # Activate zoom wheel
+    # figure_obj.toolbar.active_drag = figure_obj.select_one(PanTool)  # Activate pan tool
 
     return figure_obj
 

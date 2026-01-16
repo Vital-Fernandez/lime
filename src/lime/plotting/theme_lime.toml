@@ -58,6 +58,8 @@ default."textsize_notes" = 4
 default."width" = 600
 default."height" = 300
 default."tools" = 'fullscreen,pan,wheel_zoom,box_zoom,xzoom_in,yzoom_in,reset,save'
+default.'active_drag' = 'PanTool'
+default.'active_scroll' = 'WheelZoomTool'
 
 [bokeh.size] # Figure elements size
 default."single_width" = '1'
