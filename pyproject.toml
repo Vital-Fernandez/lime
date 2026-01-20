@@ -46,4 +46,5 @@ pythonpath = ["src"]
 mpl-baseline-path = 'tests/baseline'
 mpl-results-path = 'tests/outputs'
 mpl-results-always = false
+markers = ["mpl: matplotlib image comparison tests"]
 addopts = "-p no:asdf_schema_tester"
