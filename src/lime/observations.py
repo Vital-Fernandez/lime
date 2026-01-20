@@ -1904,10 +1904,15 @@ class Sample(UserDict, OpenFits):
         # User load function
         if self._load_function is not None:
             load_function_output = self._load_function(log_df, obs_idx, root_address, **kwargs)
-            if isinstance(load_function_output, (Spectrum, Cube)):
+            if not isinstance(load_function_output, dict):
                 return load_function_output
             else:
                 return Spectrum(**load_function_output) if self.spectrum_check else Cube(**load_function_output)
+
+            # if isinstance(load_function_output, (Spectrum, Cube)):
+            #     return load_function_output
+            # else:
+            #     return Spectrum(**load_function_output) if self.spectrum_check else Cube(**load_function_output)
 
         # Instrument load function
         else:

@@ -49,8 +49,8 @@ if remake_spec:
 
     # ---------------- Spectrum
     spax = shoc579.get_spectrum(spax_cords[0], spax_cords[1], id_label='SHOC579_Manga38-35')
-    spax.retrieve.spectrum(spec_text_address)
-    spax.retrieve.spectrum(data_folder/spec_text_address.name)
+    # spax.retrieve.spectrum(spec_text_address)
+    # spax.retrieve.spectrum(data_folder/spec_text_address.name)
 
 
 # Load the text file
@@ -65,6 +65,6 @@ spax.plot.spectrum(rest_frame=True, log_scale=False)
 
 # Save the results
 # lime.save_frame(line_bands_file, bands)
-# spax.save_frame(lines_log_file)
+# spax.save_frame(lines_log_file) # TODO the not save version does not work
 spax.save_frame(results_folder/'SHOC579_MANGA38-35_log.tex', param_list=['particle', 'wavelength', 'group_label', 'latex_label'], safe_version=False)
 spax.save_frame(baseline_folder/'SHOC579_MANGA38-35_log.tex', param_list=['particle', 'wavelength', 'group_label', 'latex_label'], safe_version=False)

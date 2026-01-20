@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from copy import deepcopy
 from lime.io import load_cfg
+from lime.tools import au
 
 _logger = logging.getLogger('LiMe')
 
@@ -33,12 +34,15 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library='
     x_label = f'Wavelength ({x_label})'
 
     # Flux axis units
-    norm_flux = units_flux.scale if norm_flux is None else norm_flux
-    norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(norm_flux))
+    if units_flux != au.dimensionless_unscaled:
+        norm_flux = units_flux.scale if norm_flux is None else norm_flux
+        norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(norm_flux))
 
-    y_label = f"Flux {units_flux.to_string('latex')}"
-    y_label = y_label.replace(r'$\mathrm{', r'$\left(')
-    y_label = y_label.replace('}$', norm_label)
+        y_label = f"Flux {units_flux.to_string('latex')}"
+        y_label = y_label.replace(r'$\mathrm{', r'$\left(')
+        y_label = y_label.replace('}$', norm_label)
+    else:
+        y_label = f'Flux (scaled)'
 
     if plotting_library == 'bokeh':
         x_label, y_label = x_label.replace('$', '$$'), y_label.replace('$', '$$')
