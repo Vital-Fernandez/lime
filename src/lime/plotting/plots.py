@@ -935,7 +935,7 @@ def mplcursor_parser(mpl_key_list, spec):
 
 
 def spec_continuum_calculation(spec, wave, flux, cont_fit, idcs_cont, low_flux_limit, high_flux_limit,
-                               smooth_scale, **kwargs):
+                               smooth_scale, exclude_intvls, **kwargs):
 
     # Clear previous figure
     spec.plot.reset_figure()
@@ -965,16 +965,20 @@ def spec_continuum_calculation(spec, wave, flux, cont_fit, idcs_cont, low_flux_l
         spec.ax_list.fill_between(wave, low_flux_limit, high_flux_limit, alpha=0.2, label='Flux threshold',
                                   color=theme.colors['inspection_uncertainty'])
 
-        # # Masked and rectected pixels
-        # if smooth_flux is not None:
-        #     spec.ax_list.scatter(wave[~idcs_cont], smooth_flux[~idcs_cont], label='Rejected peaks',
-        #                          color=theme.colors['rejected_peak'], facecolor='none')
+        # Masked and rejected pixels
         spec.ax_list.scatter(wave[~idcs_cont], flux[~idcs_cont], label='Rejected peaks',
                              color=theme.colors['rejected_peak'], facecolor='none')
 
 
         # Output continuum
         spec.ax_list.plot(wave, cont_fit, label='Continuum', color=theme.colors['cont'], linestyle='--')
+
+        # Excluded intervals
+        if exclude_intvls is not None:
+            i0 = np.searchsorted(wave, exclude_intvls[:, 0], side="right")
+            i1 = np.searchsorted(wave, exclude_intvls[:, 1], side="left")
+            for start, stop in zip(i0, i1):
+                spec.ax_list.axvspan(wave[start], wave[stop], alpha=0.25, color=theme.colors['rejected_peak'])
 
         # Switch y_axis to logarithmic scale if requested
         if kwargs.get('log_scale'):

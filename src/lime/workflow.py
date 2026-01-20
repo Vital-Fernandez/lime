@@ -6,7 +6,8 @@ from astropy.io import fits
 from time import time
 from lmfit.models import PolynomialModel
 
-from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get
+import lime
+from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, au
 from lime.rsrc_manager import lineDB
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.transitions import Line, lines_frame
@@ -459,7 +460,8 @@ class SpecRetriever:
 
         return output
 
-    def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, constant_pixel_width=True):
+    def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, constant_pixel_width=True,
+                 return_spectrum=False):
 
         """
         Rebin the spectrum onto a new dispersion grid and return binned flux (and errors).
@@ -497,16 +499,20 @@ class SpecRetriever:
               spacing times ``pixel_number``.
             - If ``False``, construct edges by taking every ``pixel_number``-th native
               wavelength (non-uniform bins).
+        return_spectrum : bool, optional
+            If ``False`` (default), return the binned wavelength, flux and flux uncertainty arrays.
+            If ``True``, return a new :class:`lime.Spectrum` instance containing the binned data.
 
         Returns
         -------
         disp_centers : numpy.ndarray
-            Bin **centers** of the rebinned dispersion grid (same units as input wavelength).
+            Binned wavelength array (same units as disp_intvl if provided).
         flux_binned : numpy.ndarray
-            Mean flux per bin.
+            Binned flux array.
         err_binned : numpy.ndarray or None
-            Per-bin flux uncertainty. If the spectrum has an error array, returns
-            ``sqrt(sum(err^2))/N`` for each bin; otherwise ``None``.
+            Binned flux uncertainty array.
+        spectrum : lime.Spectrum, optional
+            Returned only if ``return_spectrum=True``. A new spectrum object with the binned data.
 
         Raises
         ------
@@ -590,7 +596,86 @@ class SpecRetriever:
         else:
             err_binned = None
 
-        return disp_intvl, flux_binned, err_binned
+        if not return_spectrum:
+            return disp_intvl, flux_binned, err_binned
+
+        else:
+            return lime.Spectrum(input_wave=disp_intvl,
+                                 input_flux=flux_binned * self._spec.norm_flux if self._spec.norm_flux else flux_binned,
+                                 input_err=err_binned * self._spec.norm_flux if self._spec.norm_flux else err_binned,
+                                 redshift=self._spec.redshift, res_power=self._spec.res_power,
+                                 units_wave=self._spec.units_wave, units_flux=self._spec.units_flux,
+                                 norm_flux=self._spec.norm_flux)
+
+    def normalization(self, return_spectrum=False, **kwargs):
+
+        """
+        Normalize the spectrum by its continuum.
+
+        If the continuum has not been previously computed (``self._spec.cont is None``),
+        this method automatically fits it by calling
+        ``self._spec.fit.continuum(**kwargs)`` before performing the normalization.
+
+        The normalized flux is defined as ``flux / continuum``. If a flux uncertainty
+        array is available, the normalized uncertainty is propagated assuming
+        independent errors in the flux and continuum.
+
+        Parameters
+        ----------
+        return_spectrum : bool, optional
+            If ``False`` (default), return the normalized flux and uncertainty arrays.
+            If ``True``, return a new :class:`lime.Spectrum` instance containing the
+            normalized data.
+        **kwargs
+            Additional keyword arguments passed directly to
+            ``lime.Spectrum.fit.continuum`` when the continuum needs to be computed.
+
+        Returns
+        -------
+        flux_norm : astropy.units.Quantity
+            Continuum-normalized flux array.
+        err_norm : astropy.units.Quantity or bool
+            Uncertainty of the normalized flux. If the original spectrum does not
+            contain a flux uncertainty array, this returns ``False``.
+        spectrum : lime.Spectrum, optional
+            Returned only if ``return_spectrum=True``. A new spectrum object with
+            dimensionless flux units and ``norm_flux=1``.
+
+        Notes
+        -----
+        - The uncertainty propagation follows:
+
+          ``σ(F/C) = |F/C| * sqrt[(σ_F / F)^2 + (σ_C / C)^2]``
+
+          where ``F`` is the flux and ``C`` is the continuum.
+        - The returned spectrum preserves the original wavelength grid, redshift,
+          spectral resolution, and pixel mask.
+        - The continuum is computed only once and cached in the parent spectrum.
+        """
+
+        # Compute the object continuum if not provided
+        if self._spec.cont is None:
+            self._spec.fit.continuum(**kwargs)
+
+        # Normalize the flux
+        flux_norm = self._spec.flux / self._spec.cont
+
+        # Normalize the flux uncertainty
+        if self._spec.err_flux is not None:
+            err_norm = np.abs(flux_norm) * np.sqrt((self._spec.err_flux / self._spec.flux) ** 2 +
+                                                   (self._spec.cont_std / self._spec.cont) ** 2)
+        else:
+            err_norm = False
+
+        # Return the normalized flux and uncertainty array
+        if not return_spectrum:
+            return flux_norm, err_norm
+
+        # Return a LiMe spectrum
+        else:
+            return lime.Spectrum(self._spec.wave.data, flux_norm.data, err_norm.data, redshift=self._spec.redshift,
+                                 units_wave=self._spec.units_wave, units_flux=au.dimensionless_unscaled, norm_flux=1,
+                                 res_power=self._spec.res_power, pixel_mask=flux_norm.mask)
 
     def upper_line_limit(self, line, bands=None, signal_to_noise=8, err_from_bands=False, continua_sigma=True):
 
@@ -988,8 +1073,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
         return
 
-    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_scale=None, plot_steps=False,
-                  **kwargs):
+    def continuum(self, degree_list, emis_threshold, abs_threshold=None, smooth_scale=None, exclude_intvls=None,
+                  rest_intvls=False,  plot_steps=False, **kwargs):
 
         """
         Fit the spectrum continuum via polynomial clipping.
@@ -998,6 +1083,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         sigma-clipping outliers above (emission) and below (absorption) a flux threshold.
         At each iteration, points outside configurable residual thresholds are excluded
         and the polynomial is refitted on the remaining pixels.
+        The user may optionally provide a list of wavelength intervals to be excluded from
+        the continuum fitting. By default, these limits are assumed to be defined in the
+        observed frame.
 
         Parameters
         ----------
@@ -1014,6 +1102,13 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         smooth_scale : int, optional
             Window size (in pixels) for a moving-average smoothing applied to the input
             flux before fitting. If ``None``, no smoothing is applied.
+        exclude_intvls : list of tuple(float, float), optional
+            List of wavelength intervals (low, high) to exclude from the continuum fitting.
+            By default, intervals are interpreted in the observed frame.
+        rest_intvls : bool, optional
+            If ``True``, the wavelength intervals in ``exclude_intvls`` are assumed to be
+            defined in the rest frame and are converted to the observed frame using
+            ``λ_obs = λ_rest × (1 + z)`` prior to mask computation.
         plot_steps : bool, optional
             If ``True``, display a diagnostic plot after each iteration showing the
             current fit, clipping limits, and kept/rejected pixels.
@@ -1054,17 +1149,40 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         Show diagnostic plots at each iteration:
 
         >>> spec.fit.continuum([2, 2], [3.0, 2.0], plot_steps=True, title="Continuum fit")
+
+        Exclude known emission-line regions (defined in the rest frame) from the continuum fit:
+
+        >>> spec.continuum(degree_list=[3, 2], emis_threshold=[3.0, 2.0], exclude_intvls=[(4861, 4875), (6548, 6584)], rest_intvls=True)
+
         """
+
         # Create a pre-Mask based on the original mask if available
-        mask_cont = ~self._spec.flux.mask
-        input_wave, input_flux = self._spec.wave.data, self._spec.flux.data
+        input_wave = self._spec.wave.data
+        input_flux = self._spec.flux.data
+        input_mask = ~self._spec.flux.mask
+
+        # Correction if intervals are in the rest frame
+        z_corr = 1 + self._spec.redshift if rest_intvls else 1
+
+        # Adjust the mask to exclude wavelengt intervals
+        if exclude_intvls is not None:
+            exclude_intvls = np.asarray(exclude_intvls, dtype=float)
+
+            # Check the input has the right format
+            if exclude_intvls.ndim != 2 or exclude_intvls.shape[1] != 2:
+                raise ValueError('The argument "exclude_intvls" must be a list of (low, high) pairs')
+
+            # Loop through the wavelength intervals and add them to the mask
+            exclude_intvls = exclude_intvls * z_corr
+            i0 = np.searchsorted(input_wave, exclude_intvls[:, 0], side="right")
+            i1 = np.searchsorted(input_wave, exclude_intvls[:, 1], side="left")
+            for start, stop in zip(i0, i1):
+                input_mask[start:stop] = False
 
         # Smooth the spectrum
         if smooth_scale is not None:
             smoothing_window = np.ones(smooth_scale) / smooth_scale
-            input_flux_s = np.convolve(input_flux, smoothing_window, mode='same')
-        else:
-            input_flux_s = input_flux
+            input_flux = np.convolve(input_flux, smoothing_window, mode='same')
 
         # Loop through the fitting degree
         abs_threshold = emis_threshold if abs_threshold is None else abs_threshold
@@ -1072,30 +1190,30 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
             # First iteration use percentile limits for an initial fit
             if i == 0:
-                low_lim, high_lim = np.nanpercentile(input_flux_s[mask_cont], (16, 84))
-                mask_cont_0 = mask_cont & (input_flux_s >= low_lim) & (input_flux_s <= high_lim)
-                cont_fit = continuum_model_fit(input_wave, input_flux_s, mask_cont_0, degree)
+                low_lim, high_lim = np.nanpercentile(input_flux[input_mask], (16, 84))
+                mask_cont_0 = input_mask & (input_flux >= low_lim) & (input_flux <= high_lim)
+                cont_fit = continuum_model_fit(input_wave, input_flux, mask_cont_0, degree)
 
             # Establishing the flux limits
-            std_flux = np.nanstd((input_flux_s - cont_fit)[mask_cont])
+            std_flux = np.nanstd((input_flux - cont_fit)[input_mask])
             low_lim, high_lim = cont_fit - abs_threshold[i] * std_flux, cont_fit + emis_threshold[i] * std_flux
 
             # Add new entries to the mask
-            mask_cont = mask_cont & (input_flux_s >= low_lim) & (input_flux_s <= high_lim)
+            input_mask = input_mask & (input_flux >= low_lim) & (input_flux <= high_lim)
 
             # Fit continuum
-            cont_fit = continuum_model_fit(input_wave, input_flux_s, mask_cont, degree)
+            cont_fit = continuum_model_fit(input_wave, input_flux, input_mask, degree)
 
             # Compute the continuum and assign replace the value outside the bands the new continuum
             if plot_steps:
                 input_kwargs = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
                 input_kwargs.update(kwargs)
-                spec_continuum_calculation(self._spec, input_wave, input_flux_s, cont_fit, mask_cont, low_lim,
-                                           high_lim, smooth_scale, **input_kwargs)
+                spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_mask, low_lim,
+                                           high_lim, smooth_scale, exclude_intvls,  **input_kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)
-        self._spec.cont_std = np.std((input_flux_s - cont_fit)[mask_cont])
+        self._spec.cont_std = np.std((input_flux - cont_fit)[input_mask])
 
         return
 

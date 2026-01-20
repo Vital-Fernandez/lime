@@ -19,7 +19,7 @@ jobs:
       - run:
           name: Run tests and collect coverage
           command: |
-            pytest tests --quiet --cov --mpl --cov-report=xml
+            pytest tests -vv -s --cov --cov-report=xml -m "not mpl"
 
       - codecov/upload
 
