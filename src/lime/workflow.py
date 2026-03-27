@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 from pathlib import Path
+
+import pandas as pd
 from astropy.io import fits
 from time import time
 from lmfit.models import PolynomialModel
@@ -10,7 +12,7 @@ import lime
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, au
 from lime.rsrc_manager import lineDB
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
-from lime.transitions import Line, lines_frame
+from lime.transitions import Line, lines_frame, _REDSHIFT_DICT
 from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
@@ -242,10 +244,10 @@ class SpecRetriever:
 
     def lines_frame(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
                     exclude_bands_masked=True, map_band_vsigma=None, grouped_lines=None, automatic_grouping=False,
-                    Rayleigh_threshold=2, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
+                    Rayleigh_threshold=2, lines_redshift=None, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
                     update_default=True, line_list=None, particle_list=None, sig_digits=4, ref_bands=None,
-                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None, components=None,
-                    save_group_label=False):
+                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None, origin=None,
+                    components=None, save_group_label=False):
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -262,7 +264,7 @@ class SpecRetriever:
         bands = lines_frame(wave_intvl, line_list, particle_list, redshift=self._spec.redshift,
                             units_wave=self._spec.units_wave, sig_digits=sig_digits, ref_bands=ref_bands,
                             vacuum_waves=vacuum_waves, update_labels=update_labels, update_latex=update_latex,
-                            rejected_lines=rejected_lines)
+                            rejected_lines=rejected_lines, origin=origin)
 
         # Compute the resolving power if necessary
         if self._spec.res_power is not None:
@@ -273,8 +275,20 @@ class SpecRetriever:
         # Adjust the middle bands to match the line width
         if adjust_central_band:
 
-            # Expected transitions in the observed frame
-            lambda_obs = bands.wavelength.to_numpy() * (1 + self._spec.redshift)
+            # Input has priority
+            if lines_redshift is not None:
+                z_corr = 1 + lines_redshift
+
+            # Origin in lines dataframe
+            elif 'origin' in bands.columns:
+                z_corr = 1 + bands['origin'].map(_REDSHIFT_DICT).fillna(self._spec.redshift).to_numpy()
+
+            # Use the object redshift
+            else:
+                z_corr = 1 + self._spec.redshift
+
+            # Expected transitions in the observed frame # TODO This could be read from the configuration file
+            lambda_obs = bands.wavelength.to_numpy() * z_corr
 
             # Add correction for the instrumental broadening
             if instrumental_correction:
@@ -350,115 +364,70 @@ class SpecRetriever:
 
         return bands
 
-    def spectrum(self, fname=None, line_label=None, ref_frame=None, split_components=False, **kwargs):
 
-        # Headers for the default list
-        headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
+    def spectrum(self, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, pixel_mask=None, mask_intvls=None,
+                 obj_redshift=False,):
 
-        # Use the observation frame if none is provided
-        frame = self._spec.frame if ref_frame is None else ref_frame
-
-        # By default report complete spectrum
-        idcs = (0, None)
-
-        # If a line is provided get indexes for the bands limits
-        line_measured = False
-        if line_label is not None:
-            if frame is not None:
-                if line_label in frame.index:
-                    bands_limits = frame.loc[line_label, 'w1':'w6']
-                    idcs_bands = np.searchsorted(self._spec.wave.data, bands_limits * (1 + self._spec.redshift))
-                    idcs = (idcs_bands[0], idcs_bands[5])
-                    line_measured = True
-                else:
-                    _logger.warning(f'Line {line_label} not found on observation frame')
-            else:
-                _logger.warning(f'No lines measured on object')
-
-        # Compute the bands
-        if line_measured:
-
-            # Declare line object and the components and its components from the frame
-            line = Line.from_transition(line_label, data_frame=frame)
-            line_list = line.list_comps
-
-            # Compute the linear components
-            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line.profile,
-                                                x_array=self._spec.wave.data[idcs[0]: idcs[1]])
-            linear_arr = linear_continuum_computation(line_list, frame, 1 + self._spec.redshift, x_array=self._spec.wave.data[idcs[0]: idcs[1]])
-
-            # Determine which component you want to extract:
-            if split_components is False:
-                gaussian_arr = gaussian_arr.sum(axis=1) + linear_arr[:, 0]
-                gaussian_arr = gaussian_arr.reshape(-1, 1)
-                line_hdrs = [line_label]
-            else:
-                gaussian_arr = gaussian_arr + linear_arr[:, 0][:, np.newaxis]
-                line_hdrs = line_list
-
-            # Add the line list to the headers
-            headers = np.append(headers, line_hdrs)
-
-        # Container for the data
-        out_arr = np.full((self._spec.wave.data[idcs[0]: idcs[1]].size, len(headers)), np.nan)
-
-        # Fill the array:
-        out_arr[:, 0] = self._spec.wave.data[idcs[0]: idcs[1]]
-        out_arr[:, 1] = self._spec.flux.data[idcs[0]: idcs[1]] * self._spec.norm_flux
-
-        # Err array if it exists
+        # Extract the spectrum data
+        mask_arr = self._spec.flux.mask
+        wave_arr = self._spec.wave.data
+        flux_arr = self._spec.flux.data if self._spec.norm_flux is None else self._spec.flux.data * self._spec.norm_flux
         if self._spec.err_flux is not None:
-            out_arr[:, 2] = self._spec.err_flux[idcs[0]: idcs[1]].data * self._spec.norm_flux
-
-        # Pixel mask if any is invalid
-        if np.any(self._spec.wave.mask):
-            out_arr[:, 3] = self._spec.wave[idcs[0]: idcs[1]].mask
-
-        # Add the components
-        if line_measured:
-            for i, line_comp in enumerate(line_hdrs):
-                out_arr[:, 4 + i] = gaussian_arr[:, i]
-
-        # Crop array if some columns are missing
-        nan_columns = np.zeros(out_arr.shape[1]).astype(bool)
-        nan_columns[:4] = np.all(np.isnan(out_arr[:, :4]), axis=0)
-        out_arr = out_arr[:, ~nan_columns]
-
-        # Headers
-        headers = headers[~nan_columns]
-
-        # Formatting for the data
-        spec_hdrs_list = ['%.18e', '%.18e', '%.18e', '%d']
-        spec_hdrs_list = spec_hdrs_list + ['%.18e'] * len(line_hdrs) if line_measured else spec_hdrs_list
-        array_fmt = np.array(spec_hdrs_list)
-        array_fmt = list(array_fmt[~nan_columns])
-
-        # Update defaults with user-provided values
-        default_kwargs = {"fmt": array_fmt, "delimiter": ' '}
-        default_kwargs.update(kwargs)
-
-        # Create header
-        if default_kwargs.get('header') is None:
-            default_kwargs['header'] = default_kwargs['delimiter'].join(headers)
-
-        # Dictionary with parameters
-        if 'footer' not in default_kwargs:
-            footer_dict = {'LiMe': f"v{lime_cfg['metadata']['version']}",
-                            'units_wave': self._spec.units_wave, 'units_flux':  self._spec.units_flux,
-                            'redshift': self._spec.redshift, 'norm_flux': self._spec.norm_flux, 'id_label': self._spec.label}
-            footer_str = "\n".join(f"{key}:{value}" for key, value in footer_dict.items())
-            default_kwargs['footer'] = footer_str
-
-        # Return a recarray with the spectrum data
-        if fname is None:
-            output = np.core.records.fromarrays([out_arr[:, i] for i in range(out_arr.shape[1])], names=list(headers))
-
-        # Save to a file
+            err_arr = self._spec.err_flux.data if self._spec.norm_flux is None else self._spec.err_flux.data * self._spec.norm_flux
         else:
-            np.savetxt(fname, out_arr, **default_kwargs)
-            output = None
+            err_arr = None
 
-        return output
+        # Use the original pixel mask if none is provided else combine
+        pixel_mask = mask_arr if pixel_mask is None else mask_arr | pixel_mask
+
+        # Add the user masked regions
+        if mask_intvls is not None:
+
+            # LiMe lines frame
+            if isinstance(mask_intvls, pd.DataFrame):
+                if {'w3', 'w4'}.issubset(mask_intvls):
+                    mask_intvls = mask_intvls.loc[:, ['w3','w4']].to_numpy()
+
+
+                else:
+                    raise LiMe_Error(f'In order to use a pandas dataframe as "mask_intvls" it must have the a "w3" and'
+                                     f' "w4" column to specify the lines location. Alternatively, you may use a matrix '
+                                     f'array to define the masked intervals')
+
+            # Array of intervals (check it has the rigth dimensions)
+            else:
+                # Check the input has the right format
+                mask_intvls = np.asarray(mask_intvls, dtype=float)
+                if mask_intvls.ndim != 2 or mask_intvls.shape[1] != 2:
+                    raise ValueError('The argument "exclude_intvls" must be a list of (low, high) pairs')
+
+            # Add redshift correction
+            if obj_redshift:
+                mask_intvls = mask_intvls * (1 + self._spec.redshift) if redshift is None else mask_intvls * (1 + redshift)
+
+            # Loop through the wavelength intervals and add them to the mask
+            # exclude_intvls = exclude_intvls * z_corr
+            i0 = np.searchsorted(wave_arr, mask_intvls[:, 0], side="right")
+            i1 = np.searchsorted(wave_arr, mask_intvls[:, 1], side="left")
+            for start, stop in zip(i0, i1):
+                pixel_mask[start:stop] = True
+
+
+        # Recreate the spectrum
+        out_spec = lime.Spectrum(input_wave=wave_arr,
+                      input_flux=flux_arr,
+                      input_err=err_arr,
+                      redshift=self._spec.redshift if redshift is None else redshift,
+                      res_power=self._spec.res_power,
+                      units_wave=self._spec.units_wave,
+                      units_flux=self._spec.units_flux,
+                      norm_flux=norm_flux,
+                      crop_waves=crop_waves,
+                      crop_flux=crop_flux,
+                      pixel_mask=pixel_mask)
+
+
+        return out_spec
 
     def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, constant_pixel_width=True,
                  return_spectrum=False):
@@ -544,6 +513,7 @@ class SpecRetriever:
         mask_arr = self._spec.wave.mask
         wave_arr = self._spec.wave.data
         flux_arr = self._spec.flux.data
+        err_arr = self._spec.err_flux.data if self._spec.err_flux is not None else None
 
         # Check the input disespersion interval
         if disp_intvl is not None:
@@ -583,18 +553,42 @@ class SpecRetriever:
 
         # Make the binning calculation
         flux_binned, edges, binnumber = stats.binned_statistic(wave_arr, flux_arr, statistic='mean', bins=disp_intvl)
-        disp_intvl = disp_intvl[:-1] + bin_width/2
 
-        if self._spec.err_flux is not None:
-            err_arr = self._spec.err_flux.data
-            sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
-            bin_counts = np.bincount(binnumber)
-            N_bins = flux_binned.size
-            sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
-            bin_counts_filtered = bin_counts[1: N_bins + 1]
-            err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
+        if err_arr is not None:
+            err_sum, _, _ = stats.binned_statistic(wave_arr, err_arr ** 2, statistic='sum', bins=disp_intvl)
+            counts, _, _ = stats.binned_statistic(wave_arr, err_arr, statistic='count', bins=disp_intvl)
+            err_binned = np.sqrt(err_sum) / counts
+
+            # nbins = flux_binned.size
+            # bin_idx = binnumber - 1  # make 0-based
+            # sum_sq = np.bincount(bin_idx, weights=err_arr ** 2, minlength=nbins)
+            # counts = np.bincount(bin_idx, minlength=nbins)
+            # err_binned = np.sqrt(sum_sq) / counts
+
+            # # get unique bin numbers #
+            # uni_bin = np.unique(binnumber)
+            # err_binned_Svea = []
+            #
+            # for binnum in uni_bin[:-1]:
+            #     index_bin = np.where(binnumber == binnum)
+            #     errors_bin = err_arr[index_bin]
+            #     err_bin = np.sqrt(np.sum(errors_bin ** 2)) / (len(errors_bin))
+            #     err_binned_Svea.append(err_bin)
+            # err_binned_Svea = np.array(err_binned_Svea)
+
+
+            # err_arr = self._spec.err_flux.data
+            # sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
+            # bin_counts = np.bincount(binnumber)
+            # N_bins = flux_binned.size
+            # sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
+            # bin_counts_filtered = bin_counts[1: N_bins + 1]
+            # err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
         else:
             err_binned = None
+
+        # Update the binned wavelength
+        disp_intvl = disp_intvl[:-1] + bin_width/2
 
         if not return_spectrum:
             return disp_intvl, flux_binned, err_binned
@@ -834,7 +828,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
-        # User 2_guides override default behaviour for the pixel error and the continuum calculation
+        # User inputs override default behaviour for the pixel error and the continuum calculation
         err_from_bands = True if (err_from_bands is None) and (self._spec.err_flux is None) else err_from_bands
 
         # Interpret the input line
@@ -1205,11 +1199,12 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             cont_fit = continuum_model_fit(input_wave, input_flux, input_mask, degree)
 
             # Compute the continuum and assign replace the value outside the bands the new continuum
-            if plot_steps:
-                input_kwargs = {'title':f'Continuum fitting, iteration ({i+1}/{len(degree_list)})'}
-                input_kwargs.update(kwargs)
-                spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_mask, low_lim,
-                                           high_lim, smooth_scale, exclude_intvls,  **input_kwargs)
+            if plot_steps is True or (plot_steps == 'last' and (i == len(degree_list) - 1)):
+                    default_ax_cfg = {'title':f'Continuum fitting ({i+1}/{len(degree_list)}), polynomial degree = {degree}'}
+                    input_kwargs = kwargs.get('ax_cfg')
+                    input_kwargs = default_ax_cfg if input_kwargs is None else default_ax_cfg.update(input_kwargs)
+                    spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_mask, low_lim,
+                                               high_lim, smooth_scale, exclude_intvls,  ax_cfg=input_kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)

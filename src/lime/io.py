@@ -221,9 +221,32 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
 
         # TODO review convert numpy arrays and floats64
         if toml_check:
-            toml_dict = param_dict if section_name is None else {section_name: param_dict}
-            with open(output_file, "w") as f:
-                toml.dump(toml_dict, f)
+
+            # Section dict or the default dictionary
+            output_data = param_dict if section_name is None else {section_name: param_dict}
+
+            # If the file does not exist create a new file
+            if not output_path.is_file():
+                with open(output_file, "w") as f:
+                    toml.dump(output_data, f)
+
+            # Load the file and add the new section
+            else:
+                with open(output_path, 'r') as f:
+                    full_config = toml.load(f)
+
+                # Update the section data
+                full_config.update(output_data)
+                # if section_name is not None:
+                #     full_config.update(output_data)
+                #
+                # # Add the new data
+                # else:
+                #     full_config.update(output_data)
+
+                # Save the new data
+                with open(output_file, "w") as f:
+                    toml.dump(full_config, f)
 
         else:
             raise LiMe_Error(f'toml library is not installed. Toml files cannot be saved')
@@ -538,7 +561,7 @@ def save_frame(fname, dataframe, page='FRAME', parameters='all', header=None, co
 
                 lineLogHDU = log_to_HDU(lines_log, ext_name=page, column_dtypes=column_dtypes, header_dict=header)
 
-                if log_path.is_file(): # TODO this strategy is slow for many 2_guides
+                if log_path.is_file(): # TODO this strategy is slow for many configuration
                     try:
                         fits.update(log_path, data=lineLogHDU.data, header=lineLogHDU.header, extname=lineLogHDU.name, verify=True)
                     except KeyError:

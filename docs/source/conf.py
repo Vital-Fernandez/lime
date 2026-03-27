@@ -94,7 +94,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.0.5"
+release = "2.1.0"
 
 # -- General configuration ---------------------------------------------------
 _lib_path = Path(__file__).parents[2]/'src'

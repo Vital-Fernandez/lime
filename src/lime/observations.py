@@ -7,6 +7,7 @@ from pathlib import Path
 from astropy.io import fits
 from collections import UserDict
 
+from lime.fitting.lines import profiles_computation, linear_continuum_computation
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
     parse_unit_convertion
 
@@ -157,6 +158,7 @@ def check_spectra_arrays(observation):
 
     return
 
+
 def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1, min_flux_scale=0.001, max_flux_scale=1e50):
 
     if (redshift is None) or np.isnan(redshift) or np.isinf(redshift):
@@ -226,10 +228,10 @@ def check_sample_levels(levels, necessary_levels=("id", "file")):
     return
 
 
-def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask):
+def cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux, input_err, pixel_mask):
 
     if crop_waves is not None:
-
+        # TODO warning message
         idx_min = np.searchsorted(input_wave, crop_waves[0]) if crop_waves[0] != 0 else 0
         idx_max = np.searchsorted(input_wave, crop_waves[1]) if crop_waves[1] != -1 else None
 
@@ -255,6 +257,23 @@ def cropping_spectrum(crop_waves, input_wave, input_flux, input_err, pixel_mask)
 
         if pixel_mask is not None:
             pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
+
+    if crop_flux is not None:
+
+        # Validate percentiles
+        for perctl, name in zip(crop_flux, ("Min percentile", "Max percentile")):
+            if not np.isscalar(perctl):
+                raise TypeError(f"{name} must be a scalar.")
+            if not (0.0 <= perctl <= 100):
+                raise ValueError(f"{name} must be in the range [0, 100].")
+
+        if crop_flux[0] >= crop_flux[1]:
+            raise ValueError(f"The lower percentile limit ({crop_flux[0]}) must be  must be smaller than upper limit "
+                             f"({crop_flux[1]}).")
+
+        # Clip the flux to the limits
+        lo, hi = np.percentile(input_flux[~pixel_mask], crop_flux)
+        input_flux[~pixel_mask] = np.clip(input_flux[~pixel_mask], lo, hi)
 
     return input_wave, input_flux, input_err, pixel_mask
 
@@ -416,7 +435,8 @@ class Spectrum:
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, review_inputs=True):
+                 crop_flux=None, res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None,
+                 review_inputs=True):
 
         # Class attributes
         self.label = None
@@ -447,7 +467,7 @@ class Spectrum:
 
         # Review and assign the attibutes data
         if review_inputs:
-            self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, res_power,
+            self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, crop_flux, res_power,
                                  units_wave, units_flux, pixel_mask, id_label)
 
         return
@@ -503,11 +523,6 @@ class Spectrum:
         # Class attributes
         spec.label = label
         spec.flux = cube.flux[:, idx_j, idx_i]
-        # from matplotlib import pyplot as plt
-        # fig, ax = plt.subplots()
-        # ax.imshow(cube.err_flux[500, :, :].data)
-        # plt.show()
-
         spec.err_flux = None if cube.err_flux is None else cube.err_flux[:, idx_j, idx_i]
         spec.norm_flux = cube.norm_flux
         spec.redshift = cube.redshift
@@ -526,7 +541,7 @@ class Spectrum:
         return spec
 
     @classmethod
-    def from_file(cls, fname, instrument, redshift=None, norm_flux=None, crop_waves=None, res_power=None,
+    def from_file(cls, fname, instrument, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, res_power=None,
                   units_wave=None, units_flux=None, pixel_mask=None, id_label=None, wcs=None, **kwargs):
 
         """
@@ -623,8 +638,8 @@ class Spectrum:
         fits_args = cls._fitsMgr.parse_data_from_file(cls._fitsMgr.file_address, pixel_mask, **kwargs)
 
         # Update the file parameters with the user parameters
-        input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, res_power=res_power,
-                            units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
+        input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, crop_flux=crop_flux,
+                          res_power=res_power, units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
 
         if cls._fitsMgr.spectrum_check:
             input_args.pop('wcs')
@@ -675,8 +690,8 @@ class Spectrum:
         # Create the LiMe object
         return cls(**fits_args)
 
-    def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, res_power, units_wave,
-                        units_flux, pixel_mask, label):
+    def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, crop_flux, res_power,
+                        units_wave, units_flux, pixel_mask, label):
 
         # Class attributes
         self.label = label
@@ -691,8 +706,8 @@ class Spectrum:
         self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux, self.units_flux)
 
         # Crop the input spectrum if necessary
-        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
-                                                                          pixel_mask)
+        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux,
+                                                                          input_err, pixel_mask)
 
         # Normalization and masking
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
@@ -925,6 +940,116 @@ class Spectrum:
 
         return
 
+    def save_spectrum(self, fname=None, line_label=None, ref_frame=None, split_components=False, **kwargs):
+
+        # Headers for the default list
+        headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
+
+        # Use the observation frame if none is provided
+        frame = self.frame if ref_frame is None else ref_frame
+
+        # By default report complete spectrum
+        idcs = (0, None)
+
+        # If a line is provided get indexes for the bands limits
+        line_measured = False
+        if line_label is not None:
+            if frame is not None:
+                if line_label in frame.index:
+                    bands_limits = frame.loc[line_label, 'w1':'w6']
+                    idcs_bands = np.searchsorted(self._spec.wave.data, bands_limits * (1 + self._spec.redshift))
+                    idcs = (idcs_bands[0], idcs_bands[5])
+                    line_measured = True
+                else:
+                    _logger.warning(f'Line {line_label} not found on observation frame')
+            else:
+                _logger.warning(f'No lines measured on object')
+
+        # Compute the bands
+        if line_measured:
+
+            # Declare line object and the components and its components from the frame
+            line = Line.from_transition(line_label, data_frame=frame)
+            line_list = line.list_comps
+
+            # Compute the linear components
+            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line.profile,
+                                                x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+            linear_arr = linear_continuum_computation(line_list, frame, 1 + self._spec.redshift, x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+
+            # Determine which component you want to extract:
+            if split_components is False:
+                gaussian_arr = gaussian_arr.sum(axis=1) + linear_arr[:, 0]
+                gaussian_arr = gaussian_arr.reshape(-1, 1)
+                line_hdrs = [line_label]
+            else:
+                gaussian_arr = gaussian_arr + linear_arr[:, 0][:, np.newaxis]
+                line_hdrs = line_list
+
+            # Add the line list to the headers
+            headers = np.append(headers, line_hdrs)
+
+        # Container for the data
+        out_arr = np.full((self.wave.data[idcs[0]: idcs[1]].size, len(headers)), np.nan)
+
+        # Fill the array:
+        out_arr[:, 0] = self.wave.data[idcs[0]: idcs[1]]
+        out_arr[:, 1] = self.flux.data[idcs[0]: idcs[1]] * self.norm_flux
+
+        # Err array if it exists
+        if self.err_flux is not None:
+            out_arr[:, 2] = self.err_flux[idcs[0]: idcs[1]].data * self.norm_flux
+
+        # Pixel mask if any is invalid
+        if np.any(self.wave.mask):
+            out_arr[:, 3] = self.wave[idcs[0]: idcs[1]].mask
+
+        # Add the components
+        if line_measured:
+            for i, line_comp in enumerate(line_hdrs):
+                out_arr[:, 4 + i] = gaussian_arr[:, i]
+
+        # Crop array if some columns are missing
+        nan_columns = np.zeros(out_arr.shape[1]).astype(bool)
+        nan_columns[:4] = np.all(np.isnan(out_arr[:, :4]), axis=0)
+        out_arr = out_arr[:, ~nan_columns]
+
+        # Headers
+        headers = headers[~nan_columns]
+
+        # Formatting for the data
+        spec_hdrs_list = ['%.18e', '%.18e', '%.18e', '%d']
+        spec_hdrs_list = spec_hdrs_list + ['%.18e'] * len(line_hdrs) if line_measured else spec_hdrs_list
+        array_fmt = np.array(spec_hdrs_list)
+        array_fmt = list(array_fmt[~nan_columns])
+
+        # Update defaults with user-provided values
+        default_kwargs = {"fmt": array_fmt, "delimiter": ' '}
+        default_kwargs.update(kwargs)
+
+        # Create header
+        if default_kwargs.get('header') is None:
+            default_kwargs['header'] = default_kwargs['delimiter'].join(headers)
+
+        # Dictionary with parameters
+        if 'footer' not in default_kwargs:
+            footer_dict = {'LiMe': f"v{lime_cfg['metadata']['version']}",
+                            'units_wave': self.units_wave, 'units_flux':  self.units_flux,
+                            'redshift': self.redshift, 'norm_flux': self.norm_flux, 'id_label': self.label}
+            footer_str = "\n".join(f"{key}:{value}" for key, value in footer_dict.items())
+            default_kwargs['footer'] = footer_str
+
+        # Return a recarray with the spectrum data
+        if fname is None:
+            output = np.core.records.fromarrays([out_arr[:, i] for i in range(out_arr.shape[1])], names=list(headers))
+
+        # Save to a file
+        else:
+            np.savetxt(fname, out_arr, **default_kwargs)
+            output = None
+
+        return output
+
     def update_redshift(self, redshift):
 
         """
@@ -982,19 +1107,22 @@ class Spectrum:
 
         return
 
-    def line_detection(self, *args, **kwargs):
-
-        raise LiMe_Error(f'The line_detection functionality has been moved an rebranded. Please use:\n'
-                         f'Spectrum.infer.peaks_troughs()')
-    
-    def clear_data(self):
+    def clear_data(self, line_data=True, cont_data=True):
 
         """
-        Clear the spectrum’s measurements frame.
+        Clear the spectrum’s line measurements frame and fitted continuum.
 
         This method removes all entries from the internal ``frame`` attribute,
         effectively resetting the stored measurements while preserving the
         dataframe structure (columns and metadata).
+
+        Parameters
+        ----------
+        line_data : bool, optional
+            Clear the spectrum’s line measurements frame. The default value is true.
+
+        cont_data : bool, optional
+            Clear the spectrum’s fitted continuum. The default value is true.
 
         Returns
         -------
@@ -1005,6 +1133,7 @@ class Spectrum:
         -----
         - The operation is equivalent to reassigning ``self.frame = self.frame[0:0]``,
           which clears all rows but keeps column definitions intact.
+        - The Spectrum.cont and cont_std variables are set to None.
         - Use this method to reset the spectrum’s measurement results before
           reprocessing or refitting without recreating the object.
 
@@ -1017,7 +1146,12 @@ class Spectrum:
         (0, 10)
         """
 
-        self.frame = self.frame[0:0]
+        if line_data:
+            self.frame = self.frame[0:0]
+
+        if cont_data:
+            self.cont = None
+            self.cont_std = None
 
         return
 
@@ -1105,9 +1239,10 @@ class Cube:
     _fitsMgr = None
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
-                 res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None, wcs=None):
+                 crop_flux=None, res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None,
+                 wcs=None):
 
-        # Review the 2_guides
+        # Review the inputs
         pixel_mask = check_inputs_arrays(input_wave, input_flux, input_err, pixel_mask, self)
 
         # Class attributes
@@ -1133,8 +1268,8 @@ class Cube:
         self.redshift, self.norm_flux = check_redshift_norm(redshift, norm_flux, input_flux, self.units_flux)
 
         # Start cropping the input spectrum if necessary
-        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, input_wave, input_flux, input_err,
-                                                                          pixel_mask)
+        input_wave, input_flux, input_err, pixel_mask = cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux,
+                                                                          input_err, pixel_mask)
 
         # Spectrum normalization, redshift and mask calculation
         self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
@@ -1336,7 +1471,7 @@ class Cube:
         >>> cube.spatial_masking("H1_4861A", param="SN_line", contour_pctls=[80, 90, 95])
         """
 
-        # Check the function 2_guides
+        # Check the function inputs
         contour_pctls = np.atleast_1d(contour_pctls)
         if not np.all(np.diff(contour_pctls) > 0):
             raise LiMe_Error(f'The mask percentiles ({contour_pctls}) must be in increasing order')
@@ -1561,7 +1696,7 @@ class Cube:
         --------
         Extract a single spaxel spectrum from a cube:
 
-        >>> spec = cube.spectrum_from_indices(25, 30)
+        >>> spec = cube.get_spectrum(25, 30)
 
         """
 

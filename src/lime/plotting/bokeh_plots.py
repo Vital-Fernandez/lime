@@ -244,7 +244,7 @@ class BokehFigures:
         log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
 
-        # Set figure format with the user 2_guides overwriting the default conf
+        # Set figure format with the user inputs overwriting the default conf
         legend_check = True if label is not None else False
 
         # Check which line should be plotted
@@ -315,12 +315,12 @@ class BokehFigures:
         return
 
     def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
-                 include_fits=True, include_cont=False, include_components=False, return_fig=False, fig_cfg=None,
+                 include_fits=True, show_cont=False, include_components=False, return_fig=False, fig_cfg=None,
                  ax_cfg=None, maximize=False, detection_band=None, show_masks=True, show_categories=False, show_err=False):
 
         if bokeh_check:
 
-            # Set figure format with the user 2_guides overwriting the default conf
+            # Set figure format with the user inputs overwriting the default conf
             legend_check = True if label is not None else False
 
             # Adjust the default theme
@@ -351,13 +351,22 @@ class BokehFigures:
                                step_mode="center", fill_alpha=0.2, color=theme.colors['err_area'])
 
             # Include the continuum
-            if include_cont and self._spec.cont is not None:
+            if show_cont and self._spec.cont is not None:
                 fig.line(wave_plot/z_corr, self._spec.cont*z_corr, legend_label="Continuum.",
-                         line_color=theme.colors['fade_fg'], line_dash="dashed", line_width=2)
+                         line_color=theme.colors['cont'], line_dash="dashed", line_width=2)
 
                 low_limit, high_limit = self._spec.cont - self._spec.cont_std, self._spec.cont + self._spec.cont_std
                 fig.varea(x=wave_plot/z_corr, y1=low_limit*z_corr, y2=high_limit*z_corr, fill_alpha=0.2,
-                          color=theme.colors['fade_fg'])
+                          color=theme.colors['inspection_uncertainty'])
+                #
+                # # Plot the fit continuum
+                # if show_cont and self._spec.cont is not None:
+                #     self.ax.plot(wave_plot / z_corr, self._spec.cont * z_corr, label='Continuum',
+                #                  color=theme.colors['cont'], linestyle='--')
+                #
+                #     low_limit, high_limit = self._spec.cont - self._spec.cont_std, self._spec.cont + self._spec.cont_std
+                #     self.ax.fill_between(wave_plot / z_corr, low_limit * z_corr, high_limit * z_corr, alpha=0.2,
+                #                          color=theme.colors['inspection_uncertainty'])
 
             # Plot the fittings
             if include_fits and self._spec.frame.size > 0:

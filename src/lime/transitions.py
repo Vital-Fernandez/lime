@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from numpy.core.fromnumeric import argmin
+from collections import Counter
 
 from lime.io import (_LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame,
                      _LIME_FOLDER)
@@ -18,10 +19,13 @@ _logger = logging.getLogger('LiMe')
 _COMPs_KEYS = {'k': 'kinem',
                'p': 'profile',
                's': 'shape',
-               't': 'trans'}
+               't': 'trans',
+               'o': 'origin'}
 
-ELEMENTS_DICT = dict(H='Hydrogen', He='Helium', Li='Lithium', Be='Beryllium', B='Boron', C='Carbon', N='Nitrogen', O='Oxygen', F='Fluorine',
-                     Ne='Neon', Na='Sodium', Mg='Magnesium', Al='Aluminum', Si='Silicon', P='Phosphorus', S='Sulfur',
+_REDSHIFT_DICT = {'MW': 0, 'airglow': 0, 'telluric': 0}
+
+ELEMENTS_DICT = dict(H='Hydrogen', He='Helium', Li='Lithium', Be='Beryllium', B='Boron', C='Carbon', N='Nitrogen', O='Oxygen',
+                     F='Fluorine', Ne='Neon', Na='Sodium', Mg='Magnesium', Al='Aluminum', Si='Silicon', P='Phosphorus', S='Sulfur',
                      Cl='Chlorine', Ar='Argon', K='Potassium', Ca='Calcium', Sc='Scandium', Ti='Titanium', V='Vanadium',
                      Cr='Chromium', Mn='Manganese', Fe='Iron', Ni='Nickel', Co='Cobalt', Cu='Copper', Zn='Zinc',
                      Ga='Gallium', Ge='Germanium', As='Arsenic', Se='Selenium', Br='Bromine', Kr='Krypton', Rb='Rubidium',
@@ -44,7 +48,7 @@ SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I
 
 
 # Reading file with the format and export status for the measurements
-_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.0.txt'
+_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.5.txt'
 
 def check_lines_frame_units(frame):
 
@@ -56,16 +60,17 @@ def check_lines_frame_units(frame):
 
 class LinesDatabase:
 
-    def __init__(self, frame_address=None, default_shape=None, default_profile=None):
+    def __init__(self, frame_address=None, default_shape=None, default_profile=None, default_origin=None):
 
         # Default_lines database
         self.frame_address = _DATABASE_FILE if frame_address is None else frame_address
         self.frame = load_frame(self.frame_address)
 
-        # Default values
+        # Default values # TODO we should review here to check there are valid
         self._vacuum_check = False
         self._shape = 'emi' if default_shape is None else default_shape
         self._profile = 'g' if default_profile is None else default_profile
+        self._origin = default_origin
         self.set_units_wave()
 
         return
@@ -123,6 +128,9 @@ class LinesDatabase:
     def get_profile(self):
         return self._profile
 
+    def get_origin(self):
+        return self._origin
+
     def get_units(self):
         return self._units_wave
 
@@ -144,7 +152,7 @@ def recover_ionization(string):
 
     part_len = len(string)
     index = part_len - 1  # Start at the last character
-    while index >= 0 and string[index].isdigit():
+    while index >= 0 and string[index].isdigit(): # TODO this gives an error
         index -= 1
 
     # All characters
@@ -556,17 +564,18 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     True
     """
 
-    headers = ['particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp', 'transition_comp']
-    lines_df = pd.DataFrame(index=np.array(lines_list, ndmin=1), columns=headers)
+    headers = ['label', 'particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp',
+               'transition_comp', 'shape', 'origin', 'redshift']
+    lines_df = pd.DataFrame(columns=headers)
 
     # Loop through the lines and derive their properties:
-    for label in lines_df.index:
-        line = Line.from_transition(label, fit_conf, bands, verbose=verbose)
+    for i, label in enumerate(lines_list):
+        line = label if isinstance(label, Line) else Line.from_transition(label, fit_conf, bands, verbose=verbose)
+        lines_df.loc[i, :] = (line.label, line.particle.label, line.wavelength,
+                              line.latex_label, line.kinem, line.profile, line.trans,
+                              line.shape, line.origin, line.redshift)
 
-        lines_df.loc[label, :] = (line.particle.label, line.wavelength, line.latex_label, line.kinem,
-                                  line.profile, line.trans)
-
-    # Adjust column types
+    # Adjust column types # TODO do we need this one?
     lines_df['wavelength'] = pd.to_numeric(lines_df['wavelength'])
 
     # Recover the columns requested by the user
@@ -666,7 +675,7 @@ def format_line_mask_option(entry_value, wave_array):
 
 
 def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=4,
-                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, rejected_lines=None):
+                vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, rejected_lines=None, origin=None):
     
     """
 
@@ -676,8 +685,8 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
     If the user provides a wavelength array (``wave_inter``) the output dataframe will be limited to the lines within
     this wavelength interval.
 
-    Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the these
-    lists. These 2_guides must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
+    Similarly, the user provides a ``lines_list`` or a ``particle_list`` the output bands will be limited to the lines
+    matching these inputs. These arguments must follow `LiMe notation style <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_
 
     If the user provides a redshift value alongside the wavelength interval (``wave_intvl``) the output bands will be
     limited to the transitions at that observed range.
@@ -742,7 +751,7 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
         w_min, w_max = wave_intvl[0], wave_intvl[-1]
 
         # Account for redshift
-        redshift = redshift if redshift is not None else 0
+        redshift = redshift if redshift is not None else 0 # TODO this does not include origin...
         if 'wavelength' in bands_df.columns:
             wave_arr = bands_df['wavelength'] * (1 + redshift)
         else:
@@ -755,15 +764,29 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
     if particle_list is not None:
         idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
 
-    # Finally slice by the name of the lines
-    if line_list is not None:
-        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
-
     # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
     if vacuum_waves:
         bands_df['wavelength'] = bands_df['wave_vac']
         bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
         bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
+
+    # Finally slice by the name of the lines # TODO warn if line is not in the database
+    repeated_entries = None
+    if line_list is not None:
+        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
+
+        # Recover the origins if LiMe line list
+        if isinstance(line_list[0], Line) and (origin is None):
+            origin = np.full(idcs_rows.sum(), 'none')
+            for i, idx_df in enumerate(bands_df.loc[idcs_rows].index):
+                if line_list[line_list.index(idx_df)].origin is not None:
+                    origin[i] = line_list[line_list.index(idx_df)].origin
+            origin = None if np.all(origin == 'none') else origin
+
+            if origin is not None:
+                repeated_entries = [item for item, count in Counter(line_list).items() if count > 1]
+            else:
+                repeated_entries = []
 
     # Final table
     bands_df = bands_df.loc[idcs_rows]
@@ -791,6 +814,29 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
     # Exclude lines
     if rejected_lines is not None:
         bands_df = bands_df.loc[~bands_df.index.isin(rejected_lines)]
+
+    # Add origin value
+    if origin is not None:
+        bands_df['origin'] = origin
+
+        if len(repeated_entries):
+            line_arr = np.array(line_list)
+            for line in repeated_entries:
+                if line in bands_df.index:
+                    orig_list = [line_list[idx].origin for idx in np.where(line_arr == line)[0].tolist()]
+                    clear_initial = True
+                    for orig in orig_list:
+                        if orig != 'none':
+                            bands_df.loc[f'{line}_{orig}', :] = bands_df.loc[f'{line}', :]
+                            bands_df.loc[f'{line}_{orig}', 'origin'] = orig
+                        else:
+                            clear_initial = False
+
+                    if clear_initial:
+                        bands_df = bands_df.drop(line)
+
+                    print(line, orig_list)
+
 
     return bands_df
 
@@ -1166,6 +1212,10 @@ class Particle:
 
         return cls(label, symbol, ionization)
 
+    @property
+    def classic_notation(self):
+        return f'{self.symbol}{int_to_roman(self.ionization)}'
+
     def __str__(self):
 
         return self.label
@@ -1346,7 +1396,7 @@ class Line:
 
     def __init__(self, label, particle=None, wavelength=None, units_wave=None, latex_label=None, core=None,
                  group_label=None, group=None, list_comps=None, mask=None, kinem=None, trans=None, profile=None,
-                 shape=None, pixel_mask=None):
+                 shape=None, pixel_mask=None, origin=None, redshift=None):
 
         self.label = label
         self.particle = Particle.from_label(particle)
@@ -1358,6 +1408,10 @@ class Line:
         self.group = group
         self.list_comps = None
         self.ref_idx = None
+
+        # Assign source default values
+        self.origin = origin
+        self.redshift = redshift if redshift is not None else _REDSHIFT_DICT.get(self.origin)
 
         self.mask = mask
         self.pixel_mask = 'no' if pixel_mask is None else pixel_mask
@@ -1406,9 +1460,12 @@ class Line:
 
         return False
 
+    def __hash__(self):
+        return hash(self.label)
+
     @classmethod
     def from_transition(cls, label, fit_cfg=None, data_frame=None, parent_group_label=None, norm_flux=None,
-                        def_shape=None, def_profile=None, verbose=True, warn_missing_db=False):
+                        def_shape=None, def_profile=None, def_origin=None, verbose=True, warn_missing_db=False):
 
         """
         Construct a :class:`Line` instance from transition label and optional user input fit_cfg and lines frame.
@@ -1513,6 +1570,7 @@ class Line:
                                            parent_group_label=parent_group_label,
                                            def_shape=rsrc_manager.lineDB.get_shape() if def_shape is None else def_shape,
                                            def_profile=rsrc_manager.lineDB.get_profile() if def_profile is None else def_profile,
+                                           def_origin=rsrc_manager.lineDB.get_origin() if def_origin is None else def_origin,
                                            verbose=verbose,
                                            warn_missing_db=warn_missing_db)
 
@@ -1551,6 +1609,25 @@ class Line:
                 line.measurements = LineMeasurements()
 
         return line
+
+    @classmethod
+    def from_list(cls, line_list, fit_cfg=None, data_frame=None, norm_flux=None, shape=None, profile=None,
+                  origin=None, verbose=True, warn_missing_db=False):
+
+        # Empty container
+        out_list = []
+
+        for label in line_list:
+
+            line = Line.from_transition(label, fit_cfg, data_frame, parent_group_label=None, norm_flux=norm_flux,
+                                        def_shape=shape, def_profile=profile, def_origin=origin,
+                                        verbose=verbose, warn_missing_db=warn_missing_db)
+
+            if line is not None:
+                out_list.append(line)
+
+
+        return out_list if len(out_list) > 0  else None
 
     def param_arr(self, param):
 
@@ -1665,7 +1742,8 @@ class Line:
         return
 
 
-def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, verbose, warn_missing_db=False):
+def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, def_origin, verbose,
+                         warn_missing_db=False):
 
     # Review line notation and its group structure
     line_params = get_line_group(label, fit_cfg, data_frame, parent_group_label, verbose)
@@ -1677,7 +1755,7 @@ def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_sha
     line_params = get_line_from_df(line_params, data_frame, warn_missing_db)
 
     # Review input for missing/default parameter values
-    review_input_params(line_params, def_shape, def_profile)
+    review_input_params(line_params, def_shape, def_profile, def_origin)
 
     return line_params
 
@@ -1724,7 +1802,7 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
 
             else:
                 _logger.warning(f'Line {label} has an unrecognized optional item: {opt_i}.'
-                                f' - Please use "_k-", "_t-", "_p-", "_s-".')
+                                f' - Please use "_k-", "_t-", "_p-", "_s-", "_o-".')
 
     # Get line core label
     core = f'{items[0]}_{items[1]}'
@@ -1733,7 +1811,7 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
     if group_type:
         group_label = None if fit_cfg is None else fit_cfg.get(label, None)
 
-        # Dict 2_guides have preference over database
+        # Dict inputs have preference over database
         if (group_label is None) and isinstance(data_frame, pd.DataFrame):
             group_label = pd_get(data_frame, label, column='group_label', transform='none')
     else:
@@ -1825,7 +1903,7 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
 
     # Assign the data
     if row_name is not None:
-        db_params = dict(particle=pd_get(input_df, row_name, 'particle'),
+        db_params = dict(particle=pd_get(input_df, row_name, 'particle', nan_to_none=True),
                          wavelength=pd_get(input_df, row_name, 'wavelength'),
                          units_wave=pd_get(input_df, row_name, 'units_wave'),
                          latex_label=pd_get(input_df, row_name, 'latex_label'),
@@ -1835,6 +1913,7 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
                          kinem=pd_get(input_df, row_name, 'kinem'),
                          profile=pd_get(input_df, row_name, 'profile'),
                          shape=pd_get(input_df, row_name, 'shape'),
+                         origin=pd_get(input_df, row_name, 'origin'),
                          )
 
         if 'w1' in input_df.columns:
@@ -1859,7 +1938,7 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
         return line_params
 
 
-def review_input_params(line_params, def_shape, def_profile):
+def review_input_params(line_params, def_shape, def_profile, def_origin):
 
     # Check core components
     line_items = line_params['label'].split('_')
@@ -1875,7 +1954,7 @@ def review_input_params(line_params, def_shape, def_profile):
             line_params['wavelength']  = float(line_items[1][:-1])
         else:
             au_unit = au.Unit(line_items[1])
-            line_params['units_wave'] = au_unit.bases[0]
+            line_params['units_wave'] = au_unit.bases[0] # TODO this fails if the transition does not have units: "H1_4861"
             line_params['wavelength']  = au_unit.scale
 
     # Units:
@@ -1896,6 +1975,10 @@ def review_input_params(line_params, def_shape, def_profile):
     # Line shape (emi, abs)
     if line_params.get('shape') is None:
         line_params['shape'] = def_shape
+
+    # Line Origin (ISM, stellar, airglow, telluric)
+    if line_params.get('origin') is None:
+        line_params['origin'] = def_origin
 
     # Review latex label
     if line_params.get('group') is None:

@@ -24,8 +24,14 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
 
     for i, idx in enumerate(index_arr):
         line = lime.Line.from_transition(idx)
+        # print(idx, line)
         if pd.notnull(df_lines.loc[idx, 'trans']):
             line.trans = df_lines.loc[idx, 'trans']
+
+        # If the table does not have wavelength use the one from the label
+        if pd.isnull(df_lines.loc[idx, 'wave_vac']):
+            df_lines.loc[idx, 'wave_vac'] = line.wavelength
+
         wave_vac = df_lines.loc[idx, 'wave_vac']
         decimals = abs(decimal.Decimal(str(wave_vac)).as_tuple().exponent)
         wave_air = np.around(air_to_vacuum_function(wave_vac), decimals)
@@ -40,6 +46,7 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
         if line.label not in updated_labels:
             updated_labels[i] = line.label
         else:
+            print('REPETIDA', line.label)
             message = f'{line.label} -> '
             line.update_labels(sig_digits=int(np.log10(line.wavelength)) + 2)
             updated_labels[i] = line.label
@@ -103,13 +110,17 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
 if __name__ == "__main__":
 
     current_file_folder = Path(__file__).resolve().parent
-    PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.0.0.xlsx'
-    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.4.txt'
+    PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.0.4.xlsx'
+    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.5.txt'
 
     parent_db = pd.read_excel(PARENT_DATABASE_path, header=0, index_col=0)
     child_db = format_lines_database(parent_db)
 
     lime.save_frame(CHILD_DATABASE_path, child_db)
+
+    # CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.4.xlsx'
+    # lime.save_frame(CHILD_DATABASE_path, child_db)
+
 
 
 
