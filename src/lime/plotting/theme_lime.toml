@@ -15,6 +15,7 @@ default."err_width" = '2'
 default."cont_width" = '0.5'
 default."spectrum_width" = '0.75'
 default."textsize_notes" = 4
+default."label_lines" = 10
 
 [matplotlib.colors] # Theme format
 "figure.facecolor" = "bg"
@@ -95,8 +96,11 @@ bg = '#FFFFFF'
 fg = '#000000'
 cont_band = '#8c564b'
 line_band = '#b5bd61'
+line_label = '#000000'
+
 color_cycle = ['#279e68', '#d62728', '#aa40fc', '#8c564b',  '#e377c2', '#7f7f7f',
                '#b5bd61', '#17becf', '#1f77b4', '#ff7f0e']
+palette_bokeh = 'Category20'
 match_line = '#b5bd61'
 peak = '#7FFFD4'
 rejected_peak = '#8C000F'
@@ -112,14 +116,21 @@ line_removed = '#ff796c'
 inspection_uncertainty = '#ff796c' # 'xkcd:salmon'
 fade_fg = "#FFE5B4"
 err_area = "#00FF00"
+origin.ISM = '#FF7C0A'
+origin.stellar = '#E1AD01'
+origin.airglow = '#C41E3A'
+origin.nebular = '#00FF98'
+origin.MW = '#3FC7EB'
 
 [colors.dark] # Dark theme
 bg = "#2B2B2B"
 fg = "#CCCCCC"
 cont_band = '#e7298a'
+line_label =  "#CCCCCC"
 line_band = '#8fff9f'
 color_cycle = ['#66c2a5', '#fc8d62', '#e68ac3', '#a6d854',  '#ffd92f', '#e5c494',
                '#8dcbe2', '#e7298a', '#332288', '#88ccee']
+palette_bokeh = 'Category20'
 match_line = '#8fff9f'
 peak = '#7FFFD4'
 rejected_peak = '#8C000F'
@@ -130,9 +141,14 @@ error = '#FF0000'
 mask_map = 'viridis'
 comps_map = 'PuRd'
 mask_marker = '#FF0000'
-line_selected = '#FFFFFF'
+line_selected = '#999999'
 line_removed = '#ff796c'
 inspection_positive = "#2B2B2B"
 inspection_uncertainty = '#ff796c' # 'xkcd:salmon'  other '#840000'
 fade_fg = "#73879B"
 err_area = "#00FF00"
+origin.ISM = '#FF7C0A'
+origin.stellar = '#E1AD01'
+origin.airglow = '#C41E3A'
+origin.nebular = '#00FF98'
+origin.MW = '#3FC7EB'

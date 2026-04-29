@@ -369,13 +369,13 @@ class BandsInspection:
 
         # Just the center region is adjusted
         if self.show_continua:
-            idxL = idcs_band[2] - 10 if idcs_band[2] - 10 > 0 else 0
-            idxH = idcs_band[3] + 10 if idcs_band[3] + 10 < self.wave_plot.size - 1 else self.wave_plot.size - 1
+            idxL = idcs_band[0] - 5 if idcs_band[0] - 5 > 0 else 0
+            idxH = idcs_band[5] + 5 if idcs_band[5] + 5 < self.wave_plot.size - 1 else  self.wave_plot.size - 1
 
         # Center + continua
         else:
-            idxL = idcs_band[0] - 5 if idcs_band[0] - 5 > 0 else 0
-            idxH = idcs_band[5] + 5 if idcs_band[5] + 5 < self.wave_plot.size - 1 else  self.wave_plot.size - 1
+            idxL = idcs_band[2] - 10 if idcs_band[2] - 10 > 0 else 0
+            idxH = idcs_band[3] + 10 if idcs_band[3] + 10 < self.wave_plot.size - 1 else self.wave_plot.size - 1
 
         # Plot the spectrum
         ax.step(self.wave_plot[idxL:idxH]/self.z_corr, self.flux_plot[idxL:idxH]*self.z_corr, where='mid',
@@ -410,7 +410,7 @@ class BandsInspection:
         ax.set_xticklabels([])
         ax.set_yticklabels([])
         ax.yaxis.set_minor_locator(NullLocator())
-        ax.get_xlim() # TODO without this one there is no plot
+        # ax.get_xlim() # TODO without this one there is no plot
 
         return
 

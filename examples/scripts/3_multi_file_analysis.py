@@ -16,7 +16,7 @@ files_dict = {'isis': 'IZW18_isis.fits',
 
 # Instrument - object dictionary
 object_dict = {'nirspec':'ceers1027',
-               # 'isis':'Izw18',
+               'isis':'Izw18',
                'sdss':'SHOC579'}
 
 # Loop through the observations

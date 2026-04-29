@@ -12,7 +12,7 @@ from pathlib import Path
 def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma=4, delta_lambda_inst=0):
 
     # Adjust previous database
-    index_arr = df_lines.index.to_numpy()
+    index_arr = df_lines.sort_values('wavelength').index.to_numpy()
     updated_labels = [None] * index_arr.size
 
     # Generate synthetic spectrum to compute the initial bands values if necessary
@@ -26,6 +26,11 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
         line = lime.Line.from_transition(idx)
         if pd.notnull(df_lines.loc[idx, 'trans']):
             line.trans = df_lines.loc[idx, 'trans']
+
+        # If the table does not have wavelength use the one from the label
+        if pd.isnull(df_lines.loc[idx, 'wave_vac']):
+            df_lines.loc[idx, 'wave_vac'] = line.wavelength
+
         wave_vac = df_lines.loc[idx, 'wave_vac']
         decimals = abs(decimal.Decimal(str(wave_vac)).as_tuple().exponent)
         wave_air = np.around(air_to_vacuum_function(wave_vac), decimals)
@@ -37,13 +42,18 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
         line.update_labels(sig_digits=int(np.log10(line.wavelength)) + 1)
 
         # Add a decimal if the line is already there
-        if line.label not in updated_labels:
-            updated_labels[i] = line.label
+        if line not in updated_labels:
+            updated_labels[i] = line
         else:
+            print('Re-writing ', line.label, ' label')
             message = f'{line.label} -> '
             line.update_labels(sig_digits=int(np.log10(line.wavelength)) + 2)
-            updated_labels[i] = line.label
-            message += updated_labels[i]
+            if line.label in updated_labels:
+                idx_previous = updated_labels.index(line.label)
+                line_previous = updated_labels[idx_previous]
+                print(f'- No success, changing other {line_previous}')
+                line_previous.update_labels(sig_digits=int(np.log10(line_previous.wavelength)) + 2)
+            updated_labels[i] = line
 
         # Update dataframe values
         df_lines.loc[idx, 'wavelength'] = wave_air if air_trans else wave_vac
@@ -64,7 +74,14 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
         #     df_lines.loc[idx, 'latex_label'] = np.array(['$' + line.latex_label[0][2:]])
 
     # Update the new names
-    df_lines['new_index'] = updated_labels
+    # df_lines['new_index'] = updated_labels
+    df_lines['new_index'] = [line.label for line in updated_labels]
+
+    # Check no repeated entries
+    if not df_lines.new_index.is_unique:
+        print(f'Repeated entries: {df_lines.loc[df_lines.new_index.duplicated()].index.to_numpy()}')
+
+    # Make it the new index
     df_lines.set_index('new_index', inplace=True)
     df_lines.index.name = None
 
@@ -91,6 +108,7 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
     unsorted_mask =  df_lines['wavelength'].diff().fillna(0) < 0
     unsorted_indexes = df_lines.index[unsorted_mask].tolist()
 
+    # Review
     if len(unsorted_indexes) == 0:
         print("Column is sorted.")
     else:
@@ -103,13 +121,19 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
 if __name__ == "__main__":
 
     current_file_folder = Path(__file__).resolve().parent
-    PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.0.0.xlsx'
-    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.4.txt'
+    PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.0.5.xlsx'
 
+    # Reformat the database
     parent_db = pd.read_excel(PARENT_DATABASE_path, header=0, index_col=0)
     child_db = format_lines_database(parent_db)
 
+    # Save the new version
+    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.6.txt'
     lime.save_frame(CHILD_DATABASE_path, child_db)
+
+    # CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.0.5.xlsx'
+    # lime.save_frame(CHILD_DATABASE_path, child_db)
+
 
 
 

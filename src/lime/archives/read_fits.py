@@ -265,6 +265,7 @@ def check_fits_instructions(fits_source, online_provider=False):
             fits_reader = getattr(fits_manager, fits_source)
         else:
             source_type = 'instrument' if online_provider is False else 'survey'
+            # TODO show instruments supported
             raise LiMe_Error(f'Input {source_type} "{fits_source}" is not recognized. LiMe observation cannot be created.')
 
     else:
@@ -373,6 +374,40 @@ def load_fits(fits_address, data_ext_list=None, hdr_ext_list=None, url_check=Fal
         data_list, header_list = None, None
 
     return data_list, header_list
+
+
+def join_spectra_matrix(wave, flux, err=None):
+
+    # Make sure the wavelength array is increasing
+    # for i in range(wave.shape[0]):
+    #     if wave[i, 0] > wave[i, -1]:
+    #         wave[i] = wave[i, ::-1]
+    #         flux[i] = flux[i, ::-1]
+    #         err[i] = err[i, ::-1] if err is not None else None
+
+    # Make sure the passes are sorted:
+    key = np.nanmean(wave, axis=1)
+    order = np.argsort(key)
+    wave, flux, err = wave[order], flux[order], err[order] if err is not None else None
+
+    # Get dimensions
+    n_passes, n_pix = wave.shape
+
+    join_wl = 0.5 * (wave[:-1, -1] + wave[1:, 0])
+    cut_idx = np.sum(wave[:-1] <= join_wl[:, None], axis=1)
+    cut_idx = np.append(cut_idx, n_pix)
+
+    pix = np.arange(n_pix)
+    mask = pix < cut_idx[:, None]
+
+    wave_1d = wave[mask]
+    flux_1d = flux[mask]
+    err_1d = err[mask] if err is not None else None
+
+    lengths = np.sum(mask, axis=1)
+    starts = np.concatenate(([0], np.cumsum(lengths[:-1])))
+
+    return wave_1d, flux_1d, err_1d
 
 
 class OpenFits:
@@ -785,30 +820,42 @@ class OpenFits:
 
         """
 
-        # Check dimensions of array
+        # Read the array
         data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Warning in the case of empty observartion
+        if len(data_list[0]['WAVELENGTH'].squeeze()) == 0:
+            _logger.critical(f'Input COS observation does not have scientific data ({fits_address}).')
+
+        # One single array with the data
         if data_list[0]['WAVELENGTH'].squeeze().ndim == 1:
             wave_arr = data_list[0]['WAVELENGTH'].squeeze()
             flux_arr = data_list[0]['FLUX'].squeeze()
             err_arr = data_list[0]['ERROR'].squeeze()
 
+        # Multiple passes
         else:
-            # Get common middle index for joining the spectra
-            # wave_matrix = data_list[0]['WAVELENGTH'][::-1]
-            idcs_common = np.nonzero(data_list[0]['WAVELENGTH'][1, :] > data_list[0]['WAVELENGTH'][0, 0])[0]
-            center_idx = idcs_common.shape[0] // 2
 
-            # Create empty containers
-            wave_arr = np.empty(data_list[0]['WAVELENGTH'].size - center_idx, data_list[0]['WAVELENGTH'].dtype)  # TODO check for additional extension to join the spectra
-            flux_arr = np.empty(data_list[0]['FLUX'].size - center_idx, data_list[0]['FLUX'].dtype)  # dtype=data_list[0]['FLUX'].dtype)
-            err_arr = np.empty(data_list[0]['ERROR'].size - center_idx, data_list[0]['ERROR'].dtype)  # dtype=data_list[0]['ERROR'].dtype)
+            wave_arr, flux_arr, err_arr = join_spectra_matrix(data_list[0]['WAVELENGTH'],
+                                                              data_list[0]['FLUX'],
+                                                              data_list[0]['ERROR'])
 
-            # Fill with the array data
-            arr_size = data_list[0]['WAVELENGTH'].shape[1]
-            for key_arr, cont_arr in zip(['WAVELENGTH', 'FLUX', 'ERROR'], [wave_arr, flux_arr, err_arr]):
-                cont_arr[0:arr_size - center_idx] = data_list[0][key_arr][1][0:arr_size - center_idx]
-                cont_arr[arr_size - center_idx:] = data_list[0][key_arr][0]
-                # print(key_arr, np.any(np.isnan(cont_arr)))
+            # # Get common middle index for joining the spectra
+            # # wave_matrix = data_list[0]['WAVELENGTH'][::-1]
+            # idcs_common = np.nonzero(data_list[0]['WAVELENGTH'][1, :] > data_list[0]['WAVELENGTH'][0, 0])[0]
+            # center_idx = idcs_common.shape[0] // 2
+            #
+            # # Create empty containers
+            # wave_arr = np.empty(data_list[0]['WAVELENGTH'].size - center_idx, data_list[0]['WAVELENGTH'].dtype)  # TODO check for additional extension to join the spectra
+            # flux_arr = np.empty(data_list[0]['FLUX'].size - center_idx, data_list[0]['FLUX'].dtype)  # dtype=data_list[0]['FLUX'].dtype)
+            # err_arr = np.empty(data_list[0]['ERROR'].size - center_idx, data_list[0]['ERROR'].dtype)  # dtype=data_list[0]['ERROR'].dtype)
+            #
+            # # Fill with the array data
+            # arr_size = data_list[0]['WAVELENGTH'].shape[1]
+            # for key_arr, cont_arr in zip(['WAVELENGTH', 'FLUX', 'ERROR'], [wave_arr, flux_arr, err_arr]):
+            #     cont_arr[0:arr_size - center_idx] = data_list[0][key_arr][1][0:arr_size - center_idx]
+            #     cont_arr[arr_size - center_idx:] = data_list[0][key_arr][0]
+            #     # print(key_arr, np.any(np.isnan(cont_arr)))
 
         # Spectrum properties
         params_dict = SPECTRUM_FITS_PARAMS['cos']

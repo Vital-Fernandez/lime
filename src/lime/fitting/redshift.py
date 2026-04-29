@@ -149,9 +149,6 @@ def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components
         if spec.res_power is not None:
             res_power = spec.res_power
         else:
-            # wave_arr / np.r_[np.diff(wave_arr), np.diff(wave_arr)[-1]]
-            # alpha_lambda = np.diff(wave_arr)
-            # res_power = wave_arr / np.r_[alpha_lambda, alpha_lambda[-1]]
             delta_lambda = np.ediff1d(wave_arr, to_end=0)
             delta_lambda[-1] = delta_lambda[-2]
             res_power = wave_arr / delta_lambda
@@ -166,8 +163,6 @@ def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components
         z_arr = np.arange(z_min, z_max + 0.5 * delta_z, delta_z)
 
         # Parameters for the brute analysis
-        # z_arr = np.linspace(z_min, z_max, z_nsteps)
-        # z_arr = np.arange(z_min, z_max, step=0.005)
         wave_matrix = np.tile(wave_arr, (theo_lambda.size, 1))
         flux_sum = np.zeros(z_arr.size)
 
@@ -197,7 +192,7 @@ def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components
 
     if plot_results and (z_infer is not None):
         gauss_arr_max = compute_gaussian_ridges(z_infer, theo_lambda, wave_matrix, 1, band_vsigma, res_power)
-        redshift_key_evaluation(spec, method, z_infer, mask, gauss_arr_max, z_arr, flux_sum)
+        redshift_key_evaluation(spec, method, z_infer, mask, gauss_arr_max, z_arr, flux_sum, theo_lambda)
 
     return z_infer
 

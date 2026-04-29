@@ -1,6 +1,8 @@
 import logging
 import numpy as np
 
+from pathlib import Path
+from pandas import isnull
 from lime.transitions import label_decomposition, Line
 from lime.plotting.format import theme
 from lime.plotting.plots import frame_mask_switch, line_profile_generator
@@ -10,10 +12,12 @@ from lime.plotting.utils import parse_bands_arguments
 from lime.fitting.lines import profiles_computation, linear_continuum_computation
 
 try:
-    from bokeh import plotting
-    from bokeh import models
+    from bokeh import plotting, palettes
     from bokeh.plotting import figure, output_file, save, show
-    from bokeh.models import ColumnDataSource, Legend, LegendItem, LogScale
+    from bokeh.core.properties import value
+
+    from bokeh import models
+    from bokeh.models import ColumnDataSource, Legend, LegendItem, LogScale, Range1d, Label
     from bokeh.models import BoxAnnotation
     from bokeh.models import WheelZoomTool, PanTool, HoverTool
 
@@ -90,6 +94,40 @@ def update_bokeh_figure(figure_obj, config_dict):
 
     return figure_obj
 
+
+def save_close_fig_swicth(file_path, fig_obj, display_check):
+
+    # Automatic display/saving
+    if display_check:
+
+        # Display
+        if file_path is None:
+            show(fig_obj)
+
+        elif isinstance(file_path, (Path, str)):
+            save(fig_obj, filename=file_path)
+
+            # Close the figure in the case of printing
+            if fig_obj is not None:
+                show(fig_obj)
+
+        # Keep the image on the memory
+        else:
+            _logger.info(f'Output file address is not recognized: {file_path} ({type(file_path)})')
+            return
+
+    # # Save or display the plot
+    # if return_fig:
+    #     return self.fig
+    #
+    # elif output_address is not None:
+    #     save(self.fig, filename=output_address)
+    #
+    # else:
+    #     # output_notebook()
+    #     show(self.fig)
+
+    return
 
 def bokeh_bands(fig, bands, x, y, z_corr, redshift):
 
@@ -187,6 +225,55 @@ def spec_profile_bokeh(fig, spec, line_i, z_corr):
     return
 
 
+def spec_lines_bokeh(fig, line_list, line_waves, x, y, z_corr, orig_arr, color_dict=None):
+
+    # Loop through the lines and plot the markers
+    idcs_lines = np.searchsorted(x, line_waves)
+    y0 = y[idcs_lines]
+    dy = 0.01 * (np.nanmax(y) - np.nanmin(y))
+    # global_ymax = -np.inf  # <-- track highest ymax
+
+    # By default all the indexes are None
+    orig_arr = np.array(["none" if x is None else x for x in orig_arr])
+    val, idcs_unique = np.unique(orig_arr, return_index=True)
+
+    color_cycle = list(getattr(palettes, theme.colors['palette_bokeh'])[10])
+    color_index = 0
+
+    for i, line in enumerate(line_list):
+
+        ymin = np.max(y[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, y.size - 1)]) + (5 * dy)
+        ymax = ymin + dy
+        # global_ymax = max(global_ymax, 1.15 * ymax)  # <-- update
+
+        if (orig_arr[i] is None) or (orig_arr[i] == 'none'):
+            color = color_dict['fg']
+            legend_entry = None
+        else:
+            color = color_dict['origin'].get(orig_arr[i])
+            if color is None:
+                color = color_cycle[color_index % len(color_cycle)]
+                color_index += 1
+                color_dict['origin'][orig_arr[i]] = color
+            legend_entry = orig_arr[i]
+
+        # Add the legend entry if available
+        segment_params = dict(color=color, line_width=1)
+        if legend_entry is not None:
+            segment_params['legend_label'] =  legend_entry
+
+        x_coord = x[idcs_lines[i]] / z_corr
+        fig.segment(x0=x_coord, y0=ymin, x1=x_coord, y1=ymax, **segment_params)
+        fig.segment(x0=x_coord, y0=y0[i], x1=x_coord, y1=ymin, color=color, line_width=0.5, line_dash='dotted')
+        fig.text(x=x_coord, y=ymax, text=[str(line)], x_offset=0, y_offset=-5, color=color,
+                 text_baseline='middle', text_align='left', angle=90, angle_units='deg', text_font=value("dejavu sans"))
+
+    # Estimate text height in data space and pad y range
+    # fig.y_range.end = global_ymax
+
+    return
+
+
 def profile_bokeh(fig, line, z_cor, log, redshift, norm_flux):
 
     # Check if blended line or Single/merged
@@ -227,12 +314,22 @@ def profile_bokeh(fig, line, z_cor, log, redshift, norm_flux):
     return line_single
 
 
+
+
+# Sentinel object for non input figures
+_NO_FIG = object()
+
+
 class BokehFigures:
 
     def __init__(self, spectrum):
 
         # Lime spectrum object with the scientific data
         self._spec = spectrum
+
+        # Container for the bokeh
+        self.fig = None
+
 
         return
 
@@ -244,7 +341,7 @@ class BokehFigures:
         log, norm_flux, redshift = self._spec.frame, self._spec.norm_flux, self._spec.redshift
         units_wave, units_flux = self._spec.units_wave, self._spec.units_flux
 
-        # Set figure format with the user 2_guides overwriting the default conf
+        # Set figure format with the user inputs overwriting the default conf
         legend_check = True if label is not None else False
 
         # Check which line should be plotted
@@ -314,13 +411,17 @@ class BokehFigures:
 
         return
 
-    def spectrum(self, output_address=None, label=None, bands=None, rest_frame=False, log_scale=False,
-                 include_fits=True, include_cont=False, include_components=False, return_fig=False, fig_cfg=None,
-                 ax_cfg=None, maximize=False, detection_band=None, show_masks=True, show_categories=False, show_err=False):
+    def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
+                 include_fits=True, show_cont=False, show_comps=False, in_fig=_NO_FIG, fig_cfg=None,
+                 ax_cfg=None, show_err=False):
 
+        # Check bokeh has been installed
         if bokeh_check:
 
-            # Set figure format with the user 2_guides overwriting the default conf
+            # Display check for input figures
+            display_check = True if in_fig is _NO_FIG else False
+
+            # Set figure format with the user inputs overwriting the default conf
             legend_check = True if label is not None else False
 
             # Adjust the default theme
@@ -330,34 +431,54 @@ class BokehFigures:
             # Set the scale
             scale_str = 'log' if log_scale and (PLT_CONF.get('y_axis_type') is None) else 'linear'
 
-            # Create figure with default utils if not provided
-            fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+            # Establish figure
+            if (in_fig is None) or (in_fig is _NO_FIG):
+                self.fig = figure(tools=PLT_CONF.get('tools', "pan,wheel_zoom,box_zoom,reset,save"), y_axis_type=scale_str)
+            else:
+                self.fig = in_fig
 
             # Data to plot
             wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
 
             # Spectrum data source
-            fig.step( wave_plot / z_corr, flux_plot * z_corr, mode="center", line_width=1, color=theme.colors['fg'])
+            self.fig.step( wave_plot / z_corr, flux_plot * z_corr, mode="center", line_width=1, color=theme.colors['fg'])
 
             # Plot the bands if provided
             if bands is not None:
-                bokeh_bands(fig, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
+                bokeh_bands(self.fig, bands, wave_plot, flux_plot, z_corr, self._spec.redshift)
 
             # Show uncertainty
             if show_err and (self._spec.err_flux is not None):
-                fig.varea_step(x=wave_plot / z_corr,
+                self.fig.varea_step(x=wave_plot / z_corr,
                                y1=(flux_plot - err_plot) * z_corr,
                                y2=(flux_plot + err_plot) * z_corr,
                                step_mode="center", fill_alpha=0.2, color=theme.colors['err_area'])
 
+            if line_list is not None:
+
+                label_arr, lambda_arr, orig_arr, z_arr = label_decomposition(line_list, params_list=['label', 'wavelength',
+                                                                                                     'origin', 'redshift'])
+                # Apply redshift correction and crop selection
+                z_arr[isnull(z_arr)] = self._spec.redshift
+                lambda_arr = lambda_arr * (1 + z_arr)
+
+                idcs = (lambda_arr > wave_plot[0]) & (lambda_arr < wave_plot[-1])
+                label_arr, lambda_arr = label_arr[idcs], lambda_arr[idcs]
+                orig_arr, z_arr = orig_arr[idcs], z_arr[idcs]
+
+                # Plot the components
+                spec_lines_bokeh(self.fig, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, z_corr, orig_arr, theme.colors.copy())
+
+                legend_check = True
+
             # Include the continuum
-            if include_cont and self._spec.cont is not None:
-                fig.line(wave_plot/z_corr, self._spec.cont*z_corr, legend_label="Continuum.",
-                         line_color=theme.colors['fade_fg'], line_dash="dashed", line_width=2)
+            if show_cont and self._spec.cont is not None:
+                self.fig.line(wave_plot/z_corr, self._spec.cont*z_corr, legend_label="Continuum.",
+                         line_color=theme.colors['cont'], line_dash="dashed", line_width=2)
 
                 low_limit, high_limit = self._spec.cont - self._spec.cont_std, self._spec.cont + self._spec.cont_std
-                fig.varea(x=wave_plot/z_corr, y1=low_limit*z_corr, y2=high_limit*z_corr, fill_alpha=0.2,
-                          color=theme.colors['fade_fg'])
+                self.fig.varea(x=wave_plot/z_corr, y1=low_limit*z_corr, y2=high_limit*z_corr, fill_alpha=0.2,
+                          color=theme.colors['inspection_uncertainty'])
 
             # Plot the fittings
             if include_fits and self._spec.frame.size > 0:
@@ -367,14 +488,11 @@ class BokehFigures:
 
                 # Loop through the lines and plot them
                 line_list = self._spec.frame.index.values
-                profile_list = [None] * line_list.size
                 for i, line_label in enumerate(line_list):
                     line_i = Line.from_transition(line_label, data_frame=self._spec.frame)
-                    # profile_list[i] = profile_bokeh(fig, line_i, z_corr, self._spec.frame, self._spec.redshift,
-                    #                                self._spec.norm_flux)
-                    spec_profile_bokeh(fig, self._spec, line_i, z_corr)
+                    spec_profile_bokeh(self.fig, self._spec, line_i, z_corr)
 
-            if include_components:
+            if show_comps:
                 # Define the bins you want
                 bins = [40, 60, 80, 100]
 
@@ -417,27 +535,27 @@ class BokehFigures:
                                         flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
 
                                         # Plot with the corresponding colors and linestyle
-                                        fig.step(wave_nan, flux_nan, mode="center", color=feature_color,
-                                                 line_dash=category_conf_styles[idx_conf])
+                                        self.fig.step(wave_nan, flux_nan, mode="center", color=feature_color,
+                                                      line_dash=category_conf_styles[idx_conf])
 
                         # Add intensity label
                         rlines = []
                         for dash in category_conf_styles.values():
-                            rl = fig.line(x=wave_plot[0], y=wave_plot[0], line_color="black", line_dash=dash, line_width=2)
+                            rl = self.fig.line(x=wave_plot[0], y=wave_plot[0], line_color="black", line_dash=dash, line_width=2)
                             rl.visible = False
                             rlines.append(rl)
 
                         # Create invisible scatter glyphs for the legend
                         dots = []
                         for color in color_list:
-                            r = fig.scatter(x=wave_plot[0], y=wave_plot[0], size=5, fill_color=color, line_color=None)
+                            r = self.fig.scatter(x=wave_plot[0], y=wave_plot[0], size=5, fill_color=color, line_color=None)
                             r.visible = False  # hide from plot
                             dots.append(r)
 
                         dot_legend = Legend(items=[LegendItem(label=label, renderers=[r]) for label, r in
                                                      zip(feature_list, dots)],
                                               orientation="vertical", location="top_right")
-                        fig.add_layout(dot_legend)
+                        self.fig.add_layout(dot_legend)
 
 
                         labels_int = ["> 40% conf.", "> 60% conf.", "> 80% conf."]
@@ -446,31 +564,22 @@ class BokehFigures:
                                               orientation="horizontal", location="center")
 
                         # Add legend *below* the plot
-                        fig.add_layout(style_legend, 'below')
+                        self.fig.add_layout(style_legend, 'below')
 
             # Plot labels
-            fig.xaxis.axis_label = AXES_CONF['xlabel']
-            fig.yaxis.axis_label = AXES_CONF['ylabel']
+            self.fig.xaxis.axis_label = AXES_CONF['xlabel']
+            self.fig.yaxis.axis_label = AXES_CONF['ylabel']
 
             # Adjust the format of the plot
-            update_bokeh_figure(fig, PLT_CONF)
+            update_bokeh_figure(self.fig, PLT_CONF)
 
             # Hide the legend if there are line profiles
-            fig.legend.visible = legend_check
+            self.fig.legend.visible = legend_check
 
-            # Save or display the plot
-            if return_fig:
-                return fig
-
-            elif output_address is not None:
-                save(fig, filename=output_address)
-
-            else:
-                # output_notebook()
-                show(fig)
+            # Save, display or keep
+            save_close_fig_swicth(fname, self.fig, display_check)
 
         else:
-
             raise LiMe_Error(f'Bokeh is not installed')
 
         return

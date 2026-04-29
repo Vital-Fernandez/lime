@@ -1,12 +1,13 @@
 import logging
 
 import numpy as np
+from pandas import isnull
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, colors, lines as mlines, figure
 from pathlib import Path
 
 from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr
-from lime.transitions import format_line_mask_option, Line
+from lime.transitions import format_line_mask_option, Line, label_decomposition
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation, PROFILE_FUNCTIONS
 
 from lime.plotting.format import theme, latex_science_float
@@ -35,6 +36,7 @@ except ImportError:
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
+
 
 # Sentinel object for non input figures
 _NO_FIG = object()
@@ -550,8 +552,8 @@ def label_generator(idx_sample, log, legend_handle):
     return spec_label
 
 
-def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, in_fig=None, fig_cfg=None,
-                            ax_cfg=None, label=None, rest_frame=True):
+def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, theo_lambda=None,
+                            in_fig=None, fig_cfg=None, ax_cfg=None, label=None, rest_frame=True):
 
     # Display check for the user figures
     display_check = True if in_fig is None else False
@@ -573,7 +575,13 @@ def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_a
         ax3 = plt.subplot(grid_ax[1])
 
         # Reference _frame for the plot
-        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spectrum, rest_frame)
+        # wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spectrum, rest_frame)
+        # Doppler factor for rest _frame plots
+        z_corr = 1 + z_infered
+        idcs_mask = spectrum.wave.mask
+        wave_plot = spectrum.wave.data
+        flux_plot = spectrum.flux.data
+        err_plot = None if spectrum.err_flux is None else spectrum.err_flux.data
 
         # Plot spectrum
         ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
@@ -592,6 +600,9 @@ def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_a
 
         # Plot peack
         ax3.scatter(z_infered, 1, marker='o', color='red')
+
+        # if theo_lambda is not None:
+        #     obs_lambda = theo_lambda * (1+ )
 
         # Wording and formatting
         ax1.set(**AXES_CONF)
@@ -616,7 +627,7 @@ def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, 
     # Display check for the user figures
     display_check = True if in_fig is None else False
 
-    # Set figure format with the user 2_guides overwriting the default conf
+    # Set figure format with the user configuration overwriting the default conf
     legend_check = True if label is not None else False
 
     print(f'Observed wavelengths: {obs_wave_arr}')
@@ -944,7 +955,7 @@ def spec_continuum_calculation(spec, wave, flux, cont_fit, idcs_cont, low_flux_l
     display_check = False if kwargs.get('in_fig') is not None else True
 
     # Adjust the default theme
-    plt_cfg = theme.fig_defaults(kwargs.get('in_fig'))
+    plt_cfg = theme.fig_defaults(kwargs.get('fig_cfg'))
     ax_labels_cfg = theme.ax_defaults(kwargs.get('ax_cfg'), spec)
 
     # Create and fill the figure
@@ -978,7 +989,9 @@ def spec_continuum_calculation(spec, wave, flux, cont_fit, idcs_cont, low_flux_l
             i0 = np.searchsorted(wave, exclude_intvls[:, 0], side="right")
             i1 = np.searchsorted(wave, exclude_intvls[:, 1], side="left")
             for start, stop in zip(i0, i1):
-                spec.ax_list.axvspan(wave[start], wave[stop], alpha=0.25, color=theme.colors['rejected_peak'])
+                if start != stop:
+                    stop = stop if stop != wave.size else stop - 1
+                    spec.ax_list.axvspan(wave[start], wave[stop], alpha=0.25, color=theme.colors['rejected_peak'])
 
         # Switch y_axis to logarithmic scale if requested
         if kwargs.get('log_scale'):
@@ -1093,15 +1106,58 @@ def spec_profile_plotter(ax, spec, line_i, z_corr):
     return mplcursor_list
 
 
+def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_dict=None):
+
+    # Loop through the lines and plot the markers
+    idcs_lines = np.searchsorted(x, line_waves)
+    y0 = y[idcs_lines]
+    dy = 0.01 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+
+    # By default all the indexes are None
+    orig_arr = np.array(["none" if x is None else x for x in orig_arr])
+    val, idcs_unique = np.unique(orig_arr, return_index=True)
+
+    for i, line in enumerate(line_list):
+
+        ymin = np.max(y[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, y.size - 1)]) + (5 * dy)
+        ymax = ymin + dy
+
+        if orig_arr[i] is None:
+            color = color_dict['fg']
+        else:
+            color = color_dict['origin'].get(orig_arr[i])
+            if color is None:
+                color = ax._get_lines.get_next_color()
+                color_dict['origin'][orig_arr[i]] = color
+
+        x_coord = x[idcs_lines[i]]/z_corr
+        label = orig_arr[i] if i in idcs_unique else '_'
+
+        ax.vlines(x_coord, ymin, ymax, color=color, linewidth=1)
+        ax.vlines(x_coord, y0[i], ymin, label=label, color=color, linewidth=0.5, linestyles=':')
+        ax.text(x_coord, ymax + dy/2, line, rotation=90, va="bottom", ha="center", color=color, fontsize=theme.plt['label_lines'])
+
+    return
+
+
 def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colors['match_line']):
 
     # Compute bands limits
-    w3 = bands.w3.values * (1 + redshift)
-    w4 = bands.w4.values * (1 + redshift)
+    z_arr = (1 + redshift) if 'z_line' not in bands.columns else np.nan_to_num(1 + bands.z_line.to_numpy(), nan=(1 + redshift))
+
+    w3 = bands.w3.values * z_arr
+    w4 = bands.w4.values * z_arr
+    lambda_arr = bands.wavelength * z_arr
+
+    # Remove lines beyond limits
+    idcs_range = (w4 >= x[0]) & (w4 <= x[-1])
+    w3, w4 = w3[idcs_range], w4[idcs_range]
+
+    # Get indexes
     idcs_bands = np.searchsorted(x, np.array([w3, w4]))
 
     # Loop through the detections and plot the names # TODO add reviewer here
-    for i, line_label in enumerate(bands.index):
+    for i, line_label in enumerate(bands.loc[idcs_range].index):
         line = Line.from_transition(line_label, data_frame=bands, verbose=False)
         try:
 
@@ -1111,17 +1167,10 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
             x_region = x[idx_w3:idx_w4]
 
             # Band shade area
-            label = 'Matched line' if i == 0 else '_'
+            label = 'Line band' if i == 0 else '_'
             span = ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color, ec='none')
 
-            # Label area
-            # text = line_label
-            x_text = line.wavelength * (1 + redshift) / z_corr
-            y_text = max_region * 0.9 * z_corr
-            # ax.text(x_text, y_text, text, rotation=270)
-            # print('seguro', text)
-
-            ax.annotate(line_label, xy=(line.wavelength * (1 + redshift) / z_corr, max_region * z_corr),
+            ax.annotate(line_label, xy=(lambda_arr[i] / z_corr, max_region * z_corr),
                         xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", rotation=270)
         except:
             print(LiMe_Error(f"Error plotting the band for line {line}"))
@@ -1361,7 +1410,7 @@ class SpectrumFigures:
 
         return
 
-    def spectrum(self, fname=None, label=None, bands=None, rest_frame=False, log_scale=False,
+    def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
                  show_profiles=True, show_cont=False, show_err=False, show_masks=True, show_components=False,
                  in_fig=_NO_FIG, fig_cfg=None, ax_cfg=None, maximize=False):
 
@@ -1450,7 +1499,7 @@ class SpectrumFigures:
         # Display check for input figures
         display_check = True if in_fig is _NO_FIG else False
 
-        # Set figure format with the user 2_guides overwriting the default conf
+        # Set figure format with the user configuration overwriting the default conf
         legend_check = True if label is not None else False
 
         # Adjust the default theme
@@ -1486,8 +1535,28 @@ class SpectrumFigures:
 
             # Plot bands if provided
             if bands is not None:
-                spec_bands_plotter(self.ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr,
-                                   self._spec.redshift)
+                spec_bands_plotter(self.ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr, self._spec.redshift)
+
+            if line_list is not None:
+
+                label_arr, lambda_arr, orig_arr, z_arr = label_decomposition(line_list, params_list=['label', 'wavelength',
+                                                                                                     'origin', 'redshift'])
+
+                # Apply redshift correction and crop selection
+                z_arr[isnull(z_arr)] = self._spec.redshift
+                lambda_arr = lambda_arr * (1 + z_arr)
+
+                idcs = (lambda_arr > wave_plot[0]) & (lambda_arr < wave_plot[-1])
+                label_arr, lambda_arr = label_arr[idcs], lambda_arr[idcs]
+                orig_arr, z_arr = orig_arr[idcs], z_arr[idcs]
+
+                # Plot the components
+                spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, z_corr, orig_arr, theme.colors.copy())
+
+                # Confirm the legend
+                if (len(orig_arr) > 1) and ~np.all(isnull(orig_arr)):
+                    legend_check = True
+
 
             # Plot the fittings
             if show_profiles and self._spec.frame.size > 0:
@@ -2079,6 +2148,12 @@ class SpectrumFigures:
         """
 
         plt.show(**kwargs)
+
+        return
+
+    def save_fig(self, fname):
+
+        self.fig.savefig(fname, bbox_inches='tight')
 
         return
 
