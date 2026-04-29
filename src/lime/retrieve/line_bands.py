@@ -161,6 +161,7 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
 
     return groups_dict
 
+
 def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False):
 
     # Containers for the requested changes
@@ -170,22 +171,47 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False)
 
         # The grouped line replaces the reference entry
         line = Line.from_transition(new_label, fit_cfg=fit_cfg)
-        old_label = line.list_comps[line.ref_idx].core
 
-        # Extract the single components from the sub-transitions if necessary
+        # In case there are lines with multiple origins
+        if (line.list_comps[line.ref_idx].origin is not None) and (line.list_comps[line.ref_idx].label in bands.index): # TODO maybe
+            old_label = line.list_comps[line.ref_idx].label
+        else:
+            old_label = line.list_comps[line.ref_idx].core
+
+        # Extract the single components ignoring extra kinmatics
         unique_comp_list = []
-        for trans in line.list_comps: unique_comp_list += list(trans.param_arr('core'))
+        for trans in line.list_comps:
+            if trans.kinem == 0:
+                unique_comp_list.append(trans.label)
         unique_comp_list = np.unique(unique_comp_list)
 
         # Only apply corrections if components are present
         idcs_comps = bands.index.isin(unique_comp_list)
         if idcs_comps.sum() == len(unique_comp_list):
-
-            # Save the modifications
             rename_dict[old_label] = new_label
             exclude_list += list(unique_comp_list)
-            param_dict['w3'][new_label] = bands.loc[idcs_comps, 'w3'].min()
-            param_dict['w4'][new_label] = bands.loc[idcs_comps, 'w4'].max()
+
+            # Recover lines redshifts
+            z_corr_arr = (1 + bands.z_line) if 'z_line' in bands.columns else None
+
+            # Default values
+            w3_min = bands.loc[idcs_comps, 'w3'].min()
+            w4_max = bands.loc[idcs_comps, 'w4'].max()
+
+            # Override if multiple origins with redshift correction available
+            multiple_origins = ('origin' in bands.columns) and (bands.loc[idcs_comps].origin.unique().size > 1)
+            if multiple_origins:
+                if z_corr_arr is not None:
+                    w3_min = np.min(bands.loc[idcs_comps, 'w3'] * z_corr_arr) / (1 + spec.redshift)
+                    w4_max = np.max(bands.loc[idcs_comps, 'w4'] * z_corr_arr) / (1 + spec.redshift)
+                else:
+                    if '_o-' in line.group_label:
+                        _logger.warning(f'The grouped line: {line.label}={line.group_label} contains transitions from '
+                                        f'different origins but their redshifts could not be verified. The output bands '
+                                        f'with may not covert the correct wavelength interval (w3, w4)')
+
+            param_dict['w3'][new_label] = w3_min #bands.loc[idcs_comps, 'w3'].min()
+            param_dict['w4'][new_label] = w4_max #bands.loc[idcs_comps, 'w4'].max()
             param_dict['wavelength'][new_label] = line.wavelength
             param_dict['latex_label'][new_label] = line.latex_label
             param_dict['group_label'][new_label] = line.group_label

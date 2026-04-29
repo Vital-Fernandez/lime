@@ -1,18 +1,19 @@
 import logging
 
 import numpy as np
-from pathlib import Path
-
 import pandas as pd
-from astropy.io import fits
+
 from time import time
+from pathlib import Path
+from astropy.io import fits
 from lmfit.models import PolynomialModel
+from inspect import signature
 
 import lime
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, au
 from lime.rsrc_manager import lineDB
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
-from lime.transitions import Line, lines_frame, _REDSHIFT_DICT
+from lime.transitions import Line, lines_frame, _REDSHIFT_DICT, multi_origin_lines_frame
 from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
@@ -244,10 +245,11 @@ class SpecRetriever:
 
     def lines_frame(self, band_vsigma=70, n_sigma=4, adjust_central_band=True, instrumental_correction=True,
                     exclude_bands_masked=True, map_band_vsigma=None, grouped_lines=None, automatic_grouping=False,
-                    Rayleigh_threshold=2, lines_redshift=None, fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
-                    update_default=True, line_list=None, particle_list=None, sig_digits=4, ref_bands=None,
-                    vacuum_waves=False, update_labels=False, update_latex=False, rejected_lines=None, origin=None,
-                    components=None, save_group_label=False):
+                    fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True,
+                    line_list=None, particle_list=None, sig_digits=4, ref_bands=None, vacuum_waves=False,
+                    update_labels=False, update_latex=False, rejected_lines=None, Rayleigh_threshold=2, lines_redshift=None,
+                    map_origin=None, components=None, save_group_label=False):
+
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -255,16 +257,12 @@ class SpecRetriever:
         # Check configuration format
         in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default) if fit_cfg else None
 
-        # Get the parameters from configuration file if provided
-        map_band_vsigma = in_cfg['map_band_vsigma'] if in_cfg and ('map_band_vsigma' in in_cfg) else map_band_vsigma
-        rejected_lines = in_cfg['rejected_lines'] if in_cfg and ('rejected_lines' in in_cfg) else rejected_lines
-        grouped_lines = in_cfg['grouped_lines'] if in_cfg and ('grouped_lines' in in_cfg) else grouped_lines
-
-        # Crop the bands to match the observation
-        bands = lines_frame(wave_intvl, line_list, particle_list, redshift=self._spec.redshift,
-                            units_wave=self._spec.units_wave, sig_digits=sig_digits, ref_bands=ref_bands,
-                            vacuum_waves=vacuum_waves, update_labels=update_labels, update_latex=update_latex,
-                            rejected_lines=rejected_lines, origin=origin)
+        # Generate the table of single lines taking into account possible origins
+        bands = multi_origin_lines_frame(map_origin, line_list, self._spec.redshift, wave_intvl=wave_intvl,
+                                         particle_list=particle_list, units_wave=self._spec.units_wave,
+                                         sig_digits=sig_digits, ref_bands=ref_bands, vacuum_waves=vacuum_waves,
+                                         update_labels=update_labels, update_latex=update_latex,
+                                         rejected_lines=rejected_lines)
 
         # Compute the resolving power if necessary
         if self._spec.res_power is not None:
@@ -275,13 +273,13 @@ class SpecRetriever:
         # Adjust the middle bands to match the line width
         if adjust_central_band:
 
-            # Input has priority
-            if lines_redshift is not None:
-                z_corr = 1 + lines_redshift
+            # Input the origin redshift
+            if 'z_line' in bands.columns:
+                z_corr = 1 + np.nan_to_num(bands['z_line'].to_numpy(), nan=self._spec.redshift)
 
-            # Origin in lines dataframe
-            elif 'origin' in bands.columns:
-                z_corr = 1 + bands['origin'].map(_REDSHIFT_DICT).fillna(self._spec.redshift).to_numpy()
+            # Use the function redshift
+            elif lines_redshift is not None:
+                z_corr = 1 + lines_redshift
 
             # Use the object redshift
             else:
@@ -304,6 +302,9 @@ class SpecRetriever:
                 delta_lambda_inst = 0
 
             # Use unique or specific velocity sigma for the bands
+            # map_band_vsigma = in_cfg['map_band_vsigma'] if in_cfg and ('map_band_vsigma' in in_cfg) else map_band_vsigma
+            map_band_vsigma = map_band_vsigma if map_band_vsigma else (in_cfg or {}).get('map_band_vsigma')
+
             if map_band_vsigma is not None:
                 band_vsigma = np.full(lambda_obs.size, band_vsigma)
                 for idx in bands.index.get_indexer(map_band_vsigma.keys()):
@@ -314,8 +315,8 @@ class SpecRetriever:
             delta_lambda = velocity_to_wavelength_band(n_sigma, band_vsigma, lambda_obs, delta_lambda_inst)
 
             # Add new values to database in the rest frame
-            bands['w3'] = (lambda_obs - delta_lambda) / (1 + self._spec.redshift)
-            bands['w4'] = (lambda_obs + delta_lambda) / (1 + self._spec.redshift)
+            bands['w3'] = (lambda_obs - delta_lambda) / z_corr
+            bands['w4'] = (lambda_obs + delta_lambda) / z_corr
 
         # Remove from the output bands those which have all their pixels masked
         if exclude_bands_masked:
@@ -326,12 +327,10 @@ class SpecRetriever:
 
         # Combine the blended/merged lines in the bands table
         if in_cfg:
-
-            # Determine the line groups
+            grouped_lines = grouped_lines if grouped_lines else (in_cfg or {}).get('grouped_lines')
             groups_dict = determine_line_groups(self._spec, bands, in_cfg, grouped_lines, automatic_grouping, n_sigma,
                                                 Rayleigh_threshold)
 
-            # Apply the changes
             groupify_lines_df(bands, in_cfg, groups_dict, self._spec, save_group_label)
 
         # Filter the table to match the line detections
@@ -601,7 +600,7 @@ class SpecRetriever:
                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux,
                                  norm_flux=self._spec.norm_flux)
 
-    def normalization(self, return_spectrum=False, **kwargs):
+    def normalization(self, return_spectrum=False, crop_waves=None, crop_flux=None, **kwargs):
 
         """
         Normalize the spectrum by its continuum.
@@ -669,7 +668,8 @@ class SpecRetriever:
         else:
             return lime.Spectrum(self._spec.wave.data, flux_norm.data, err_norm.data, redshift=self._spec.redshift,
                                  units_wave=self._spec.units_wave, units_flux=au.dimensionless_unscaled, norm_flux=1,
-                                 res_power=self._spec.res_power, pixel_mask=flux_norm.mask)
+                                 res_power=self._spec.res_power, pixel_mask=flux_norm.mask, crop_waves=crop_waves,
+                                 crop_flux=crop_flux)
 
     def upper_line_limit(self, line, bands=None, signal_to_noise=8, err_from_bands=False, continua_sigma=True):
 
@@ -810,19 +810,19 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         --------
         Fit a Gaussian emission line using the default configuration:
 
-        >>> spec.bands("O3_5007A")
+        >>> spec.fit.bands("O3_5007A")
 
         Use a custom bands table and configuration dictionary:
 
-        >>> spec.bands("H1_4861A", bands="my_bands.xlsx", fit_cfg=my_fit_cfg)
+        >>> spec.fit.bands("H1_4861A", bands="my_bands.xlsx", fit_cfg=my_fit_cfg)
 
         Change the minimization algorithm and temperature:
 
-        >>> spec.bands("O2_3726A", min_method="nelder", temp=12000)
+        >>> spec.fit.bands("O2_3726A", min_method="nelder", temp=12000)
 
         Fit a line providing the central wavelength directly:
 
-        >>> spec.bands(5007.0, bands=my_bands_df)
+        >>> spec.fit.bands(5007.0, bands=my_bands_df)
         """
 
         # Make a copy of the fitting configuration
@@ -976,19 +976,19 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         --------
         Measure all lines from a bands file:
 
-        >>> spec.frame("my_bands.xlsx", fit_cfg="my_fit_config.toml")
+        >>> spec.fit.frame("my_bands.xlsx", fit_cfg="my_fit_config.toml")
 
         Run the fit with a progress bar:
 
-        >>> spec.frame(bands_df, progress_output="bar")
+        >>> spec.fit.frame(bands_df, progress_output="bar")
 
         Limit to a subset of lines:
 
-        >>> spec.frame(bands_df, line_list=["O3_5007A", "H1_4861A"])
+        >>> spec.fit.frame(bands_df, line_list=["O3_5007A", "H1_4861A"])
 
         Enable automatic line detection:
 
-        >>> spec.frame(bands_df, line_detection=True)
+        >>> spec.fit.frame(bands_df, line_detection=True)
 
         """
 

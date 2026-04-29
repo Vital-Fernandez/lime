@@ -20,7 +20,7 @@ gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_o
 gp_spec.check.bands(lineBandsFile, band_vsigma=100, n_sigma=4, instrumental_correction=True,
                     map_band_vsigma={'H1_4861A': 200, 'H1_6563A': 200, 'N2_6548A': 200, 'N2_6583A': 200,
                                      'O3_4959A': 250, 'O3_5007A': 250},
-                    rejected_lines=['Ne5_3426A', 'N2_5755A', 'He1_5016A'],
+                    rejected_lines=['Ne5_3426A', 'N2_5755A', 'He1_5016A'], show_continua=True,
                     fit_cfg=cfgFile, default_cfg_prefix='default', obj_cfg_prefix='gp121903_osiris',
                     grouped_lines = ['O2_3726A_m', 'O1_6300A_b', 'S2_6716A_b'],
                     automatic_grouping=True,

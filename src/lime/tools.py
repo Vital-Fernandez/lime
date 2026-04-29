@@ -210,10 +210,13 @@ def check_lines_normalization(input_lines, norm_line, log):
 
 
 def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_flux', column_name='line_flux',
-                     column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line']):
+                     column_position=0, column_normalization_name='norm_line', sample_levels=['id', 'line'],
+                     clear_empty=False):
 
     '''
+
     If the normalization line is not available, no operation is added.
+
     '''
 
     # Check columns present in log
@@ -288,7 +291,11 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
             if column_normalization_name is not None:
                 log.loc[idcs_ratios, f'{column_normalization_name}'] = denom
 
-    return
+    # Clear lines not on the input selection if requested
+    if clear_empty:
+        log = log[log[column_name].notna()]
+
+    return log
 
 
 def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_err_pct=None, obj_label='spec_0'):

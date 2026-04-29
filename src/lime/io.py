@@ -141,7 +141,6 @@ def parse_lime_cfg(toml_cfg, fit_cfg_suffix='_line_fitting'):
     return toml_cfg
 
 
-# Function to load configuration file
 def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
 
     """
@@ -206,7 +205,6 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
     return cfg_lime
 
 
-# Function to save SpecSyzer configuration file
 def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
 
     """

@@ -10,6 +10,7 @@ from lime.io import (_LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTR
                      _LIME_FOLDER)
 from lime.tools import pd_get, au, unit_conversion
 from lime import rsrc_manager
+from dataclasses import dataclass
 
 _DEFAULT_PROFILE = 'g'
 _DEFAULT_SHAPE = 'emi'
@@ -46,9 +47,8 @@ ELEMENTS_DICT = dict(H='Hydrogen', He='Helium', Li='Lithium', Be='Beryllium', B=
 VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
-
 # Reading file with the format and export status for the measurements
-_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.5.txt'
+_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.6.txt'
 
 def check_lines_frame_units(frame):
 
@@ -592,6 +592,24 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     return output
 
 
+# def origin_decomposition(lines_list, **kwargs):
+#
+#     # Loop throught the line origins and get the default function values
+#     map_origin = {}
+#     for line in lines_list:
+#         orig = line.origin
+#         core_label = line.label if '_o-' not in line.label else line.label[:line.label.find('_o-')]
+#         # First line on the origin entry
+#         if orig not in map_origin:
+#             map_origin[orig] = {**kwargs}
+#             map_origin[orig]['line_list'] = [core_label]
+#             map_origin[orig]['lines_redshift'] = line.redshift
+#
+#         else:
+#             map_origin[orig]['line_list'].append(core_label)
+#
+#     return map_origin
+
 def label_profiling(profile_comp, default_type='emi'):
 
     _p_type_list, _p_shape_list = [], []
@@ -674,6 +692,36 @@ def format_line_mask_option(entry_value, wave_array):
     return formatted_value
 
 
+def dataframe_line_indexing(bands_df, wave_intvl, redshift, particle_list, line_list, rejected_lines, conversion_factor):
+
+    # First slice by wavelength and redshift
+    idcs_rows = np.ones(bands_df.index.size).astype(bool)
+    if wave_intvl is not None:
+
+        # Account for redshift
+        redshift = redshift if redshift is not None else 0
+        if 'wavelength' in bands_df.columns:
+            wave_arr = bands_df['wavelength'] * (1 + redshift)
+        else:
+            wave_arr = label_decomposition(bands_df.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
+
+        # Compare with wavelength values
+        idcs_rows = idcs_rows & (wave_arr >= wave_intvl[0]) & (wave_arr <= wave_intvl[-1])
+
+    # Second slice by particle
+    if particle_list is not None:
+        idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
+
+    # Lines we want TODO warn if line is not in the database
+    if line_list is not None:
+        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
+
+    # Lines we dont want
+    if rejected_lines is not None:
+        idcs_rows = idcs_rows & ~bands_df.index.isin(rejected_lines)
+
+    return idcs_rows
+
 def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=4,
                 vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, rejected_lines=None, origin=None):
     
@@ -739,57 +787,20 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
     # Convert to requested units
     if units_wave != 'Angstrom':
         wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        conversion_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
-        bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * conversion_factor
+        unit_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
+        bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * unit_factor
         bands_df['units_wave'] = units_wave
     else:
-        conversion_factor = 1
-
-    # First slice by wavelength and redshift
-    idcs_rows = np.ones(bands_df.index.size).astype(bool)
-    if wave_intvl is not None:
-        w_min, w_max = wave_intvl[0], wave_intvl[-1]
-
-        # Account for redshift
-        redshift = redshift if redshift is not None else 0 # TODO this does not include origin...
-        if 'wavelength' in bands_df.columns:
-            wave_arr = bands_df['wavelength'] * (1 + redshift)
-        else:
-            wave_arr = label_decomposition(bands_df.index.to_numpy(), params_list=['wavelength'])[0] * conversion_factor
-
-        # Compare with wavelength values
-        idcs_rows = idcs_rows & (wave_arr >= w_min) & (wave_arr <= w_max)
-
-    # Second slice by particle
-    if particle_list is not None:
-        idcs_rows = idcs_rows & bands_df.particle.isin(particle_list)
+        unit_factor = 1
 
     # Convert to vacuum wavelengths if requested but after renaming the labels to keep air if requested
     if vacuum_waves:
         bands_df['wavelength'] = bands_df['wave_vac']
-        bands_lim_columns = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-        bands_df[bands_lim_columns] = air_to_vacuum_function(bands_df[bands_lim_columns].to_numpy())
+        bands_df[['w1', 'w2', 'w3', 'w4', 'w5', 'w6']] = air_to_vacuum_function(bands_df[['w1', 'w2', 'w3', 'w4', 'w5', 'w6']].to_numpy())
 
-    # Finally slice by the name of the lines # TODO warn if line is not in the database
-    repeated_entries = None
-    if line_list is not None:
-        idcs_rows = idcs_rows & bands_df.index.isin(line_list)
-
-        # Recover the origins if LiMe line list
-        if isinstance(line_list[0], Line) and (origin is None):
-            origin = np.full(idcs_rows.sum(), 'none')
-            for i, idx_df in enumerate(bands_df.loc[idcs_rows].index):
-                if line_list[line_list.index(idx_df)].origin is not None:
-                    origin[i] = line_list[line_list.index(idx_df)].origin
-            origin = None if np.all(origin == 'none') else origin
-
-            if origin is not None:
-                repeated_entries = [item for item, count in Counter(line_list).items() if count > 1]
-            else:
-                repeated_entries = []
-
-    # Final table
-    bands_df = bands_df.loc[idcs_rows]
+    # indexing the line selection # TODO maybe overwrite the redshift from origins here
+    idcs = dataframe_line_indexing(bands_df, wave_intvl, redshift, particle_list, line_list, rejected_lines, unit_factor)
+    bands_df = bands_df.loc[idcs]
 
     # Update the labels if requested
     if update_labels or update_latex:
@@ -811,34 +822,102 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
         if update_labels:
             bands_df.rename(index=dict(zip(bands_df.index, labels)), inplace=True)
 
-    # Exclude lines
-    if rejected_lines is not None:
-        bands_df = bands_df.loc[~bands_df.index.isin(rejected_lines)]
-
-    # Add origin value
-    if origin is not None:
+    # Include the origin and redshift if not null
+    if (origin is not None) and (origin != 'none'):
         bands_df['origin'] = origin
 
-        if len(repeated_entries):
-            line_arr = np.array(line_list)
-            for line in repeated_entries:
-                if line in bands_df.index:
-                    orig_list = [line_list[idx].origin for idx in np.where(line_arr == line)[0].tolist()]
-                    clear_initial = True
-                    for orig in orig_list:
-                        if orig != 'none':
-                            bands_df.loc[f'{line}_{orig}', :] = bands_df.loc[f'{line}', :]
-                            bands_df.loc[f'{line}_{orig}', 'origin'] = orig
-                        else:
-                            clear_initial = False
-
-                    if clear_initial:
-                        bands_df = bands_df.drop(line)
-
-                    print(line, orig_list)
-
+        if redshift is not None:
+            bands_df['z_line'] = redshift
 
     return bands_df
+
+
+def multi_origin_lines_frame(map_origin, line_list, spec_redshift, **kwargs):
+
+    # Confirm the presence of multiple origins
+    if line_list and isinstance(line_list[0], Line):
+
+        # Warning in case map is declared alongside a line list
+        if map_origin is not None:
+            _logger.warning(f'The "map_origin" argument cannot be used alongside with a  "line_list" of "lime.Line" objects. '
+                            f'The "line_list" data will be used instead of the "map_origin" values')
+
+        # Loop through the dictionary
+        map_origin = {}
+        for line in line_list:
+            orig = line.origin # TODO include the core label with the origin?
+            core_label = line.label if '_o-' not in line.label else line.label[:line.label.find('_o-')]
+
+            # First line on the origin entry
+            if orig not in map_origin:
+                map_origin[orig] = {**kwargs}
+                map_origin[orig]['line_list'] = [core_label]
+
+                # Redshift priority the one in the line > The origin default > The spectrum redshift
+                if line.redshift is not None:
+                    map_origin[orig]['redshift'] = line.redshift
+                else:
+                    map_origin[orig]['redshift'] = _REDSHIFT_DICT.get(orig, spec_redshift)
+
+            else:
+                map_origin[orig]['line_list'].append(core_label)
+
+                # Redshift security check
+                if map_origin[orig]['redshift'] != _REDSHIFT_DICT.get(orig, spec_redshift):
+                    _logger.warning(f'The input redshift for {orig} is different between lines, '
+                                    f'first = {map_origin[orig]["redshift"] }'
+                                    f'current = {_REDSHIFT_DICT.get(orig, spec_redshift)}')
+
+    # Single origin
+    if map_origin is None:
+        bands = lines_frame(line_list=line_list, redshift=spec_redshift, **kwargs)
+
+    # Multiple origins
+    else:
+
+        # Normalize input to a dict of {orig: extra_params}
+        if isinstance(map_origin, (list, np.ndarray)):
+            origin_map = {orig: {} for orig in map_origin}
+        else:
+            origin_map = map_origin
+
+        # Loop through the origins
+        df_list = []
+        for orig, mapped_origin in origin_map.items():
+
+            # Default values < Function arguments < map_origin_dictionary
+            lines_frame_params = {'line_list': line_list,
+                                  'redshift': _REDSHIFT_DICT.get(orig, spec_redshift),
+                                  'origin': orig, #TODO pop orogin from mapped origin
+                                  **kwargs, **mapped_origin}
+
+            # Generate origin dataframe
+            df_i = lines_frame(**lines_frame_params)
+
+            # Add the origin column and suffix (lines_frame does not add suffix nor does it add column if none)
+            if orig is None or orig == 'none':
+                df_i['origin'] = 'none'
+            else:
+                df_i.index = df_i.index + f"_o-{orig}"
+
+            # Add object redshift if it is none
+            df_i['z_line'] = _REDSHIFT_DICT.get(orig, spec_redshift)
+
+            # Append it
+            df_list.append(df_i)
+
+        # Check if repeated entries
+        all_indices = pd.Index([idx for df in df_list for idx in df.index])
+        duplicated = all_indices[all_indices.duplicated()]
+        if len(duplicated.unique()) > 0:
+            _logger.critical(f'There are repeated line entries from the input of list origins:'
+                             f' - {duplicated.unique()}')
+
+        # Combine the dataframes and sort by wavelength
+        bands = pd.concat(df_list)
+        bands.sort_values(by=['wavelength'], ascending=True, inplace=True)
+
+    return bands
 
 
 def bands_from_measurements(frame, sample_levels=['id', 'line'], sort=True, remove_empty_columns=False, index_dict=None,
@@ -1292,6 +1371,12 @@ class LineMeasurements:
         return
 
 
+@dataclass
+class TransitionParameters:
+    osc_str : float = None            # Oscilattor strength (f_ij)
+    trans_prob : float = None         # Transition probability (Aij)
+
+
 def check_measurements_table(df):
 
     if df is not None:
@@ -1396,14 +1481,13 @@ class Line:
 
     def __init__(self, label, particle=None, wavelength=None, units_wave=None, latex_label=None, core=None,
                  group_label=None, group=None, list_comps=None, mask=None, kinem=None, trans=None, profile=None,
-                 shape=None, pixel_mask=None, origin=None, redshift=None):
+                 shape=None, pixel_mask=None, origin=None, redshift=None, atom_data=None):
 
         self.label = label
         self.particle = Particle.from_label(particle)
         self.wavelength = wavelength
         self.units_wave = units_wave
         self.latex_label = latex_label
-        self.core = core
         self.group_label = group_label
         self.group = group
         self.list_comps = None
@@ -1412,6 +1496,7 @@ class Line:
         # Assign source default values
         self.origin = origin
         self.redshift = redshift if redshift is not None else _REDSHIFT_DICT.get(self.origin)
+        self.core = core #if origin is None else f'{core}_o-{origin}' # TODO include origin in core?
 
         self.mask = mask
         self.pixel_mask = 'no' if pixel_mask is None else pixel_mask
@@ -1440,7 +1525,8 @@ class Line:
             self.wavelength = self.list_comps[self.ref_idx].wavelength
             self.units_wave = self.list_comps[self.ref_idx].units_wave
 
-        # Add measurements variable
+        # Objects to contain data
+        self.atom_data = atom_data
         self.measurements = None
 
         return
@@ -1614,6 +1700,8 @@ class Line:
     def from_list(cls, line_list, fit_cfg=None, data_frame=None, norm_flux=None, shape=None, profile=None,
                   origin=None, verbose=True, warn_missing_db=False):
 
+
+
         # Empty container
         out_list = []
 
@@ -1741,6 +1829,14 @@ class Line:
 
         return
 
+    def classic_notation(self, just_particle=False):
+
+        if not just_particle:
+            notation = self.latex_label
+        else:
+            notation = f'{self.particle.classic_notation}{"a" if self.trans == '*' else ""}' # TODO this is the voigtfit
+
+        return notation
 
 def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, def_origin, verbose,
                          warn_missing_db=False):
@@ -1791,7 +1887,6 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
             else:
                 group_type = None
                 opt_items = items[2:]
-
 
     # Untangle the optional components and update the default values:
     if opt_items is not None:
@@ -1860,8 +1955,6 @@ def get_line_from_cfg(line_params, fit_cfg):
 
             # Check for the full label
             if fit_cfg['transitions'].get(line_params['label']):
-                # line_cfg = {**fit_cfg['transitions'].get(line_params['label']), **line_params}
-                # line_cfg.update(line_params)
                 return {**fit_cfg['transitions'].get(line_params['label']), **line_params}
 
             # Check for the core label
@@ -1914,6 +2007,7 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
                          profile=pd_get(input_df, row_name, 'profile'),
                          shape=pd_get(input_df, row_name, 'shape'),
                          origin=pd_get(input_df, row_name, 'origin'),
+                         redshift=pd_get(input_df, row_name, 'z_line', nan_to_none=True),
                          )
 
         if 'w1' in input_df.columns:
@@ -1923,6 +2017,10 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
                                  pd_get(input_df, row_name, 'w4'),
                                  pd_get(input_df, row_name, 'w5'),
                                  pd_get(input_df, row_name, 'w6')]
+
+        # Recover the atomic data
+        db_params['atom_data'] = TransitionParameters(pd_get(input_df, row_name, column='osc_str', nan_to_none=True),
+                                                      pd_get(input_df, row_name, column='trans_prob', nan_to_none=True))
 
         # Configuration file overwrite dataframe
         db_params.update(line_params)
@@ -1950,11 +2048,13 @@ def review_input_params(line_params, def_shape, def_profile, def_origin):
     # Wavelength (for reference blended lines we assign the reference index later)
     if (line_params.get('wavelength') is None) and (line_params.get('group') is None):
         if line_items[1][-1] == 'A':
-            line_params['units_wave'] = au.Unit('AA')
+            # line_params['units_wave'] = au.Unit('AA')
+            line_params['units_wave'] = 'Angstrom'
             line_params['wavelength']  = float(line_items[1][:-1])
         else:
             au_unit = au.Unit(line_items[1])
-            line_params['units_wave'] = au_unit.bases[0] # TODO this fails if the transition does not have units: "H1_4861"
+            print('FALLLLLLLAAAAAAAAAAA', line_params['label'])
+            line_params['units_wave'] = au_unit.bases[0].to_string() # TODO this fails if the transition does not have units: "H1_4861"
             line_params['wavelength']  = au_unit.scale
 
     # Units:

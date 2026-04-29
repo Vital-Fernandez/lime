@@ -5,7 +5,7 @@ from pandas import isnull
 from matplotlib import pyplot as plt, gridspec, patches, rc_context, colors, lines as mlines, figure
 from pathlib import Path
 
-from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX, load_cfg, check_fit_conf
+from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
 from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr
 from lime.transitions import format_line_mask_option, Line, label_decomposition
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation, PROFILE_FUNCTIONS
@@ -36,6 +36,7 @@ except ImportError:
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
+
 
 # Sentinel object for non input figures
 _NO_FIG = object()
@@ -1112,9 +1113,12 @@ def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_
     y0 = y[idcs_lines]
     dy = 0.01 * (ax.get_ylim()[1] - ax.get_ylim()[0])
 
+    # By default all the indexes are None
+    orig_arr = np.array(["none" if x is None else x for x in orig_arr])
     val, idcs_unique = np.unique(orig_arr, return_index=True)
 
     for i, line in enumerate(line_list):
+
         ymin = np.max(y[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, y.size - 1)]) + (5 * dy)
         ymax = ymin + dy
 
@@ -1126,11 +1130,12 @@ def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_
                 color = ax._get_lines.get_next_color()
                 color_dict['origin'][orig_arr[i]] = color
 
-        ax.vlines(x[idcs_lines[i]]/z_corr, y0[i], ymin, color=color, linewidth=0.5, linestyles=':',
-                                                        label=orig_arr[i] if i in idcs_unique else '_')
-        ax.vlines(x[idcs_lines[i]]/z_corr, ymin, ymax, color=color, linewidth=1)
-        ax.text(x[idcs_lines[i]]/z_corr, ymax + dy/2, line, rotation=90, va="bottom", ha="center", color=color,
-                fontsize=theme.plt['label_lines'])
+        x_coord = x[idcs_lines[i]]/z_corr
+        label = orig_arr[i] if i in idcs_unique else '_'
+
+        ax.vlines(x_coord, ymin, ymax, color=color, linewidth=1)
+        ax.vlines(x_coord, y0[i], ymin, label=label, color=color, linewidth=0.5, linestyles=':')
+        ax.text(x_coord, ymax + dy/2, line, rotation=90, va="bottom", ha="center", color=color, fontsize=theme.plt['label_lines'])
 
     return
 
@@ -1138,8 +1143,11 @@ def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_
 def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colors['match_line']):
 
     # Compute bands limits
-    w3 = bands.w3.values * (1 + redshift)
-    w4 = bands.w4.values * (1 + redshift)
+    z_arr = (1 + redshift) if 'z_line' not in bands.columns else np.nan_to_num(1 + bands.z_line.to_numpy(), nan=(1 + redshift))
+
+    w3 = bands.w3.values * z_arr
+    w4 = bands.w4.values * z_arr
+    lambda_arr = bands.wavelength * z_arr
 
     # Remove lines beyond limits
     idcs_range = (w4 >= x[0]) & (w4 <= x[-1])
@@ -1159,17 +1167,10 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
             x_region = x[idx_w3:idx_w4]
 
             # Band shade area
-            label = 'Matched line' if i == 0 else '_'
+            label = 'Line band' if i == 0 else '_'
             span = ax.axvspan(x_region[0]/z_corr, x_region[-1]/z_corr, label=label, alpha=0.30, color=match_color, ec='none')
 
-            # Label area
-            # text = line_label
-            x_text = line.wavelength * (1 + redshift) / z_corr
-            y_text = max_region * 0.9 * z_corr
-            # ax.text(x_text, y_text, text, rotation=270)
-            # print('seguro', text)
-
-            ax.annotate(line_label, xy=(line.wavelength * (1 + redshift) / z_corr, max_region * z_corr),
+            ax.annotate(line_label, xy=(lambda_arr[i] / z_corr, max_region * z_corr),
                         xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", rotation=270)
         except:
             print(LiMe_Error(f"Error plotting the band for line {line}"))
@@ -1411,7 +1412,6 @@ class SpectrumFigures:
 
     def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
                  show_profiles=True, show_cont=False, show_err=False, show_masks=True, show_components=False,
-                 fit_cfg=None, default_cfg_prefix='default', obj_cfg_prefix=None,
                  in_fig=_NO_FIG, fig_cfg=None, ax_cfg=None, maximize=False):
 
         """
@@ -1535,8 +1535,7 @@ class SpectrumFigures:
 
             # Plot bands if provided
             if bands is not None:
-                spec_bands_plotter(self.ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr,
-                                   self._spec.redshift)
+                spec_bands_plotter(self.ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr, self._spec.redshift)
 
             if line_list is not None:
 
@@ -1558,69 +1557,6 @@ class SpectrumFigures:
                 if (len(orig_arr) > 1) and ~np.all(isnull(orig_arr)):
                     legend_check = True
 
-                # for group in np.unique(orig_arr):
-                #     if group not in theme.colors
-                # idcs = (wave_arr > wave_plot[0]) & (wave_arr < wave_plot[-1])
-
-
-                # Get the list of groups
-                #     # Crop to wavelength range
-                #     idcs = (wave_arr > wave_plot[0]) & (wave_arr < wave_plot[-1])
-                #     labels = labels[idcs]
-                #     wave_arr = wave_arr[idcs]
-                #
-                #     # Extras
-                #     color_label = values['color'] if values.get('color') else theme.colors['line_labels']
-
-
-                # for label in line_list:
-                #
-                #     label_decomposition()
-                #     line = label if isinstance(label, Line) else Line.from_transition(label)
-                #
-                #     # Plot the lines
-                #     spec_lines_plotter(self.ax, group, labels, wave_arr, wave_plot, flux_plot, z_corr, self._spec.redshift, color_label)
-
-                # # Input is a list of lines
-                # line_sources = {}
-                # if fit_cfg is None:
-                #     line_sources['_'] = {'labels': lines, 'z_lines': self._spec.redshift}
-                #
-                # # Input is a list of groups
-                # else:
-                #     fit_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix)
-                #     for group in lines:
-                #         if group in fit_cfg:
-                #             line_sources[group] = fit_cfg[group]
-                #
-                # # Compile the line objects
-                # for group, values in line_sources.items():
-                #
-                #     # Extract transitions properties from labels
-                #     _, wave_arr, latex_label = label_decomposition(values['labels'], fit_conf=fit_cfg)
-                #
-                #     # Check for user values
-                #     z_lines = values['z_lines'] if values.get('z_lines') is not None else self._spec.redshift
-                #     wave_arr = values['wavelengths'] if values.get('wavelengths') else wave_arr
-                #     labels = np.array(values['latex_label']) if values.get('latex_label') else np.array(values['labels'])
-                #
-                #     # Apply redshift correction
-                #     wave_arr = wave_arr * (1 + z_lines) if z_lines else wave_arr
-                #
-                #     # Crop to wavelength range
-                #     idcs = (wave_arr > wave_plot[0]) & (wave_arr < wave_plot[-1])
-                #     labels = labels[idcs]
-                #     wave_arr = wave_arr[idcs]
-                #
-                #     # Extras
-                #     color_label = values['color'] if values.get('color') else theme.colors['line_labels']
-                #
-                #     # Plot the lines
-                #     spec_lines_plotter(self.ax, group, labels, wave_arr, wave_plot, flux_plot, z_corr, self._spec.redshift, color_label)
-                #
-                #     # Confirm the legend
-                #     if (len(group) > 1) or group[0] != '_':
-                #         legend_check = True
 
             # Plot the fittings
             if show_profiles and self._spec.frame.size > 0:
@@ -2212,6 +2148,12 @@ class SpectrumFigures:
         """
 
         plt.show(**kwargs)
+
+        return
+
+    def save_fig(self, fname):
+
+        self.fig.savefig(fname, bbox_inches='tight')
 
         return
 
