@@ -87,9 +87,9 @@ grouped_lines = ['O2_7325A_m']
 
 [SHOC579_sdss_line_fitting]
 rejected_lines = ['Fe3_4986A', 'H1_8392A', 'H1_8413A', 'H1_8438A', 'H1_8467A', 'H1_8502A', 'H1_8545A']
-grouped_lines = ['H1_6563A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b']
+grouped_lines = ['O2_3726A_b', 'H1_6563A_b', 'H1_4861A_b', 'O3_4959A_b', 'O3_5007A_b']
 
-O2_3726A_b = "O2_3726A+O2_3729A+H1_3721A+H1_3734A"
+O2_3726A_b = "O2_3726A+O2_3729A+H1_3722A+H1_3734A"
 O2_3726A_kinem = "O2_3729A"
 H1_3712A_kinem = "H1_3734A"
 

@@ -258,6 +258,7 @@ class SpecRetriever:
         in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default) if fit_cfg else None
 
         # Generate the table of single lines taking into account possible origins
+        rejected_lines = rejected_lines if rejected_lines is not None else (in_cfg or {}).get('rejected_lines')
         bands = multi_origin_lines_frame(map_origin, line_list, self._spec.redshift, wave_intvl=wave_intvl,
                                          particle_list=particle_list, units_wave=self._spec.units_wave,
                                          sig_digits=sig_digits, ref_bands=ref_bands, vacuum_waves=vacuum_waves,
@@ -362,7 +363,6 @@ class SpecRetriever:
                 raise LiMe_Error(f'Aspect is not installed')
 
         return bands
-
 
     def spectrum(self, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, pixel_mask=None, mask_intvls=None,
                  obj_redshift=False,):

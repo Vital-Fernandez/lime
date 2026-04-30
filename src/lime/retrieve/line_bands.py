@@ -42,7 +42,7 @@ def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grou
         line_list, group_lines = [], []
         group_names, group_blended_check = [], []
         for comp, group_label in fit_conf.items():
-            if comp.endswith(('_b', '_m')):
+            if comp.endswith(('_b', '_m')) and groups_dict.get(comp) is None:
 
                 # No kinematic groups
 
@@ -181,8 +181,11 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False)
         # Extract the single components ignoring extra kinmatics
         unique_comp_list = []
         for trans in line.list_comps:
-            if trans.kinem == 0:
-                unique_comp_list.append(trans.label)
+            if trans.group == 'm':
+                unique_comp_list += [sub_comp.label for sub_comp in trans.list_comps]
+            else:
+                if trans.kinem == 0:
+                    unique_comp_list.append(trans.label)
         unique_comp_list = np.unique(unique_comp_list)
 
         # Only apply corrections if components are present
