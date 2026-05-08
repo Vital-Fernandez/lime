@@ -39,6 +39,10 @@ category_conf_styles = {0: 'dotted',
                         1: 'dashed',
                         2: 'solid'}
 
+def ensure_list(x):
+    return x if isinstance(x, list) else [x]
+
+
 def update_bokeh_figure(figure_obj, config_dict):
 
     # Set general figure properties
@@ -48,30 +52,40 @@ def update_bokeh_figure(figure_obj, config_dict):
         if isinstance(value, dict):
             match key:
                 case "xaxis":
-                    for axis in figure_obj.xaxis:  # Update all x-axes
-                        for attr, val in value.items():
-                            setattr(axis, attr, val)
+                    for item_obj in ensure_list(figure_obj):
+                        if item_obj is not None:
+                            for axis in item_obj.xaxis:  # Update all x-axes
+                                for attr, val in value.items():
+                                    setattr(axis, attr, val)
 
                 case "yaxis":
-                    for axis in figure_obj.yaxis:  # Update all y-axes
-                        for attr, val in value.items():
-                            setattr(axis, attr, val)
+                    for item_obj in ensure_list(figure_obj):
+                        if item_obj is not None:
+                            for axis in item_obj.yaxis:  # Update all y-axes
+                                for attr, val in value.items():
+                                    setattr(axis, attr, val)
 
                 case "title":
                     for attr, val in value.items():
-                        setattr(figure_obj.title, attr, val)
+                        for item_obj in ensure_list(figure_obj):
+                            if item_obj is not None:
+                                setattr(item_obj.title, attr, val)
 
                 case "xgrid":
-                    for grid in figure_obj.xgrid:  # Update all x-grids
-                        for attr, val in value.items():
-                            val = None if val == 'None' else val
-                            setattr(grid, attr, val)
+                    for item_obj in ensure_list(figure_obj):
+                        if item_obj is not None:
+                            for grid in item_obj.xgrid:  # Update all x-grids
+                                for attr, val in value.items():
+                                    val = None if val == 'None' else val
+                                    setattr(grid, attr, val)
 
                 case "ygrid":
-                    for grid in figure_obj.ygrid:  # Update all y-grids
-                        for attr, val in value.items():
-                            val = None if val == 'None' else val
-                            setattr(grid, attr, val)
+                    for item_obj in ensure_list(figure_obj):
+                        if item_obj is not None:
+                            for grid in item_obj.ygrid:  # Update all y-grids
+                                for attr, val in value.items():
+                                    val = None if val == 'None' else val
+                                    setattr(grid, attr, val)
 
         # Single value entries
         else:
@@ -86,7 +100,12 @@ def update_bokeh_figure(figure_obj, config_dict):
                     case 'active_tap':
                         figure_obj.toolbar.active_tap = figure_obj.select_one(getattr(models, value))
                     case _ :
-                        setattr(figure_obj, key, value)
+                        if isinstance(figure_obj, list):
+                            for ax in figure_obj:
+                                if ax is not None:
+                                    setattr(ax, key, value)
+                        else:
+                         setattr(figure_obj, key, value)
 
     # # Set zoom and pan as active
     # figure_obj.toolbar.active_scroll = figure_obj.select_one(WheelZoomTool)  # Activate zoom wheel
@@ -128,6 +147,7 @@ def save_close_fig_swicth(file_path, fig_obj, display_check):
     #     show(self.fig)
 
     return
+
 
 def bokeh_bands(fig, bands, x, y, z_corr, redshift):
 
@@ -314,6 +334,61 @@ def profile_bokeh(fig, line, z_cor, log, redshift, norm_flux):
     return line_single
 
 
+def redshift_fit_evaluation_bokeh(spectrum, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, rest_frame=True):
+
+    # gauss_arr_max = compute_z_key(z_infer, theo_lambda, wave_matrix, 1, sigma_arr)
+
+    wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spectrum.wave, spectrum.flux, z_infered, rest_frame)
+    wave_corr = wave_plot / z_corr
+    flux_corr = flux_plot * z_corr
+
+    # Masked flux (red overlay)
+    y_mask = np.full(flux_plot.size, np.nan)
+    y_mask[data_mask] = flux_corr[data_mask]
+
+    # --- Top panel: spectrum ---
+    p1 = figure(width=800, height=300,
+                x_axis_label=str(spectrum.units_wave),
+                y_axis_label=str(spectrum.units_flux),
+                tools="xpan,xwheel_zoom,reset,save")
+
+    # Full spectrum
+    p1.step(wave_corr, flux_corr, color='white', line_width=1, mode='center', legend_label='Spectrum')
+
+    # Masked region
+    p1.step(wave_corr, y_mask, color='red', line_width=1, mode='center', legend_label='Mask')
+
+    p1.legend.location = "top_right"
+    p1.legend.click_policy = "hide"
+
+    # --- Twin axis equivalent: gauss_arr on secondary y ---
+    # Bokeh doesn't have true twinx, so we normalize gauss_arr to flux scale for overlay
+    flux_max = np.nanmax(flux_corr)
+    gauss_scaled = gauss_arr * flux_max  # scale to flux range
+
+    p1.step(wave_corr, gauss_scaled, color='yellow', line_width=1, mode='center', legend_label='Bands')
+
+    # --- Bottom panel: redshift search ---
+    title = f'z_prediction = {z_infered:.3f}'
+    p2 = figure(width=800, height=200, title=title,
+                x_axis_label='Redshift range',
+                y_axis_label='F_sum / max(F_sum)',
+                tools="xpan,xwheel_zoom,reset,save")
+
+    flux_sum_norm = flux_sum_arr / np.max(flux_sum_arr)
+
+    p2.step(z_arr, flux_sum_norm, color='white', line_width=1, mode='center')
+
+    # Peak marker
+    p2.scatter([z_infered], [1], marker='circle', color='red', size=10)
+
+    # y ticks
+    p2.yaxis.ticker = [0, 1]
+
+    # Link x ranges if rest_frame shares a common axis (optional)
+    # p2.x_range = p1.x_range  # uncomment if x axes are the same
+
+    # streamlit_bokeh(column(p1, p2), use_container_width=True)
 
 
 # Sentinel object for non input figures

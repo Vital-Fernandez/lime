@@ -228,10 +228,54 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
 
 def res_power_approx(wavelength_arr):
 
+    """
+    Estimate the spectral resolving power R = λ / Δλ approximation for a wavelength array.
+
+    The dispersion per pixel (Δλ/pixel) is computed from the finite differences
+    of the wavelength array. The resolution element is assumed to be Nyquist-sampled
+    by 2 pixels, so the FWHM resolution element is 2 * (Δλ/pixel), giving:
+
+        R ≈ λ / (2 * Δλ_pixel)
+
+    Note: This is an approximation. The true R depends on the slit width,
+    detector sampling, and optical quality of the spectrograph. For precise
+    instrumental broadening estimates, an empirical LSF from arc/sky lines
+    is preferred.
+
+    Parameters
+    ----------
+    wavelength_arr : np.ndarray
+        1D array of wavelengths, assumed to be in a consistent unit (e.g. Å).
+        Must be monotonically increasing and uniformly or smoothly sampled.
+
+    Returns
+    -------
+    res_power : np.ndarray
+        1D array of resolving power R at each pixel, same shape as wavelength_arr.
+        Dimensionless.
+
+    Notes
+    -----
+    - The last pixel is extrapolated by repeating the second-to-last dispersion
+      value, since np.ediff1d produces N-1 differences for an N-element array.
+    - If the wavelength array has non-uniform sampling (e.g. from a non-linear
+      dispersion solution), R will vary across the array accordingly.
+    - Assumes 2 pixels per resolution element (Nyquist sampling). If your
+      spectrograph samples the LSF with a different number of pixels, replace
+      the factor of 2 with the appropriate value.
+
+    Examples
+    --------
+    >>> wave = np.linspace(4000, 7000, 3000)   # 1 Å/pixel
+    >>> R = res_power_approx(wave)
+    >>> print(R[0])   # expect ~2000 at 4000 Å with 1 Å/pixel dispersion
+    2000.0
+
+    """
+
     delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
     delta_lambda[-1] = delta_lambda[-2]
-
-    return wavelength_arr/delta_lambda
+    return wavelength_arr / (2 * delta_lambda)
 
 
 
@@ -303,7 +347,6 @@ class SpecRetriever:
                 delta_lambda_inst = 0
 
             # Use unique or specific velocity sigma for the bands
-            # map_band_vsigma = in_cfg['map_band_vsigma'] if in_cfg and ('map_band_vsigma' in in_cfg) else map_band_vsigma
             map_band_vsigma = map_band_vsigma if map_band_vsigma else (in_cfg or {}).get('map_band_vsigma')
 
             if map_band_vsigma is not None:

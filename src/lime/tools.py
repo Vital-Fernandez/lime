@@ -224,6 +224,7 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
         raise LiMe_Error(f'Input log is missing "{flux_column}" or "{flux_column}_err" columns')
 
     # Check the normalization for the lines
+    line_list = log.index.to_numpy() if line_list is None else line_list
     line_array, norm_array = check_lines_normalization(line_list, norm_list, log)
 
     # Add new columns if necessary

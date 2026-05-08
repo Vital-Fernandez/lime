@@ -268,7 +268,7 @@ def pseudo_power_area(line, idx, n_steps):
 
 def velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_instr):
 
-    return n_sigma * ((band_velocity_sigma / c_KMpS) * lambda_obs + delta_instr)
+    return n_sigma * np.sqrt(np.square((band_velocity_sigma / c_KMpS) * lambda_obs) + np.square(delta_instr))
 
 
 ALL_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])

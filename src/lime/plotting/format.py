@@ -201,8 +201,6 @@ class Themer:
         # Figure colors for bokeh
         colors_bokeh = nested_dict(deepcopy(self.conf['bokeh']['colors']), self.colors)
         self.active_conf['bokeh'].update(colors_bokeh)
-                # for key, value in self.conf['bokeh']['colors'].items():
-                #     self.active_conf['bokeh'][key] = self.colors.get(value, value)
 
         # Set the size
         if self.scale[0] in self.conf['matplotlib']['size']:
@@ -210,7 +208,6 @@ class Themer:
 
         if self.scale[0] in self.conf['bokeh']['size']:
             self.bokeh = self.conf['bokeh']['size'][self.scale[0]]
-
 
         return
 
