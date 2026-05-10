@@ -96,10 +96,10 @@ class TestOpenFits:
         SHOC579 = lime.Spectrum.from_file(spectra_folder/file_name, instrument='sdss')
 
         # Convert to a text file
-        SHOC579.retrieve.spectrum(fname=outputs_folder / f'shoc579_sdss.txt')
-
-        # Read the text file
-        SHOC579_txt = lime.Spectrum.from_file(outputs_folder/f'shoc579_sdss.txt', instrument='text')
+        for ext in ['.dat', '.text', '.in', '.txt']:
+            fname = outputs_folder / f'shoc579_sdss{ext}'
+            SHOC579.save_spectrum(fname=fname)
+            SHOC579_txt = lime.Spectrum.from_file(fname, instrument='text')
 
         assert(np.all(np.isclose(SHOC579_txt.flux, SHOC579.flux)))
         assert(np.all(np.isclose(SHOC579_txt.err_flux, SHOC579.err_flux)))
@@ -114,7 +114,9 @@ class TestOpenFits:
 
         # Perform a fitting and save that fitting
         SHOC579.fit.bands('H1_4861A')
-        SHOC579.retrieve.spectrum(line_label='H1_4861A', fname=outputs_folder / f'shoc579_sdss_Hbeta.txt')
+
+        # SHOC579.retrieve.spectrum(line_label='H1_4861A', fname=outputs_folder / f'shoc579_sdss_Hbeta.txt')
+        SHOC579.save_spectrum(line_label='H1_4861A', fname=outputs_folder / f'shoc579_sdss_Hbeta.txt')
 
         # Compare with baseline
         data_baseline = np.loadtxt(baseline_folder/f'shoc579_sdss_Hbeta.txt')

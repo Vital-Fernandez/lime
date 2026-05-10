@@ -4,8 +4,6 @@ import numpy as np
 from lime.retrieve.line_bands import get_spectrum_line_groups, blend_merge_dict
 
 
-
-
 fname = '/home/vital/Dropbox/Astrophysics/Tools/SpectralSynthesis/Online_example_data/sdss_dr18_0358-51818-0504.fits'
 bands_file = '/home/vital/Dropbox/Astrophysics/Tools/SpectralSynthesis/Online_example_data/sdss_dr18_0358-51818-0504.fits_bands_df.txt'
 bands = lime.load_frame(bands_file)

@@ -340,6 +340,10 @@ class Spectrum:
         internally for fitting and removed in reported measurements.
     crop_waves : tuple or numpy.ndarray, optional
         Two-element ``(min, max)`` wavelength range used to crop the input arrays.
+    crop_flux : tuple, optional
+        Two-element ``(min_percentile, max_percentile)`` range used to clip the flux array
+        by percentile. Defaults to ``None``, equivalent to ``(1, 100)`` (i.e. the 1st to
+        100th percentile).
     res_power : float or numpy.ndarray, optional
         Instrument resolving power :math:`R = \\lambda/\\Delta\\lambda`. If provided,
         it can be used to compute and apply an instrumental broadening correction
@@ -923,14 +927,18 @@ class Spectrum:
 
             # Confirm the lines in the log match the one of the spectrum
             if line_0.units_wave != self.units_wave:
-                _logger.warning(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
-                                f' in {line_0.units_wave[0]}')
+                _logger.critical(f'Different units in the spectrum dispersion ({self.units_wave}) axis and the lines log'
+                                 f' in {line_0.units_wave[0]}')
 
-            # Confirm all the log lines have the same units
-            au_str = 'A' if line_0.units_wave == 'Angstrom' else str(line_0.units_wave)
-            same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), au_str) != -1).size == line_list.size
-            if not same_units_check:
-                _logger.warning(f'The log has lines with different units')
+            # # Confirm all the log lines have the same units This fails if blended or merged in table
+            # au_str = 'A' if line_0.units_wave == 'Angstrom' else str(line_0.units_wave)
+            # same_units_check = np.flatnonzero(np.core.defchararray.find(line_list.astype(str), au_str) != -1).size == line_list.size
+            # same_units_check = np.char.find(line_list.astype(str), au_str)
+            # (np.char.find(line_list.astype(str), au_str) != -1).all()
+            # np.array([str(l) for l in line_list]).astype(str)
+            #
+            # if not same_units_check:
+            #     _logger.warning(f'The log has lines with different units')
 
             # Assign the log
             self.frame = log_df
@@ -957,7 +965,7 @@ class Spectrum:
             if frame is not None:
                 if line_label in frame.index:
                     bands_limits = frame.loc[line_label, 'w1':'w6']
-                    idcs_bands = np.searchsorted(self._spec.wave.data, bands_limits * (1 + self._spec.redshift))
+                    idcs_bands = np.searchsorted(self.wave.data, bands_limits * (1 + self.redshift))
                     idcs = (idcs_bands[0], idcs_bands[5])
                     line_measured = True
                 else:
@@ -973,9 +981,9 @@ class Spectrum:
             line_list = line.list_comps
 
             # Compute the linear components
-            gaussian_arr = profiles_computation(line_list, frame, 1 + self._spec.redshift, line.profile,
-                                                x_array=self._spec.wave.data[idcs[0]: idcs[1]])
-            linear_arr = linear_continuum_computation(line_list, frame, 1 + self._spec.redshift, x_array=self._spec.wave.data[idcs[0]: idcs[1]])
+            gaussian_arr = profiles_computation(line_list, frame, 1 + self.redshift, line.profile,
+                                                x_array=self.wave.data[idcs[0]: idcs[1]])
+            linear_arr = linear_continuum_computation(line_list, frame, 1 + self.redshift, x_array=self.wave.data[idcs[0]: idcs[1]])
 
             # Determine which component you want to extract:
             if split_components is False:
@@ -1145,13 +1153,14 @@ class Spectrum:
         >>> spec.frame.shape
         (0, 10)
         """
+        if self.frame is not None:
 
-        if line_data:
-            self.frame = self.frame[0:0]
+            if line_data:
+                self.frame = self.frame[0:0]
 
-        if cont_data:
-            self.cont = None
-            self.cont_std = None
+            if cont_data:
+                self.cont = None
+                self.cont_std = None
 
         return
 

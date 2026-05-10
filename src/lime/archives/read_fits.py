@@ -266,7 +266,6 @@ def check_fits_instructions(fits_source, online_provider=False):
             fits_reader = getattr(fits_manager, fits_source)
         else:
             source_type = 'instrument' if online_provider is False else 'survey'
-            # TODO show instruments supported
             raise LiMe_Error(f'Input {source_type} "{fits_source}" is not recognized. LiMe observation cannot be created.')
 
     else:
