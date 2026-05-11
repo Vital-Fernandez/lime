@@ -232,7 +232,7 @@ def voigt_area(line, idx, n_steps):
     sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
     gamma = np.random.normal(line.gamma[idx], line.gamma_err[idx], n_steps)
 
-    return gaussian_area(amp, sigma) + lorentz_area(amp, gamma)
+    return gaussian_area(amp, sigma, n_steps) + lorentz_area(amp, gamma, n_steps)
 
 
 def pseudo_voigt_area(line, idx, n_steps):
@@ -268,7 +268,7 @@ def pseudo_power_area(line, idx, n_steps):
 
 def velocity_to_wavelength_band(n_sigma, band_velocity_sigma, lambda_obs, delta_instr):
 
-    return n_sigma * ((band_velocity_sigma / c_KMpS) * lambda_obs + delta_instr)
+    return n_sigma * np.sqrt(np.square((band_velocity_sigma / c_KMpS) * lambda_obs) + np.square(delta_instr))
 
 
 ALL_PARAMS = np.array(['m_cont', 'n_cont', 'amp', 'center', 'sigma', 'gamma', 'alpha', 'frac', 'a', 'b', 'c'])

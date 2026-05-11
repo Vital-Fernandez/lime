@@ -228,10 +228,54 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
 
 def res_power_approx(wavelength_arr):
 
+    """
+    Estimate the spectral resolving power R = λ / Δλ approximation for a wavelength array.
+
+    The dispersion per pixel (Δλ/pixel) is computed from the finite differences
+    of the wavelength array. The resolution element is assumed to be Nyquist-sampled
+    by 2 pixels, so the FWHM resolution element is 2 * (Δλ/pixel), giving:
+
+        R ≈ λ / (2 * Δλ_pixel)
+
+    Note: This is an approximation. The true R depends on the slit width,
+    detector sampling, and optical quality of the spectrograph. For precise
+    instrumental broadening estimates, an empirical LSF from arc/sky lines
+    is preferred.
+
+    Parameters
+    ----------
+    wavelength_arr : np.ndarray
+        1D array of wavelengths, assumed to be in a consistent unit (e.g. Å).
+        Must be monotonically increasing and uniformly or smoothly sampled.
+
+    Returns
+    -------
+    res_power : np.ndarray
+        1D array of resolving power R at each pixel, same shape as wavelength_arr.
+        Dimensionless.
+
+    Notes
+    -----
+    - The last pixel is extrapolated by repeating the second-to-last dispersion
+      value, since np.ediff1d produces N-1 differences for an N-element array.
+    - If the wavelength array has non-uniform sampling (e.g. from a non-linear
+      dispersion solution), R will vary across the array accordingly.
+    - Assumes 2 pixels per resolution element (Nyquist sampling). If your
+      spectrograph samples the LSF with a different number of pixels, replace
+      the factor of 2 with the appropriate value.
+
+    Examples
+    --------
+    >>> wave = np.linspace(4000, 7000, 3000)   # 1 Å/pixel
+    >>> R = res_power_approx(wave)
+    >>> print(R[0])   # expect ~2000 at 4000 Å with 1 Å/pixel dispersion
+    2000.0
+
+    """
+
     delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
     delta_lambda[-1] = delta_lambda[-2]
-
-    return wavelength_arr/delta_lambda
+    return wavelength_arr / (2 * delta_lambda)
 
 
 
@@ -250,6 +294,120 @@ class SpecRetriever:
                     update_labels=False, update_latex=False, rejected_lines=None, Rayleigh_threshold=2, lines_redshift=None,
                     map_origin=None, components=None, save_group_label=False):
 
+        """
+        Return a bands dataframe with the spectral lines within the spectrum wavelength range.
+
+        If the user does not provide a ``ref_bands`` This method queries the `LiMe bands database <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs3_line_bands.html>`_
+        and returns a :class:`pandas.DataFrame` of transitions visible within the spectrum's observed
+        wavelength interval, taking into account the spectrum redshift, units, and pixel mask.
+
+        The central bands (``w3``–``w4``) are optionally adjusted to match the expected line width,
+        accounting for the emitting and/or absorbing medium velocity dispersion (``band_vsigma``) and instrumental broadening
+        (``instrumental_correction``). Lines whose central band falls entirely within a masked
+        pixel region can be excluded via ``exclude_bands_masked``.
+
+        If a fitting configuration (``fit_cfg``) is provided, blended or merged line groups are
+        resolved and the bands table is updated accordingly.
+
+        Parameters
+        ----------
+        band_vsigma : float, optional
+            Velocity sigma in km/s used to set the half-width of the central band (``w3``–``w4``).
+            Default is ``70``.
+        n_sigma : int, optional
+            Number of sigma used to compute the band half-width from ``band_vsigma``. Default is ``4``.
+        adjust_central_band : bool, optional
+            If ``True`` (default), recompute ``w3`` and ``w4`` from ``band_vsigma``, ``n_sigma``,
+            and the instrumental broadening.
+        instrumental_correction : bool, optional
+            If ``True`` (default), include the instrumental broadening (derived from ``res_power``)
+            when adjusting the central band width.
+        exclude_bands_masked : bool, optional
+            If ``True`` (default), remove lines whose central band pixels are entirely masked.
+        map_band_vsigma : dict, optional
+            Per-line overrides for ``band_vsigma``, keyed by line label. Lines not present in the
+            dict use the global ``band_vsigma`` value.
+        grouped_lines : dict, optional
+            Explicit line grouping definitions. If ``None``, grouping is read from ``fit_cfg`` if
+            available.
+        automatic_grouping : bool, optional
+            If ``True``, automatically decide the blended or merged line groups which match the observation. Default is ``False``.
+        fit_cfg : dict or str or pathlib.Path, optional
+            Fitting configuration. Can be a dictionary or a path to a configuration file. When
+            provided, grouped lines and rejected lines are read from this configuration unless
+            explicitly overridden.
+        default_cfg_prefix : str, optional
+            Prefix for default parameter entries in ``fit_cfg``. Default is ``"default"``.
+        obj_cfg_prefix : str, optional
+            Prefix for object-specific parameter entries in ``fit_cfg``. Default is ``None``.
+        update_default : bool, optional
+            If ``True`` (default), object-specific configuration entries override default entries.
+        line_list : list or numpy.ndarray, optional
+            Restrict the output to these line labels. Must follow
+            `LiMe notation <https://lime-stable.readthedocs.io/en/latest/inputs/n_inputs2_line_labels.html>`_.
+        particle_list : list or numpy.ndarray, optional
+            Restrict the output to transitions from these ionic species (e.g. ``["H1", "O3"]``).
+        sig_digits : int, optional
+            Number of decimal figures in the line labels. Default is ``4``.
+        ref_bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Alternative reference bands database. Defaults to the internal LiMe database.
+        vacuum_waves : bool, optional
+            If ``True``, convert wavelengths and band limits to vacuum values. Default is ``False``.
+        update_labels : bool, optional
+            If ``True``, recompute line labels from the transition data. Default is ``False``.
+        update_latex : bool, optional
+            If ``True``, recompute the ``latex_label`` column. Default is ``False``.
+        rejected_lines : list, optional
+            Line labels to exclude from the output. If ``None``, falls back to the value in
+            ``fit_cfg`` if present.
+        Rayleigh_threshold : float, optional
+            Minimum wavelength separation (in units of ``band_vsigma``) below which two lines
+            are considered blended via Rayleigh's criterion. Default is ``2``.
+        lines_redshift : float, optional
+            Redshift applied to the transition wavelengths when adjusting the central band, if
+            no per-line ``z_line`` column is present in the bands table. Falls back to the
+            spectrum redshift if ``None``.
+        map_origin : dict, optional
+            Mapping of origin labels to redshifts for multi-origin line queries.
+        components : list, optional
+            List of spectral shape components (e.g. ``["emission", "absorption"]``) used to
+            filter lines by the predicted profile type from the feature detection algorithm.
+            Requires ``spec.infer.pred_arr`` to have been computed beforehand.
+        save_group_label : bool, optional
+            If ``True``, store the group label in the bands table for grouped lines. Default is
+            ``False``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Bands dataframe with one row per transition, indexed by line label, containing
+            wavelength, band limits (``w1``–``w6``), and metadata columns.
+
+        Notes
+        -----
+        - If ``res_power`` is not set on the spectrum, an approximate resolving power is
+          computed from the wavelength array when ``instrumental_correction=True`` or
+          ``fit_cfg`` is provided.
+        - ``components`` filtering requires the aspect package and a prior call to the
+          component detection algorithm; a :exc:`LiMe_Error` is raised otherwise.
+        - Per-line redshifts in a ``z_line`` column (added by ``map_origin``) take precedence
+          over ``lines_redshift`` and the spectrum redshift when adjusting central bands.
+
+        Examples
+        --------
+        Get all lines in the spectrum wavelength range:
+
+        >>> bands = spec.fit.lines_frame()
+
+        Restrict to hydrogen and oxygen transitions with a wider velocity band:
+
+        >>> bands = spec.fit.lines_frame(particle_list=["H1", "O3"], band_vsigma=120)
+
+        Use a fitting configuration to resolve blended lines:
+
+        >>> bands = spec.fit.lines_frame(fit_cfg="my_cfg.toml")
+        """
+
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -258,6 +416,7 @@ class SpecRetriever:
         in_cfg = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default) if fit_cfg else None
 
         # Generate the table of single lines taking into account possible origins
+        rejected_lines = rejected_lines if rejected_lines is not None else (in_cfg or {}).get('rejected_lines')
         bands = multi_origin_lines_frame(map_origin, line_list, self._spec.redshift, wave_intvl=wave_intvl,
                                          particle_list=particle_list, units_wave=self._spec.units_wave,
                                          sig_digits=sig_digits, ref_bands=ref_bands, vacuum_waves=vacuum_waves,
@@ -302,7 +461,6 @@ class SpecRetriever:
                 delta_lambda_inst = 0
 
             # Use unique or specific velocity sigma for the bands
-            # map_band_vsigma = in_cfg['map_band_vsigma'] if in_cfg and ('map_band_vsigma' in in_cfg) else map_band_vsigma
             map_band_vsigma = map_band_vsigma if map_band_vsigma else (in_cfg or {}).get('map_band_vsigma')
 
             if map_band_vsigma is not None:
@@ -362,7 +520,6 @@ class SpecRetriever:
                 raise LiMe_Error(f'Aspect is not installed')
 
         return bands
-
 
     def spectrum(self, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, pixel_mask=None, mask_intvls=None,
                  obj_redshift=False,):

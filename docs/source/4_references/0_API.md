@@ -127,6 +127,11 @@ The next sections detail the functions attributes and their outputs:
    :no-show-inheritance:
    :exclude-members: from_survey, line_detection
 
+.. rubric:: Spectrum retrieve functions (.fit)
+
+.. automethod:: lime.workflow.SpecRetriever.lines_frame
+   :noindex:
+
 .. rubric:: Spectrum fitting functions (.fit)
 
 .. autoattribute:: lime.Spectrum.fit

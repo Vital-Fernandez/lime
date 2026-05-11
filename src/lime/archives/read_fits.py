@@ -7,6 +7,7 @@ from astropy.wcs import WCS
 
 from lime.io import LiMe_Error, lime_cfg
 from urllib.parse import urlparse
+from io import BytesIO
 
 try:
     import requests
@@ -265,7 +266,6 @@ def check_fits_instructions(fits_source, online_provider=False):
             fits_reader = getattr(fits_manager, fits_source)
         else:
             source_type = 'instrument' if online_provider is False else 'survey'
-            # TODO show instruments supported
             raise LiMe_Error(f'Input {source_type} "{fits_source}" is not recognized. LiMe observation cannot be created.')
 
     else:
@@ -280,13 +280,11 @@ def load_txt(text_address, **kwargs):
     out_array = np.loadtxt(text_address, **kwargs)
 
     # File address
-    if not type(text_address).__name__ == "UploadedFile":
+    if isinstance(text_address, BytesIO) or (type(text_address).__name__ == "UploadedFile"):
+        lines = text_address.getvalue().decode("utf-8").splitlines()
+    else:
         with open(text_address, "r") as f:
             lines = f.readlines()
-
-    # Uploaded file
-    else:
-        lines = text_address.getvalue().decode("utf-8").splitlines()
 
     # Reverse loop over the lines
     params_dict = {}
@@ -297,19 +295,6 @@ def load_txt(text_address, **kwargs):
         key, value = line[1:].split(":", 1)
         params_dict[key.strip()] = value.strip()
 
-    # # Transform foot comments as dictionary data
-    # params_dict = {}
-    # with open(text_address, "r") as f:
-    #
-    #     # Reverse loop while the lines start by a "#"
-    #     for line in reversed(f.readlines()):
-    #         line = line.strip()
-    #         if not line.startswith("#") or (line.startswith("# LiMe")):
-    #             break
-    #
-    #         # Extract key-value pairs
-    #         key, value = line[1:].split(":", 1)  # Split at the first ':'
-    #         params_dict[key.strip()] = value.strip()
 
     return out_array, params_dict
 
