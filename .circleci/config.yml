@@ -6,7 +6,7 @@ orbs:
 jobs:
   test-LiMe:
     docker:
-      - image: cimg/python:3.11.9   # matches requires-python >=3.11
+      - image: cimg/python:3.12.11
     steps:
       - checkout
 
