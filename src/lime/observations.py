@@ -950,6 +950,82 @@ class Spectrum:
 
     def save_spectrum(self, fname=None, line_label=None, ref_frame=None, split_components=False, **kwargs):
 
+        """Save or return the spectrum data, with the option to include the fitted profiles if available.
+
+        Exports the spectrum wavelength, flux, flux uncertainty, and pixel mask to a
+        space-delimited text file. If a ``line_label`` is provided and that line has
+        been measured, the output is cropped to the line band limits (``w1``–``w6``)
+        and the fitted profile(s) are appended as additional columns. The file footer
+        encodes key metadata (LiMe version, units, redshift, normalisation factor,
+        and object label) so the spectrum can be fully reconstructed using lime.Spectrum.from_file("file_address.txt", intrument="text")
+
+        If ``fname`` is ``None`` the data are returned as a NumPy record array instead
+        of being written to disk.
+
+        Parameters
+        ----------
+        fname : str or path-like, optional
+            Destination file path. If ``None`` (default) the spectrum is returned as
+            a :class:`numpy.recarray` rather than saved.
+        line_label : str, optional
+            Transition label (e.g. ``'H1_6563A'``) used to crop the output to the
+            band limits of that line and to append its fitted profile column(s). The
+            label must be present in ``ref_frame`` (or ``self.frame`` if
+            ``ref_frame`` is ``None``). If not found a warning is logged and the full
+            spectrum is saved without profile columns.
+        ref_frame : pandas.DataFrame, optional
+            Lines measurement frame to use for band limits and profile parameters.
+            Defaults to ``self.frame`` when ``None``.
+        split_components : bool, optional
+            When ``True`` and a ``line_label`` is supplied, each kinematic component
+            of the profile is written as a separate column (labelled by component
+            name). When ``False`` (default) all components are summed into a single
+            column labelled with ``line_label``.
+        **kwargs
+            Additional keyword arguments forwarded to :func:`numpy.savetxt`. Common
+            overrides include ``delimiter``, ``header``, and ``footer``. Defaults
+            are ``fmt`` (per-column format strings) and ``delimiter=' '``; any value
+            supplied here takes precedence.
+
+        Returns
+        -------
+        numpy.recarray or None
+            If ``fname`` is ``None``, returns a record array whose field names match
+            the output column headers (``wave``, ``flux``, ``err_flux``,
+            ``pixel_mask``, and optionally one or more profile columns). Columns that
+            are entirely ``NaN`` (e.g. ``err_flux`` when no uncertainty array is
+            attached) are dropped from the output. Returns ``None`` when writing to
+            a file.
+
+        Notes
+        -----
+        * Wavelengths are stored in the **observed** frame (rest-frame values
+          multiplied by ``1 + self.redshift``).
+        * Flux values are denormalised before saving (multiplied by
+          ``self.norm_flux``).
+        * Profile columns include the linear continuum contribution so that summing
+          them reconstructs the full fitted model over the band.
+        * The footer written by default uses a ``key:value`` format; do not supply a
+          custom ``footer`` kwarg unless you intend to replace this metadata block.
+
+        Examples
+        --------
+        Save the full spectrum to disk:
+
+        >>> spec.save_spectrum('my_spectrum.txt')
+
+        Return the band around ``H1_6563A`` as a record array:
+
+        >>> rec = spec.save_spectrum(line_label='H1_6563A')
+        >>> rec.dtype.names
+        ('wave', 'flux', 'err_flux', 'H1_6563A')
+
+        Save with individual kinematic components as separate columns:
+
+        >>> spec.save_spectrum('ha_components.txt', line_label='H1_6563A', split_components=True)
+        """
+
+
         # Headers for the default list
         headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
 

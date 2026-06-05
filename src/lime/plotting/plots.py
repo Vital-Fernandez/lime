@@ -1091,7 +1091,6 @@ def spec_profile_plotter(ax, spec, line_i, z_corr):
     if line_i.group == 'b':
 
         mplcursor_list = []
-
         for j, y_arr in enumerate(flux_array):
             line_format = color_selector(line_i.list_comps[j].label, line_i.measurements.observations, j, n_comps=flux_array.shape[0],
                                          scale_dict=theme.plt, colors_dict=theme.colors)
@@ -1268,41 +1267,67 @@ def spec_mask_plotter(axis, idcs_mask, x, y, z_corr, log=None, line_list=None, c
     return
 
 
-def line_band_plotter(axis, x, y, z_corr, idcs_mask, label, color_dict, show_central=True, show_adjacent=True):
+def line_band_plotter(axis, x, y, z_corr, idcs_mask, label, color_dict, show_adjacent=True, m_cont=None, n_cont=None):
 
     # Security check for low selection
     # TODO check this error crashing when continua bands are very small, need a better error message
     if y[idcs_mask[2]:idcs_mask[3]].size > 1:
 
-        # Lower limit for the filled region
-        if show_adjacent:
-            low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
-            low_lim = 0 if np.isnan(low_lim) else low_lim
-            x_interval = x[idcs_mask[2]:idcs_mask[3]]
-            y_interval = y[idcs_mask[2]:idcs_mask[3]]
-        else:
-            x_interval = x[idcs_mask[2]:idcs_mask[3]]
-            y_interval = y[idcs_mask[2]:idcs_mask[3]]
-            m = (y_interval[-1] - y_interval[0]) / (x_interval[-1] - x_interval[0])
-            n = y_interval[0] - m * x_interval[0]
-            low_lim = m * x_interval + n
-
         # Central bands
-        if show_central:
-            axis.fill_between(x_interval / z_corr, low_lim * z_corr, y_interval * z_corr,
-                              facecolor=color_dict['line_band'], step='mid', alpha=0.25)
+        x_interval = x[idcs_mask[2]:idcs_mask[3]]
+        y_interval = y[idcs_mask[2]:idcs_mask[3]]
+        low_lim = m_cont * x_interval + n_cont if m_cont is not None else np.nanmin(y_interval)
+        axis.fill_between(x=x_interval/z_corr, y1=low_lim*z_corr, y2=y_interval*z_corr, facecolor=color_dict['line_band'],
+                          step='mid', alpha=0.25)
 
         # Continua bands exclusion
         if show_adjacent:
-            axis.fill_between(x[idcs_mask[0]:idcs_mask[1]] / z_corr, low_lim * z_corr,
-                              y[idcs_mask[0]:idcs_mask[1]] * z_corr,
-                              facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
-            axis.fill_between(x[idcs_mask[4]:idcs_mask[5]] / z_corr, low_lim * z_corr,
-                              y[idcs_mask[4]:idcs_mask[5]] * z_corr,
-                              facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+            low_lim = np.nanmin(y[idcs_mask[0]:idcs_mask[5]]) * z_corr
+
+            x_interval = x[idcs_mask[0]:idcs_mask[1]] / z_corr
+            y_interval = y[idcs_mask[0]:idcs_mask[1]] * z_corr
+            axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+
+            x_interval = x[idcs_mask[4]:idcs_mask[5]] / z_corr
+            y_interval = y[idcs_mask[4]:idcs_mask[5]] * z_corr
+            axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
 
     else:
         _logger.warning(f'The {label} band plot interval contains less than 1 pixel')
+
+
+    # # Security check for low selection
+    # if y[idcs_mask[2]:idcs_mask[3]].size > 1:
+    #
+    #     # Lower limit for the filled region
+    #     if show_adjacent:
+    #         low_lim = np.min(y[idcs_mask[0]:idcs_mask[5]])
+    #         low_lim = 0 if np.isnan(low_lim) else low_lim
+    #         x_interval = x[idcs_mask[2]:idcs_mask[3]]
+    #         y_interval = y[idcs_mask[2]:idcs_mask[3]]
+    #     else:
+    #         x_interval = x[idcs_mask[2]:idcs_mask[3]]
+    #         y_interval = y[idcs_mask[2]:idcs_mask[3]]
+    #         m = (y_interval[-1] - y_interval[0]) / (x_interval[-1] - x_interval[0])
+    #         n = y_interval[0] - m * x_interval[0]
+    #         low_lim = m * x_interval + n
+    #
+    #     # Central bands
+    #     if show_central:
+    #         axis.fill_between(x_interval / z_corr, low_lim * z_corr, y_interval * z_corr,
+    #                           facecolor=color_dict['line_band'], step='mid', alpha=0.25)
+    #
+    #     # Continua bands exclusion
+    #     if show_adjacent:
+    #         axis.fill_between(x[idcs_mask[0]:idcs_mask[1]] / z_corr, low_lim * z_corr,
+    #                           y[idcs_mask[0]:idcs_mask[1]] * z_corr,
+    #                           facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+    #         axis.fill_between(x[idcs_mask[4]:idcs_mask[5]] / z_corr, low_lim * z_corr,
+    #                           y[idcs_mask[4]:idcs_mask[5]] * z_corr,
+    #                           facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+    #
+    # else:
+    #     _logger.warning(f'The {line.label} band plot interval contains less than 1 pixel')
 
     return
 
@@ -1719,7 +1744,8 @@ class SpectrumFigures:
 
                     # Continuum bands
                     line_band_plotter(self.ax[i], wave_plot, flux_plot, z_corr, idcs_m, line_i.label, theme.colors,
-                                      show_central=True, show_adjacent=show_adjacent)
+                                      show_adjacent=show_adjacent, m_cont=self._spec.norm_flux * line_i.measurements.m_cont,
+                                      n_cont=self._spec.norm_flux * line_i.measurements.n_cont)
 
                     # Plot the profiles and link to the mplcursors pop-ups
                     if show_profiles and (line_i.measurements is not None):
@@ -1867,12 +1893,13 @@ class SpectrumFigures:
 
                 # Plot the spectrum
                 self.ax[0].step(wave_plot[idcs_bands[0]:idcs_bands[5]]/z_corr, flux_plot[idcs_bands[0]:idcs_bands[5]] * z_corr,
-                              where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
+                                where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
 
                 # Line bands
                 if show_profile:
                     line_band_plotter(self.ax[0], wave_plot, flux_plot, z_corr, idcs_bands, line, color_dict=theme.colors,
-                                      show_central=True, show_adjacent=show_bands)
+                                      show_adjacent=show_bands, m_cont=line.measurements.m_cont/self._spec.norm_flux,
+                                      n_cont=line.measurements.n_cont/self._spec.norm_flux)
 
                     # Central point
                     self.ax[0].scatter(line.measurements.peak_wave/z_corr, line.measurements.cont*z_corr/self._spec.norm_flux,
@@ -1918,7 +1945,6 @@ class SpectrumFigures:
 
                 # Mask plotter
                 # spec_mask_plotter(self.)
-
 
                 if show_cont:
                     if self._spec.cont is not None:

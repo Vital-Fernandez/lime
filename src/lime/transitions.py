@@ -564,6 +564,10 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     True
     """
 
+    # Convert input string to list
+    lines_list = [lines_list] if isinstance(lines_list, str) else lines_list
+
+    # Container for the output data
     headers = ['label', 'particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp',
                'transition_comp', 'shape', 'origin', 'redshift']
     lines_df = pd.DataFrame(columns=headers)

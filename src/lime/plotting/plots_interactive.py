@@ -189,6 +189,7 @@ class BandsInspection:
         self.flux_plot = None
         self.z_corr = None
         self.idcs_mask = None
+        self.norm_flux = None
 
         self.color_bg = {True: theme.colors['line_selected'],
                          False: theme.colors['line_removed']}
@@ -292,6 +293,7 @@ class BandsInspection:
         # Declare the function attributes
         self.y_scale = y_scale
         self.show_continua = show_continua
+        self.norm_flux = self._spec.norm_flux
 
         # Check the address of the output line frame
         if isinstance(fname, (str, Path)):
@@ -327,7 +329,6 @@ class BandsInspection:
 
                 # Figure structure
                 self.fig = plt.figure() if in_fig is None else in_fig
-                # grid_spec = self.fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
                 grid_spec = self.fig.add_gridspec(1, 1)
                 gs_lines = grid_spec[0].subgridspec(n_rows, n_cols, hspace=0.5)
                 self.ax_list = gs_lines.subplots().flatten() if n_lines > 1 else [gs_lines.subplots()]
@@ -358,10 +359,11 @@ class BandsInspection:
 
         return
 
-    def plot_line_BI(self, ax, line, scale_dict=theme.plt):
+    def plot_line_BI(self, ax, label, scale_dict=theme.plt):
 
         # Establish the limits for the line spectrum plot
-        mask = self.log.loc[line, 'w1':'w6'].to_numpy() * self.z_corr
+        line = Line.from_transition(label, data_frame=self.log)
+        mask = self.log.loc[label, 'w1':'w6'].to_numpy() * self.z_corr
         idcs_band = np.searchsorted(self.wave_plot, mask)
 
         # Review the bands edges
@@ -382,20 +384,20 @@ class BandsInspection:
                 color=theme.colors['fg'], linewidth=scale_dict['spectrum_width'])
 
         # Continuum bands
-        line_band_plotter(ax, self.wave_plot, self.flux_plot, self.z_corr, idcs_band, line, theme.colors,
+        line_band_plotter(ax, self.wave_plot, self.flux_plot, self.z_corr, idcs_band, line.label, theme.colors,
                           show_adjacent=self.show_continua)
 
         # Plot the masked pixels
         spec_mask_plotter(ax, self.idcs_mask[idxL:idxH], self.wave_plot[idxL:idxH], self.flux_plot[idxL:idxH],
-                          self.z_corr, self.log, line, theme.colors)
+                          self.z_corr, self.log, label, theme.colors)
 
         # Plot line location
-        wave_line = pd_get(self.log, line, 'wavelength')
+        wave_line = pd_get(self.log, label, 'wavelength')
         if wave_line is not None:
             ax.axvline(wave_line, linestyle='--', color='grey', linewidth=0.5)
 
         # Background for selective line for selected lines
-        if self.active_lines[self.line_list == line][0]:
+        if self.active_lines[self.line_list == label][0]:
             ax.set_facecolor(theme.colors['line_selected'])
         else:
             ax.set_facecolor(theme.colors['line_removed'])
@@ -404,13 +406,12 @@ class BandsInspection:
         line_band_scaler(ax, self.flux_plot[idxL:idxH] * self.z_corr, 'auto')
 
         # Formatting the figure
-        ax.set_title(line, pad=3)
+        ax.set_title(label, pad=3)
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_xticklabels([])
         ax.set_yticklabels([])
         ax.yaxis.set_minor_locator(NullLocator())
-        # ax.get_xlim() # TODO without this one there is no plot
 
         return
 
@@ -861,7 +862,7 @@ class CubeInspection:
              fg_cmap='viridis', bg_norm=None, fg_norm=None, masks_file=None, masks_cmap='viridis_r', masks_alpha=0.2,
              rest_frame=False, log_scale=False, fig_cfg=None, ax_cfg_image=None, ax_cfg_spec=None, in_fig=None,
              fname=None, ext_frame_suffix='_LINELOG', maintain_y_zoom=True, wcs=None, spaxel_selection_button=1,
-             add_remove_button=3, maximize=False):
+             add_remove_button=3, maximize=False, cube_cont=None):
 
         """
         Open an interactive cube viewer: image map (left) + spaxel spectrum (right).

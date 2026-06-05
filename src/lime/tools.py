@@ -158,9 +158,8 @@ def check_lines_normalization(input_lines, norm_line, log):
     # If not input lines use all of them
     if input_lines is None:
         input_lines = log.index.to_numpy() if single_index_check else log.index.get_level_values('line').unique()
-
-    # In case there is only one input line as str
-    input_lines = [input_lines] if isinstance(input_lines, str) else input_lines
+    else:
+        input_lines = [input_lines] if isinstance(input_lines, str) else input_lines
 
     # 1) One-norm in norm_line  # 2) Multiple-norm in norm_line # 3) Multiple-norm in input_lines
 
@@ -224,7 +223,7 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
         raise LiMe_Error(f'Input log is missing "{flux_column}" or "{flux_column}_err" columns')
 
     # Check the normalization for the lines
-    line_list = log.index.to_numpy() if line_list is None else line_list
+    # line_list = log.index.to_numpy() if line_list is None else line_list
     line_array, norm_array = check_lines_normalization(line_list, norm_list, log)
 
     # Add new columns if necessary
