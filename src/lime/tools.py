@@ -887,7 +887,7 @@ def save_parameter_maps(lines_log_file, output_folder, param_list, line_list, ma
 
                 # Loop through the parameters and the lines:
                 for param in param_list:
-                    idcs_log = np.argwhere(np.in1d(log_lines, line_list))
+                    idcs_log = np.argwhere(np.isin(log_lines, line_list))
                     for i_line in idcs_log:
                         images_dict[f'{param}-{log_lines[i_line][0]}'][idx_j, idx_i] = log_data[param][i_line][0]
 

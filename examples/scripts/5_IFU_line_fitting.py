@@ -19,16 +19,16 @@ shoc579.check.cube('H1_6563A', masks_file=spatial_mask_file, rest_frame=True)
 
 # Fit the lines in one spaxel
 spaxel = shoc579.get_spectrum(38, 35)
-# spaxel.fit.frame(bands_file_0, cfg_file, obj_cfg_prefix='MASK_0')
-# spaxel.plot.spectrum(log_scale=True)
-#
-# # Load the spaxels mask coordinates
-# masks_dict = lime.load_spatial_mask(spatial_mask_file, return_coords=True)
-# for i, coords in enumerate(masks_dict['MASK_0']):
-#     idx_Y, idx_X = coords
-#     spaxel = shoc579.get_spectrum(idx_Y, idx_Y)
-#     print(f'Spaxel {idx_Y}, {idx_X}')
-#     spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], obj_cfg_prefix='MASK_0', plot_fit=False)
+spaxel.fit.frame(bands_file_0, cfg_file, obj_cfg_prefix='MASK_0')
+spaxel.plot.spectrum(log_scale=True)
+
+# Load the spaxels mask coordinates
+masks_dict = lime.load_spatial_mask(spatial_mask_file, return_coords=True)
+for i, coords in enumerate(masks_dict['MASK_0']):
+    idx_Y, idx_X = coords
+    spaxel = shoc579.get_spectrum(idx_Y, idx_Y)
+    print(f'Spaxel {idx_Y}, {idx_X}')
+    spaxel.fit.frame(bands_file_0, obs_cfg, line_list=['H1_6563A_b'], obj_cfg_prefix='MASK_0', plot_fit=False)
 
 # Fit the lines in all the masks spaxels
 shoc579.fit.spatial_mask(spatial_mask_file, fit_cfg=cfg_file, line_detection=True, fname=output_lines_log_file)
