@@ -1525,6 +1525,12 @@ class CubeTreatment(LineFitting):
         mask_list = np.array(list(mask_maps.keys()))
         mask_data_list = list(mask_maps.values())
 
+        # Resolve the reference directory with respect to the config file if provided
+        if fit_cfg is not None and not isinstance(fit_cfg, dict):
+            cfg_dir = Path(fit_cfg).resolve().parent
+        else:
+            cfg_dir = Path.cwd()
+
         # Check the mask configuration is included if there are no masks
         input_masks = mask_list if bands is None else None
         input_conf = check_fit_conf(fit_cfg, default_key=None, obj_key=None, update_default=update_default,
@@ -1568,7 +1574,11 @@ class CubeTreatment(LineFitting):
 
             # Load the mask log if provided
             if bands is None:
-                bands_file = Path(mask_conf['bands']).resolve()
+                # bands_file = Path(mask_conf['bands']).resolve()
+
+                # Get the section bands file when resolving bands or other relative paths from the config:
+                bands_file = (cfg_dir / mask_conf['bands']).resolve()
+
                 if bands_file.exists():
                     bands_in = load_frame(bands_file)
                 else:

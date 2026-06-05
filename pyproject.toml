@@ -48,3 +48,7 @@ mpl-results-path = 'tests/outputs'
 mpl-results-always = false
 markers = ["mpl: matplotlib image comparison tests"]
 addopts = "-p no:asdf_schema_tester"
+
+[tool.coverage.run]
+omit = ["src/lime/resources/generator_db.py",
+        "src/lime/resources/generator_logo.py"]

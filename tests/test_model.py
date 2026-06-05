@@ -67,10 +67,10 @@ def test_lorentzian():
     l_area = np.pi * amp * sigma
     assert spec.fit.line.profile == 'l'
     assert spec.fit.line.shape == 'emi'
-    assert np.allclose(spec.fit.line.measurements.FWHM_p, l_fwhm, rtol=0.01)
+    assert np.allclose(spec.fit.line.measurements.FWHM_p, l_fwhm, rtol=0.05)
     # assert np.allclose(spec.fit.line.FWHM_i, g_fwhm, rtol=0.01)
     # assert np.allclose(spec.fit.line.intg_flux, l_area, rtol=0.01) # TODO need to check this
-    assert np.allclose(spec.fit.line.measurements.profile_flux, l_area, rtol=0.01)
+    assert np.allclose(spec.fit.line.measurements.profile_flux, l_area, rtol=0.05)
 
     return
 

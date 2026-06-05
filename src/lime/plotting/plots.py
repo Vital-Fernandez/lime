@@ -1146,7 +1146,12 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
 
     w3 = bands.w3.values * z_arr
     w4 = bands.w4.values * z_arr
-    lambda_arr = bands.wavelength * z_arr
+
+    if 'wavelength' in bands.columns:
+        lambda_arr = bands.wavelength * z_arr
+    else:
+        _, lambda_arr, _ = label_decomposition(lines_list=bands.index.to_numpy(), bands=bands)
+        lambda_arr = lambda_arr * z_arr
 
     # Remove lines beyond limits
     idcs_range = (w4 >= x[0]) & (w4 <= x[-1])
