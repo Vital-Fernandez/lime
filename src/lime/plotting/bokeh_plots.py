@@ -596,7 +596,7 @@ class BokehFigures:
                                 counts, _ = np.histogram(self._spec.infer.conf_arr[idcs_feature], bins=bins)
                                 for idx_conf, count_conf in enumerate(counts):
                                     if count_conf > 0:
-                                        # Get indeces matching the detections
+                                        # Get indices matching the detections
                                         idcs_count = np.where((bins[idx_conf] < self._spec.infer.conf_arr[idcs_feature]) &
                                                               (self._spec.infer.conf_arr[idcs_feature] <= bins[
                                                                   idx_conf + 1]))[0]

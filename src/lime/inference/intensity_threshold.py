@@ -93,7 +93,7 @@ class LineFinder:
             raise LiMe_Error(f'Please provide a continuum and std array to the function or run "Spectrum.fit.continuum"'
                              f' prior to the peak detection')
 
-        # Get indeces of peaks
+        # Get indices of peaks
         limit_threshold = sigma_threshold * continuum_std
         limit_threshold = continuum_array + limit_threshold if emission_shape else continuum_array + limit_threshold
         idcs_peaks, _ = signal.find_peaks(self._spec.flux, height=limit_threshold, distance=width_tol)
