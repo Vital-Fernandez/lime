@@ -1497,7 +1497,7 @@ class Cube:
         signal_slice = self.flux[idcsEmis, :, :]
         signal_slice = signal_slice.data
 
-        # Get indeces all nan entries to exclude them from the analysis
+        # Get indices all nan entries to exclude them from the analysis
         idcs_all_nan = np.all(np.isnan(signal_slice.data), axis=0)
 
         # If not mask parameter provided we use the flux percentiles
@@ -2097,7 +2097,7 @@ class Sample(UserDict, OpenFits):
         # Proceed to selection
         if valid_check:
 
-            # Check if Pandas indeces, numpy boolean or scalar key
+            # Check if Pandas indices, numpy boolean or scalar key
             if isinstance(id_key, pd.Index) or isinstance(id_key, pd.MultiIndex) or isinstance(id_key, pd.Series):
                 idcs = id_key
             elif isinstance(id_key, (np.ndarray, np.bool_)):

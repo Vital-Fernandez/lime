@@ -52,7 +52,7 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_sou
                         f' a measurement.')
         return None
 
-    # Compute the line and adjacent continua indeces:
+    # Compute the line and adjacent continua indices:
     idcsEmis, idcsCont = line.index_bands(spec.wave, spec.redshift)
 
     if user_cont_source == 'fit':

@@ -1208,7 +1208,7 @@ def spec_components_plotter(spec, ax, wave_plot, flux_plot, z_corr):
                 counts, _ = np.histogram(spec.infer.conf_arr[idcs_feature], bins=bins)
                 for idx_conf, count_conf in enumerate(counts):
                     if count_conf > 0:
-                        # Get indeces matching the detections
+                        # Get indices matching the detections
                         idcs_count = np.where((bins[idx_conf] < spec.infer.conf_arr[idcs_feature]) &
                                               (spec.infer.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
                         idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True

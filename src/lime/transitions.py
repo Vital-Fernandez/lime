@@ -1737,7 +1737,7 @@ class Line:
         # Get the wavelength array and mask
         wave_arr = wavelength_array.data
 
-        # Find the indeces of the bands
+        # Find the indices of the bands
         idcs_bands = np.searchsorted(wave_arr, bands_obs_arr)
 
         # Return the boolean arrays
