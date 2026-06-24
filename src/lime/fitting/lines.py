@@ -227,12 +227,8 @@ def lorentz_area(line, idx, n_steps):
 
 
 def voigt_area(line, idx, n_steps):
-
-    amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
-    sigma = np.random.normal(line.sigma[idx], line.sigma_err[idx], n_steps)
-    gamma = np.random.normal(line.gamma[idx], line.gamma_err[idx], n_steps)
-
-    return gaussian_area(amp, sigma, n_steps) + lorentz_area(amp, gamma, n_steps)
+    
+    return gaussian_area(line, idx, n_steps) + lorentz_area(line, idx, n_steps)
 
 
 def pseudo_voigt_area(line, idx, n_steps):
