@@ -161,12 +161,17 @@ def check_spectra_arrays(observation):
 
 def check_redshift_norm(redshift, norm_flux, flux_array, units_flux, norm_factor=1, min_flux_scale=0.001, max_flux_scale=1e50):
 
-    if (redshift is None) or np.isnan(redshift) or np.isinf(redshift):
+    if redshift is None:
         _logger.warning(f'No redshift provided for the spectrum. Assuming local universe observation (z = 0)')
         redshift = 0
 
-    if redshift < 0:
-        _logger.warning(f'Input spectrum redshift has a negative value: z = {redshift}')
+    elif not np.isfinite(redshift):
+        _logger.warning(f'The redshift value is no numeric: z={redshift}. Setting the value to z = 0)')
+        redshift = 0
+
+    else:
+        if redshift < 0:
+            _logger.warning(f'Input spectrum redshift has a negative value: z = {redshift}')
 
     if norm_flux is None:
         if units_flux.scale == 1:
@@ -1239,6 +1244,67 @@ class Spectrum:
                 self.cont_std = None
 
         return
+
+    def __repr__(self):
+
+        # Label
+        label_str = self.label if self.label is not None else 'Spectrum'
+
+        # Redshift and normalization
+        z_str = f'{self.redshift:.6f}' if self.redshift is not None else 'None'
+        norm_str = f'{self.norm_flux:.3e}' if self.norm_flux is not None else 'None'
+
+        # Wavelength range and resolution
+        if self.wave is not None:
+            wmin_str = f'{self.wave.data.min():.2f}'
+            wmax_str = f'{self.wave.data.max():.2f}'
+            delta = np.diff(self.wave.data)
+            if np.all(np.isclose(delta, delta[0])):
+                res_str = f'constant ({delta[0]:.3f} {self.units_wave})'
+            else:
+                res_str = f'variable (min={delta.min():.3f}, max={delta.max():.3f} {self.units_wave})'
+        else:
+            wmin_str = wmax_str = res_str = 'None'
+
+        # Resolving power
+        if self.res_power is None:
+            res_power_str = 'None'
+        elif np.ndim(self.res_power) == 0:
+            res_power_str = f'{self.res_power:.1f} (scalar)'
+        else:
+            res_power_arr = np.asarray(self.res_power)
+            if np.all(np.isclose(res_power_arr, res_power_arr[0])):
+                res_power_str = f'{res_power_arr[0]:.1f} (constant)'
+            else:
+                res_power_str = f'variable (min={res_power_arr.min():.1f}, max={res_power_arr.max():.1f})'
+
+        # Checks
+        has_mask = (self.wave is not None) and np.any(self.wave.mask)
+        has_err = self.err_flux is not None
+
+        return (
+            f'\n{"=" * 60}\n'
+            f'  {label_str}\n'
+            f'{"=" * 60}\n'
+            f'  Units\n'
+            f'    Wavelength   : {self.units_wave}\n'
+            f'    Flux         : {self.units_flux}\n'
+            f'{"-" * 60}\n'
+            f'  Observation\n'
+            f'    Redshift     : {z_str}\n'
+            f'    Norm flux    : {norm_str}\n'
+            f'{"-" * 60}\n'
+            f'  Wavelength grid\n'
+            f'    wmin         : {wmin_str} {self.units_wave}\n'
+            f'    wmax         : {wmax_str} {self.units_wave}\n'
+            f'    Resolution   : {res_str}\n'
+            f'    Res. power   : {res_power_str}\n'
+            f'{"-" * 60}\n'
+            f'  Checks\n'
+            f'    Masked pixels     : {"yes" if has_mask else "no"}\n'
+            f'    Uncertainty array : {"yes" if has_err else "no"}\n'
+            f'{"=" * 60}\n'
+        )
 
 
 class Cube:

@@ -1,5 +1,6 @@
 import logging
 
+import matplotlib.pyplot as plt
 import numpy as np
 from lmfit.models import Model
 from lmfit import fit_report
@@ -90,6 +91,7 @@ def const_cont_model(cont_array, prefix='cont_', allow_scale=False):
         params[f'{prefix}scale'].set(vary=False)
         # freeze at 1.0 -> truly constant
     return m, params
+
 
 def linear_model(x, m_cont, n_cont):
     """Linear line formulation"""
@@ -252,9 +254,9 @@ def power_area(line, idx, n_steps):
 def exp_area(line, idx, n_steps):
 
     amp = np.random.normal(line.amp[idx], line.amp_err[idx], n_steps)
-    alpha = np.random.normal(line.alpha[idx], line.alpha[idx], n_steps)
+    alpha = np.random.normal(line.alpha[idx], line.alpha_err[idx], n_steps)
 
-    return 2.5066282746 * amp * 1/alpha
+    return 2 * amp / alpha
 
 
 def pseudo_power_area(line, idx, n_steps):
@@ -938,9 +940,18 @@ class LineFitting:
         line.measurements.peak_wave = emis_wave[peakIdx]
         line.measurements.peak_flux = emis_flux[peakIdx]
         line.measurements.pixelWidth = np.diff(emis_wave).mean()
-        # line.measurements.cont = line.measurements.peak_wave * line.measurements.m_cont + line.measurements.n_cont
+
+        # Continuum level and uncertainty at peak
         line.measurements.cont = cont_arr[peakIdx]
-        line.measurements.cont_err = emis_err[peakIdx]
+
+        if self.cov_linear is None:
+            line.measurements.cont_err = np.sqrt(((emis_wave[-1] - emis_wave[peakIdx]) / (emis_wave[-1]-emis_wave[0]) * emis_err[0]) ** 2
+                                                 + ((emis_wave[peakIdx] - emis_wave[0]) / (emis_wave[-1]-emis_wave[0])  * emis_err[-1]) ** 2)
+        else:
+            line.measurements.cont_err = np.sqrt(self.cov_linear[0, 0] * emis_wave[peakIdx] ** 2 + self.cov_linear[1, 1]
+                                                 + 2 * self.cov_linear[0, 1] * emis_wave[peakIdx])
+
+        # y_val_err = np.sqrt(((emis_wave[-1] - emis_wave[peakIdx]) / (emis_wave[-1]-emis_wave[0]) * emis_err[0]) ** 2 + ((emis_wave[peakIdx] - emis_wave[0]) / (emis_wave[-1]-emis_wave[0])  * emis_err[-1]) ** 2)
 
         # Warning if continuum above or below line peak/through
         if emission_check and (cont_arr[peakIdx] > emis_flux[peakIdx]):
@@ -1003,61 +1014,67 @@ class LineFitting:
         match user_cont_source:
 
             case 'adjacent':
-
-                # Check for zero err
                 err_cont = self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else None
-                err_cont = err_cont if np.any(err_cont) else None
+                # err_cont = err_cont if np.any(err_cont) else None
 
                 # Fit the model, including uncertainties
-                params, covariance = curve_fit(linear_model,
-                                               xdata=self._spec.wave[idcs_cont].compressed(),
-                                               ydata=self._spec.flux[idcs_cont].compressed(),
-                                               sigma=err_cont,
-                                               absolute_sigma=True, check_finite=False)
+                params, self.cov_linear = curve_fit(linear_model, xdata=self._spec.wave[idcs_cont].compressed(),
+                                                    ydata=self._spec.flux[idcs_cont].compressed(), sigma=err_cont,
+                                                    absolute_sigma=True, check_finite=False)
 
-                self.line.measurements.m_cont, self.line.measurements.n_cont = params
-                self.line.measurements.m_cont_err_intg, self.line.measurements.n_cont_err_intg = np.sqrt(np.diag(covariance))
+                self.line.measurements.m_cont = params[0]
+                self.line.measurements.n_cont = params[1]
+                self.line.measurements.m_cont_err_intg, self.line.measurements.n_cont_err_intg = np.sqrt(np.diag(self.cov_linear))
+
                 cont_arr = self._spec.wave * self.line.measurements.m_cont + self.line.measurements.n_cont
 
             case 'central':
-
                 x, y = self._spec.wave[idcs_emis].compressed(), self._spec.flux[idcs_emis].compressed()
                 err = self._spec.err_flux[idcs_emis].compressed() if self._spec.err_flux is not None else [0, 0]
 
-                self.line.measurements.m_cont = (y[-1] - y[0]) / (x[-1] - x[0])
+                dx = x[-1] - x[0]
+                self.line.measurements.m_cont = (y[-1] - y[0]) / dx
                 self.line.measurements.n_cont =  y[0] - self.line.measurements.m_cont * x[0]
 
-                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
-                self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] / dx) ** 2 + (err[-1] / dx) ** 2)
+                self.line.measurements.n_cont_err_intg = np.sqrt((err[0] * x[-1] / dx) ** 2 + (err[-1] * x[0] / dx) ** 2)
+
                 cont_arr = self._spec.wave * self.line.measurements.m_cont + self.line.measurements.n_cont
 
-            case 'fit':
 
+            case 'fit':
                 x, y = self._spec.wave[idcs_cont].compressed(), self._spec.cont[idcs_cont].compressed()
                 err = self._spec.err_flux[idcs_cont].compressed() if self._spec.err_flux is not None else [0, 0]
 
-                self.line.measurements.m_cont = (y[-1] - y[0]) / (x[-1] - x[0])
+                dx = x[-1] - x[0]
+                self.line.measurements.m_cont = (y[-1] - y[0]) / dx
                 self.line.measurements.n_cont =  y[0] - self.line.measurements.m_cont * x[0]
 
-                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] * (-1 / (x[-1] - x[0]))) ** 2 + (err[-1] * (1/(x[-1] - x[0]))) ** 2)
-                self.line.measurements.n_cont_err_intg = np.sqrt(err[0] ** 2 + (self.line.measurements.m_cont_err_intg * (-x[0])) ** 2)
+                self.line.measurements.m_cont_err_intg = np.sqrt((err[0] / dx) ** 2 + (err[-1] / dx) ** 2)
+                self.line.measurements.n_cont_err_intg = np.sqrt((err[0] * x[-1] / dx) ** 2 + (err[-1] * x[0] / dx) ** 2)
+
+                # TODO here with the uncertainty from the spectrum fitted
                 cont_arr = self._spec.cont
 
             case _:
                 raise LiMe_Error(f'Continuum source "{user_cont_source}" is not recognized. '
                                  f'Please use "central", "adjacent" and "fit".')
 
-        # # Initial continuum level value
-        # self.line.measurements.cont = (self.line.measurements.m_cont * self._spec.wave[idcs_emis].compressed().mean() +
-        #                                self.line.measurements.n_cont)
+        # Bands constant pixel error
+        if err_from_bands:
+            err_arr = self._spec.wave * 0 + np.std(self._spec.flux[idcs_cont] - (self.line.measurements.m_cont * self._spec.wave[idcs_cont] + self.line.measurements.n_cont), ddof=2)
 
-        return cont_arr
+        # Spectrum error
+        else:
+            err_arr = self._spec.err_flux
+
+        return cont_arr, err_arr
 
     def pixel_error_calculation(self, idcs_continua, user_error_from_bands):
-
+        # TODO delete this one
         # Constant pixel error array from adjacent bands
         if user_error_from_bands:
-            return np.ma.array(np.full(self._spec.wave.shape, np.std(self._spec.flux[idcs_continua] - (self.line.measurements.m_cont * self._spec.wave[idcs_continua] + self.line.measurements.n_cont))), mask=np.zeros(self._spec.wave.shape, dtype=bool))
+            return np.ma.array(np.full(self._spec.wave.shape, np.std(self._spec.flux[idcs_continua] - (self.line.measurements.m_cont * self._spec.wave[idcs_continua] + self.line.measurements.n_cont), ddof=2)), mask=self._spec.wave.mask)
 
         # Pixel array
         else:

@@ -1148,7 +1148,7 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
     w4 = bands.w4.values * z_arr
 
     if 'wavelength' in bands.columns:
-        lambda_arr = bands.wavelength * z_arr
+        lambda_arr = bands.wavelength.to_numpy() * z_arr
     else:
         _, lambda_arr, _ = label_decomposition(lines_list=bands.index.to_numpy(), bands=bands)
         lambda_arr = lambda_arr * z_arr
@@ -1537,7 +1537,7 @@ class SpectrumFigures:
         ax_labels_cfg = theme.ax_defaults(ax_cfg, self._spec)
 
         # Create and fill the figure
-        with ((rc_context(plt_cfg))):
+        with rc_context(plt_cfg):
 
             # Establish figure
             self.fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
@@ -1628,6 +1628,76 @@ class SpectrumFigures:
             save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
 
         return
+
+    def resolution(self, fname=None, rest_frame=False, in_fig=_NO_FIG, fig_cfg=None, ax_cfg=None, maximize=False):
+
+        """
+        Plot the spectral resolution as a function of wavelength.
+
+        If the resolving power (``res_power``) is available, it is plotted against
+        wavelength. Otherwise, the pixel width (``np.diff(wave)``) is plotted instead.
+
+        Parameters
+        ----------
+        fname : str, optional
+            Output file path for saving the plot. If not provided, the plot is
+            displayed in a new window.
+        rest_frame : bool, optional
+            If ``True``, plot in rest-frame wavelengths. Default is ``False``.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration dictionary.
+        ax_cfg : dict, optional
+            Axes configuration dictionary with optional keys ``"xlabel"``, ``"ylabel"``,
+            and ``"title"``.
+        maximize : bool, optional
+            If ``True``, maximize the plot window after rendering. Default is ``False``.
+        """
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Display check for input figures
+        display_check = True if in_fig is _NO_FIG else False
+
+        # Adjust the default theme
+        plt_cfg = theme.fig_defaults(fig_cfg)
+        ax_labels_cfg = theme.ax_defaults(ax_cfg, self._spec)
+
+        with rc_context(plt_cfg):
+
+            # Establish figure
+            self.fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+            self.ax = self.fig.add_subplot()
+
+            # Reference frame for the plot
+            wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
+
+            # Plot resolving power or pixel width
+            if self._spec.res_power is not None:
+                y_data = np.asarray(self._spec.res_power)
+                if np.ndim(y_data) == 0:
+                    y_data = np.full(wave_plot.size, float(y_data))
+                ax_labels_cfg['ylabel'] = r'Resolving power $R = \lambda/\Delta\lambda$'
+                ax_labels_cfg['title'] = 'Spectral resolving power vs wavelength'
+                self.ax.plot(wave_plot/z_corr, y_data, color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
+
+            else:
+                delta = np.diff(wave_plot/z_corr)
+                y_data = np.concatenate([delta, [delta[-1]]])
+                ax_labels_cfg['ylabel'] = f'Pixel width ({self._spec.units_wave})'
+                ax_labels_cfg['title'] = 'Pixel width vs wavelength'
+                self.ax.step(wave_plot/z_corr, y_data, color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'],
+                             where='mid')
+
+            self.ax.set(**ax_labels_cfg)
+
+            # Save or display
+            save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
+
+        return
+
 
     def grid(self, fname=None, rest_frame=True, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5),
              show_profiles=True, show_adjacent=False, in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
