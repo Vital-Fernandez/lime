@@ -143,6 +143,7 @@ LiMe medium update - 2.4.0 - 26/06/2024
     - Added paper citation on the documentation
     - Added more integration with aspect functions (next medium release will focus on documenting these updgrades)
     - Adding releases on the github page to mark medium / major updates
+    - Bump minimum python to 3.12 version for uniform requirements with readthedocs compilation
 
 
 
