@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import pandas as pd
 from lime.io import LiMe_Error
-from lime.transitions import Line
+from lime.transitions import Line, parse_line_group_notation
 
 
 _logger = logging.getLogger('LiMe')
@@ -23,56 +23,6 @@ def find_sharing_groups(lines: np.ndarray, matrix: np.ndarray) -> list[np.ndarra
     breaks = np.where(np.diff(superdiag.astype(int), prepend=0, append=0) != 0)[0]
     starts, ends = breaks[0::2], breaks[1::2]
     return [lines[s:e + 1] for s, e in zip(starts, ends) if superdiag[s]]
-
-
-def blend_merge_dict(line_list: np.ndarray, relation_list: np.ndarray) -> dict:
-    """
-    Build a blend/merge dictionary from a list of lines and their relations.
-
-    Parameters
-    ----------
-    line_list : np.ndarray
-        Ordered array of line names.
-    relation_list : np.ndarray of bool
-        Connections between consecutive lines. True=blended, False=merged.
-        Length must be len(line_list) - 1.
-
-    Returns
-    -------
-    dict
-        Keys/values describing blend and merge groupings.
-    """
-    # All True: single blended group
-    if relation_list.all():
-        return {f"{line_list[0]}_b": "+".join(line_list)}
-
-    # All False: single merge group
-    if not relation_list.any():
-        return {f"{line_list[0]}_m": "+".join(line_list)}
-
-    # Mixed: find contiguous False entries
-    false_mask = ~relation_list
-    edges = np.diff(false_mask.astype(int), prepend=0, append=0)
-    starts = np.where(edges == 1)[0]
-    ends   = np.where(edges == -1)[0]
-
-    # Build merge entries: each False run covers lines[start : end+1]
-    merge_entries = {f"{line_list[s]}_m": "+".join(line_list[s:e + 1]) for s, e in zip(starts, ends)}
-
-    # Build blend parts: replace merged subgroups with their key (Mark hidden in a merge subgroup)
-    hidden = np.zeros(len(line_list), dtype=bool)
-    for s, e in zip(starts, ends):
-        hidden[s + 1:e + 1] = True  # keep the first line as anchor, absorb the rest
-
-    # For non-hidden lines: use line name, but swap merge-subgroup anchors for their key
-    is_anchor = np.zeros(len(line_list), dtype=bool)
-    is_anchor[starts] = True
-
-    blend_parts = np.where(is_anchor, np.array([f"{l}_m" for l in line_list]), line_list)
-    blend_value = "+".join(blend_parts[~hidden])
-
-    blend_key = f"{line_list[0]}_b"
-    return {blend_key: blend_value, **merge_entries}
 
 
 def determine_line_groups(spec, bands, fit_conf, composite_lines, automatic_grouping, n_sigma, Rayleigh_threshold):
@@ -253,7 +203,7 @@ def get_spectrum_line_groups(wave_rest, bands, n_sigma=4, Rayleigh_threshold=2):
 
     group_dict = {}
     for line_list, relation_list in zip(grouped_lines, relation_list):
-        group_dict.update(blend_merge_dict(line_list, relation_list))
+        group_dict.update(parse_line_group_notation(line_list, relation_list))
 
     group_dict = None if len(group_dict) == 0 else group_dict
 

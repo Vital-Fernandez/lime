@@ -134,7 +134,6 @@ def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components
 
         # If there is only one line return nan
         if not (method_flux and not detection_only):
-            # match np.count_nonzero(np.diff(np.r_[False, idcs_lines])):
             match comp_counter(idcs_lines):
                 case 0:
                     return None # No components

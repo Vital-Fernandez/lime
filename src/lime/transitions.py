@@ -564,6 +564,10 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     True
     """
 
+    # Convert input string to list
+    lines_list = [lines_list] if isinstance(lines_list, str) else lines_list
+
+    # Container for the output data
     headers = ['label', 'particle', 'wavelength', 'latex_label', 'kinem', 'profile_comp',
                'transition_comp', 'shape', 'origin', 'redshift']
     lines_df = pd.DataFrame(columns=headers)
@@ -592,23 +596,16 @@ def label_decomposition(lines_list, bands=None, fit_conf=None, params_list=('par
     return output
 
 
-# def origin_decomposition(lines_list, **kwargs):
-#
-#     # Loop throught the line origins and get the default function values
-#     map_origin = {}
-#     for line in lines_list:
-#         orig = line.origin
-#         core_label = line.label if '_o-' not in line.label else line.label[:line.label.find('_o-')]
-#         # First line on the origin entry
-#         if orig not in map_origin:
-#             map_origin[orig] = {**kwargs}
-#             map_origin[orig]['line_list'] = [core_label]
-#             map_origin[orig]['lines_redshift'] = line.redshift
-#
-#         else:
-#             map_origin[orig]['line_list'].append(core_label)
-#
-#     return map_origin
+def get_wavelength_units_label(label):
+    if label[1][-1] == 'A':
+        return float(label[:-1]), 'Angstrom'
+    else:
+        au_unit = au.Unit(line_items[1])
+        line_params['units_wave'] = au_unit.bases[
+            0].to_string()  # TODO this fails if the transition does not have units: "H1_4861"
+        line_params['wavelength'] = au_unit.scale
+
+    return
 
 def label_profiling(profile_comp, default_type='emi'):
 
@@ -722,6 +719,7 @@ def dataframe_line_indexing(bands_df, wave_intvl, redshift, particle_list, line_
 
     return idcs_rows
 
+
 def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=None, units_wave='Angstrom', sig_digits=4,
                 vacuum_waves=False, ref_bands=None, update_labels=False, update_latex=False, rejected_lines=None, origin=None):
     
@@ -784,8 +782,17 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
     # Load the reference bands
     bands_df = check_file_dataframe(ref_bands)
 
+    # Get the units of the dataframe
+    units_db = pd_get(bands_df, row=bands_df.index[0], column='units_wave')
+    if units_db is None:
+        if 'units_wave' not in bands_df:
+            units_db =  au.Unit(bands_df.index[0])
+        else:
+            _logger.critical(f'Missing "units_wave" on the input lines database frame"')
+
+
     # Convert to requested units
-    if units_wave != 'Angstrom':
+    if units_wave != units_db:
         wave_columns = ['wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
         unit_factor = unit_conversion(in_units='Angstrom', out_units=units_wave, wave_array=1)
         bands_df.loc[:, wave_columns] = bands_df.loc[:, wave_columns] * unit_factor
@@ -798,7 +805,7 @@ def lines_frame(wave_intvl=None, line_list=None, particle_list=None, redshift=No
         bands_df['wavelength'] = bands_df['wave_vac']
         bands_df[['w1', 'w2', 'w3', 'w4', 'w5', 'w6']] = air_to_vacuum_function(bands_df[['w1', 'w2', 'w3', 'w4', 'w5', 'w6']].to_numpy())
 
-    # indexing the line selection # TODO maybe overwrite the redshift from origins here
+    # Indexing the line selection # TODO maybe overwrite the redshift from origins here
     idcs = dataframe_line_indexing(bands_df, wave_intvl, redshift, particle_list, line_list, rejected_lines, unit_factor)
     bands_df = bands_df.loc[idcs]
 
@@ -1389,6 +1396,57 @@ def check_measurements_table(df):
         return False
 
 
+def parse_line_group_notation(line_list: np.ndarray, relation_list: np.ndarray) -> dict:
+
+    """
+    Build a blend/merge dictionary from a list of lines and their relations.
+
+    Parameters
+    ----------
+    line_list : np.ndarray
+        Ordered array of line names.
+    relation_list : np.ndarray of bool
+        Connections between consecutive lines. True=blended, False=merged.
+        Length must be len(line_list) - 1.
+
+    Returns
+    -------
+    dict
+        Keys/values describing blend and merge groupings.
+    """
+
+    # All True: single blended group
+    if relation_list.all():
+        return {f"{line_list[0]}_b": "+".join(line_list)}
+
+    # All False: single merge group
+    if not relation_list.any():
+        return {f"{line_list[0]}_m": "+".join(line_list)}
+
+    # Mixed: find contiguous False entries
+    false_mask = ~relation_list
+    edges = np.diff(false_mask.astype(int), prepend=0, append=0)
+    starts = np.where(edges == 1)[0]
+    ends   = np.where(edges == -1)[0]
+
+    # Build merge entries: each False run covers lines[start : end+1]
+    merge_entries = {f"{line_list[s]}_m": "+".join(line_list[s:e + 1]) for s, e in zip(starts, ends)}
+
+    # Build blend parts: replace merged subgroups with their key (Mark hidden in a merge subgroup)
+    hidden = np.zeros(len(line_list), dtype=bool)
+    for s, e in zip(starts, ends):
+        hidden[s + 1:e + 1] = True  # keep the first line as anchor, absorb the rest
+
+    # For non-hidden lines: use line name, but swap merge-subgroup anchors for their key
+    is_anchor = np.zeros(len(line_list), dtype=bool)
+    is_anchor[starts] = True
+
+    blend_parts = np.where(is_anchor, np.array([f"{l}_m" for l in line_list]), line_list)
+    blend_value = "+".join(blend_parts[~hidden])
+
+    blend_key = f"{line_list[0]}_b"
+    return {blend_key: blend_value, **merge_entries}
+
 class Line:
 
     """
@@ -1838,6 +1896,7 @@ class Line:
 
         return notation
 
+
 def parse_container_data(label, fit_cfg, data_frame, parent_group_label, def_shape, def_profile, def_origin, verbose,
                          warn_missing_db=False):
 
@@ -1902,6 +1961,10 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
     # Get line core label
     core = f'{items[0]}_{items[1]}'
 
+    # Confirm the units are provided
+    if items[-1].isdigit():
+        raise LiMe_Error(f'The line {label} format is not recognized. The core label "{core}" must end with the units.')
+
     # Confirm grouped lines have specified their components otherwise set to single
     if group_type:
         group_label = None if fit_cfg is None else fit_cfg.get(label, None)
@@ -1931,6 +1994,18 @@ def get_line_group(label, fit_cfg, data_frame, parent_group_label=None, verbose=
     # Assign essential keys:
     line_params['label'] = label
     line_params['core'] = core
+
+    # # Get the label units
+    # if items[1][-1] == 'A':
+    #     units_wave = 'Angstrom'
+    # else:
+    #     i = 1
+    #     while not items[1][-i].isdigit():
+    #         i += 1
+    #         if i > len(items[1]):
+    #             raise LiMe_Error(f'The line {label} format is not recognized. Please use a "Particle_WavelengthUnits" format.')
+    #     units_wave = items[1][-i + 1:]
+    # line_params['units_wave'] = units_wave
 
     # Add group keys if they passed all checks
     if group_type:
@@ -2022,6 +2097,14 @@ def get_line_from_df(line_params, input_df, warn_missing_db=False):
         db_params['atom_data'] = TransitionParameters(pd_get(input_df, row_name, column='osc_str', nan_to_none=True),
                                                       pd_get(input_df, row_name, column='trans_prob', nan_to_none=True))
 
+        # # Warn if label units are different from database
+        # if db_params['units_wave'] is not None:
+        #     if db_params['units_wave'] != line_params['units_wave']:
+        #         _logger.warning(f'The "{line_params['label']}" units ("{line_params['units_wave']}") are different from '
+        #                         f'the bands frame units ({ db_params['units_wave']}). If you are using the LiMe database'
+        #                         f'please switch the units using: ')
+
+
         # Configuration file overwrite dataframe
         db_params.update(line_params)
 
@@ -2047,13 +2130,12 @@ def review_input_params(line_params, def_shape, def_profile, def_origin):
 
     # Wavelength (for reference blended lines we assign the reference index later)
     if (line_params.get('wavelength') is None) and (line_params.get('group') is None):
+        # line_params['wavelength'], line_params['units_wave'] = get_wavelength_units_label(line_items[1])
         if line_items[1][-1] == 'A':
-            # line_params['units_wave'] = au.Unit('AA')
             line_params['units_wave'] = 'Angstrom'
             line_params['wavelength']  = float(line_items[1][:-1])
         else:
             au_unit = au.Unit(line_items[1])
-            print('FALLLLLLLAAAAAAAAAAA', line_params['label'])
             line_params['units_wave'] = au_unit.bases[0].to_string() # TODO this fails if the transition does not have units: "H1_4861"
             line_params['wavelength']  = au_unit.scale
 

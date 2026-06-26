@@ -205,7 +205,7 @@ def load_cfg(file_address, fit_cfg_suffix='_line_fitting'):
     return cfg_lime
 
 
-def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
+def save_cfg(output_file, param_dict, section_name=None, clear_section=False, overwrite_file=False):
 
     """
     This function safes the input dictionary into a configuration file. If no section is provided the input dictionary
@@ -224,7 +224,7 @@ def save_cfg(output_file, param_dict, section_name=None, clear_section=False):
             output_data = param_dict if section_name is None else {section_name: param_dict}
 
             # If the file does not exist create a new file
-            if not output_path.is_file():
+            if not output_path.is_file() or overwrite_file:
                 with open(output_file, "w") as f:
                     toml.dump(output_data, f)
 

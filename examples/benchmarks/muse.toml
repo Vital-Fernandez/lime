@@ -11,6 +11,7 @@ redshift = 0.004691
 
 [MASK_0_line_fitting]
 bands = "CGCG007_MASK_0_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 
@@ -37,6 +38,7 @@ O3_4959A_k-1_amp = "expr:<0.5*O3_4959A_amp"
 
 [MASK_1_line_fitting]
 bands = "CGCG007_MASK_1_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 
@@ -58,21 +60,25 @@ O3_4959A_k-1_amp = "expr:<0.5*O3_4959A_amp"
 
 [MASK_2_line_fitting]
 bands = "CGCG007_MASK_2_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 
 [MASK_3_line_fitting]
 bands = "CGCG007_MASK_3_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 
 [MASK_4_line_fitting]
 bands = "CGCG007_MASK_4_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 
 [MASK_5_line_fitting]
 bands = "CGCG007_MASK_4_bands.txt"
+peaks_troughs.sigma_threshold = 3
 continuum.degree_list = [3, 6, 6]
 continuum.emis_threshold = [5, 3, 2]
 

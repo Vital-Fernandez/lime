@@ -1,4 +1,4 @@
-# LiMe: A Line Measuring library (v2 release)
+# LiMe: A Line Measuring library (v2.4 release)
 
 ```{image} 0_resources/images/LiMe2_logo_white_transparent.png
 :width: 500px
@@ -15,7 +15,7 @@
 ## ✨ Key features
 
 - Integrated and profile-dependent measurements of emission and absorption line fluxes.  
-- Support for including pixel-level uncertainty spectra in calculations.  
+- Support for including pixel-level uncertainty spectra in calculations and pixel masks.  
 - A flexible configuration system for multi-component profile fitting.  
 - Automated and manual tools to verify line detections.  
 - Interactive plots for visual inspection of inputs and results.  
@@ -29,6 +29,35 @@
 - The **Explanations** section discusses LiMe’s configuration and results from a scientific point of view.  
 - The **Reference** section contains comprehensive indexes of *LiMe* functions.  
 :::
+
+## ✨ Citation:
+
+If you found LiMe useful, please remember to cite [Fernández et al (2024)](https://doi.org/10.1051/0004-6361/202449224) 📝:
+
+<details>
+<summary>BibTeX citation</summary>
+
+```bibtex
+@ARTICLE{2024A&A...688A..69F,
+       author = {{Fern{\'a}ndez}, V. and {Amor{\'\i}n}, R. and {Firpo}, V. and {Morisset}, C.},
+        title = "{LIME: A LIne MEasuring library for large and complex spectroscopic data sets. I. Implementation of a virtual observatory for JWST spectra}",
+      journal = {\aap},
+     keywords = {methods: data analysis, techniques: spectroscopic, galaxies: abundances, galaxies: kinematics and dynamics, Astrophysics - Instrumentation and Methods for Astrophysics},
+         year = 2024,
+        month = aug,
+       volume = {688},
+          eid = {A69},
+        pages = {A69},
+          doi = {10.1051/0004-6361/202449224},
+archivePrefix = {arXiv},
+       eprint = {2405.15072},
+ primaryClass = {astro-ph.IM},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2024A&A...688A..69F},
+}
+```
+
+</details>
+
 
 ## ✨ LiMe v2 release:
 
@@ -117,8 +146,8 @@ maxdepth: 2
 caption: Guides
 ---
 2_guides/0_creating_observations
-🆕 Automatic bands <2_guides/1_prepare_line_bands>
 2_guides/2_manual_bands_adjustement
+🆕 Automatic bands <2_guides/1_prepare_line_bands>
 Spectrum Continuum <2_guides/3_continuum_fitting>
 2_guides/4_line_detection
 🆕 Line Continuum <2_guides/5_line_continuum>
@@ -133,7 +162,7 @@ Spectrum Continuum <2_guides/3_continuum_fitting>
 maxdepth: 2
 caption: Explanations
 ---
-3_explanations/0_measurements.rst
+3_explanations/0_measurements.md
 
 ```
 

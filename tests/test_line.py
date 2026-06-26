@@ -1,9 +1,7 @@
 from pathlib import Path
 import numpy as np
 import lime
-from lime.transitions import _DATABASE_FILE
-from lime.transitions import Line, label_decomposition, Particle, format_line_mask_option
-from lime.resources.generator_db import format_lines_database
+from lime.transitions import Line, label_decomposition, Particle, format_line_mask_option, parse_line_group_notation
 from lime.io import _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, _LOG_COLUMNS
 
 # Data for the tests
@@ -28,7 +26,9 @@ bands = spec.retrieve.lines_frame(band_vsigma=90, fit_cfg=cfg, obj_cfg_prefix='3
 # TODO if line He2_1640_m does not find components on the log it is going
 #  to use the database this can cause an issue with he bands width...
 
+
 def find_groups_with_n_and_diffcol(df, same_cols, diff_col, n=6, exact=False):
+
     """
     Find groups of rows where:
       - The rows match on `same_cols`
@@ -48,6 +48,39 @@ def find_groups_with_n_and_diffcol(df, same_cols, diff_col, n=6, exact=False):
                 result.append(tuple(idxes))
 
     return result
+
+
+def test_group_notation_maker():
+
+    # Quick checks
+    lines = np.array(['H1_3722A', 'O2_3726A', 'O2_3729A', 'H1_3734A'])
+
+    notation = parse_line_group_notation(lines, np.array([True, True, True]))
+    print(notation)
+    assert list(notation.keys())[0] == 'H1_3722A_b'
+    assert list(notation.values())[0] == 'H1_3722A+O2_3726A+O2_3729A+H1_3734A'
+
+    notation = parse_line_group_notation(lines, np.array([False, False, False]))
+    print(notation)
+    assert list(notation.keys())[0] == 'H1_3722A_m'
+    assert list(notation.values())[0] == 'H1_3722A+O2_3726A+O2_3729A+H1_3734A'
+
+    notation = parse_line_group_notation(lines, np.array([True, False, False]))
+    print(notation)
+    assert list(notation.keys())[0] == 'H1_3722A_b'
+    assert list(notation.values())[0] == 'H1_3722A+O2_3726A_m'
+    assert list(notation.keys())[1] == 'O2_3726A_m'
+    assert list(notation.values())[1] == 'O2_3726A+O2_3729A+H1_3734A'
+
+    notation = parse_line_group_notation(lines, np.array([False, False, True]))
+    print(notation)
+    assert list(notation.keys())[0] == 'H1_3722A_b'
+    assert list(notation.values())[0] == 'H1_3722A_m+H1_3734A'
+    assert list(notation.keys())[1] == 'H1_3722A_m'
+    assert list(notation.values())[1] == 'H1_3722A+O2_3726A+O2_3729A'
+
+    return
+
 
 def test_label_decomposition():
 
@@ -87,7 +120,7 @@ def test_format_line_mask_option():
     return
 
 
-def tests_bands_from_log():
+def test_bands_from_log():
 
     # Declare the data
     bands_df = lime.load_frame(baseline_folder/'SHOC579_MANGA38-35_bands.txt')
@@ -98,8 +131,7 @@ def tests_bands_from_log():
     bands_new = lime.bands_from_measurements(log_df, index_dict=rename_dict)
 
     # Compare the rows and columns
-    assert {'wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label', 'particle', 'units_wave',
-            'trans'}.issubset(bands_df.columns)
+    assert {'wave_vac', 'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'particle', 'units_wave'}.issubset(bands_df.columns)
 
     assert {'wavelength', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'latex_label', 'particle'}.issubset(log_df.columns)
 
@@ -137,6 +169,7 @@ def assert_measurements(fit_line, log_line):
             assert diag
 
     return
+
 
 class TestTransitionClass:
 

@@ -1,12 +1,12 @@
 version: 2.1
 
 orbs:
-  codecov: codecov/codecov@3.2.2
+  codecov: codecov/codecov@4.1.0
 
 jobs:
   test-LiMe:
     docker:
-      - image: cimg/python:3.11.9   # matches requires-python >=3.11
+      - image: cimg/python:3.12.11
     steps:
       - checkout
 

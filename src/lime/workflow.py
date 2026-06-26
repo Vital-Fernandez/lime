@@ -9,6 +9,8 @@ from astropy.io import fits
 from lmfit.models import PolynomialModel
 from inspect import signature
 
+from matplotlib import pyplot as plt
+
 import lime
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, au
 from lime.rsrc_manager import lineDB
@@ -44,6 +46,10 @@ def review_bands(spec, line, min_line_pixels=3, min_cont_pixels=2, user_cont_sou
                                                                                f" w4 > w_max_rest ({line.mask[3]} > {limit_red})"
                                                                                f" it won't be measured")
         return None
+
+    # Check the units are the same
+    if line.units_wave != spec.units_wave:
+        _logger.warning(f"The input {line} line units ({line.units_wave}) are different from the input spectrum units ({spec.units_wave})")
 
     # Check if the spectrum does not have the error arr but the user has requested it
     if spec.err_flux is None and user_err_from_bands is False:
@@ -278,6 +284,87 @@ def res_power_approx(wavelength_arr):
     return wavelength_arr / (2 * delta_lambda)
 
 
+def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr, mask_arr):
+
+    # Check the input disespersion interval
+    if disp_intvl is not None:
+
+        if disp_intvl[0] < wave_arr[0]:
+            _logger.warning(f'The input lower dispersion value is below the spectral range: disp_intvl {disp_intvl[0]} < {wave_arr[0]}')
+        if disp_intvl[-1] > wave_arr[-1]:
+            _logger.warning(f'The input higher dispersion value is above the spectral range: disp_intvl {disp_intvl[-1]} > {wave_arr[-1]}')
+
+        bin_width = np.nanmean(np.diff(disp_intvl))
+
+    else:
+
+        # Compute the wavelength range based on the pixel width
+        if pixel_width is not None:
+            disp_intvl = np.arange(np.round(wave_arr[0]), np.round(wave_arr[-1]), pixel_width)
+            bin_width = pixel_width
+
+        # Compute the wavelength range based on a number of pixels
+        else:
+            if pixel_number is not None and pixel_number >= 2:
+                if not float(pixel_number).is_integer():
+                    _logger.info(f'The input pixel number has been rounded from {pixel_number} to {round(pixel_number)}')
+                pixel_number = round(pixel_number)
+            else:
+                raise ValueError(f'In the number of pixels rebinning the input value must be above 1.')
+
+            if constant_pixel_width:
+                bin_width = np.nanmean(np.diff(wave_arr)) * pixel_number
+                disp_intvl = np.arange(wave_arr[0], wave_arr[-1], bin_width)
+            else:
+                disp_intvl = wave_arr[pixel_number::pixel_number]
+                bin_width = np.nanmean(np.diff(disp_intvl))
+
+    # Compute bin edges from centers — applies to all branches
+    bin_edges = np.concatenate([[disp_intvl[0] - bin_width / 2], disp_intvl + bin_width / 2])
+
+    # Make the binning calculation
+    flux_binned, edges, binnumber = stats.binned_statistic(wave_arr, flux_arr, statistic='mean', bins=bin_edges)
+
+    if err_arr is not None:
+        err_sum, _, _ = stats.binned_statistic(wave_arr, err_arr ** 2, statistic='sum', bins=bin_edges)
+        counts, _, _ = stats.binned_statistic(wave_arr, err_arr, statistic='count', bins=bin_edges)
+        err_binned = np.sqrt(err_sum) / counts
+    else:
+        err_binned = None
+
+        # nbins = flux_binned.size
+        # bin_idx = binnumber - 1  # make 0-based
+        # sum_sq = np.bincount(bin_idx, weights=err_arr ** 2, minlength=nbins)
+        # counts = np.bincount(bin_idx, minlength=nbins)
+        # err_binned = np.sqrt(sum_sq) / counts
+
+        # # get unique bin numbers #
+        # uni_bin = np.unique(binnumber)
+        # err_binned_Svea = []
+        #
+        # for binnum in uni_bin[:-1]:
+        #     index_bin = np.where(binnumber == binnum)
+        #     errors_bin = err_arr[index_bin]
+        #     err_bin = np.sqrt(np.sum(errors_bin ** 2)) / (len(errors_bin))
+        #     err_binned_Svea.append(err_bin)
+        # err_binned_Svea = np.array(err_binned_Svea)
+
+        # err_arr = self._spec.err_flux.data
+        # sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
+        # bin_counts = np.bincount(binnumber)
+        # N_bins = flux_binned.size
+        # sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
+        # bin_counts_filtered = bin_counts[1: N_bins + 1]
+        # err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
+
+
+    # # Update the binned wavelength # TODO when do I change this...
+    # if disp_intvl.size != flux_binned.size:
+    #     disp_intvl = disp_intvl[:-1] + bin_width / 2
+
+    return disp_intvl, flux_binned, err_binned
+
+
 
 class SpecRetriever:
 
@@ -397,15 +484,15 @@ class SpecRetriever:
         --------
         Get all lines in the spectrum wavelength range:
 
-        >>> bands = spec.fit.lines_frame()
+        >>> bands = spec.retrieve.lines_frame()
 
         Restrict to hydrogen and oxygen transitions with a wider velocity band:
 
-        >>> bands = spec.fit.lines_frame(particle_list=["H1", "O3"], band_vsigma=120)
+        >>> bands = spec.retrieve.lines_frame(particle_list=["H1", "O3"], band_vsigma=120)
 
         Use a fitting configuration to resolve blended lines:
 
-        >>> bands = spec.fit.lines_frame(fit_cfg="my_cfg.toml")
+        >>> bands = spec.retrieve.lines_frame(fit_cfg="my_cfg.toml")
         """
 
 
@@ -522,7 +609,7 @@ class SpecRetriever:
         return bands
 
     def spectrum(self, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, pixel_mask=None, mask_intvls=None,
-                 obj_redshift=False,):
+                 obj_redshift=False):
 
         # Extract the spectrum data
         mask_arr = self._spec.flux.mask
@@ -585,7 +672,7 @@ class SpecRetriever:
 
         return out_spec
 
-    def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, constant_pixel_width=True,
+    def rebinned(self, disp_intvl=None, pixel_width=None, pixel_number=None, const_pixel_width=True, rest_frame=False,
                  return_spectrum=False):
 
         """
@@ -601,6 +688,9 @@ class SpecRetriever:
           is ``True`` (default), uses an average native dispersion to build uniform-width
           bins; otherwise, takes every ``pixel_number``-th native wavelength as an edge
           (non-uniform bin widths).
+
+        The user can choose to perform the rebining in the observation restframe (this will
+        set redshift=0 on the return spectrum).
 
         The binned flux is the mean flux per bin. If an uncertainty array is available,
         per-bin errors are combined as the square-root of the sum of variances divided
@@ -624,6 +714,8 @@ class SpecRetriever:
               spacing times ``pixel_number``.
             - If ``False``, construct edges by taking every ``pixel_number``-th native
               wavelength (non-uniform bins).
+        rest_frame: bool, optional
+            Perform the rebinning on the observation rest frame.
         return_spectrum : bool, optional
             If ``False`` (default), return the binned wavelength, flux and flux uncertainty arrays.
             If ``True``, return a new :class:`lime.Spectrum` instance containing the binned data.
@@ -666,85 +758,20 @@ class SpecRetriever:
             raise ValueError(f"Arguments {active} are mutually exclusive. Please only one.")
 
         # Extract the spectrum data
+        z_corr = 1 if rest_frame is False else (1 + self._spec.redshift)
         mask_arr = self._spec.wave.mask
-        wave_arr = self._spec.wave.data
-        flux_arr = self._spec.flux.data
-        err_arr = self._spec.err_flux.data if self._spec.err_flux is not None else None
+        wave_arr = self._spec.wave.data / z_corr
+        flux_arr = self._spec.flux.data * z_corr
+        err_arr = self._spec.err_flux.data * z_corr if self._spec.err_flux is not None else None
 
-        # Check the input disespersion interval
-        if disp_intvl is not None:
+        # Perform the rebinne
+        disp_intvl, flux_binned, err_binned = spectrum_resampling(disp_intvl, pixel_width, pixel_number, const_pixel_width,
+                                                                  wave_arr, flux_arr, err_arr, mask_arr)
 
-            # Limit warnings
-            if disp_intvl[0] < wave_arr[0]:
-                _logger.warning(f'The input lower dispersion value is below the spectral range: disp_intvl {disp_intvl[0]} < {wave_arr[0]}')
-            if disp_intvl[-1] > wave_arr[-1]:
-                _logger.warning(f'The input higher dispersion value is above the spectral range: disp_intvl {disp_intvl[-1]} > {wave_arr[-1]}')
-            bin_width = np.nanmean(np.diff(disp_intvl))
-
-        else:
-
-            # Compute the wavelength range based on the pixel width
-            if pixel_width is not None:
-                disp_intvl = np.arange(wave_arr[0], wave_arr[-1], pixel_width)
-                bin_width = pixel_width
-
-            # Compute the wavelength range based on a number of pixels
-            else:
-
-                # Make sure the inputs make sense good values
-                if pixel_number is not None and pixel_number >= 2:
-                    if not float(pixel_number).is_integer():
-                        _logger.info(f'The input pixel number has been rounded from {pixel_number} to {round(pixel_number)}')
-                    pixel_number = round(pixel_number)
-                else:
-                    raise ValueError(f" In the number of pixels rebinning you need the input value must be above 1.")
-
-                # Calculate the difference:
-                if constant_pixel_width:
-                    bin_width = np.nanmean(np.diff(wave_arr)) * pixel_number
-                    disp_intvl = np.arange(wave_arr[0], wave_arr[-1], bin_width)
-                else:
-                    disp_intvl = wave_arr[pixel_number::pixel_number]
-                    bin_width = disp_intvl[-1] - disp_intvl[-2]
-
-        # Make the binning calculation
-        flux_binned, edges, binnumber = stats.binned_statistic(wave_arr, flux_arr, statistic='mean', bins=disp_intvl)
-
-        if err_arr is not None:
-            err_sum, _, _ = stats.binned_statistic(wave_arr, err_arr ** 2, statistic='sum', bins=disp_intvl)
-            counts, _, _ = stats.binned_statistic(wave_arr, err_arr, statistic='count', bins=disp_intvl)
-            err_binned = np.sqrt(err_sum) / counts
-
-            # nbins = flux_binned.size
-            # bin_idx = binnumber - 1  # make 0-based
-            # sum_sq = np.bincount(bin_idx, weights=err_arr ** 2, minlength=nbins)
-            # counts = np.bincount(bin_idx, minlength=nbins)
-            # err_binned = np.sqrt(sum_sq) / counts
-
-            # # get unique bin numbers #
-            # uni_bin = np.unique(binnumber)
-            # err_binned_Svea = []
-            #
-            # for binnum in uni_bin[:-1]:
-            #     index_bin = np.where(binnumber == binnum)
-            #     errors_bin = err_arr[index_bin]
-            #     err_bin = np.sqrt(np.sum(errors_bin ** 2)) / (len(errors_bin))
-            #     err_binned_Svea.append(err_bin)
-            # err_binned_Svea = np.array(err_binned_Svea)
-
-
-            # err_arr = self._spec.err_flux.data
-            # sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
-            # bin_counts = np.bincount(binnumber)
-            # N_bins = flux_binned.size
-            # sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
-            # bin_counts_filtered = bin_counts[1: N_bins + 1]
-            # err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
-        else:
-            err_binned = None
-
-        # Update the binned wavelength
-        disp_intvl = disp_intvl[:-1] + bin_width/2
+        if np.any(mask_arr):
+            if mask_arr.size != disp_intvl.size:
+                _logger.warning('Recalculating input mask')
+                mask_arr = None
 
         if not return_spectrum:
             return disp_intvl, flux_binned, err_binned
@@ -753,7 +780,7 @@ class SpecRetriever:
             return lime.Spectrum(input_wave=disp_intvl,
                                  input_flux=flux_binned * self._spec.norm_flux if self._spec.norm_flux else flux_binned,
                                  input_err=err_binned * self._spec.norm_flux if self._spec.norm_flux else err_binned,
-                                 redshift=self._spec.redshift, res_power=self._spec.res_power,
+                                 redshift=0 if rest_frame else self._spec.redshift , res_power=self._spec.res_power,
                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux,
                                  norm_flux=self._spec.norm_flux)
 
@@ -880,6 +907,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         self.line = None
         self._i_line = 0
         self._n_lines = 0
+        self.cov_linear = None
+
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile=None, shape=None,
               cont_source='central', err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None,
@@ -982,6 +1011,9 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         >>> spec.fit.bands(5007.0, bands=my_bands_df)
         """
 
+        # Reset attributes
+        self.cov_linear = None
+
         # Make a copy of the fitting configuration
         input_conf = check_fit_conf(fit_cfg, default_cfg_prefix, obj_cfg_prefix, update_default)
 
@@ -1004,11 +1036,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             # Unpack the line selections
             idcs_line, idcs_continua = idcs_selection
 
-            # Compute line continuum
-            cont_arr = self.continuum_calculation(idcs_line, idcs_continua, cont_source, err_from_bands)
-
-            # Compute line flux error
-            pixel_err_arr = self.pixel_error_calculation(idcs_continua, err_from_bands)
+            # Compute line continuum and the pixel error
+            cont_arr, pixel_err_arr = self.continuum_calculation(idcs_line, idcs_continua, cont_source, err_from_bands)
 
             # Non-parametric measurements
             self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line],
@@ -1525,6 +1554,12 @@ class CubeTreatment(LineFitting):
         mask_list = np.array(list(mask_maps.keys()))
         mask_data_list = list(mask_maps.values())
 
+        # Resolve the reference directory with respect to the config file if provided
+        if fit_cfg is not None and not isinstance(fit_cfg, dict):
+            cfg_dir = Path(fit_cfg).resolve().parent
+        else:
+            cfg_dir = Path.cwd()
+
         # Check the mask configuration is included if there are no masks
         input_masks = mask_list if bands is None else None
         input_conf = check_fit_conf(fit_cfg, default_key=None, obj_key=None, update_default=update_default,
@@ -1568,7 +1603,11 @@ class CubeTreatment(LineFitting):
 
             # Load the mask log if provided
             if bands is None:
-                bands_file = Path(mask_conf['bands']).resolve()
+                # bands_file = Path(mask_conf['bands']).resolve()
+
+                # Get the section bands file when resolving bands or other relative paths from the config:
+                bands_file = (cfg_dir / mask_conf['bands']).resolve()
+
                 if bands_file.exists():
                     bands_in = load_frame(bands_file)
                 else:

@@ -25,7 +25,7 @@ def format_for_table(entry, rounddig=4, rounddig_er=2, scientific_notation=False
         rounddig_er = rounddig
 
     # Check None entry
-    if entry != None:
+    if entry is not None:
 
         # Check string entry
         if isinstance(entry, (str, bytes)):

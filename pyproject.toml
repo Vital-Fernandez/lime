@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lime-stable"
-version = "2.2.dev5"
+version = "2.4.0"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 license = {text = "GPL-3.0-or-later"}
@@ -24,7 +24,7 @@ dependencies = ["astropy~=7.1",
 
 [project.optional-dependencies]
 full = ["asdf~=4.1",
-        "aspect-stable~=0.7.dev2",
+        "aspect-stable~=0.8",
         "bokeh~=3.8",
         "mplcursors~=0.6",
         "openpyxl~=3.1",
@@ -48,3 +48,7 @@ mpl-results-path = 'tests/outputs'
 mpl-results-always = false
 markers = ["mpl: matplotlib image comparison tests"]
 addopts = "-p no:asdf_schema_tester"
+
+[tool.coverage.run]
+omit = ["src/lime/resources/generator_db.py",
+        "src/lime/resources/generator_logo.py"]

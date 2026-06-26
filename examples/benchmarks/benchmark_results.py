@@ -1,7 +1,7 @@
-from matplotlib import pyplot as plt, rc_context
-from lime.plots import STANDARD_PLOT
 import pandas as pd
 import numpy as np
+import lime
+from matplotlib import pyplot as plt, rc_context
 
 
 def plot_lines_minutes(df):
@@ -27,13 +27,15 @@ def plot_lines_minutes(df):
     print(f'{np.round(2000000 / (20*60*60), 0)} lines per second')
     print(f'{np.round(41022 / (20*60*60), 0)} spaxels per second')
 
+    STANDARD_PLOT = lime.theme.fig_defaults()
+
     STANDARD_PLOT['figure.figsize'] = (8, 7)
     STANDARD_PLOT['axes.titlesize'] = 25
     STANDARD_PLOT['axes.labelsize'] = 25
     STANDARD_PLOT['xtick.labelsize'] = 15
     STANDARD_PLOT['ytick.labelsize'] = 15
-    # STANDARD_PLOT['font.family'] = 'Times New Roman'
     STANDARD_PLOT['mathtext.fontset'] = 'cm'
+    # STANDARD_PLOT['font.family'] = 'Times New Roman'
 
     with rc_context(STANDARD_PLOT):
 
@@ -57,15 +59,19 @@ def plot_lines_minutes(df):
 
         ax1.update({'xlabel': 'Time (minutes)'})
         plt.tight_layout()
-        # plt.show()
-        plt.savefig('benchmarks.png', bbox_inches='tight')
+        plt.show()
+        # plt.savefig('benchmarks.png', bbox_inches='tight')
     # 
     return
 
 # Test 3) Saving fits file log every 1000 spaxels + terminal coord display
-spaxels_array = np.array([11, 90, 383, 2108, 2073, 3109])
-lines_array = np.array([459, 3381, 3440, 17390, 9579, 12498])
-minutes_array = np.array([0.08, 0.62, 0.71, 3.78, 2.69, 3.89])
+# spaxels_array = np.array([11, 90, 383, 2108, 2073, 3109])
+# lines_array = np.array([459, 3381, 3440, 17390, 9579, 12498])
+# minutes_array = np.array([0.08, 0.62, 0.71, 3.78, 2.69, 3.89])
+
+spaxels_array = np.array([11, 87, 383, 2108, 2073, 3109])
+lines_array = np.array([462, 3427, 3446, 17592, 9851, 12769])
+minutes_array = np.array([0.11, 0.80, 0.95, 5.11, 3.71, 5.22])
 
 
 data = {'Spaxels': spaxels_array, 'Lines': lines_array, 'Minutes': minutes_array}
@@ -73,16 +79,35 @@ df_test3 = pd.DataFrame(data)
 
 plot_lines_minutes(df_test3)
 
-96 lines perscond
 
 
 
+'''
+Test 4 LiMe aspect version
 
+Spatial mask 1/6) MASK_0 (10 spaxels)
+462 lines measured in 0.11 minutes.
 
+Spatial mask 2/6) MASK_1 (87 spaxels)
+3427 lines measured in 0.80 minutes.
 
+Spatial mask 3/6) MASK_2 (383 spaxels)
+[==========] 100% of mask (spaxel coordinate. 208-186)
+3446 lines measured in 0.95 minutes.
 
+Spatial mask 4/6) MASK_3 (2108 spaxels)
+[==========] 100% of mask (spaxel coordinate. 213-191)
+17592 lines measured in 5.11 minutes.
 
+Spatial mask 5/6) MASK_4 (2073 spaxels)
+[==========] 100% of mask (spaxel coordinate. 215-192)
+9851 lines measured in 3.71 minutes.
 
+Spatial mask 6/6) MASK_5 (3109 spaxels)
+[==========] 100% of mask (spaxel coordinate. 228-169)
+12769 lines measured in 5.22 minutes.
+
+'''
 
 # Test 3) Saving fits file log every 1000 spaxels + terminal coord display
 #

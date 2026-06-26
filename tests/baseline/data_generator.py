@@ -49,22 +49,24 @@ if remake_spec:
 
     # ---------------- Spectrum
     spax = shoc579.get_spectrum(spax_cords[0], spax_cords[1], id_label='SHOC579_Manga38-35')
+    spax.save_spectrum(spec_text_address)
     # spax.retrieve.spectrum(spec_text_address)
     # spax.retrieve.spectrum(data_folder/spec_text_address.name)
 
 
 # Load the text file
 spax = lime.Spectrum.from_file(spec_text_address, instrument='text')
+spax.check.bands(line_bands_file, show_continua=True)
 
 # Generate the bands
-bands = spax.retrieve.lines_frame(band_vsigma=90, fit_cfg=fit_cfg, obj_cfg_prefix='38-35', automatic_grouping=True)
+# bands = spax.retrieve.lines_frame(band_vsigma=90, fit_cfg=fit_cfg, obj_cfg_prefix='38-35', automatic_grouping=True)
 
 # Frame fitting
-spax.fit.frame(bands, fit_cfg, obj_cfg_prefix='38-35')
+spax.fit.frame(line_bands_file, fit_cfg, obj_cfg_prefix='38-35')
 spax.plot.spectrum(rest_frame=True, log_scale=False)
+spax.plot.bands('O3_5007A')
 
 # Save the results
 # lime.save_frame(line_bands_file, bands)
-# spax.save_frame(lines_log_file) # TODO the not save version does not work
-spax.save_frame(results_folder/'SHOC579_MANGA38-35_log.tex', param_list=['particle', 'wavelength', 'group_label', 'latex_label'], safe_version=False)
+spax.save_frame(lines_log_file) # TODO the not save version does not work
 spax.save_frame(baseline_folder/'SHOC579_MANGA38-35_log.tex', param_list=['particle', 'wavelength', 'group_label', 'latex_label'], safe_version=False)

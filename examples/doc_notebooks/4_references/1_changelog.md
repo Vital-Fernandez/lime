@@ -124,4 +124,27 @@
 - Further development for the functions involving redshift a line fitting using aspect
 - The spatial masking functions should not require the 'PARAM', 'PARAMIDX', 'PARAMVAL' and 'NUMSPAXE' in the .fits headers to plot the mask overlays
 
+## 2.4.0 LiMe medium update (26/06/2024)
+- Added new ultraviolet and infrared lines to the database `lines_database_v2.0.6.txt`
+- Major updates to `observations.py`: expanded spectrum observation handling
+- Major updates to `workflow.py`: significant refactoring of the fitting workflow
+- The Transition and Line classes are been update to have an `origin`, `redshift` and `atomic_data` as attributes. This will be documented in a future major update
+- Changes to the matplotlib and bokeh plot functions to use common theme structure
+- The `Spectrum.retrieve.lines_frame` has been update to include an origin as an input. This will be documented in a future major update
+- The `Spectrum.retrieve.lines_frame` documentation added to the API.
+- Added SDSS complete spectrum example script (`3_complete_spectrum_SDSS.py`)
+- Added line groups prediction example script (`3_line_groups_prediction.py`)
+- Updated `fitting/redshift.py` function to correct a bug issue with non-line measurements
+- Updated `archives/read_fits.py`: FITS reading improvements
+- Updated `pyproject.toml` updated dependencies to include ASPECT features
+- The computation of the line continua now takes into account the covariance of the fitting. The nominal values remain constant but the uncertainty predicted is smaller
+- Expanded the tests for the latex/pdf table making functions from the `test_tables.py` script
+- Expanded the tests to compare the line measurements with synthetic lines for more profile parameters (including the line continuum levels)
+- Improvement of the descriptions in the measurements documentation page and correction of wrong terms
+- Updated plot baselines across multiple tests
+- Added paper citation on the documentation
+- Added more integration with aspect functions (next medium release will focus on documenting these updgrades)
+- Adding releases on the github page to mark medium / major updates
+
+
 
