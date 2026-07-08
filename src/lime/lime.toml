@@ -1,6 +1,6 @@
 [metadata]
 name = 'lime-stable'
-version = "2.4.1"
+version = "2.4.2"
 lines_database = 'lines_database_v2.4.1.txt'
 
 # =====================
