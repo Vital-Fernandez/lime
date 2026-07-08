@@ -150,5 +150,6 @@ LiMe small update - 2.4.1 - 08/07/2026
     - Added lines to lines database.
     - The lines database version now follows the current lime version.
     - Renamed internal function "continuum_calculation" to "_cont_level_profile" in order to avoid confusion with external "Spectrum.fit.continuum"
+    - Bump the dependencies to the current versions. At the current state, LiMe should be compatible with Pandas 3.0.0 but more changes will be necessary to take full advantage of the library upgrades"
 
 
