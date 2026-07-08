@@ -94,7 +94,7 @@ copyright = '2021, Vital-Fernandez'
 author = 'Vital-Fernandez'
 
 # The full version, including alpha/beta/rc tags
-release = "2.4.0"
+release = "2.4.1"
 
 # -- General configuration ---------------------------------------------------
 _lib_path = Path(__file__).parents[2]/'src'
@@ -174,7 +174,8 @@ imgmath_use_preview = True
 
 # html_theme = 'sphinx_rtd_theme'
 html_theme = 'sphinx_book_theme'
-html_static_path = [] # ['_static']
+html_static_path = ['_static']
+html_css_files = ['custom.css']
 
 html_theme_options = {"logo": {"image_light": "0_resources/images/LiMe2_logo_white_transparent.png",
                                "image_dark":  "0_resources/images/LiMe2_logo_dark_transparent.png",

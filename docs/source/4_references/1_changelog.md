@@ -145,6 +145,12 @@
 - Added paper citation on the documentation
 - Added more integration with aspect functions (next medium release will focus on documenting these updgrades)
 - Adding releases on the github page to mark medium / major updates
+- Bump minimum python to 3.12 version for uniform requirements with readthedocs compilation
 
+## 2.4.1 LiMe medium update (XX/XX/XXX)
+- Now all instrument fits loading functions copy the configuration dictionary to avoid possible corruptions.
+- Added lines to lines database.
+- The lines database version now follows the current lime version.
+- Renamed internal function "continuum_calculation" to "_cont_level_profile" in order to avoid confusion with external "Spectrum.fit.continuum"
 
 

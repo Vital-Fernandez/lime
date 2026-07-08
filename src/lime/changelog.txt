@@ -122,7 +122,7 @@ LiMe minor update - 2.0.4 - 12/05/2025
     - Further development for the functions involving redshift a line fitting using aspect
     - The spatial masking functions should not require the 'PARAM', 'PARAMIDX', 'PARAMVAL' and 'NUMSPAXE' in the .fits headers to plot the mask overlays
 
-LiMe medium update - 2.4.0 - 26/06/2024
+LiMe medium update - 2.4.0 - 26/06/2026
     - Added new ultraviolet and infrared lines to the database `lines_database_v2.0.6.txt`
     - Major updates to `observations.py`: expanded spectrum observation handling
     - Major updates to `workflow.py`: significant refactoring of the fitting workflow
@@ -145,5 +145,10 @@ LiMe medium update - 2.4.0 - 26/06/2024
     - Adding releases on the github page to mark medium / major updates
     - Bump minimum python to 3.12 version for uniform requirements with readthedocs compilation
 
+LiMe small update - 2.4.1 - 08/07/2026
+    - Now all instrument fits loading functions copy the configuration dictionary to avoid possible corruptions.
+    - Added lines to lines database.
+    - The lines database version now follows the current lime version.
+    - Renamed internal function "continuum_calculation" to "_cont_level_profile" in order to avoid confusion with external "Spectrum.fit.continuum"
 
 
