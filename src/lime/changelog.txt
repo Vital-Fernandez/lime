@@ -145,13 +145,11 @@ LiMe medium update - 2.4.0 - 26/06/2026
     - Adding releases on the github page to mark medium / major updates
     - Bump minimum python to 3.12 version for uniform requirements with readthedocs compilation
 
-LiMe small update - 2.4.1 - 08/07/2026
+LiMe small update - 2.4.3 - 08/07/2026
     - Now all instrument fits loading functions copy the configuration dictionary to avoid possible corruptions.
     - Added lines to lines database.
     - The lines database version now follows the current lime version.
     - Renamed internal function "continuum_calculation" to "_cont_level_profile" in order to avoid confusion with external "Spectrum.fit.continuum"
-    - Bump the dependencies to the current versions. At the current state, LiMe should be compatible with Pandas 3.0.0 but more changes will be necessary to take full advantage of the library upgrades"
-
-LiMe small update - 2.4.2 - 08/07/2026
+    - Bump pandas dependency, LiMe should be compatible with Pandas 3.0.0 but more changes will be necessary to take full advantage of the library upgrades"
     - Relaxed dependencies for the numba installation in the streamlit specsy wrapper"
 
