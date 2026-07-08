@@ -1,6 +1,7 @@
 [metadata]
 name = 'lime-stable'
-version = "2.4.0"
+version = "2.4.1"
+lines_database = 'lines_database_v2.4.1.txt'
 
 # =====================
 # Spectrum / Long-slit
@@ -41,6 +42,20 @@ cos.units_wave = "Angstrom"
 cos.units_flux = "FLAM"
 cos.pixel_mask = "nan"
 cos.id_label = 'null'
+
+lzlcs_miri_merged.norm_flux = 'null'
+lzlcs_miri_merged.res_power = 'null'
+lzlcs_miri_merged.units_wave = "um"
+lzlcs_miri_merged.units_flux = "Jy"
+lzlcs_miri_merged.pixel_mask = "nan"
+lzlcs_miri_merged.id_label = 'null'
+
+lzlcs_miri_x1d.norm_flux = 'null'
+lzlcs_miri_x1d.res_power = 'null'
+lzlcs_miri_x1d.units_wave = "um"
+lzlcs_miri_x1d.units_flux = "Jy"
+lzlcs_miri_x1d.pixel_mask = "nan"
+lzlcs_miri_x1d.id_label = 'null'
 
 sdss.norm_flux = 'null'
 sdss.res_power = 'null'

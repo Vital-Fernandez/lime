@@ -7,7 +7,7 @@ from numpy.core.fromnumeric import argmin
 from collections import Counter
 
 from lime.io import (_LOG_COLUMNS, check_file_dataframe, LiMe_Error, _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT, load_frame,
-                     _LIME_FOLDER)
+                     _LIME_FOLDER, lime_cfg)
 from lime.tools import pd_get, au, unit_conversion
 from lime import rsrc_manager
 from dataclasses import dataclass
@@ -48,7 +48,7 @@ VAL_LIST = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
 SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
 # Reading file with the format and export status for the measurements
-_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/lines_database_v2.0.6.txt'
+_DATABASE_FILE = rf'{_LIME_FOLDER}/resources/{lime_cfg["metadata"]["lines_database"]}'
 
 def check_lines_frame_units(frame):
 

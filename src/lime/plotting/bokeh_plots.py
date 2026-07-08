@@ -17,7 +17,7 @@ try:
     from bokeh.core.properties import value
 
     from bokeh import models
-    from bokeh.models import ColumnDataSource, Legend, LegendItem, LogScale, Range1d, Label
+    from bokeh.models import ColumnDataSource, Legend, LegendItem, LogScale, Range1d, Label, GridPlot
     from bokeh.models import BoxAnnotation
     from bokeh.models import WheelZoomTool, PanTool, HoverTool
 
@@ -43,7 +43,23 @@ def ensure_list(x):
     return x if isinstance(x, list) else [x]
 
 
+def extract_figures(figure_obj):
+    # Normalize input (figure, list of figures, GridPlot, or nested layout) to a flat list of figures
+    fig_list = []
+    for item_obj in ensure_list(figure_obj):
+        if item_obj is None:
+            continue
+        if isinstance(item_obj, GridPlot):
+            fig_list += list(item_obj.select(dict(type=figure)))
+        else:
+            fig_list.append(item_obj)
+    return fig_list
+
+
 def update_bokeh_figure(figure_obj, config_dict):
+
+    if isinstance(figure_obj, GridPlot):
+        figure_obj = extract_figures(figure_obj)
 
     # Set general figure properties
     for key, value in config_dict.items():

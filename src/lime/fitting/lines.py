@@ -1008,7 +1008,7 @@ class LineFitting:
 
         return
 
-    def continuum_calculation(self, idcs_emis, idcs_cont, user_cont_source, err_from_bands):
+    def _cont_level_profile(self, idcs_emis, idcs_cont, user_cont_source, err_from_bands):
 
         # Use the continuum bands for the calculation
         match user_cont_source:

@@ -65,7 +65,7 @@ class TestSampleClass:
 
         ref_lines = ['H1_4861A', 'O3_5007A', 'H1_6563A']
         sample_log_address = f'{tmp_path}/sample_log.txt'
-        sample1.frame['z_line'] = 0
+        sample1.frame['z_line'] = 0.0
         sample1.check.redshift(sample1.frame.index, reference_lines=ref_lines, output_file_log=sample_log_address,
                                output_idcs=sample1.frame.index, redshift_column='z_line', initial_z=0.0475,
                                in_fig=fig)

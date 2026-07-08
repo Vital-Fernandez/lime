@@ -1,0 +1,8 @@
+/* Dark mode: soften the near-black background and pure-white text */
+html[data-theme="dark"] {
+    --pst-color-background: #2B2B2B;
+    --pst-color-on-background: #222529;   /* cards/surfaces */
+    --pst-color-surface: #26292e;         /* code blocks, sidebars */
+    --pst-color-text-base: #CCCCCC;
+    --pst-color-text-muted: #a0a0a0;
+}

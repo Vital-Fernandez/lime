@@ -1037,7 +1037,7 @@ class SpecTreatment(LineFitting, RedshiftFitting):
             idcs_line, idcs_continua = idcs_selection
 
             # Compute line continuum and the pixel error
-            cont_arr, pixel_err_arr = self.continuum_calculation(idcs_line, idcs_continua, cont_source, err_from_bands)
+            cont_arr, pixel_err_arr = self._cont_level_profile(idcs_line, idcs_continua, cont_source, err_from_bands)
 
             # Non-parametric measurements
             self.integrated_properties(self.line, self._spec.wave[idcs_line], self._spec.flux[idcs_line],

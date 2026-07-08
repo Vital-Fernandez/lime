@@ -189,6 +189,44 @@ def test_extract_fluxes_multi_index():
     return
 
 
+# def test_redshift_calculation():
+#
+#     # Single index
+#     z_df = lime.redshift_calculation(lines_log)
+#     z_df_eqw = lime.redshift_calculation(lines_log, weight_parameter='eqw')
+#     z_df_flux_gauss = lime.redshift_calculation(lines_log, weight_parameter='profile_flux')
+#     z_df_strong = lime.redshift_calculation(lines_log, line_list=['O3_5007A', 'H1_6563A'])
+#
+#     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
+#
+#     assert z_df['weight'][0] is None
+#     assert z_df_eqw['weight'][0] == 'eqw'
+#     assert z_df_flux_gauss['weight'][0] == 'profile_flux'
+#     assert z_df_strong['weight'][0] is None
+#     assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
+#
+#     # Multi-index
+#     z_df = lime.redshift_calculation(obs.frame)
+#     z_df_eqw = lime.redshift_calculation(obs.frame, weight_parameter='eqw')
+#     z_df_flux_gauss = lime.redshift_calculation(obs.frame, weight_parameter='profile_flux')
+#     z_df_strong = lime.redshift_calculation(obs.frame, line_list=['O3_5007A', 'H1_6563A'])
+#
+#     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
+#     assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
+#
+#     assert np.all(z_df['weight'].to_numpy() == None)
+#     assert np.all(z_df_eqw['weight'] == 'eqw')
+#     assert np.all(z_df_flux_gauss['weight'] == 'profile_flux')
+#     assert np.all(z_df_strong['weight'].to_numpy() == None)
+#     assert np.all(z_df_strong['lines'] == 'O3_5007A,H1_6563A')
+#
+#     return
+
 def test_redshift_calculation():
 
     # Single index
@@ -197,16 +235,16 @@ def test_redshift_calculation():
     z_df_flux_gauss = lime.redshift_calculation(lines_log, weight_parameter='profile_flux')
     z_df_strong = lime.redshift_calculation(lines_log, line_list=['O3_5007A', 'H1_6563A'])
 
-    assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_eqw['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_flux_gauss['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'].iloc[0], 0.047498, atol=0.00024, equal_nan=True)
 
-    assert z_df['weight'][0] is None
-    assert z_df_eqw['weight'][0] == 'eqw'
-    assert z_df_flux_gauss['weight'][0] == 'profile_flux'
-    assert z_df_strong['weight'][0] is None
-    assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
+    assert z_df['weight'].iloc[0] is None
+    assert z_df_eqw['weight'].iloc[0] == 'eqw'
+    assert z_df_flux_gauss['weight'].iloc[0] == 'profile_flux'
+    assert z_df_strong['weight'].iloc[0] is None
+    assert z_df_strong['lines'].iloc[0] == 'O3_5007A,H1_6563A'
 
     # Multi-index
     z_df = lime.redshift_calculation(obs.frame)
@@ -214,16 +252,16 @@ def test_redshift_calculation():
     z_df_flux_gauss = lime.redshift_calculation(obs.frame, weight_parameter='profile_flux')
     z_df_strong = lime.redshift_calculation(obs.frame, line_list=['O3_5007A', 'H1_6563A'])
 
-    assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_eqw['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_flux_gauss['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
+    assert np.allclose(z_df_strong['z_mean'].iloc[0], 0.047498, atol=0.00024, equal_nan=True)
 
-    assert np.all(z_df['weight'].to_numpy() == None)
-    assert np.all(z_df_eqw['weight'] == 'eqw')
-    assert np.all(z_df_flux_gauss['weight'] == 'profile_flux')
-    assert np.all(z_df_strong['weight'].to_numpy() == None)
-    assert np.all(z_df_strong['lines'] == 'O3_5007A,H1_6563A')
+    assert z_df['weight'].isna().all()
+    assert (z_df_eqw['weight'] == 'eqw').all()
+    assert (z_df_flux_gauss['weight'] == 'profile_flux').all()
+    assert z_df_strong['weight'].isna().all()
+    assert (z_df_strong['lines'] == 'O3_5007A,H1_6563A').all()
 
     return
 

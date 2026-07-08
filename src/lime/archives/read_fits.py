@@ -610,10 +610,88 @@ class OpenFits:
         pixel_mask = np.isnan(flux_array) | np.isnan(err_array)
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['nirspec']
-        params_dict['pixel_mask'] = pixel_mask
+        params_dict = {**SPECTRUM_FITS_PARAMS['nirspec'], 'pixel_mask': pixel_mask}
 
         return wave_array, flux_array, err_array, header_list, params_dict
+
+
+    @staticmethod
+    def lzlcs_miri_merged(fits_address, data_ext_list=(1), hdr_ext_list=(1), **kwargs):
+
+        """
+
+        This method returns the spectrum array data and headers from a MUSE observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Cube. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        wave_array = data_list[0]['WAVE']
+        flux_array = data_list[0]['FLUX']
+        err_array = data_list[0]['FLUX_ERROR']
+
+        # Fits properties
+        fits_params = {**SPECTRUM_FITS_PARAMS['lzlcs_miri_merged'], 'pixel_mask': None}
+
+        return wave_array, flux_array, err_array, header_list, fits_params
+
+    @staticmethod
+    def lzlcs_miri_x1d(fits_address, data_ext_list=(1), hdr_ext_list=(1), **kwargs):
+
+        """
+
+        This method returns the spectrum array data and headers from a MUSE observation.
+
+        The function returns numpy arrays with the wavelength, flux and uncertainty flux (if available this is the
+        standard deviation available), a list with the requested headers and a dictionary with the parameters to
+        construct a LiMe Cube. These parameters include the observation wavelength/flux units, normalization and wcs
+        from the input fits file.
+
+        :param fits_address: File location address for the observation .fits file.
+        :type fits_address: str, Path
+
+        :param data_ext_list: Data extension number or name to extract from the .fits file.
+        :type fits_address: int, str or list of either, optional
+
+        :param hdr_ext_list: header extension number or name to extract from the .fits file.
+        :type hdr_ext_list: int, str or list of either, optional
+
+        :return: wavelength array, flux array, uncertainty array, header list, observation parameter dict
+
+        """
+
+        # Get data table and header dict lists
+        data_list, header_list = load_fits(fits_address, data_ext_list, hdr_ext_list, url_check=False)
+
+        # Re-construct spectrum arrays
+        wave_array = data_list[0]['WAVELENGTH']
+        flux_array = data_list[0]['FLUX']
+        err_array = data_list[0]['FLUX_ERROR']
+
+        # Fits properties
+        fits_params = {**SPECTRUM_FITS_PARAMS['lzlcs_miri_x1d'], 'pixel_mask': None}
+
+        return wave_array, flux_array, err_array, header_list, fits_params
+
+
 
     @staticmethod
     def nirspec_grizli(fits_address, data_ext_list=1, hdr_ext_list=(0, 1), **kwargs):
@@ -649,8 +727,7 @@ class OpenFits:
         pixel_mask = np.isnan(flux_array) | np.isnan(err_array)
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['nirspec_grizli']
-        params_dict['pixel_mask'] = pixel_mask
+        params_dict = {**SPECTRUM_FITS_PARAMS['nirspec_grizli'], 'pixel_mask': pixel_mask}
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
@@ -695,7 +772,7 @@ class OpenFits:
             flux_array, err_array = data_list[0], None
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['isis']
+        params_dict = {**SPECTRUM_FITS_PARAMS['isis']}
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
@@ -776,7 +853,7 @@ class OpenFits:
             flux_array, err_array = data_list[0], None
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['osiris']
+        params_dict = {**SPECTRUM_FITS_PARAMS['osiris']}
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
@@ -843,7 +920,7 @@ class OpenFits:
             #     # print(key_arr, np.any(np.isnan(cont_arr)))
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['cos']
+        params_dict = {**SPECTRUM_FITS_PARAMS['cos']}
 
         return wave_arr, flux_arr, err_arr, header_list, params_dict
 
@@ -894,8 +971,7 @@ class OpenFits:
         err_array = np.sqrt(1 / ivar_array)
 
         # Spectrum properties
-        params_dict = SPECTRUM_FITS_PARAMS['sdss']
-        params_dict['redshift'] = redshift
+        params_dict = {**SPECTRUM_FITS_PARAMS['sdss'], 'redshift': redshift}
 
         return wave_array, flux_array, err_array, header_list, params_dict
 
@@ -1123,6 +1199,7 @@ class OpenFits:
         fits_params = {**CUBE_FITS_PARAMS['miri'], 'pixel_mask': pixel_mask_cube, 'wcs': wcs}
 
         return wave_array, flux_cube, err_cube, header_list, fits_params
+
 
     @staticmethod
     def desi(target_id, root_url='https://data.desi.lbl.gov/public/edr/spectro/redux', **kwargs):
