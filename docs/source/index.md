@@ -38,7 +38,7 @@ If you found LiMe useful, please remember to cite [Fernández et al (2024)](http
 <summary>BibTeX citation</summary>
 
 ```bibtex
-@ARTICLE{2024A&A...688A..69F,
+@ARTICLE{LiMe_paper,
        author = {{Fern{\'a}ndez}, V. and {Amor{\'\i}n}, R. and {Firpo}, V. and {Morisset}, C.},
         title = "{LIME: A LIne MEasuring library for large and complex spectroscopic data sets. I. Implementation of a virtual observatory for JWST spectra}",
       journal = {\aap},
