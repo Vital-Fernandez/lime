@@ -212,6 +212,12 @@ The next sections detail the functions attributes and their outputs:
 ```
 
 ```{eval-rst}
+.. autofunction:: lime.redshift_calculation
+    :noindex:
+```
+
+```{eval-rst}
 .. autofunction:: lime.save_parameter_maps
     :noindex:
 ```
+

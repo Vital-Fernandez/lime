@@ -128,7 +128,7 @@ if __name__ == "__main__":
     child_db = format_lines_database(parent_db)
 
     # Save the new version
-    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.4.1.txt'
+    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.4.2.txt'
     lime.save_frame(CHILD_DATABASE_path, child_db)
 
     # # Preparing new version
