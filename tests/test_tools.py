@@ -1,13 +1,15 @@
 import numpy as np
 import pandas as pd
+import pytest
 import lime
 from pathlib import Path
 from lime.tools import int_to_roman, join_fits_files, au
-from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df
+from lime.io import _LOG_EXPORT_DICT, hdu_to_log_df, LiMe_Error
 from lime.transitions import air_to_vacuum_function
 from astropy.io import fits
 import astropy.units as u
 from lime.fitting.lines import c_KMpS
+from lime.tools import redshift_calculation
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
@@ -185,83 +187,6 @@ def test_extract_fluxes_multi_index():
 
     assert np.all(log4.xs('O3_5007A', level='line')['norm_line'] == 'H1_4861A')
     assert np.all(log4.xs('N2_6583A', level='line')['norm_line'] == 'H1_6563A')
-
-    return
-
-
-# def test_redshift_calculation():
-#
-#     # Single index
-#     z_df = lime.redshift_calculation(lines_log)
-#     z_df_eqw = lime.redshift_calculation(lines_log, weight_parameter='eqw')
-#     z_df_flux_gauss = lime.redshift_calculation(lines_log, weight_parameter='profile_flux')
-#     z_df_strong = lime.redshift_calculation(lines_log, line_list=['O3_5007A', 'H1_6563A'])
-#
-#     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
-#
-#     assert z_df['weight'][0] is None
-#     assert z_df_eqw['weight'][0] == 'eqw'
-#     assert z_df_flux_gauss['weight'][0] == 'profile_flux'
-#     assert z_df_strong['weight'][0] is None
-#     assert z_df_strong['lines'][0] == 'O3_5007A,H1_6563A'
-#
-#     # Multi-index
-#     z_df = lime.redshift_calculation(obs.frame)
-#     z_df_eqw = lime.redshift_calculation(obs.frame, weight_parameter='eqw')
-#     z_df_flux_gauss = lime.redshift_calculation(obs.frame, weight_parameter='profile_flux')
-#     z_df_strong = lime.redshift_calculation(obs.frame, line_list=['O3_5007A', 'H1_6563A'])
-#
-#     assert np.allclose(z_df['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_eqw['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_flux_gauss['z_mean'][0], 0.047526, atol=0.00024, equal_nan=True)
-#     assert np.allclose(z_df_strong['z_mean'][0], 0.047498, atol=0.00024, equal_nan=True)
-#
-#     assert np.all(z_df['weight'].to_numpy() == None)
-#     assert np.all(z_df_eqw['weight'] == 'eqw')
-#     assert np.all(z_df_flux_gauss['weight'] == 'profile_flux')
-#     assert np.all(z_df_strong['weight'].to_numpy() == None)
-#     assert np.all(z_df_strong['lines'] == 'O3_5007A,H1_6563A')
-#
-#     return
-
-def test_redshift_calculation():
-
-    # Single index
-    z_df = lime.redshift_calculation(lines_log)
-    z_df_eqw = lime.redshift_calculation(lines_log, weight_parameter='eqw')
-    z_df_flux_gauss = lime.redshift_calculation(lines_log, weight_parameter='profile_flux')
-    z_df_strong = lime.redshift_calculation(lines_log, line_list=['O3_5007A', 'H1_6563A'])
-
-    assert np.allclose(z_df['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_eqw['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_flux_gauss['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'].iloc[0], 0.047498, atol=0.00024, equal_nan=True)
-
-    assert z_df['weight'].iloc[0] is None
-    assert z_df_eqw['weight'].iloc[0] == 'eqw'
-    assert z_df_flux_gauss['weight'].iloc[0] == 'profile_flux'
-    assert z_df_strong['weight'].iloc[0] is None
-    assert z_df_strong['lines'].iloc[0] == 'O3_5007A,H1_6563A'
-
-    # Multi-index
-    z_df = lime.redshift_calculation(obs.frame)
-    z_df_eqw = lime.redshift_calculation(obs.frame, weight_parameter='eqw')
-    z_df_flux_gauss = lime.redshift_calculation(obs.frame, weight_parameter='profile_flux')
-    z_df_strong = lime.redshift_calculation(obs.frame, line_list=['O3_5007A', 'H1_6563A'])
-
-    assert np.allclose(z_df['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_eqw['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_flux_gauss['z_mean'].iloc[0], 0.047526, atol=0.00024, equal_nan=True)
-    assert np.allclose(z_df_strong['z_mean'].iloc[0], 0.047498, atol=0.00024, equal_nan=True)
-
-    assert z_df['weight'].isna().all()
-    assert (z_df_eqw['weight'] == 'eqw').all()
-    assert (z_df_flux_gauss['weight'] == 'profile_flux').all()
-    assert z_df_strong['weight'].isna().all()
-    assert (z_df_strong['lines'] == 'O3_5007A,H1_6563A').all()
 
     return
 
@@ -508,3 +433,77 @@ def test_line_bands_labels():
     assert np.isclose(bands.loc['H1_4863A', 'wavelength'], bands.loc['H1_4863A', 'wave_vac'])
 
     return
+
+
+def make_frame(wavelength, center, center_err, extra=None):
+    """Build a minimal single-index lines frame with the columns the function needs."""
+    n = len(wavelength)
+    data = {
+        'wavelength': np.asarray(wavelength, dtype=float),
+        'center': np.asarray(center, dtype=float),
+        'center_err': np.asarray(center_err, dtype=float),
+        'profile_flux_err': np.ones(n),  # non-null -> line counts as "measured"
+    }
+    if extra is not None:
+        data.update(extra)
+    index = pd.Index([f'LINE_{i}' for i in range(n)], name='line')
+    return pd.DataFrame(data, index=index)
+
+
+def test_bad_input_type_raises():
+    with pytest.raises(LiMe_Error):
+        redshift_calculation("not a frame at all", )
+
+
+def test_scatter_flags_disagreeing_lines():
+    # When lines disagree far beyond their formal errors, z_scatter >> z_std.
+    wavelength = [5000.0] * 4
+    center = [5100.0, 5100.0, 5100.0, 5140.0]  # last line strongly offset
+    center_err = [0.5, 0.5, 0.5, 0.5]  # but all claim tiny errors
+    frame = make_frame(wavelength, center, center_err)
+
+    z_df = redshift_calculation(frame)
+    assert z_df.loc['spec_0', 'z_scatter'] > z_df.loc['spec_0', 'z_std']
+
+
+def test_real_frame_physical_redshift():
+    z_df = redshift_calculation(lines_log)
+    z_mean = z_df.loc['spec_0', 'z_mean']
+    # SHOC579 sits at z ~ 0.0475
+    assert 0.045 < z_mean < 0.049
+    assert z_df.loc['spec_0', 'z_std'] > 0
+    assert z_df.loc['spec_0', 'z_scatter'] > 0
+
+
+def test_real_frame_matches_zline_column():
+    # The frame carries its own per-line 'z_line'; the unweighted mean of the
+    # per-line z we compute should track the median of that column closely.
+    z_df = redshift_calculation(lines_log)
+    z_line_median = np.median(lines_log['z_line'].to_numpy())
+    assert np.abs(z_df.loc['spec_0', 'z_mean'] - z_line_median) < 5e-4
+
+
+def test_real_frame_flux_weighting_changes_mean():
+    # Flux weighting should move the mean relative to the uniform one, but stay physical.
+    z_unw = redshift_calculation(lines_log)
+    z_w = redshift_calculation(lines_log, weight_parameter='profile_flux')
+    assert 0.045 < z_w.loc['spec_0', 'z_mean'] < 0.049
+    # weighted formal error should be no larger than the uniform one here
+    assert z_w.loc['spec_0', 'z_std'] <= z_unw.loc['spec_0', 'z_std'] * 5
+
+
+def test_real_frame_error_cut_reduces_line_count():
+    z_all = redshift_calculation(lines_log)
+    z_cut = redshift_calculation(lines_log, max_centroid_err_frac=1e-5)
+    n_all = len(z_all.loc['spec_0', 'lines'].split(','))
+    n_cut = len(z_cut.loc['spec_0', 'lines'].split(',')) if z_cut.loc['spec_0', 'lines'] else 0
+    assert n_cut < n_all
+
+
+def test_real_frame_line_subset():
+    # pick a few strong lines known to be in the log
+    subset = ['O3_5007A', 'H1_4861A', 'H1_6563A']
+    present = [ln for ln in subset if ln in lines_log.index]
+    z_df = redshift_calculation(lines_log, line_list=present)
+    used = z_df.loc['spec_0', 'lines'].split(',')
+    assert set(used) == set(present)

@@ -15,7 +15,7 @@ from astropy.units.core import CompositeUnit, IrreducibleUnit, Unit
 
 from astropy.io import fits
 
-from lime.io import LiMe_Error, load_frame, log_to_HDU
+from lime.io import LiMe_Error, load_frame, log_to_HDU, check_file_dataframe
 
 _logger = logging.getLogger('LiMe')
 
@@ -298,31 +298,115 @@ def normalize_fluxes(log, line_list=None, norm_list=None, flux_column='profile_f
     return log
 
 
-def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_err_pct=None, obj_label='spec_0'):
+def redshift_calculation(lines_frame, line_list=None, weight_parameter=None, max_centroid_err_frac=None, obj_label='spec_0'):
 
-    if str(type(input_log)) in ["<class 'lime.observations.Spectrum'>", "<class 'lime.observations.Cube'>", "<class 'lime.observations.Sample'>"]:
-        input_log = input_log.frame
+    """
+    Computes the mean redshift of one or several objects from the lines in a LiMe-styled lines dataframe (pandas.DataFrame).
+
+    For every line, the redshift is computed from the observed centroid of the fitted profile (``center``
+    column, observed frame) and the transition reference wavelength (``wavelength`` column, rest frame) as
+    ``z = center/wavelength - 1``, with uncertainty ``z_err = center_err/wavelength``. The user can request one of the lines
+    dataframe parameters as a weight (such as the profile_flux or eqw) If the input frame has a MultiIndex, the calculation
+    is performed per object (assuming by default lime.Sample.frame levels), producing one row per object.
+
+    Parameters
+    ----------
+    lines_frame : pandas.DataFrame, str, pathlib.Path, Spectrum, Cube or Sample
+        Lines frame with the measurements, a path to a file containing one, or a LiMe observation whose
+        ``.frame`` attribute is used.
+    line_list : str or list of str, optional
+        Label(s) of the lines to include in the calculation. Default is ``None`` (all lines in the frame).
+    weight_parameter : str, optional
+        Column whose values weight the individual line redshifts (for example ``profile_flux``). Only lines
+        with positive values are included. Default is ``None`` (uniform weights).
+    max_centroid_err_frac : float, optional
+        Maximum fractional centroid uncertainty (``center_err/center``, equivalent to the velocity precision
+        ``sigma_v/c``) for a line to enter the calculation. This is a fraction, not a percentage
+        (``0.001`` keeps lines with centroids constrained better than 0.1 per cent). Default is ``None`` (no cut).
+    obj_label : str, optional
+        Object name for the output index when the input frame has a single index. Default is ``"spec_0"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table indexed by object with the columns:
+
+        * ``z_mean``: weighted mean redshift of the selected lines.
+        * ``z_std``: formal uncertainty on ``z_mean`` propagated from the line centroid errors.
+        * ``z_scatter``: uncertainty on ``z_mean`` from the line-to-line dispersion (standard error of the
+          weighted mean). ``NaN`` when only one line is available.
+        * ``n_lines``: Number of lines used in the redshift measurement.
+        * ``lines``: comma-separated list of the lines used in the measurement.
+        * ``weight``: value of ``weight_parameter`` used (``None`` for uniform weights).
+
+    Raises
+    ------
+    LiMe_Error
+        If the input is not recognized as a lines frame or if ``weight_parameter`` is not found among the
+        frame columns.
+
+    Notes
+    -----
+    Line selection: lines without a measurement (``NaN`` values in the ``profile_flux_err`` column) are excluded; if
+    ``max_centroid_err_frac`` is provided, lines with ``center_err/center`` above the threshold are also
+    excluded; if ``weight_parameter`` is provided, lines with non-positive weights are excluded.
+
+    For weights ``w_i`` and line redshifts ``z_i`` with uncertainties ``z_err_i``:
+
+    * ``z_mean = sum(w_i * z_i) / W`` with ``W = sum(w_i)``.
+    * ``z_std = sqrt(sum(w_i**2 * z_err_i**2)) / W`` (error propagation with the weights as constants).
+    * ``z_scatter = s / sqrt(n_eff)``, where ``s**2 = W * sum(w_i * (z_i - z_mean)**2) / (W**2 - sum(w_i**2))``
+      is the unbiased weighted variance of the line redshifts and ``n_eff = W**2 / sum(w_i**2)`` is the Kish
+      effective sample size. With uniform weights these reduce to the sample variance (``N - 1`` denominator)
+      and ``s/sqrt(N)``.
+
+    ``z_std`` and ``z_scatter`` are complementary: the former assumes all lines share the same redshift and
+    reflects only the centroid measurement precision, while the latter grows when the lines disagree beyond
+    their formal errors (resonant line offsets, blends, wavelength calibration residuals). A ``z_scatter``
+    larger than ``z_std`` flags inconsistent line measurements.
+
+    For a single line, ``z_std`` is the line ``z_err`` and ``z_scatter`` is ``NaN``. Objects without valid
+    lines return ``NaN`` in all columns.
+
+    Examples
+    --------
+    Redshift from the Balmer lines weighted by their flux:
+
+    >>> z_df = redshift_calculation(sample, line_list=["H1_4861A", "H1_6563A"], weight_parameter="profile_flux")
+
+    Redshift from all the lines in a log file with a velocity precision cut of ~30 km/s:
+
+    >>> z_df = redshift_calculation("lines_log.txt", max_centroid_err_frac=1e-4)
+
+    """
+
+    lines_frame = check_file_dataframe(lines_frame, copy_input=False)
+    if not isinstance(lines_frame, pd.DataFrame):
+        if str(type(lines_frame)) in ["<class 'lime.observations.Spectrum'>", "<class 'lime.observations.Cube'>", "<class 'lime.observations.Sample'>"]:
+            lines_frame = lines_frame.frame
+        else:
+            raise LiMe_Error(f'The input variable is not recognized as a dataframe: \n{lines_frame}')
 
     # Check if single or multi-index
-    sample_check = isinstance(input_log.index, pd.MultiIndex)
+    sample_check = isinstance(lines_frame.index, pd.MultiIndex)
 
     # Check the weighted parameter presence
     if weight_parameter is not None:
-        if weight_parameter not in input_log.columns:
+        if weight_parameter not in lines_frame.columns:
             raise LiMe_Error(f'The parameter {weight_parameter} is not found on the input lines log headers')
 
     # Check input line is not a string
     line_list = np.array(line_list, ndmin=1) if isinstance(line_list, str) else line_list
 
     if sample_check:
-        levels = input_log.index.names
-        id_list = input_log.index.droplevel(levels[-1]).unique()
+        levels = lines_frame.index.names
+        id_list = lines_frame.index.droplevel(levels[-1]).unique()
     else:
         id_list = np.array([obj_label])
         levels = None
 
     # Container for redshifts
-    z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'lines', 'weight'])
+    z_df = pd.DataFrame(index=id_list, columns=['z_mean', 'z_std', 'n_lines', 'lines', 'weight', 'z_scatter'])
     if sample_check:
         z_df.rename_axis(index=levels[:-1], inplace=True)
 
@@ -331,9 +415,9 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_e
 
         # Slice to the object log
         if not sample_check:
-            df_slice = input_log
+            df_slice = lines_frame
         else:
-            df_slice = input_log.xs(idx, level=levels[0])
+            df_slice = lines_frame.xs(idx, level=levels[0])
 
         # Get the lines requested
         if line_list is not None:
@@ -344,51 +428,56 @@ def redshift_calculation(input_log, line_list=None, weight_parameter=None, min_e
         df_slice = df_slice.loc[df_slice.profile_flux_err.notnull()]
 
         # Exclude error lines:
-        if min_err_pct is not None:
-            idcs_slice = df_slice.center_err.to_numpy() / df_slice.center.to_numpy() <= min_err_pct
+        if max_centroid_err_frac is not None:
+            idcs_slice = df_slice.center_err.to_numpy() / df_slice.center.to_numpy() <= max_centroid_err_frac
             df_slice = df_slice.loc[idcs_slice]
 
-        # Check the line has lines
+        # Check there are lines
         n_lines = len(df_slice.index)
         if n_lines > 0:
             z_array = (df_slice['center']/df_slice['wavelength'] - 1).to_numpy()
-            z_err_array = df_slice.center_err.to_numpy() / df_slice.center.to_numpy()
+            z_err_array = df_slice.center_err.to_numpy() / df_slice.wavelength.to_numpy()
             line_array = df_slice.index.to_numpy()
 
             # Just one line
             if n_lines == 1:
                 z_mean = z_array[0]
-                z_std = df_slice.center_err.to_numpy()[0]/df_slice.center.to_numpy()[0]
+                z_std = z_err_array[0]
+                z_scatter = np.nan
 
             # Multiple lines
             else:
 
-                # Not weighted parameter
-                if weight_parameter is None:
-                    z_mean = z_array.mean()
-                    z_std = z_array.std()
+                # Use weight parameter if requested
+                w_array = np.ones(n_lines) if weight_parameter is None else df_slice[weight_parameter].to_numpy()
 
-                # With a weighted parameter
+                # Use only positive weighted points.
+                idcs_pos = w_array > 0
+                w_array = w_array[idcs_pos]
+                z_array, z_err_array, line_array = z_array[idcs_pos], z_err_array[idcs_pos], line_array[idcs_pos]
+
+                # Formal nominal and uncertainty values
+                w_sum = np.sum(w_array)
+                z_mean = np.sum(w_array * z_array)/w_sum
+                z_std = np.sqrt(np.sum(np.square(w_array) * np.square(z_err_array))) / w_sum
+
+                # Scatter calculation (general, un-normalized weights)
+                sum_w2 = np.sum(np.square(w_array))
+                n_eff = np.square(w_sum) / sum_w2  # Kish effective sample size
+                if n_eff > 1:
+                    w_var = w_sum * np.sum(w_array * np.square(z_array - z_mean)) / (np.square(w_sum) - sum_w2)
+                    z_scatter = np.sqrt(w_var) / np.sqrt(n_eff)  # error on the mean from line disagreement
                 else:
+                    z_scatter = np.nan
 
-                    # Get normalized errors weight values which are positive...
-                    w_array = df_slice[weight_parameter].to_numpy()
-                    idcs_pos = w_array > 0
-                    w_array = w_array[idcs_pos]/np.sum(w_array[idcs_pos])
-
-                    # Only use possitive values
-                    z_array, z_err_array, line_array = z_array[idcs_pos], z_err_array[idcs_pos], line_array[idcs_pos]
-
-                    z_mean = np.sum(w_array * z_array)/np.sum(w_array)
-                    z_std = np.sqrt(np.sum(w_array * np.square(z_err_array)) / np.square(np.sum(w_array)))
-
-            obsLineList = ','.join(list(line_array))
+            # Lines used in the measurement
+            obs_line_list = ','.join(list(line_array))
 
         else:
-            z_mean, z_std, obsLineList = np.nan, np.nan, None
+            z_mean, z_std, z_scatter, obs_line_list = np.nan, np.nan, np.nan, None
 
         # Add to dataframe
-        z_df.loc[idx, 'z_mean':'weight'] = z_mean, z_std, obsLineList, weight_parameter
+        z_df.loc[idx, 'z_mean':'z_scatter'] = z_mean, z_std, n_lines, obs_line_list, weight_parameter, z_scatter
 
     return z_df
 
@@ -416,6 +505,58 @@ def compute_FWHM0(idx_peak, spec_flux, delta_wave, cont_flux, emission_check=Tru
             i += delta_wave
 
     return i
+
+
+def res_power_approx(wavelength_arr):
+
+    """
+    Estimate the spectral resolving power R = λ / Δλ approximation for a wavelength array.
+
+    The dispersion per pixel (Δλ/pixel) is computed from the finite differences
+    of the wavelength array. The resolution element is assumed to be Nyquist-sampled
+    by 2 pixels, so the FWHM resolution element is 2 * (Δλ/pixel), giving:
+
+        R ≈ λ / (2 * Δλ_pixel)
+
+    Note: This is an approximation. The true R depends on the slit width,
+    detector sampling, and optical quality of the spectrograph. For precise
+    instrumental broadening estimates, an empirical LSF from arc/sky lines
+    is preferred.
+
+    Parameters
+    ----------
+    wavelength_arr : np.ndarray
+        1D array of wavelengths, assumed to be in a consistent unit (e.g. Å).
+        Must be monotonically increasing and uniformly or smoothly sampled.
+
+    Returns
+    -------
+    res_power : np.ndarray
+        1D array of resolving power R at each pixel, same shape as wavelength_arr.
+        Dimensionless.
+
+    Notes
+    -----
+    - The last pixel is extrapolated by repeating the second-to-last dispersion
+      value, since np.ediff1d produces N-1 differences for an N-element array.
+    - If the wavelength array has non-uniform sampling (e.g. from a non-linear
+      dispersion solution), R will vary across the array accordingly.
+    - Assumes 2 pixels per resolution element (Nyquist sampling). If your
+      spectrograph samples the LSF with a different number of pixels, replace
+      the factor of 2 with the appropriate value.
+
+    Examples
+    --------
+    >>> wave = np.linspace(4000, 7000, 3000)   # 1 Å/pixel
+    >>> R = res_power_approx(wave)
+    >>> print(R[0])   # expect ~2000 at 4000 Å with 1 Å/pixel dispersion
+    2000.0
+
+    """
+
+    delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
+    delta_lambda[-1] = delta_lambda[-2]
+    return wavelength_arr / (2 * delta_lambda)
 
 
 def blended_label_from_log(line, log):

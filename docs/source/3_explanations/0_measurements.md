@@ -189,7 +189,7 @@ by the user at the `lime.Spectrum` definition.
 - **sigma_instr** (`.sigma_instr`, `float`): The instrumental broadening contribution to the line width in
   $\mathrm{km/s}$, derived from the spectral resolving power $R = \lambda / \Delta\lambda$:
 
-  $$\sigma_{instr} = \frac{\lambda}{R \cdot 2\sqrt{2\ln 2} \cdot 1000}$$
+  $$\sigma_{instr} = \frac{\lambda}{R \cdot 2\sqrt{2\ln 2}}$$
 
   where $\bar{\lambda}$ is the mean wavelength of the line region and the $2\sqrt{2\ln 2}$ factor converts from the
   instrumental FWHM to a Gaussian $\sigma$. If $R$ is provided as a scalar, a single value is computed from the mean

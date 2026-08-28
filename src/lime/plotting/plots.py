@@ -1343,27 +1343,28 @@ def line_band_scaler(axis, y, y_scale, scale_dict=theme.plt):
     if y_scale == 'auto':
 
         # Limits for the axes, ignore the divide by zero warning
-        with np.errstate(divide='ignore', invalid='ignore'):
-            neg_check = np.any(y < 0)
-            y_max, y_min = np.nanmax(y), np.nanmin(y)
-            ratio = np.abs(y_max/y_min)
-            if (ratio > 25) or (ratio < 0.06):
-                if neg_check:
-                    if np.sum(y>0) > 1:
-                        y_scale = {'value': 'symlog', 'linthresh': min(np.ceil(np.abs(y_min)), np.min(y[y>0]))}
+        if y.size > 1:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                neg_check = np.any(y < 0)
+                y_max, y_min = np.nanmax(y), np.nanmin(y)
+                ratio = np.abs(y_max/y_min)
+                if (ratio > 25) or (ratio < 0.06):
+                    if neg_check:
+                        if np.sum(y>0) > 1:
+                            y_scale = {'value': 'symlog', 'linthresh': min(np.ceil(np.abs(y_min)), np.min(y[y>0]))}
+                        else:
+                            y_scale = {'value': 'symlog', 'linthresh': np.ceil(np.abs(y_min))}
                     else:
-                        y_scale = {'value': 'symlog', 'linthresh': np.ceil(np.abs(y_min))}
+                        y_scale = {'value': 'log'}
                 else:
-                    y_scale = {'value': 'log'}
-            else:
-                y_scale = {'value': 'linear'}
+                    y_scale = {'value': 'linear'}
 
-        axis.set_yscale(**y_scale)
+            axis.set_yscale(**y_scale)
 
-        if y_scale["value"] != 'linear':
-            axis.text(0.12, 0.8, f'${y_scale["value"]}$',
-                      fontsize=scale_dict['textsize_notes'], ha='center', va='center',
-                      transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
+            if y_scale["value"] != 'linear':
+                axis.text(0.12, 0.8, f'${y_scale["value"]}$',
+                          fontsize=scale_dict['textsize_notes'], ha='center', va='center',
+                          transform=axis.transAxes, alpha=0.5, color=theme.colors['fg'])
     else:
         axis.set_yscale(y_scale)
 

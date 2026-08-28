@@ -153,3 +153,8 @@ LiMe small update - 2.4.3 - 08/07/2026
     - Bump pandas dependency, LiMe should be compatible with Pandas 3.0.0 but more changes will be necessary to take full advantage of the library upgrades"
     - Relaxed dependencies for the numba installation in the streamlit specsy wrapper"
 
+LiMe small update - 2.5.0 - XX/XX/XXXX
+    - Bug fix in auto scaling for cases where the y-axis array has no values.
+    - The res_power_approx function has been moved from the workflow.py script to the tools.py script
+    - Corrected a typo in the instrumental sigma calculation formula of the documentation
+    - Added function to compute observation redshift from line centroids

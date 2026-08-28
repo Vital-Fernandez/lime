@@ -12,7 +12,7 @@ from inspect import signature
 from matplotlib import pyplot as plt
 
 import lime
-from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, au
+from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, res_power_approx, au
 from lime.rsrc_manager import lineDB
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.transitions import Line, lines_frame, _REDSHIFT_DICT, multi_origin_lines_frame
@@ -232,56 +232,7 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-def res_power_approx(wavelength_arr):
 
-    """
-    Estimate the spectral resolving power R = λ / Δλ approximation for a wavelength array.
-
-    The dispersion per pixel (Δλ/pixel) is computed from the finite differences
-    of the wavelength array. The resolution element is assumed to be Nyquist-sampled
-    by 2 pixels, so the FWHM resolution element is 2 * (Δλ/pixel), giving:
-
-        R ≈ λ / (2 * Δλ_pixel)
-
-    Note: This is an approximation. The true R depends on the slit width,
-    detector sampling, and optical quality of the spectrograph. For precise
-    instrumental broadening estimates, an empirical LSF from arc/sky lines
-    is preferred.
-
-    Parameters
-    ----------
-    wavelength_arr : np.ndarray
-        1D array of wavelengths, assumed to be in a consistent unit (e.g. Å).
-        Must be monotonically increasing and uniformly or smoothly sampled.
-
-    Returns
-    -------
-    res_power : np.ndarray
-        1D array of resolving power R at each pixel, same shape as wavelength_arr.
-        Dimensionless.
-
-    Notes
-    -----
-    - The last pixel is extrapolated by repeating the second-to-last dispersion
-      value, since np.ediff1d produces N-1 differences for an N-element array.
-    - If the wavelength array has non-uniform sampling (e.g. from a non-linear
-      dispersion solution), R will vary across the array accordingly.
-    - Assumes 2 pixels per resolution element (Nyquist sampling). If your
-      spectrograph samples the LSF with a different number of pixels, replace
-      the factor of 2 with the appropriate value.
-
-    Examples
-    --------
-    >>> wave = np.linspace(4000, 7000, 3000)   # 1 Å/pixel
-    >>> R = res_power_approx(wave)
-    >>> print(R[0])   # expect ~2000 at 4000 Å with 1 Å/pixel dispersion
-    2000.0
-
-    """
-
-    delta_lambda = np.ediff1d(wavelength_arr, to_end=0)
-    delta_lambda[-1] = delta_lambda[-2]
-    return wavelength_arr / (2 * delta_lambda)
 
 
 def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr, mask_arr):
