@@ -112,7 +112,7 @@ def extract_fluxes(log, flux_type='mixture', sample_level='line', column_name='l
     if flux_type not in ('mixture', 'intg', 'profile'):
         raise LiMe_Error(f'Flux type "{flux_type}" is not recognized please one of "intg", "profile", or "mixture" ')
 
-    # Get indeces of blended lines
+    # Get indices of blended lines
     if not isinstance(log.index, pd.MultiIndex):
         idcs_blended = (log['group_label'] != 'none') & (~log.index.str.endswith('_m'))
     else:
