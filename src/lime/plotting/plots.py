@@ -552,77 +552,76 @@ def label_generator(idx_sample, log, legend_handle):
     return spec_label
 
 
-def redshift_key_evaluation(spectrum, mode, z_infered, data_mask, gauss_arr, z_arr, flux_sum_arr, theo_lambda=None,
-                            in_fig=None, fig_cfg=None, ax_cfg=None, label=None, rest_frame=True):
+def redshift_key_evaluation(spectrum, z_arr, data_mask, z_flux, z_pixel, flux_bands, pixel_bands,
+                             flux_sum_arr, pixel_sum_arr, in_fig=None, fig_cfg=None, ax_cfg=None,
+                             label=None, fname=None):
 
     # Display check for the user figures
     display_check = True if in_fig is None else False
 
     # Adjust the default theme
     PLT_CONF = theme.fig_defaults(fig_cfg)
-    AXES_CONF = theme.ax_defaults(ax_cfg, spectrum.units_wave, spectrum.units_flux, spectrum.norm_flux)
+    AXES_CONF = theme.ax_defaults(ax_cfg, observation=spectrum)
 
     # Create and fill the figure
     with (rc_context(PLT_CONF)):
-
         # Generate the figure object and figures
         if in_fig is None:
             in_fig = plt.figure()
-
         grid_ax = in_fig.add_gridspec(nrows=2, ncols=1, height_ratios=[2, 1])
         ax1 = plt.subplot(grid_ax[0])
         ax2 = ax1.twinx()
         ax3 = plt.subplot(grid_ax[1])
 
-        # Reference _frame for the plot
-        # wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(spectrum, rest_frame)
-        # Doppler factor for rest _frame plots
-        z_corr = 1 + z_infered
-        idcs_mask = spectrum.wave.mask
+        z_corr = 1 + z_flux
         wave_plot = spectrum.wave.data
         flux_plot = spectrum.flux.data
-        err_plot = None if spectrum.err_flux is None else spectrum.err_flux.data
 
         # Plot spectrum
         ax1.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
                    linewidth=theme.plt['spectrum_width'])
 
-        # Plot the bands
-        ax2.step(wave_plot / z_corr, gauss_arr, label=label, where='mid', color='yellow', linewidth=theme.plt['spectrum_width'])
+        # Plot the bands: solid for flux-sum, dashed for pixel-count
+        ax2.step(wave_plot / z_corr, flux_bands, label='Flux sum bands', where='mid', color='#e08a96',
+                 linewidth=theme.plt['spectrum_width'])
+        ax2.step(wave_plot / z_corr, pixel_bands, label='Pixel count bands', where='mid', color='#eead69ff',
+                 linewidth=theme.plt['spectrum_width'], linestyle='--')
+        ax2.legend()
 
         # Plot the data used for the masks
         y_arr = np.full(flux_plot.size, np.nan)
         y_arr[data_mask] = flux_plot[data_mask]
-        ax1.step(wave_plot / z_corr, y_arr*z_corr, label=label, where='mid', color='red', linewidth=theme.plt['spectrum_width'])
+        ax1.step(wave_plot / z_corr, y_arr*z_corr, label='Components', where='mid', color='#00FF98',
+                 linewidth=theme.plt['spectrum_width'])
 
-        # Plot the spectrum sum
-        ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), color=theme.colors['fg'], where='mid', linewidth=theme.plt['spectrum_width'])
+        # Plot both redshift distributions on the same axis: solid for flux-sum, dashed for pixel-count
+        ax3.step(z_arr, flux_sum_arr/np.max(flux_sum_arr), label='Flux sum distribution', color='#e08a96', where='mid',
+                  linewidth=theme.plt['spectrum_width'])
+        ax3.scatter(z_flux, 1, marker='o', color='red')
 
-        # Plot peack
-        ax3.scatter(z_infered, 1, marker='o', color='red')
-
-        # if theo_lambda is not None:
-        #     obs_lambda = theo_lambda * (1+ )
+        ax3.step(z_arr, pixel_sum_arr/np.max(pixel_sum_arr), label='Pixel count distribution', color='#eead69ff', where='mid',
+                  linewidth=theme.plt['spectrum_width'], linestyle='--')
+        ax3.scatter(z_pixel, 1, marker='o', color='red', label='Redshift peak')
+        ax3.legend()
 
         # Wording and formatting
         ax1.set(**AXES_CONF)
-
         ax2.set_ylim(0, 1)
         ax2.axis('off')
-
-        ax3.update({'xlabel': 'Redshift range',
-                    'ylabel': r'$\frac{{F_{{sum, {band}}}}}{{max(F_{{sum, {band}}})}}$'.format(band='pixels' if mode == 'xor' else 'flux'),
-                    'title': r'$z_{{prediction, {mode}}} = $'.format(mode=mode) + f'{z_infered:0.3f}'})
+        ax3.update({'xlabel': 'Redshift range', 'ylabel': r'$\frac{\sum Bands(z)}{max \left(\sum Bands(z) \right)}$',
+                    'title': (r'$z_{flux\,sum} = $' + f'{z_flux:0.3f}    ' +
+                              r'$z_{pixel\,count} = $' + f'{z_pixel:0.3f}')})
         ax3.set_yticks([0, 1])
 
+        in_fig.subplots_adjust(hspace=0.4)
+
         # By default, plot on screen unless an output address is provided
-        output_address, maximize = None, False
-        in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
+        in_fig = save_close_fig_swicth(fname, 'tight', in_fig, False, display_check)
 
     return
 
 def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, in_fig=None, fig_cfg=None,
-                            ax_cfg=None, label=None, rest_frame=False):
+                             ax_cfg=None, label=None, rest_frame=False):
 
     # Display check for the user figures
     display_check = True if in_fig is None else False
@@ -1121,8 +1120,8 @@ def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_
         ymin = np.max(y[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, y.size - 1)]) + (5 * dy)
         ymax = ymin + dy
 
-        if orig_arr[i] is None:
-            color = color_dict['fg']
+        if orig_arr[i] == "none":
+            color = color_dict['line_label']
         else:
             color = color_dict['origin'].get(orig_arr[i])
             if color is None:
@@ -1287,15 +1286,20 @@ def line_band_plotter(axis, x, y, z_corr, idcs_mask, label, color_dict, show_adj
 
         # Continua bands exclusion
         if show_adjacent:
-            low_lim = np.nanmin(y[idcs_mask[0]:idcs_mask[5]]) * z_corr
+            y_range = y[idcs_mask[0]:idcs_mask[5]]
+            if y_range.size > 0:
+                low_lim = np.nanmin(y[idcs_mask[0]:idcs_mask[5]]) * z_corr
 
-            x_interval = x[idcs_mask[0]:idcs_mask[1]] / z_corr
-            y_interval = y[idcs_mask[0]:idcs_mask[1]] * z_corr
-            axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+                x_interval = x[idcs_mask[0]:idcs_mask[1]] / z_corr
+                y_interval = y[idcs_mask[0]:idcs_mask[1]] * z_corr
+                axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
 
-            x_interval = x[idcs_mask[4]:idcs_mask[5]] / z_corr
-            y_interval = y[idcs_mask[4]:idcs_mask[5]] * z_corr
-            axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+                x_interval = x[idcs_mask[4]:idcs_mask[5]] / z_corr
+                y_interval = y[idcs_mask[4]:idcs_mask[5]] * z_corr
+                axis.fill_between(x_interval, low_lim, y_interval, facecolor=color_dict['cont_band'], step='mid', alpha=0.25)
+            else:
+                err_msg = f'Unsorted {label} band edges indexes: {idcs_mask}' if np.any(np.diff(idcs_mask) < 1) else f'Band plot error for {label}: Zero length array for indexes: {idcs_mask}'
+                _logger.warning(err_msg)
 
     else:
         _logger.warning(f'The {label} band plot interval contains less than 1 pixel')
@@ -1582,7 +1586,8 @@ class SpectrumFigures:
                 orig_arr, z_arr = orig_arr[idcs], z_arr[idcs]
 
                 # Plot the components
-                spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, z_corr, orig_arr, theme.colors.copy())
+                spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, z_corr,
+                                                     orig_arr, theme.colors.copy())
 
                 # Confirm the legend
                 if (len(orig_arr) > 1) and ~np.all(isnull(orig_arr)):

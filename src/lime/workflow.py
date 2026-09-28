@@ -8,19 +8,19 @@ from pathlib import Path
 from astropy.io import fits
 from lmfit.models import PolynomialModel
 from inspect import signature
+from scipy import stats
 
 from matplotlib import pyplot as plt
 
 import lime
-from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, res_power_approx, au
 from lime.rsrc_manager import lineDB
+from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, res_power_approx, au
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
 from lime.transitions import Line, lines_frame, _REDSHIFT_DICT, multi_origin_lines_frame
 from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
 from lime.plotting.plots import spec_continuum_calculation
-from scipy import stats
 
 try:
     import aspect
@@ -232,37 +232,31 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-
-
-
-def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr, mask_arr):
-
-    # Check the input disespersion interval
+def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr,
+                        mask_arr):
+    # Check the input dispersion interval
     if disp_intvl is not None:
-
         if disp_intvl[0] < wave_arr[0]:
-            _logger.warning(f'The input lower dispersion value is below the spectral range: disp_intvl {disp_intvl[0]} < {wave_arr[0]}')
+            _logger.warning(
+                f'The input lower dispersion value is below the spectral range: disp_intvl {disp_intvl[0]} < {wave_arr[0]}')
         if disp_intvl[-1] > wave_arr[-1]:
-            _logger.warning(f'The input higher dispersion value is above the spectral range: disp_intvl {disp_intvl[-1]} > {wave_arr[-1]}')
-
+            _logger.warning(
+                f'The input higher dispersion value is above the spectral range: disp_intvl {disp_intvl[-1]} > {wave_arr[-1]}')
         bin_width = np.nanmean(np.diff(disp_intvl))
-
     else:
-
         # Compute the wavelength range based on the pixel width
         if pixel_width is not None:
             disp_intvl = np.arange(np.round(wave_arr[0]), np.round(wave_arr[-1]), pixel_width)
             bin_width = pixel_width
-
         # Compute the wavelength range based on a number of pixels
         else:
             if pixel_number is not None and pixel_number >= 2:
                 if not float(pixel_number).is_integer():
-                    _logger.info(f'The input pixel number has been rounded from {pixel_number} to {round(pixel_number)}')
+                    _logger.info(
+                        f'The input pixel number has been rounded from {pixel_number} to {round(pixel_number)}')
                 pixel_number = round(pixel_number)
             else:
                 raise ValueError(f'In the number of pixels rebinning the input value must be above 1.')
-
             if constant_pixel_width:
                 bin_width = np.nanmean(np.diff(wave_arr)) * pixel_number
                 disp_intvl = np.arange(wave_arr[0], wave_arr[-1], bin_width)
@@ -272,6 +266,22 @@ def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_wi
 
     # Compute bin edges from centers — applies to all branches
     bin_edges = np.concatenate([[disp_intvl[0] - bin_width / 2], disp_intvl + bin_width / 2])
+
+    # --- Guard against zero-width bins caused by gaps/cuts in wave_arr ---
+    min_spacing = np.nanmin(np.abs(np.diff(wave_arr[np.isfinite(wave_arr)])))
+    tolerance = min_spacing * 1e-6
+    unique_mask = np.concatenate([[True], np.diff(bin_edges) > tolerance])
+
+    if not np.all(unique_mask):
+        n_removed = np.sum(~unique_mask)
+        _logger.warning(f'Found {n_removed} duplicate or zero-width bin edge(s) in bin_edges, '
+                        f'likely caused by gaps or cuts in wave_arr. '
+                        f'These will be removed before binning (tolerance = {tolerance:.2e} Å).')
+        bin_edges = bin_edges[unique_mask]
+
+    if len(bin_edges) < 2:
+        raise ValueError('After removing duplicate bin edges fewer than 2 edges remain. '
+                         'Check that wave_arr and disp_intvl are compatible.')
 
     # Make the binning calculation
     flux_binned, edges, binnumber = stats.binned_statistic(wave_arr, flux_arr, statistic='mean', bins=bin_edges)
@@ -283,35 +293,9 @@ def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_wi
     else:
         err_binned = None
 
-        # nbins = flux_binned.size
-        # bin_idx = binnumber - 1  # make 0-based
-        # sum_sq = np.bincount(bin_idx, weights=err_arr ** 2, minlength=nbins)
-        # counts = np.bincount(bin_idx, minlength=nbins)
-        # err_binned = np.sqrt(sum_sq) / counts
-
-        # # get unique bin numbers #
-        # uni_bin = np.unique(binnumber)
-        # err_binned_Svea = []
-        #
-        # for binnum in uni_bin[:-1]:
-        #     index_bin = np.where(binnumber == binnum)
-        #     errors_bin = err_arr[index_bin]
-        #     err_bin = np.sqrt(np.sum(errors_bin ** 2)) / (len(errors_bin))
-        #     err_binned_Svea.append(err_bin)
-        # err_binned_Svea = np.array(err_binned_Svea)
-
-        # err_arr = self._spec.err_flux.data
-        # sum_sq_errors = np.bincount(binnumber, weights=err_arr ** 2)
-        # bin_counts = np.bincount(binnumber)
-        # N_bins = flux_binned.size
-        # sum_sq_errors_filtered = sum_sq_errors[1: N_bins + 1]
-        # bin_counts_filtered = bin_counts[1: N_bins + 1]
-        # err_binned = np.sqrt(sum_sq_errors_filtered) / bin_counts_filtered
-
-
-    # # Update the binned wavelength # TODO when do I change this...
-    # if disp_intvl.size != flux_binned.size:
-    #     disp_intvl = disp_intvl[:-1] + bin_width / 2
+    # Recompute disp_intvl to match actual number of bins if edges were removed
+    if len(bin_edges) - 1 != len(disp_intvl):
+        disp_intvl = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
     return disp_intvl, flux_binned, err_binned
 
@@ -560,66 +544,111 @@ class SpecRetriever:
         return bands
 
     def spectrum(self, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, pixel_mask=None, mask_intvls=None,
-                 obj_redshift=False):
+                 match_redshift=True, smooth_sigma=None, truncate_smooth=4, min_smooth=0, return_arrays=False):
 
         # Extract the spectrum data
         mask_arr = self._spec.flux.mask
         wave_arr = self._spec.wave.data
         flux_arr = self._spec.flux.data if self._spec.norm_flux is None else self._spec.flux.data * self._spec.norm_flux
+
         if self._spec.err_flux is not None:
             err_arr = self._spec.err_flux.data if self._spec.norm_flux is None else self._spec.err_flux.data * self._spec.norm_flux
         else:
             err_arr = None
 
-        # Use the original pixel mask if none is provided else combine
-        pixel_mask = mask_arr if pixel_mask is None else mask_arr | pixel_mask
+        # Use the original pixel mask if none is provided else combine (copy to avoid mutating the source mask)
+        pixel_mask = mask_arr.copy() if pixel_mask is None else (mask_arr | pixel_mask)
 
         # Add the user masked regions
         if mask_intvls is not None:
 
-            # LiMe lines frame
-            if isinstance(mask_intvls, pd.DataFrame):
-                if {'w3', 'w4'}.issubset(mask_intvls):
-                    mask_intvls = mask_intvls.loc[:, ['w3','w4']].to_numpy()
+            # File path saved by the interactive mask selection tool
+            if isinstance(mask_intvls, (str, Path)):
+                mask_path = Path(mask_intvls)
+                if not mask_path.is_file():
+                    raise LiMe_Error(f'The "mask_intvls" file was not found ({mask_path.as_posix()})')
+                mask_intvls = np.loadtxt(mask_path, ndmin=2)
+                if mask_intvls.size == 0:
+                    mask_intvls = None
+                elif mask_intvls.shape[1] != 2:
+                    raise LiMe_Error(f'The "mask_intvls" file must have two columns (low, high) '
+                                     f'({mask_path.as_posix()})')
 
+            if mask_intvls is not None:
 
+                # LiMe lines frame
+                if isinstance(mask_intvls, pd.DataFrame):
+                    if {'w3', 'w4'}.issubset(mask_intvls):
+                        mask_intvls = mask_intvls.loc[:, ['w3', 'w4']].to_numpy()
+                    else:
+                        raise LiMe_Error(
+                            f'In order to use a pandas dataframe as "mask_intvls" it must have the a "w3" and'
+                            f' "w4" column to specify the lines location. Alternatively, you may use a matrix '
+                            f'array to define the masked intervals')
+
+                # Array of intervals (check it has the right dimensions)
                 else:
-                    raise LiMe_Error(f'In order to use a pandas dataframe as "mask_intvls" it must have the a "w3" and'
-                                     f' "w4" column to specify the lines location. Alternatively, you may use a matrix '
-                                     f'array to define the masked intervals')
+                    mask_intvls = np.asarray(mask_intvls, dtype=float)
+                    if mask_intvls.ndim != 2 or mask_intvls.shape[1] != 2:
+                        raise ValueError('The argument "exclude_intvls" must be a list of (low, high) pairs')
 
-            # Array of intervals (check it has the rigth dimensions)
-            else:
-                # Check the input has the right format
-                mask_intvls = np.asarray(mask_intvls, dtype=float)
-                if mask_intvls.ndim != 2 or mask_intvls.shape[1] != 2:
-                    raise ValueError('The argument "exclude_intvls" must be a list of (low, high) pairs')
+                # Add redshift correction
+                if match_redshift:
+                    mask_intvls = mask_intvls * (1 + self._spec.redshift) if redshift is None else mask_intvls * (1 + redshift)
 
-            # Add redshift correction
-            if obj_redshift:
-                mask_intvls = mask_intvls * (1 + self._spec.redshift) if redshift is None else mask_intvls * (1 + redshift)
+                # Loop through the wavelength intervals and add them to the mask
+                i0 = np.searchsorted(wave_arr, mask_intvls[:, 0], side="right")
+                i1 = np.searchsorted(wave_arr, mask_intvls[:, 1], side="left")
+                for start, stop in zip(i0, i1):
+                    pixel_mask[start:stop] = True
 
-            # Loop through the wavelength intervals and add them to the mask
-            # exclude_intvls = exclude_intvls * z_corr
-            i0 = np.searchsorted(wave_arr, mask_intvls[:, 0], side="right")
-            i1 = np.searchsorted(wave_arr, mask_intvls[:, 1], side="left")
-            for start, stop in zip(i0, i1):
-                pixel_mask[start:stop] = True
+        # Smooth the spectrum
+        if smooth_sigma is not None:
 
+            r = int(np.ceil(truncate_smooth * smooth_sigma))
+            x = np.arange(-r, r + 1)
+            k = np.exp(-0.5 * (x / smooth_sigma) ** 2)
+            k /= k.sum()
+
+            # The pixel mask already flags non-finite entries, so trust it directly
+            good = ~pixel_mask
+
+            f = np.where(good, flux_arr, 0.0)
+            norm = np.convolve(good.astype(float), k, mode="same")  # valid weight per pixel
+
+            with np.errstate(invalid="ignore", divide="ignore"):
+                flux_s = np.convolve(f, k, mode="same") / norm
+                if err_arr is not None:
+                    var = np.where(good, err_arr ** 2, 0.0)
+                    var_s = np.convolve(var, k ** 2, mode="same") / norm ** 2
+                    err_s = np.sqrt(var_s)
+
+            invalid = norm == 0
+            flux_s[invalid] = np.nan
+            flux_arr = flux_s                       # write the smoothed flux back
+
+            if err_arr is not None:
+                err_s[invalid] = np.nan
+                err_arr = err_s
+
+            pixel_mask = pixel_mask | (norm <= min_smooth)
 
         # Recreate the spectrum
-        out_spec = lime.Spectrum(input_wave=wave_arr,
-                      input_flux=flux_arr,
-                      input_err=err_arr,
-                      redshift=self._spec.redshift if redshift is None else redshift,
-                      res_power=self._spec.res_power,
-                      units_wave=self._spec.units_wave,
-                      units_flux=self._spec.units_flux,
-                      norm_flux=norm_flux,
-                      crop_waves=crop_waves,
-                      crop_flux=crop_flux,
-                      pixel_mask=pixel_mask)
+        if return_arrays:
+            out_spec = wave_arr, flux_arr, err_arr, pixel_mask
 
+        else:
+            out_spec = lime.Spectrum(input_wave=wave_arr,
+                                     input_flux=flux_arr,
+                                     input_err=err_arr,
+                                     redshift=self._spec.redshift if redshift is None else redshift,
+                                     res_power=self._spec.res_power,
+                                     units_wave=self._spec.units_wave,
+                                     units_flux=self._spec.units_flux,
+                                     norm_flux=norm_flux,
+                                     crop_waves=crop_waves,
+                                     crop_flux=crop_flux,
+                                     pixel_mask=pixel_mask)
 
         return out_spec
 
@@ -725,7 +754,7 @@ class SpecRetriever:
                 mask_arr = None
 
         if not return_spectrum:
-            return disp_intvl, flux_binned, err_binned
+            return disp_intvl, flux_binned * self._spec.norm_flux, err_binned * self._spec.norm_flux
 
         else:
             return lime.Spectrum(input_wave=disp_intvl,

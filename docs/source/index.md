@@ -21,7 +21,7 @@
 - Interactive plots for visual inspection of inputs and results.  
 - Line labeling conventions compatible with [PyNeb](http://research.iac.es/proyecto/PyNeb/).  
 - Flexible output results format, including `.txt`, `.pdf`, multi-page `.fits`, `.asdf`, and `.xlsx` files.
-- Support for both long-slit and integrated fiels spectrocopic cubes *.fits* files. 
+- Support for both long-slit and integrated field spectroscopic cubes *.fits* files. 
 
 :::{tip} **Where to find what you need**
 - The **Introduction** section provides detailed descriptions of *LiMe*’s main components.  
@@ -163,6 +163,7 @@ maxdepth: 2
 caption: Explanations
 ---
 3_explanations/0_measurements.md
+🆕 3_explanations/1_uncertainty.ipynb
 
 ```
 

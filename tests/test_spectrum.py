@@ -669,8 +669,7 @@ class TestMeasurements:
     #
     #     # Measure the lines
     #     bands_df = spec.retrieve.lines_frame(fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', band_vsigma=120)
-    #     spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', cont_source='adjacent',
-    #                    line_list=['O3_4959A', 'Ar3_7136A', 'S2_6716A_b'])
+    #     spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', cont_source='adjacent')
     #     lime_df = spec.frame.copy()
     #
     #     # Unpack SDSS line measurements
@@ -698,11 +697,16 @@ class TestMeasurements:
     #     sdss_df.rename(index=inv_dict, inplace=True)
     #
     #     # Compare the line fluxes
-    #     # spec.plot.spectrum(log_scale=True)
+    #     spec.plot.spectrum(log_scale=True)
     #     for line in ['O3_4959A', 'Ar3_7136A', 'S2_6716A', 'S2_6731A']:
+    #     # for line in ['S2_6716A', 'S2_6731A']:
     #         sdss_flux, sdss_err = sdss_df.loc[line, ['LINEAREA', 'LINEAREA_ERR']]
     #         lime_intg, lime_intg_err = lime_df.loc[line, ['intg_flux', 'intg_flux_err']]
     #         lime_gauss, lime_gauss_err = lime_df.loc[line, ['profile_flux', 'profile_flux_err']]
+    #
+    #         print(f'SLOAN = {sdss_flux}+/-{sdss_err}')
+    #         print(lime_df.loc[['O3_4959A'], ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err']])
+    #         print(lime_df.loc[['O3_4959A', 'O3_4959A_k-1'], ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err']])
     #
     #         sdss_cont, sdss_cont_err = sdss_df.loc[line, ['LINECONTLEVEL', 'LINECONTLEVEL_ERR']]
     #         lime_cont, lime_cont_err = lime_df.loc[line, ['cont', 'cont_err']]
@@ -720,11 +724,11 @@ class TestMeasurements:
     #         sigma_quad = np.sqrt(np.square(lime_cont_err) + np.square(sdss_cont_err))
     #         diag_arr = np.abs(lime_cont - sdss_cont) <= 3 * sigma_quad
     #
-    #         # print(f'Cont SDSS : {line} = {sdss_cont:0.3f} ± {sdss_cont_err:0.3f}')
-    #         # print(f'Cont LiMe :          {lime_cont:0.3f} ± {lime_cont_err:0.3f}')
-    #         # print('Continuum flux close',diag_arr)
+    #         print(f'Cont SDSS : {line} = {sdss_cont:0.3f} ± {sdss_cont_err:0.3f}')
+    #         print(f'Cont LiMe :          {lime_cont:0.3f} ± {lime_cont_err:0.3f}')
+    #         print('Continuum flux close',diag_arr)
     #
-    #         # assert np.isclose(sdss_flux, lime_gauss, rtol=0.05)
-    #         # assert np.isclose(sdss_cont, lime_cont, rtol=0.05)
+    #         assert np.isclose(sdss_flux, lime_gauss, rtol=0.05)
+    #         assert np.isclose(sdss_cont, lime_cont, rtol=0.05)
     #
     #     return

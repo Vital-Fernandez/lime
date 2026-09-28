@@ -9,7 +9,7 @@ from collections import UserDict
 
 from lime.fitting.lines import profiles_computation, linear_continuum_computation
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
-    parse_unit_convertion
+    parse_unit_convertion, is_luminosity_unit, flux_to_luminosity, au
 
 from lime.inference.detection import FeatureDetection
 from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures
@@ -734,10 +734,10 @@ class Spectrum:
 
         return
 
-    def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None):
+    def unit_conversion(self, wave_units_out=None, flux_units_out=None, norm_flux=None, distance=None):
 
         """
-        Convert the spectrum dispersion, energy density, and energy uncertainty units of the .
+        Convert the spectrum dispersion, energy density, and energy uncertainty units.
 
         This method updates the internal data arrays of the :class:`~lime.Spectrum` instance to new physical units.
         Conversions are handled by the `Astropy Units module
@@ -757,11 +757,18 @@ class Spectrum:
             ``"FLAM"`` (erg s⁻¹ cm⁻² Å⁻¹), ``"FNU"`` (erg s⁻¹ cm⁻² Hz⁻¹),
             ``"PHOTLAM"`` (photon s⁻¹ cm⁻² Å⁻¹), and ``"PHOTNU"`` (photon s⁻¹ cm⁻² Hz⁻¹).
             Lowercase equivalents (``"flam"``, ``"fnu"``, etc.) are also accepted.
-            If ``None``, the flux units are preserved.
+            Luminosity shortcuts ``"LLAM"`` (Lsun Å⁻¹) and ``"LNU"`` (Lsun Hz⁻¹) are accepted
+            if ``distance`` is provided. If ``None``, the flux units are preserved.
         norm_flux : float, optional
             Flux normalization factor to apply after conversion. If provided,
             the flux and uncertainty arrays are scaled accordingly, and the new
             normalization is stored in ``self.norm_flux``.
+        distance : float or astropy.units.Quantity, optional
+            Distance to the source. If provided, the flux and its uncertainty are converted to
+            luminosity density, L = 4 pi d^2 F, in solar luminosities per Angstrom (for F_lambda
+            units) or per Hz (for F_nu units). Floats are assumed to be in Mpc. For cosmological
+            sources use the luminosity distance. Only energy flux densities are supported (not
+            photon units). The value is stored in ``self.distance``.
 
         Returns
         -------
@@ -769,7 +776,7 @@ class Spectrum:
             The method modifies the current :class:`Spectrum` instance in place,
             updating the arrays:
             ``wave``, ``wave_rest``, ``flux``, ``err_flux``,
-            and the attributes ``units_wave``, ``units_flux``, and ``norm_flux``.
+            and the attributes ``units_wave``, ``units_flux``, ``norm_flux`` and ``distance``.
 
         Examples
         --------
@@ -785,11 +792,38 @@ class Spectrum:
 
         >>> import astropy.units as u
         >>> spec.unit_conversion(wave_units_out=u.um, flux_units_out=u.Jy)
+
+        Convert to luminosity density (Lsun/Å) for a source at 10 Mpc:
+
+        >>> spec.unit_conversion(distance=10)
+
+        Convert to Lsun/Hz for a source at 50 kpc:
+
+        >>> spec.unit_conversion(flux_units_out="FNU", distance=50 * u.kpc)
         """
 
+        # Luminosity units require a distance
+        if flux_units_out is not None and is_luminosity_unit(flux_units_out):
+            if distance is None:
+                raise ValueError('Luminosity units require a "distance" argument.')
+
+            if not isinstance(distance, au.Quantity):
+                _logger.info(f'The input distance is not an astropy quantity. The code assumes it is in MPC')
+
+            # Use the equivalent flux units for the parsing step
+            flux_units_out = 'FNU' if au.Unit(flux_units_out).is_equivalent(au.Unit('LNU')) else 'FLAM'
+
+        if distance is not None and is_luminosity_unit(self.units_flux):
+            raise ValueError('The spectrum is already in luminosity units.')
+
         # Extract the new values
-        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = parse_unit_convertion(self,
-                                                                                                                 wave_units_out, flux_units_out)
+        wave_units_out, flux_units_out, output_wave, output_flux, output_err, pixel_mask = parse_unit_convertion(
+            self, wave_units_out, flux_units_out)
+
+        # Flux -> luminosity if a distance is provided
+        if distance is not None:
+            output_flux, output_err, flux_units_out = flux_to_luminosity(output_flux, output_err,
+                                                                         flux_units_out, distance)
 
         # Reassign the units and normalization
         self.units_wave, self.units_flux = check_units(wave_units_out, flux_units_out)
