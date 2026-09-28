@@ -27,8 +27,11 @@ SYB_LIST = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I
 dict_units = {'flam': au.erg/au.s/au.cm**2/au.AA, 'FLAM': au.erg/au.s/au.cm**2/au.AA,
               'fnu': au.erg/au.s/au.cm**2/au.Hz, 'FNU': au.erg/au.s/au.cm**2/au.Hz,
               'photlam': au.photon/au.s/au.cm**2/au.AA, 'PHOTLAM': au.photon/au.s/au.cm**2/au.AA,
-              'photnu': au.photon/au.s/au.cm**2/au.Hz, 'PHOTNU': au.photon/au.s/au.cm**2/au.Hz}
+              'photnu': au.photon/au.s/au.cm**2/au.Hz, 'PHOTNU': au.photon/au.s/au.cm**2/au.Hz,
+              'llam': au.Lsun / au.AA, 'LLAM': au.Lsun / au.AA,
+              'lnu': au.Lsun / au.Hz, 'LNU': au.Lsun / au.Hz}
 au.set_enabled_aliases(dict_units)
+LUM_UNITS = (dict_units['LLAM'], dict_units['LNU'])
 
 
 PARAMETER_LATEX_DICT = {'Flam': r'$F_{\lambda}$',
@@ -1101,6 +1104,31 @@ def extract_wcs_header(wcs, drop_axis=None):
         hdr_coords = None
 
     return hdr_coords
+
+
+
+
+def is_luminosity_unit(units):
+    units = au.Unit(units)
+    return units.is_equivalent(au.Unit('LLAM')) or units.is_equivalent(au.Unit('LNU'))
+
+
+def flux_to_luminosity(flux, err_flux, flux_units, distance):
+
+    d = distance if isinstance(distance, au.Quantity) else distance * au.Mpc
+    flux_units = au.Unit(flux_units)
+
+    if flux_units.is_equivalent(au.Unit('FLAM')):
+        lum_units = au.Unit('LLAM')
+    elif flux_units.is_equivalent(au.Unit('FNU')):
+        lum_units = au.Unit('LNU')
+    else:
+        raise ValueError(f'Cannot convert "{flux_units}" to luminosity: only energy flux densities '
+                         f'(FLAM, FNU, Jy, ...) are supported.')
+
+    factor = (4 * np.pi * d**2 * flux_units).to(lum_units).value
+
+    return flux * factor, err_flux * factor, lum_units
 
 
 class ProgressBar:

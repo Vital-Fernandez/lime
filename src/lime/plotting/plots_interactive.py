@@ -13,8 +13,8 @@ from astropy.io import fits
 from lime.io import load_frame, save_frame, LiMe_Error, check_file_dataframe
 from lime.plotting.plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_parser,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
-                    image_plot, spec_plot, spatial_mask_plot, _masks_plot, theme, line_band_plotter, spec_mask_plotter, \
-                    line_band_scaler, spec_profile_plotter
+                    image_plot, spatial_mask_plot, _masks_plot, theme, line_band_plotter, spec_mask_plotter, \
+                    line_band_scaler, spec_profile_plotter, spec_lines_plotter
 
 from lime.tools import pd_get, unique_line_arr
 from lime.transitions import label_decomposition, Line, check_continua_bands
@@ -508,6 +508,343 @@ class BandsInspection:
 
         return
 
+
+class MaskSelection:
+
+    def __init__(self):
+
+        # Matplotlib containers
+        self.fig, self.ax = None, None
+
+        # Interactive state
+        self._mask_regions = []    # list of dicts: {'low','high','patch'} in DISPLAY frame
+        self.fname = None
+        self.rest_frame = False
+        self.match_frame = True
+        self.z_corr = 1.0
+
+        # Current mouse gesture
+        self._active = None
+        self._edge_tol_px = 6
+        self._click_tol_px = 3
+
+        return
+
+    def masks(self, fname=None, intvls=None, match_obs_frame=True, label=None, line_list=None, log_scale=False,
+              rest_frame=False, show_err=False, show_masks=True, in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
+
+        """
+        Interactive editor to select wavelength spans over a 1D spectrum.
+
+        Left-click and drag to create a span. Right-click on a span to delete it.
+        Left-click and drag a span edge to resize it, or its interior to move it.
+        Every change is written immediately to ``fname``.
+        """
+
+        self.rest_frame = rest_frame
+        self.match_frame = match_obs_frame
+        self._mask_regions = []
+        self._active = None
+
+        # Resolve the output file
+        if fname is not None:
+            self.fname = Path(fname)
+            if not self.fname.parent.is_dir():
+                raise LiMe_Error(f'Output regions directory does not exist ({self.fname.parent.as_posix()})')
+        else:
+            self.fname = None
+
+        plt_cfg = theme.fig_defaults(fig_cfg)
+        ax_labels_cfg = theme.ax_defaults(ax_cfg, self._spec)
+
+        with rc_context(plt_cfg):
+
+            self.fig = plt.figure() if in_fig is None else in_fig
+            self.ax = self.fig.add_subplot()
+            self.ax.set(**ax_labels_cfg)
+
+            wave_plot, flux_plot, err_plot, self.z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
+
+            self._wave_min = wave_plot.min() / self.z_corr
+            self._wave_max = wave_plot.max() / self.z_corr
+
+            self.ax.step(wave_plot / self.z_corr, flux_plot * self.z_corr, label=label, where='mid',
+                         color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'], zorder=10)
+
+            if show_err and err_plot is not None:
+                self.ax.fill_between(x=wave_plot / self.z_corr,
+                                     y1=(flux_plot - err_plot) * self.z_corr,
+                                     y2=(flux_plot + err_plot) * self.z_corr,
+                                     step='mid', alpha=0.2, color='lime', ec=None)
+
+
+            if line_list is not None:
+
+                label_arr, lambda_arr, orig_arr, z_arr = label_decomposition(line_list, params_list=['label', 'wavelength',
+                                                                                                     'origin', 'redshift'])
+
+                # Apply redshift correction and crop selection
+                z_arr[pd.isnull(z_arr)] = self._spec.redshift
+                lambda_arr = lambda_arr * (1 + z_arr)
+
+                idcs = (lambda_arr > wave_plot[0]) & (lambda_arr < wave_plot[-1])
+                label_arr, lambda_arr = label_arr[idcs], lambda_arr[idcs]
+                orig_arr, z_arr = orig_arr[idcs], z_arr[idcs]
+
+                # Plot the components
+                spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, self.z_corr,
+                                                     orig_arr, theme.colors.copy())
+
+            if show_masks:
+                spec_mask_plotter(self.ax, idcs_mask, wave_plot, flux_plot, self.z_corr, self._spec.frame)
+
+            if log_scale:
+                self.ax.set_yscale('log')
+
+            if label is not None:
+                self.ax.legend()
+
+            self._load_and_draw(intvls)
+
+            self.fig.canvas.mpl_connect('button_press_event', self._on_press)
+            self.fig.canvas.mpl_connect('motion_notify_event', self._on_motion)
+            self.fig.canvas.mpl_connect('button_release_event', self._on_release)
+
+            save_close_fig_swicth(None, True, self.fig, maximise=maximize,
+                                  plot_check=True if in_fig is None else False)
+
+        return
+
+    # ------------------------------------------------------------------ #
+    #  Frame conversions  (display <-> stored)
+    # ------------------------------------------------------------------ #
+    def _store_to_display(self, arr):
+        if self.match_frame:
+            return arr * (1 + self._spec.redshift) / self.z_corr
+        return arr
+
+    def _display_to_store(self, arr):
+        if self.match_frame:
+            return arr * self.z_corr / (1 + self._spec.redshift)
+        return arr
+
+    def _load_and_draw(self, intervals):
+
+        src = None
+        load_failed = False
+
+        if self.fname is not None and self.fname.is_file():
+            try:
+                data = np.loadtxt(self.fname, ndmin=2)
+                src = data[:, :2] if data.size > 0 else np.empty((0, 2))
+            except (ValueError, OSError) as e:
+                load_failed = True
+                _logger.warning(f'Could not parse existing regions file ({self.fname}): {e}. '
+                                f'Leaving it untouched; no regions will be loaded or saved this session.')
+
+        if load_failed:
+            self._mask_regions = []
+            self.fname = None
+            return
+
+        if src is None and intervals is not None:
+            if isinstance(intervals, (str, Path)):
+                src = np.loadtxt(intervals, ndmin=2)[:, :2]
+            else:
+                src = np.atleast_2d(np.asarray(intervals, dtype=float))[:, :2]
+
+        skip_save = False
+
+        if src is not None and src.size > 0:
+            disp = self._store_to_display(src)
+
+            # Keep only intervals overlapping the spectrum wavelength range
+            in_range = (disp[:, 1] >= self._wave_min) & (disp[:, 0] <= self._wave_max)
+            n_total, n_kept = disp.shape[0], int(in_range.sum())
+
+            if n_kept == 0:
+                _logger.warning(f'All {n_total} input interval(s) fall outside the spectrum wavelength range '
+                                f'({self._wave_min:.2f}-{self._wave_max:.2f}). None were loaded; the existing '
+                                f'file (if any) was left untouched.')
+                skip_save = True
+            else:
+                disp = disp[in_range]
+                for low, high in disp:
+                    low, high = sorted((float(low), float(high)))
+                    self._mask_regions.append({'low': low, 'high': high,
+                                               'patch': self._make_patch(low, high)})
+
+        if not skip_save:
+            self._save_regions()
+
+        return
+
+    def _save_regions(self):
+
+        if self.fname is None:
+            return
+
+        if len(self._mask_regions) == 0:
+            if self.fname.is_file():
+                self.fname.unlink()
+            return
+
+        arr = np.array([[r['low'], r['high']] for r in self._mask_regions], dtype=float)
+        arr = self._display_to_store(arr)
+        arr = arr[np.argsort(arr[:, 0])]
+        np.savetxt(self.fname, arr, fmt='%.8f', header='w_low w_high')
+
+        return
+
+    def _make_patch(self, low, high, temp=False):
+        return self.ax.axvspan(low, high, facecolor=theme.colors['line_band'], edgecolor=theme.colors['line_band'],
+                               alpha=0.15 if temp else 0.3, linewidth=1.4, zorder=2)
+
+    @staticmethod
+    def _set_patch(patch, low, high):
+        patch.set_x(low)
+        patch.set_width(high - low)
+
+    def _refresh_region(self, r):
+        self._set_patch(r['patch'], r['low'], r['high'])
+
+    def _edge_hit(self, event):
+        best = None
+        for r in self._mask_regions:
+            for key in ('low', 'high'):
+                xpix = self.ax.transData.transform((r[key], 0))[0]
+                d = abs(event.x - xpix)
+                if d <= self._edge_tol_px and (best is None or d < best[2]):
+                    best = (r, key, d)
+        return (best[0], best[1]) if best is not None else (None, None)
+
+    def _region_at(self, x):
+        for r in reversed(self._mask_regions):
+            if r['low'] <= x <= r['high']:
+                return r
+        return None
+
+    def _on_press(self, event):
+
+        if self._navigation_active():
+            self._cancel_active()
+            return
+
+        if event.inaxes is not self.ax or event.xdata is None:
+            return
+
+        if event.button == 3:
+            r = self._region_at(event.xdata)
+            if r is not None:
+                r['patch'].remove()
+                self._mask_regions.remove(r)
+                self._save_regions()
+                self.fig.canvas.draw_idle()
+            return
+
+        if event.button != 1:
+            return
+
+        region, edge = self._edge_hit(event)
+        if region is not None:
+            self._active = {'mode': 'resize', 'region': region, 'edge': edge,
+                            'low0': region['low'], 'high0': region['high']}
+            return
+
+        region = self._region_at(event.xdata)
+        if region is not None:
+            self._active = {'mode': 'move', 'region': region, 'grab': event.xdata,
+                            'low0': region['low'], 'high0': region['high']}
+            return
+
+        self._active = {'mode': 'create', 'x0': event.xdata, 'px0': event.x,
+                        'patch': self._make_patch(event.xdata, event.xdata, temp=True)}
+        return
+
+    def _on_motion(self, event):
+
+        if self._navigation_active():
+            self._cancel_active()
+            return
+
+        if self._active is None or event.inaxes is not self.ax or event.xdata is None:
+            return
+
+        mode, x = self._active['mode'], event.xdata
+
+        if mode == 'create':
+            x0 = self._active['x0']
+            self._set_patch(self._active['patch'], min(x0, x), max(x0, x))
+
+        elif mode == 'resize':
+            r = self._active['region']
+            r[self._active['edge']] = x
+            self._refresh_region(r)
+
+        elif mode == 'move':
+            dx = x - self._active['grab']
+            r = self._active['region']
+            r['low'], r['high'] = self._active['low0'] + dx, self._active['high0'] + dx
+            self._refresh_region(r)
+
+        self.fig.canvas.draw_idle()
+        return
+
+    def _on_release(self, event):
+
+        if self._navigation_active():
+            self._cancel_active()
+            return
+
+        if self._active is None:
+            return
+
+        mode = self._active['mode']
+
+        if mode == 'create':
+            self._active['patch'].remove()
+            x1 = event.x if event.x is not None else self._active['px0']
+            if abs(x1 - self._active['px0']) >= self._click_tol_px and event.xdata is not None:
+                low, high = sorted((self._active['x0'], event.xdata))
+                self._mask_regions.append({'low': low, 'high': high,
+                                           'patch': self._make_patch(low, high)})
+                self._save_regions()
+            self.fig.canvas.draw_idle()
+
+        elif mode in ('resize', 'move'):
+            r = self._active['region']
+            if r['low'] > r['high']:
+                r['low'], r['high'] = r['high'], r['low']
+            self._refresh_region(r)
+            self._save_regions()
+            self.fig.canvas.draw_idle()
+
+        self._active = None
+        return
+
+    def _navigation_active(self):
+        toolbar = getattr(self.fig.canvas, 'toolbar', None)
+        return toolbar is not None and toolbar.mode != ''
+
+    def _cancel_active(self):
+
+        if self._active is None:
+            return
+
+        mode = self._active['mode']
+
+        if mode == 'create':
+            self._active['patch'].remove()
+
+        elif mode in ('resize', 'move'):
+            r = self._active['region']
+            r['low'], r['high'] = self._active['low0'], self._active['high0']
+            self._refresh_region(r)
+
+        self._active = None
+        self.fig.canvas.draw_idle()
+
+        return
 
 class RedshiftInspection:
 
@@ -1261,13 +1598,14 @@ class CubeInspection:
             return None
 
 
-class SpectrumCheck(Plotter, BandsInspection):
+class SpectrumCheck(Plotter, BandsInspection, MaskSelection):
 
     def __init__(self, spectrum):
 
         # Instantiate the dependencies
         Plotter.__init__(self)
         BandsInspection.__init__(self)
+        MaskSelection.__init__(self)
 
         # Lime spectrum object with the scientific data
         self._spec = spectrum

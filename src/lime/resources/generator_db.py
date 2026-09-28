@@ -120,6 +120,8 @@ def format_lines_database(df_lines, redshift=0, band_velocity_sigma=100, n_sigma
 
 if __name__ == "__main__":
 
+
+    # 1) Making database updates
     current_file_folder = Path(__file__).resolve().parent
     PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.4.1.xlsx'
 
@@ -128,11 +130,12 @@ if __name__ == "__main__":
     child_db = format_lines_database(parent_db)
 
     # Save the new version
-    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.4.2.txt'
+    CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.5.0.txt'
     lime.save_frame(CHILD_DATABASE_path, child_db)
 
-    # # Preparing new version
-    # PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.0.6.txt'
+    # # 2) New database release
+    # current_file_folder = Path(__file__).resolve().parent
+    # PARENT_DATABASE_path = current_file_folder / 'lines_database_v2.4.1.txt'
     # parent_db = lime.load_frame(PARENT_DATABASE_path)
     # CHILD_DATABASE_path = current_file_folder / 'lines_database_v2.4.1.xlsx'
     # lime.save_frame(CHILD_DATABASE_path, parent_db)

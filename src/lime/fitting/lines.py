@@ -111,8 +111,6 @@ def lorentz_model(x, amp, center, sigma):
 
 
 def voigt_model(x, amp, center, sigma, gamma):
-    # z = ((x-center) + 1j*gamma) / (sigma*sqrt2)
-    # return amp * np.real(wofz(z)) / (sigma * k_GaussArea)
     z = (x-center + 1j*gamma) / max(tiny, (sigma*sqrt2))
     return amp*np.real(wofz(z)) / max(tiny, (sigma*k_GaussArea))
 
@@ -342,11 +340,8 @@ def show_profile_parameters(profile_params=PROFILE_PARAMS, profile_abbrev=PROFIL
     return
 
 
-def signal_to_noise_rola(amp, std_cont, n_pixels):
-
-    snr = (k_GaussArea/6) * (amp/std_cont) * np.sqrt(n_pixels)
-
-    return snr
+def signal_to_noise_rola(amp, std_cont, n_pixels, rola_const=np.sqrt(2 * np.pi) / 6):
+    return rola_const * (amp/std_cont) * np.sqrt(n_pixels)
 
 
 def profiles_computation(line_list, log, z_corr, shape_list, x_array=None, interval=('w3', 'w4'), res_factor=100):
@@ -732,19 +727,16 @@ class ProfileModelCompiler:
                 line.measurements.amp_err[i] = np.nan
                 _logger.warning(f'Negative scale value for amplitude at {comp_label}')
 
+            # Compute profile flux and uncertainty
             profile_flux_dist = AREA_FUNCTIONS[comp_label.profile](line.measurements, i, 1000)
             line.measurements.profile_flux[i] = np.mean(profile_flux_dist)
             line.measurements.profile_flux_err[i] = np.std(profile_flux_dist)
 
-            # Compute profile flux and uncertainty
-            # measurements.profile_flux[i], measurements.profile_flux_err[i] = AREA_FUNCTIONS[comp_label.profile](measurements, i, 1000)
-
-            # Compute FWHM_p (Profile Full Width Half Maximum)
+            # Compute Profile Full Width Half Maximum
             line.measurements.FWHM_p[i] = FWHM_FUNCTIONS[comp_label.profile](line.measurements, i)
 
             # Check parameters error propagation
-            self.review_err_propagation(line.measurements, i, comp_label.label, user_conf, self.output.errorbars,
-                                        line.group)
+            self.review_err_propagation(line.measurements, i, comp_label.label, user_conf, line.group)
 
         # Compute the equivalent widths
         line.measurements.eqw = line.measurements.profile_flux / line.measurements.cont
@@ -871,7 +863,7 @@ class ProfileModelCompiler:
 
         return
 
-    def review_err_propagation(self, data, idx_line, comp, user_conf, error_check, line_group):
+    def review_err_propagation(self, data, idx_line, comp, user_conf, line_group):
 
         # Check gaussian flux error
         if (data.profile_flux_err[idx_line] == 0.0) and (data.amp_err[idx_line] != 0.0) and (data.sigma_err[idx_line] != 0.0):
@@ -950,8 +942,6 @@ class LineFitting:
         else:
             line.measurements.cont_err = np.sqrt(self.cov_linear[0, 0] * emis_wave[peakIdx] ** 2 + self.cov_linear[1, 1]
                                                  + 2 * self.cov_linear[0, 1] * emis_wave[peakIdx])
-
-        # y_val_err = np.sqrt(((emis_wave[-1] - emis_wave[peakIdx]) / (emis_wave[-1]-emis_wave[0]) * emis_err[0]) ** 2 + ((emis_wave[peakIdx] - emis_wave[0]) / (emis_wave[-1]-emis_wave[0])  * emis_err[-1]) ** 2)
 
         # Warning if continuum above or below line peak/through
         if emission_check and (cont_arr[peakIdx] > emis_flux[peakIdx]):

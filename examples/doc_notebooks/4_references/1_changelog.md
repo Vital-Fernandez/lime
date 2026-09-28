@@ -124,7 +124,7 @@
 - Further development for the functions involving redshift a line fitting using aspect
 - The spatial masking functions should not require the 'PARAM', 'PARAMIDX', 'PARAMVAL' and 'NUMSPAXE' in the .fits headers to plot the mask overlays
 
-## 2.4.0 LiMe medium update (26/06/2024)
+## 2.4.0 LiMe medium update (26/06/2026)
 - Added new ultraviolet and infrared lines to the database `lines_database_v2.0.6.txt`
 - Major updates to `observations.py`: expanded spectrum observation handling
 - Major updates to `workflow.py`: significant refactoring of the fitting workflow
@@ -147,10 +147,17 @@
 - Adding releases on the github page to mark medium / major updates
 - Bump minimum python to 3.12 version for uniform requirements with readthedocs compilation
 
-## 2.4.1 LiMe medium update (XX/XX/XXX)
+## 2.4.3 LiMe small update (08/07/2026)
 - Now all instrument fits loading functions copy the configuration dictionary to avoid possible corruptions.
 - Added lines to lines database.
 - The lines database version now follows the current lime version.
 - Renamed internal function "continuum_calculation" to "_cont_level_profile" in order to avoid confusion with external "Spectrum.fit.continuum"
+- Bump pandas dependency, LiMe should be compatible with Pandas 3.0.0 but more changes will be necessary to take full advantage of the library upgrades"
+- Relaxed dependencies for the numba installation in the streamlit specsy wrapper"
 
-
+## 2.5.0 LiMe small update (XX/XX/XXXX)
+- Bug fix in auto-scaling for cases where the y-axis array has no values.
+- The res_power_approx function has been moved from the workflow.py script to the tools.py script
+- Corrected a typo in the instrumental sigma calculation formula of the documentation
+- Added function to compute observation redshift from line centroids
+- Added the argument distance in unit_conversion function for Spectrum. If this value is provided the spectrum flux will be converted to solar luminosities. If an astropy quantity is not provided it assumes mega parsecs.

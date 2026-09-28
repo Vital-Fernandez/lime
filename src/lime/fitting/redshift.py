@@ -3,7 +3,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import minimize, linear_sum_assignment
-
+from pathlib import Path
 from lime.io import LiMe_Error
 from lime.fitting.lines import compute_inst_sigma_array, gaussian_model
 from lime.plotting.plots import redshift_key_evaluation, redshift_permu_evaluation
@@ -176,7 +176,7 @@ def compile_Rmin_arr(bands, map_bands_Rname=None):
 
 
 def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components_number, band_vsigma,
-                        method, map_band_R=None, sig_digits=2, detection_only=True, plot_results=False):
+                        method, map_band_R=None, sig_digits=2, detection_only=True, plot_results=False, fig_cfg=None):
 
     # Use the detection bands if provided
     if (pred_arr is not None) and (components_number is not None):
@@ -246,8 +246,10 @@ def redshift_key_method(spec, bands, z_min, z_max, delta_z, pred_arr, components
         z_infer_pixel = np.round(z_arr[np.argmax(pixel_count)], decimals=sig_digits)
 
     if plot_results and (z_infer_flux is not None):
-        gauss_arr_max = compute_gaussian_ridges(z_infer_pixel, theo_lambda, wave_matrix, 1, band_vsigma, res_power, Rmin_arr=map_index_R)
-        redshift_key_evaluation(spec, method, z_infer_flux, mask, gauss_arr_max, z_arr, flux_sum, theo_lambda)
+        flux_bands = compute_gaussian_ridges(z_infer_flux, theo_lambda, wave_matrix, 1, band_vsigma, res_power, Rmin_arr=map_index_R)
+        pixel_bands = compute_gaussian_ridges(z_infer_pixel, theo_lambda, wave_matrix, 1, band_vsigma, res_power, Rmin_arr=map_index_R)
+        redshift_key_evaluation(spec, z_arr, mask, z_infer_flux, z_infer_pixel, flux_bands, pixel_bands, flux_sum, pixel_count,
+                                fname=plot_results if isinstance(plot_results, (str, Path)) else None, fig_cfg=fig_cfg)
 
     return z_infer_flux, z_infer_pixel
 
@@ -334,7 +336,8 @@ def redshift_permutation_method(spec, bands, z_min, z_max, pred_arr, components_
 
         if plot_results:
             idcs_theo = (wave_theo * (1 + z_infer) >= wave_arr[0]) & (wave_theo * (1 + z_infer) <= wave_arr[-1])
-            redshift_permu_evaluation(spec, z_infer, wave_obs, wave_theo[idcs_theo] * (1 + z_infer))
+            redshift_permu_evaluation(spec, z_infer, wave_obs, wave_theo[idcs_theo] * (1 + z_infer),
+                                      fname=plot_results if isinstance(plot_results, (str, Path)) else None)
 
 
     else:
@@ -350,7 +353,8 @@ class RedshiftFitting:
         return
 
     def redshift(self, bands, z_min=0, z_max=12, delta_z=None,  mode='key', comps_list=['emission', 'doublet-em'],
-                 res_power=None, detection_only=True, band_vsigma=70, map_min_R=None, sig_digits=2, plot_results=False):
+                 res_power=None, detection_only=True, band_vsigma=70, map_min_R=None, sig_digits=2, plot_results=False,
+                 fig_cfg=None):
 
         '''
         bands, z_min, z_max, z_nsteps, idcs_lines, res_power, sigma_factor, sig_digits=2,
@@ -379,7 +383,7 @@ class RedshiftFitting:
             case 'key':
                 z_flux, z_xor = redshift_key_method(self._spec, bands, z_min, z_max, delta_z, pred_arr, components_number,
                                                     band_vsigma, mode, map_band_R=map_min_R, sig_digits=sig_digits,
-                                                    detection_only=detection_only, plot_results=plot_results)
+                                                    detection_only=detection_only, plot_results=plot_results, fig_cfg=fig_cfg)
             case 'permute':
                 z_flux = redshift_permutation_method(self._spec, bands, z_min, z_max, pred_arr, components_number,
                                                       plot_results=plot_results)

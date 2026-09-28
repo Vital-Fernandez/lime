@@ -1,7 +1,7 @@
 [metadata]
 name = 'lime-stable'
-version = "2.4.3"
-lines_database = 'lines_database_v2.4.1.txt'
+version = "2.5.0"
+lines_database = 'lines_database_v2.5.0.txt'
 
 # =====================
 # Spectrum / Long-slit

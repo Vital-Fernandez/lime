@@ -451,6 +451,7 @@ class TestTransitionClass:
 
         return
 
+
 class TestParticleClass:
 
     def test_pyneb_items(self):

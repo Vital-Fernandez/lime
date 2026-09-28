@@ -154,7 +154,8 @@ LiMe small update - 2.4.3 - 08/07/2026
     - Relaxed dependencies for the numba installation in the streamlit specsy wrapper"
 
 LiMe small update - 2.5.0 - XX/XX/XXXX
-    - Bug fix in auto scaling for cases where the y-axis array has no values.
+    - Bug fix in auto-scaling for cases where the y-axis array has no values.
     - The res_power_approx function has been moved from the workflow.py script to the tools.py script
     - Corrected a typo in the instrumental sigma calculation formula of the documentation
     - Added function to compute observation redshift from line centroids
+    - Added the argument distance in unit_conversion function for Spectrum. If this value is provided the spectrum flux will be converted to solar luminosities. If an astropy quantity is not provided it assumes mega parsecs.
