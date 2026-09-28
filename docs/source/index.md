@@ -163,7 +163,7 @@ maxdepth: 2
 caption: Explanations
 ---
 3_explanations/0_measurements.md
-🆕 3_explanations/1_uncertainty.ipynb
+🆕 Measurement biases <3_explanations/1_uncertainty.ipynb>
 
 ```
 
