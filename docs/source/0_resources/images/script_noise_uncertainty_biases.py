@@ -60,9 +60,10 @@ STACK_LABELS = (f'Intrinsic line (S/N = {WEAK_SNR:.0f})',
                 r'Background noise ($\sigma_{c}$)',
                 'Observed spectrum')
 
-SPEC_COLOR = '0.35'
+SPEC_COLOR = 'tab:orange'
 FILL_COLOR = '0.75'              # trace baselines
 BAND_FILL = '#EFC3A6'            # area under the limiting profile
+SILVER = '#C0C0C0'
 
 # Confidence band shades. They are flattened against the panel background once,
 # at import time, so the bands and their legend patches are drawn with the very
@@ -132,11 +133,11 @@ def upper_limit_flux(sigma_c, mean_width):
 def plot_upper_limit(ax, wave, flux):
     """Left panel: flux upper limit set by the pseudo-continuum noise."""
 
-    ax.step(wave, flux, color=SPEC_COLOR, linewidth=0.9, zorder=3, where='mid')
+    ax.step(wave, flux, color=lime.theme.colors['fg'], linewidth=0.9, zorder=3, where='mid')
 
     # Pseudo-continuum and the sigma_c ceiling
-    ax.axhline(CONTINUUM, color='black', linewidth=1.0, zorder=4)
-    ax.axhline(CONTINUUM + SIGMA_C, color='black', linewidth=1.3,
+    ax.axhline(CONTINUUM, color=SPEC_COLOR, linewidth=1.0, zorder=4)
+    ax.axhline(CONTINUUM + SIGMA_C, color=SPEC_COLOR, linewidth=1.3,
                linestyle=(0, (7, 5)), zorder=4)
 
     # Limiting profile of the undetected transition
@@ -153,17 +154,17 @@ def plot_upper_limit(ax, wave, flux):
     # sigma_c double headed arrow
     ax.annotate('', xy=(SIGMA_MARKER_WAVE, CONTINUUM),
                 xytext=(SIGMA_MARKER_WAVE, CONTINUUM + SIGMA_C),
-                arrowprops=dict(arrowstyle='<->', color='black', linewidth=1.1),
+                arrowprops=dict(arrowstyle='<->', color=SPEC_COLOR, linewidth=1.1),
                 zorder=6)
     ax.text(SIGMA_MARKER_WAVE - 2.5, CONTINUUM + 0.5 * SIGMA_C, r'$\sigma_{c}$',
-            fontsize=15, ha='right', va='center')
+            fontsize=19, ha='right', va='center', color=SPEC_COLOR)
 
     # Transition labels with their pointers
     for cfg, gap in ((DETECTED, 0.14), (UNDETECTED, 0.42)):
         peak = CONTINUUM + cfg['amp']
-        ax.annotate('', xy=(cfg['wave'], peak + gap),
+        ax.annotate('', xy=(cfg['wave'], peak + gap/2),
                     xytext=(cfg['wave'], cfg['label_pos'][1] - 0.06),
-                    arrowprops=dict(arrowstyle='-|>', color='black',
+                    arrowprops=dict(arrowstyle='-|>', color=SPEC_COLOR,
                                     linewidth=1.5, mutation_scale=18))
         ax.text(cfg['label_pos'][0], cfg['label_pos'][1], cfg['label'], fontsize=15, ha='center', va='bottom')
 
@@ -171,7 +172,7 @@ def plot_upper_limit(ax, wave, flux):
     ax.set_ylim(0.0, 2.5)
     ax.yaxis.set_major_locator(MultipleLocator(0.5))
     ax.yaxis.set_minor_locator(MultipleLocator(0.1))
-    ax.set_title('Line below the S/N level', fontsize=17, pad=12)
+    ax.set_title('Line hidden by noise', fontsize=17, pad=12)
 
     return
 
@@ -195,7 +196,7 @@ def plot_weak_line(ax, wave, line, noise, observed):
 
     for (offset, trace), label in zip(traces, STACK_LABELS):
         ax.axhline(offset, color=FILL_COLOR, linewidth=0.8, zorder=2)
-        ax.step(wave, offset + STACK_SCALE * trace, color=SPEC_COLOR, linewidth=1.1, zorder=3, where='mid')
+        ax.step(wave, offset + STACK_SCALE * trace, color='tab:blue', linewidth=1.1, zorder=3, where='mid')
         ax.text(WAVE_LIMITS[0] + 3.0, offset + 0.60, label, zorder=6, **label_kwargs)
 
     # Operators between the stacked traces

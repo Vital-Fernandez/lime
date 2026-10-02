@@ -39,6 +39,8 @@ category_conf_styles = {0: 'dotted',
                         1: 'dashed',
                         2: 'solid'}
 
+
+
 def ensure_list(x):
     return x if isinstance(x, list) else [x]
 
@@ -54,6 +56,12 @@ def extract_figures(figure_obj):
         else:
             fig_list.append(item_obj)
     return fig_list
+
+
+def select_tool(figure_obj, tool_name):
+    tool_cls = getattr(models, tool_name)
+    tools = [tool for tool in figure_obj.toolbar.tools if isinstance(tool, tool_cls)]
+    return tools[0] if tools else None
 
 
 def update_bokeh_figure(figure_obj, config_dict):
@@ -110,11 +118,11 @@ def update_bokeh_figure(figure_obj, config_dict):
                     case 'tools':
                         pass
                     case 'active_scroll':
-                        figure_obj.toolbar.active_scroll = figure_obj.select_one(getattr(models, value))
+                        figure_obj.toolbar.active_scroll = select_tool(figure_obj, value)
                     case 'active_drag':
-                        figure_obj.toolbar.active_drag = figure_obj.select_one(getattr(models, value))
+                        figure_obj.toolbar.active_drag = select_tool(figure_obj, value)
                     case 'active_tap':
-                        figure_obj.toolbar.active_tap = figure_obj.select_one(getattr(models, value))
+                        figure_obj.toolbar.active_tap = select_tool(figure_obj, value)
                     case _ :
                         if isinstance(figure_obj, list):
                             for ax in figure_obj:
@@ -122,10 +130,6 @@ def update_bokeh_figure(figure_obj, config_dict):
                                     setattr(ax, key, value)
                         else:
                          setattr(figure_obj, key, value)
-
-    # # Set zoom and pan as active
-    # figure_obj.toolbar.active_scroll = figure_obj.select_one(WheelZoomTool)  # Activate zoom wheel
-    # figure_obj.toolbar.active_drag = figure_obj.select_one(PanTool)  # Activate pan tool
 
     return figure_obj
 

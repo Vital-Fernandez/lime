@@ -620,51 +620,6 @@ def redshift_key_evaluation(spectrum, z_arr, data_mask, z_flux, z_pixel, flux_ba
 
     return
 
-def redshift_permu_evaluation(spectrum, z_infered, obs_wave_arr, theo_wave_arr, in_fig=None, fig_cfg=None,
-                             ax_cfg=None, label=None, rest_frame=False):
-
-    # Display check for the user figures
-    display_check = True if in_fig is None else False
-
-    # Set figure format with the user configuration overwriting the default conf
-    legend_check = True if label is not None else False
-
-    print(f'Observed wavelengths: {obs_wave_arr}')
-    print(f'Best matching wavelengths: {theo_wave_arr}')
-
-    # Adjust the default theme
-    PLT_CONF = theme.fig_defaults(fig_cfg)
-    AXES_CONF = theme.ax_defaults(ax_cfg, spectrum.units_wave, spectrum.units_flux, spectrum.norm_flux)
-
-    # Create and fill the figure
-    with (rc_context(PLT_CONF)):
-
-        in_fig, in_ax = plt.subplots()
-
-        if AXES_CONF.get('title') is None:
-         AXES_CONF['title'] = r'$z_{permutation} = $' + f'{z_infered:0.3f}'
-
-        in_ax.set(**AXES_CONF)
-
-        # Reference _frame for the plot
-        wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(spectrum.wave, spectrum.flux, z_infered, rest_frame)
-
-        # Plot spectrum
-        in_ax.step(wave_plot / z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
-                   linewidth=theme.plt['spectrum_width'])
-
-        for i, obs_wave in enumerate(obs_wave_arr):
-            in_ax.axvline(obs_wave, linestyle='--')
-
-        for i, theo_wave in enumerate(theo_wave_arr):
-            in_ax.axvline(theo_wave, linestyle=':')
-
-        # By default, plot on screen unless an output address is provided
-        output_address, maximize = None, False
-        in_fig = save_close_fig_swicth(output_address, 'tight', in_fig, maximize, display_check)
-
-    return
-
 
 def bands_filling_plot(axis, x, y, z_corr, idcs_mask, label, exclude_continua=True, color_dict=theme.colors, show_central=True):
 
