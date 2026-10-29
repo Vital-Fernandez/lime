@@ -321,3 +321,33 @@ class TestOpenFits:
         return fig
 
 
+@pytest.mark.parametrize('extension', ['.dat', '.csv', '.txt'])
+def test_save_and_read_text_sdss(tmp_path, extension, file_name='sdss_dr18_0358-51818-0504.fits'):
+
+    # Original spectrum from the SDSS fits file
+    spec = lime.Spectrum.from_file(spectra_folder/file_name, instrument='sdss')
+
+    # Save to a text file
+    out_file = tmp_path / f'sdss_spectrum{extension}'
+    spec.save_spectrum(out_file)                       # <- adjust arguments if needed
+    assert out_file.is_file()
+
+    # Read it back (text files may not store metadata, so pass it explicitly)
+    spec_read = lime.Spectrum.from_file(out_file, instrument='text',
+                                        redshift=spec.redshift,
+                                        units_wave=spec.units_wave,
+                                        units_flux=spec.units_flux)
+
+    # Compare metadata
+    assert spec_read.units_wave == spec.units_wave
+    assert spec_read.units_flux == spec.units_flux
+    assert np.isclose(spec_read.redshift, spec.redshift)
+    assert spec_read.norm_flux == spec.norm_flux
+
+    # Compare arrays (text output truncates precision, so use allclose)
+    assert np.allclose(spec_read.wave, spec.wave, rtol=1e-6)
+    assert np.allclose(spec_read.flux.data, spec.flux.data, rtol=1e-6, equal_nan=True)
+    assert np.allclose(spec_read.err_flux.data, spec.err_flux.data, rtol=1e-6, equal_nan=True)
+    assert np.all(spec_read.flux.mask == spec.flux.mask)
+
+    return

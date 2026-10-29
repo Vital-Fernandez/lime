@@ -135,9 +135,8 @@ def import_line_kinematics(line, z_cor, log, fit_conf):
 
             # Line has not been measured before found
             else:
-                _logger.info(f'\n{parent_label} has not been found on the input lines frame for {child_label} kinematics export.'
-                             f'\n - Please check you are using the right line label and that the line has been measured prior '
-                             f'prior to the current fitting.')
+                _logger.info(f'\n{parent_label} has not been found for {child_label} kinematics.'
+                             f'\n - Please make sure {parent_label}  is measured before {child_label}.')
 
     return
 
@@ -232,8 +231,8 @@ def continuum_model_fit(x_array, y_array, idcs, degree):
     return cont_fit
 
 
-def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr,
-                        mask_arr):
+def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_width, wave_arr, flux_arr, err_arr):
+
     # Check the input dispersion interval
     if disp_intvl is not None:
         if disp_intvl[0] < wave_arr[0]:
@@ -557,7 +556,7 @@ class SpecRetriever:
             err_arr = None
 
         # Use the original pixel mask if none is provided else combine (copy to avoid mutating the source mask)
-        pixel_mask = mask_arr.copy() if pixel_mask is None else (mask_arr | pixel_mask)
+        pixel_mask = mask_arr.copy() if pixel_mask is None else pixel_mask
 
         # Add the user masked regions
         if mask_intvls is not None:
@@ -724,6 +723,8 @@ class SpecRetriever:
         - Binning uses ``scipy.stats.binned_statistic(..., statistic='mean')`` for flux.
         - If the spectrum contains masked or NaN values, ensure they are appropriately
           handled upstream; NaNs within a bin will propagate to the mean.
+        - If the spectrum has a pixel mask, the binned pixels containing at least one masked
+          native pixel are masked in the returned spectrum.
         """
 
         # Check only one approach is necessary
@@ -737,32 +738,43 @@ class SpecRetriever:
         if len(active) > 1:
             raise ValueError(f"Arguments {active} are mutually exclusive. Please only one.")
 
-        # Extract the spectrum data
-        z_corr = 1 if rest_frame is False else (1 + self._spec.redshift)
-        mask_arr = self._spec.wave.mask
-        wave_arr = self._spec.wave.data / z_corr
-        flux_arr = self._spec.flux.data * z_corr
-        err_arr = self._spec.err_flux.data * z_corr if self._spec.err_flux is not None else None
+        # Extract the spectrum data keeping the normalization for a more stable rebinning
+        wave_arr, flux_arr, err_arr, mask_arr = self._spec.retrieve.spectrum(return_arrays=True)
+        norm_flux = self._spec.norm_flux
 
-        # Perform the rebinne
+        if norm_flux is not None:
+            flux_arr = flux_arr / self._spec.norm_flux
+            err_arr = err_arr if err_arr is None else err_arr / self._spec.norm_flux
+
+        # Perform the rebinning
         disp_intvl, flux_binned, err_binned = spectrum_resampling(disp_intvl, pixel_width, pixel_number, const_pixel_width,
-                                                                  wave_arr, flux_arr, err_arr, mask_arr)
+                                                                  wave_arr, flux_arr, err_arr)
 
+        # Recalculate the mask on the new dispersion grid
         if np.any(mask_arr):
-            if mask_arr.size != disp_intvl.size:
-                _logger.warning('Recalculating input mask')
-                mask_arr = None
+            _logger.info('Recalculating input mask')
+            mid = 0.5 * (disp_intvl[1:] + disp_intvl[:-1])
+            edges = np.r_[2 * disp_intvl[0] - mid[0], mid, 2 * disp_intvl[-1] - mid[-1]]
+            idcs = np.digitize(wave_arr[mask_arr], edges) - 1
+            idcs = idcs[(idcs >= 0) & (idcs < disp_intvl.size)]
+            mask_arr = np.zeros(disp_intvl.size, dtype=bool)
+            mask_arr[idcs] = True
+        else:
+            mask_arr = None
+
+        # Recover the flux normalization
+        if norm_flux is not None:
+            flux_binned = flux_binned * norm_flux
+            err_binned = err_binned * norm_flux if err_binned is not None else None
 
         if not return_spectrum:
-            return disp_intvl, flux_binned * self._spec.norm_flux, err_binned * self._spec.norm_flux
+            return disp_intvl, flux_binned, err_binned
 
         else:
-            return lime.Spectrum(input_wave=disp_intvl,
-                                 input_flux=flux_binned * self._spec.norm_flux if self._spec.norm_flux else flux_binned,
-                                 input_err=err_binned * self._spec.norm_flux if self._spec.norm_flux else err_binned,
-                                 redshift=0 if rest_frame else self._spec.redshift , res_power=self._spec.res_power,
+            return lime.Spectrum(input_wave=disp_intvl, input_flux=flux_binned, input_err=err_binned,
+                                 redshift=0 if rest_frame else self._spec.redshift, res_power=self._spec.res_power,
                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux,
-                                 norm_flux=self._spec.norm_flux)
+                                 norm_flux=norm_flux, pixel_mask=mask_arr)
 
     def normalization(self, return_spectrum=False, crop_waves=None, crop_flux=None, **kwargs):
 
@@ -891,8 +903,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
 
     def bands(self, label, bands=None, fit_cfg=None, min_method='least_squares', profile=None, shape=None,
-              cont_source='central', err_from_bands=None, temp=10000.0, default_cfg_prefix='default', obj_cfg_prefix=None,
-              update_default=True):
+              cont_source='central', err_from_bands=None, temp=10000.0, scale_covar=True, lmfit_covar=False,
+              default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True):
 
         """
         Fit a spectral line from defined bands (see :ref:`bands documentation <line-bands-doc>`.).
@@ -1033,7 +1045,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
                                  y_arr=self._spec.flux[idcs_fitting],
                                  err_arr=pixel_err_arr[idcs_fitting],
                                  cont_arr=cont_arr[idcs_fitting] if cont_source == 'fit' else None,
-                                 user_conf=input_conf, fit_method=min_method)
+                                 user_conf=input_conf, fit_method=min_method,
+                                 scale_covar=scale_covar, lmfit_covar=lmfit_covar)
 
             # Instrumental and thermal corrections for the lines
             sigma_corrections(self.line, idcs_line, self._spec.wave[idcs_line], self._spec.res_power, temp)
@@ -1049,9 +1062,10 @@ class SpecTreatment(LineFitting, RedshiftFitting):
         return
 
 
-    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None, cont_source='central',
-              err_from_bands=None, temp=10000.0, line_list=None, default_cfg_prefix='default', obj_cfg_prefix=None,
-              update_default=True, line_detection=False, plot_fit=False, progress_output='bar'):
+    def frame(self, bands, fit_cfg=None, min_method='least_squares', profile=None, shape=None,
+              cont_source='central', err_from_bands=None, temp=10000.0, line_list=None, scale_covar=True, lmfit_covar=False,
+              default_cfg_prefix='default', obj_cfg_prefix=None, update_default=True, line_detection=False,
+              plot_fit=False, progress_output='bar'):
 
         """
         Measure multiple spectral lines from a bands dataframe
@@ -1219,7 +1233,8 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
                         # Fit the lines
                         self.bands(line, bands, input_conf, min_method, profile, shape, cont_source=cont_source,
-                                   err_from_bands=err_from_bands, temp=temp, obj_cfg_prefix=None, default_cfg_prefix=None)
+                                   err_from_bands=err_from_bands, temp=temp, scale_covar=scale_covar, lmfit_covar=lmfit_covar,
+                                   obj_cfg_prefix=None, default_cfg_prefix=None)
 
                         if plot_fit:
                             self._spec.plot.bands()
@@ -1366,11 +1381,11 @@ class SpecTreatment(LineFitting, RedshiftFitting):
 
             # Compute the continuum and assign replace the value outside the bands the new continuum
             if plot_steps is True or (plot_steps == 'last' and (i == len(degree_list) - 1)):
-                    default_ax_cfg = {'title':f'Continuum fitting ({i+1}/{len(degree_list)}), polynomial degree = {degree}'}
-                    input_kwargs = kwargs.get('ax_cfg')
-                    input_kwargs = default_ax_cfg if input_kwargs is None else default_ax_cfg.update(input_kwargs)
-                    spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_mask, low_lim,
-                                               high_lim, smooth_scale, exclude_intvls,  ax_cfg=input_kwargs)
+                default_ax_cfg = {'title':f'Continuum fitting ({i+1}/{len(degree_list)}), polynomial degree = {degree}'}
+                input_kwargs = kwargs.get('ax_cfg')
+                input_kwargs = default_ax_cfg if input_kwargs is None else default_ax_cfg.update(input_kwargs)
+                spec_continuum_calculation(self._spec, input_wave, input_flux, cont_fit, input_mask, low_lim,
+                                           high_lim, smooth_scale, exclude_intvls,  ax_cfg=input_kwargs)
 
         # Include the standard deviation of the spectrum for the unmasked pixels
         self._spec.cont = np.ma.masked_array(cont_fit, self._spec.flux.mask)
@@ -1392,7 +1407,7 @@ class CubeTreatment(LineFitting):
 
     def spatial_mask(self, mask_file, fname, bands=None, fit_cfg=None, mask_list=None, line_list=None,
                      log_ext_suffix='_LINELOG', min_method='least_squares', profile=None, shape=None, cont_source='central',
-                     err_from_bands=False, temp=10000.0, default_cfg_prefix='default', update_default=True,
+                     err_from_bands=False, temp=10000.0, scale_covar=True, lmfit_covar=False, default_cfg_prefix='default', update_default=True,
                      line_detection=False, progress_output='bar', plot_fit=False, header=None, join_output_files=True):
 
         """
@@ -1624,7 +1639,7 @@ class CubeTreatment(LineFitting):
                 spaxel.fit.frame(bands_in, spaxel_conf, line_list=line_list, min_method=min_method,
                                  line_detection=line_detection, profile=profile, shape=shape,
                                  cont_source=cont_source, err_from_bands=err_from_bands,
-                                 temp=temp, progress_output=None, plot_fit=None,
+                                 temp=temp, scale_covar=scale_covar, lmfit_covar=lmfit_covar, progress_output=None, plot_fit=None,
                                  obj_cfg_prefix=None, default_cfg_prefix=None, update_default=update_default)
 
                 # Count the number of measurements

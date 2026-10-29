@@ -908,7 +908,7 @@ def multi_origin_lines_frame(map_origin, line_list, spec_redshift, **kwargs):
                 df_i.index = df_i.index + f"_o-{orig}"
 
             # Add object redshift if it is none
-            df_i['z_line'] = _REDSHIFT_DICT.get(orig, spec_redshift)
+            # df_i['z_line'] = _REDSHIFT_DICT.get(orig, spec_redshift)
 
             # Append it
             df_list.append(df_i)

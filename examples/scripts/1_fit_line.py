@@ -14,8 +14,9 @@ fits_file = data_folder/'spectra/gp121903_osiris.fits'
 z_obj = 0.19531
 
 # Generate a spectrum variable from the observation file
-gp_spec = lime.Spectrum.from_file(fits_file, instrument='osiris', redshift=z_obj)
-gp_spec.plot.spectrum()
+gp_spec = lime.Spectrum.from_file(fits_file, instrument='osiris', redshift=z_obj, label='Revolution')
+# gp_spec.plot.spectrum(rest_frame=True, log_scale=True)
+# gp_spec.plot.resolution()
 
 # Fit the Halpha line
 gp_spec.fit.bands('H1_6563A', cont_source='adjacent')

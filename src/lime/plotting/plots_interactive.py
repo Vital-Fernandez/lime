@@ -534,11 +534,61 @@ class MaskSelection:
               rest_frame=False, show_err=False, show_masks=True, in_fig=None, fig_cfg=None, ax_cfg=None, maximize=False):
 
         """
-        Interactive editor to select wavelength spans over a 1D spectrum.
+        Interactive editor to define wavelength masks on a 1D spectrum.
 
-        Left-click and drag to create a span. Right-click on a span to delete it.
-        Left-click and drag a span edge to resize it, or its interior to move it.
-        Every change is written immediately to ``fname``.
+        :class:`MaskSelection` plots the spectrum and lets the user create, move, resize and delete wavelength spans
+        with the mouse. Every change is written immediately to a two-column text file, so the
+        regions are never lost if the figure is closed.
+
+        Mouse controls
+        --------------
+        - **Left-click and drag** on an empty area: create a new span.
+        - **Left-click and drag** a span edge (within 6 pixels): resize the span.
+        - **Left-click and drag** the interior of a span: move the span.
+        - **Right-click** on a span: delete it.
+        - Gestures are cancelled if a Matplotlib toolbar tool (zoom/pan) is active.
+        - Clicks shorter than 3 pixels do not create a span.
+
+        Attributes
+        ----------
+        fig : matplotlib.figure.Figure or None
+            Figure created (or reused) by :meth:`masks`.
+        ax : matplotlib.axes.Axes or None
+            Axes where the spectrum and the spans are drawn.
+        fname : pathlib.Path or None
+            Output file where the regions are saved. ``None`` disables saving.
+        rest_frame : bool
+            If ``True`` the spectrum is displayed in the rest frame, otherwise in the observed frame.
+        match_frame : bool
+            If ``True`` the stored wavelengths are converted to/from the display frame using the
+            spectrum redshift (see :meth:`masks`).
+        z_corr : float
+            Factor applied to the plotted wavelengths: ``1 + z`` in the rest frame, 1 otherwise.
+
+        Notes
+        -----
+        - The output file has two columns (``w_low``, ``w_high``), sorted by ``w_low`` and written
+          with 8 decimals. If the last region is deleted, the file is removed.
+        - If ``fname`` already exists, its regions are loaded and take precedence over ``intvls``.
+          If the file cannot be parsed, it is left untouched and nothing is loaded or saved
+          during the session.
+        - Input intervals which do not overlap the spectrum wavelength range are discarded. If none
+          overlaps, the existing file is not modified.
+
+        Examples
+        --------
+        Select masks on a spectrum and save them to a file:
+
+        >>> spec = lime.Spectrum.from_file("osiris_obs.fits", instrument="osiris", redshift=0.013)
+        >>> spec.check.masks("masks.txt")
+
+        Start from a previous set of intervals, displaying the rest-frame spectrum:
+
+        >>> spec.check.masks("masks.txt", intvls=[(4850, 4870), (6540, 6590)], rest_frame=True)
+
+        Overplot a line list and the spectrum uncertainty:
+
+        >>> spec.check.masks("masks.txt", line_list=bands, show_err=True, log_scale=True)
         """
 
         self.rest_frame = rest_frame
@@ -845,6 +895,7 @@ class MaskSelection:
         self.fig.canvas.draw_idle()
 
         return
+
 
 class RedshiftInspection:
 
@@ -1438,10 +1489,10 @@ class CubeInspection:
             mplcursor_list = []
             for line_label in unique_line_arr(spec.frame):
                 line = Line.from_transition(line_label, data_frame=spec.frame)
-                mplcursor_list += spec_profile_plotter(self.ax[1], spec, line, z_corr)
+                mplcursor_list += spec_profile_plotter(self.ax[1], line, z_corr, self._spec.redshift, self._spec.norm_flux)
 
             # Pop-ups
-            mplcursor_parser(mplcursor_list, spec)
+            mplcursor_parser(mplcursor_list, spec.frame, spec.norm_flux, spec.units_wave, spec.units_flux)
 
         # Y scale
         if self.log_scale:

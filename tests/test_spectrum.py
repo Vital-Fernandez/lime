@@ -170,7 +170,6 @@ class TestSpectrumClass:
     def test_change_spectrum(self):
 
         # Cropping
-
         spec0 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
                              pixel_mask=pixel_mask)
         spec1 = lime.Spectrum(wave_array, flux_array, err_array, redshift=redshift, norm_flux=norm_flux,
@@ -195,20 +194,25 @@ class TestSpectrumClass:
         assert spec0.redshift == redshift
 
         # Updating redshift
-        spec0.update_redshift(redshift=0.06)
+        spec0.doppler_corr(redshift=0.06, return_spectrum=False)
         assert spec0.redshift == 0.06
         assert spec0.norm_flux == norm_flux
-        assert np.allclose(wave_array, spec0.wave.data)
-        assert np.allclose(wave_array / (1 + 0.06), spec0.wave_rest.data)
-        assert np.allclose(flux_array, spec0.flux.data * norm_flux, equal_nan=True)
-        assert np.allclose(err_array, spec0.err_flux.data * norm_flux, equal_nan=True)
+        assert np.allclose(wave_array / (1 + 0.0475), spec0.wave_rest.data)
+        assert np.allclose(flux_array * (1 + 0.0475), spec0.flux.data * (1 + 0.06) * norm_flux, equal_nan=True)
+        assert np.allclose(err_array * (1 + 0.0475), spec0.err_flux.data * (1 + 0.06) * norm_flux, equal_nan=True)
 
-        spec0.update_redshift(redshift=redshift)
-        assert spec0.norm_flux == norm_flux
-        assert np.allclose(wave_array, spec0.wave.data)
-        assert np.allclose(wave_array / (1 + redshift), spec0.wave_rest.data)
-        assert np.allclose(flux_array, spec0.flux.data * norm_flux, equal_nan=True)
-        assert np.allclose(err_array, spec0.err_flux.data * norm_flux, equal_nan=True)
+        spec4 = spec0.doppler_corr(redshift=0.0475)
+        assert spec4.norm_flux == norm_flux
+        assert np.allclose(wave_array, spec4.wave.data)
+        assert np.allclose(wave_array / (1 + redshift), spec4.wave_rest.data)
+        assert np.allclose(flux_array, spec4.flux.data * norm_flux, equal_nan=True)
+        assert np.allclose(err_array, spec4.err_flux.data * norm_flux, equal_nan=True)
+
+        spec5 = spec0.doppler_corr(redshift=0.0475)
+        assert spec5.norm_flux == norm_flux
+        assert np.allclose(wave_array / (1 + redshift), spec5.wave_rest.data)
+        assert np.allclose(flux_array * (1 + 0.0475), spec5.flux.data * norm_flux, equal_nan=True)
+        assert np.allclose(err_array * (1 + 0.0475), spec5.err_flux.data * norm_flux, equal_nan=True)
 
         return
 

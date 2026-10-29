@@ -22,7 +22,10 @@ def latex_science_float(f, dec=2):
     float_str = f'{f:.{dec}g}'
     if "e" in float_str:
         base, exponent = float_str.split("e")
-        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
+        exponent = int(exponent)
+        if float(base) == 1:
+            return rf"10^{{{exponent}}}"
+        return rf"{base} \times 10^{{{exponent}}}"
     else:
         return float_str
 
@@ -30,25 +33,25 @@ def latex_science_float(f, dec=2):
 def spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library='matplotlib'):
 
     # Wavelength axis units
-    x_label = units_wave.to_string('latex')
-    x_label = f'Wavelength ({x_label})'
+    x_label = f"Wavelength ({units_wave.to_string('latex')})"
 
     # Flux axis units
     if units_flux != au.dimensionless_unscaled:
         norm_flux = units_flux.scale if norm_flux is None else norm_flux
-        norm_label = r'\right)$' if norm_flux == 1 else r' \,\cdot\,{}\right)$'.format(latex_science_float(norm_flux))
 
-        y_label = f"Flux {units_flux.to_string('latex')}"
-        y_label = y_label.replace(r'$\mathrm{', r'$\left(')
-        y_label = y_label.replace('}$', norm_label)
+        # Unit without its scale (it is shown through norm_flux), stripped of the outer $\mathrm{...}$
+        unit_bare = au.CompositeUnit(1, units_flux.bases, units_flux.powers)
+        unit_str = unit_bare.to_string('latex').replace(r'$\mathrm{', '').replace('}$', '')
+        norm_str = '' if norm_flux == 1 else rf'{latex_science_float(norm_flux)}\,'
+
+        y_label = rf'Flux $\left(\mathrm{{{norm_str}{unit_str}}}\right)$'
     else:
-        y_label = f'Flux (scaled)'
+        y_label = 'Flux (scaled)'
 
     if plotting_library == 'bokeh':
         x_label, y_label = x_label.replace('$', '$$'), y_label.replace('$', '$$')
 
     return x_label, y_label
-
 
 class Themer:
 
@@ -98,7 +101,8 @@ class Themer:
         return fig_conf
 
 
-    def ax_defaults(self, user_labels=None, observation=None, fig_type='default', plotting_library='matplotlib', **kwargs):
+    def ax_defaults(self, user_labels=None, observation=None, fig_type='default',
+                          plotting_library='matplotlib', **kwargs):
 
         # Default wavelength and flux
         if fig_type == 'default':

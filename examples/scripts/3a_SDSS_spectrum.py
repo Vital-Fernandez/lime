@@ -24,9 +24,12 @@ obs_cfg = lime.load_cfg(cfgFile)
 # Declare LiMe spectrum
 spec = lime.Spectrum.from_file(sdss_fits_fname, instrument='sdss')
 bands = spec.retrieve.lines_frame(fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', band_vsigma=120)
-lime.save_frame(data_folder/'bands'/f'SHOC579_dr18_bands.txt', bands)
+# lime.save_frame(data_folder/'bands'/f'SHOC579_dr18_bands.txt', bands)
 spec.plot.spectrum(bands=bands, log_scale=True)
 
 # # Measure the lines
-# spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', line_list=['O3_4959A', 'Ar3_7136A'])
+spec.fit.frame(bands, fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', line_list=['O3_4959A', 'Ar3_7136A'])
+spec.plot.spectrum(bands=bands, log_scale=True)
+
+
 # lime_df = spec.frame.copy()

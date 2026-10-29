@@ -1,6 +1,6 @@
 import logging
-
-import matplotlib.pyplot as plt
+import warnings
+import re
 import numpy as np
 from lmfit.models import Model
 from lmfit import fit_report
@@ -9,8 +9,9 @@ from scipy.special import wofz
 from scipy.optimize import curve_fit
 from lime.io import LiMe_Error
 from lime.tools import compute_FWHM0, mult_err_propagation
-import warnings
-import re
+from lime.fitting.formulae import PROFILES
+from uncertainties import ufloat
+
 
 _logger = logging.getLogger('LiMe')
 _VERBOSE_WARNINGS = 'ignore'
@@ -506,28 +507,6 @@ def sigma_corrections(line, idcs_line, wave_arr, R_arr, temperature):
 
     return
 
-# TODO esto tirarlo?
-def compute_inst_sigma_array(wave_arr, res_power=None):
-
-    # Aproximation using the wavelength array
-    if res_power is None:
-        deltalamb_arr = np.diff(wave_arr)
-        R_arr = wave_arr[1:] / deltalamb_arr
-        FWHM_arr = wave_arr[1:] / R_arr
-
-        sigma_arr = np.zeros(wave_arr.size)
-        sigma_arr[:-1] = FWHM_arr / k_gFWHM
-        sigma_arr[-1] = sigma_arr[-2]
-
-    # Use the true R_arr
-    else:
-        if wave_arr.size != res_power.size:
-            raise LiMe_Error(f'The size fo the spectrum array and the resolving power array must have the same size')
-        FWHM_arr = wave_arr / res_power
-        sigma_arr = FWHM_arr / k_gFWHM
-
-    return sigma_arr
-
 
 class ProfileModelCompiler:
 
@@ -647,7 +626,7 @@ class ProfileModelCompiler:
 
         return
 
-    def fit(self, line, x, y, err, method):
+    def fit(self, line, x, y, err, method, scale_covar):
 
         # Unpack the mask for LmFit analysis
         idcs_good = ~x.mask
@@ -673,7 +652,8 @@ class ProfileModelCompiler:
         # Run the fitting
         with warnings.catch_warnings():
             warnings.simplefilter(_VERBOSE_WARNINGS)
-            self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit')
+            self.output = self.model.fit(y_in, self.params, x=x_in, weights=weights_in, method=method, nan_policy='omit',
+                                         scale_covar=scale_covar)
 
         # Check fitting quality
         self.review_fitting(line)
@@ -763,6 +743,92 @@ class ProfileModelCompiler:
                                                               line.measurements.n_pixels)
 
         return
+
+    def measurements_calc_uvars(self, line, user_conf, redshift):
+
+        # Assign continuum values (If not already available from the fit)
+        if getattr(line.measurements, 'm_cont') is not None:
+            for param in ['m_cont', 'n_cont']:
+                param_fit = self.output.params.get(f'line0_{param}', None)
+                if param_fit is not None:
+                    setattr(line.measurements, param, param_fit.value)
+                    setattr(line.measurements, f'{param}_err', param_fit.stderr)
+
+        # Correlated parameters (ufloats) from the fit, None if it did not produce error bars
+        uvars = getattr(self.output, 'uvars', None)
+
+        # Initialize the arrays for every parameter used by any component
+        all_params = {param for comp in self.lcomps for param in PROFILES[comp.profile].params}
+        for param in all_params:
+            setattr(line.measurements, param, np.full(self.n_comps, np.nan))
+            setattr(line.measurements, f'{param}_err', np.full(self.n_comps, np.nan))
+
+        for name in ('profile_flux', 'profile_flux_err', 'eqw', 'eqw_err', 'FWHM_p'):
+            setattr(line.measurements, name, np.full(self.n_comps, np.nan))
+
+        # Loop through the line components and assign profile params
+        for i, comp_label in enumerate(self.lcomps):
+
+            profile = PROFILES[comp_label.profile]
+            params_u = {}
+
+            for param in profile.params:
+
+                # Recover possible component from fit
+                param_fit = self.output.params.get(f'line{i}_{param}', None)
+                param_value = np.nan if param_fit is None else param_fit.value
+                param_err = np.nan if (param_fit is None or param_fit.stderr is None) else param_fit.stderr
+
+                # Check for negative -0.0 # FIXME -0.0 error
+                if np.signbit(param_err):
+                    param_err = np.nan
+                    _logger.warning(f'Negative error for {param} at {comp_label}')
+
+                # Assign array curve parameters
+                getattr(line.measurements, param)[i] = param_value
+                getattr(line.measurements, f'{param}_err')[i] = param_err
+
+                # Parameter with its uncertainty for the flux propagation
+                if (uvars is not None) and (param_fit is not None):
+                    params_u[param] = uvars[f'line{i}_{param}']
+                else:
+                    params_u[param] = ufloat(param_value, param_err)
+
+            # Compute profile flux, uncertainty and Full Width Half Maximum
+            flux_u = profile.area(params_u)
+            fwhm_u = profile.fwhm(params_u)
+            line.measurements.profile_flux[i] = flux_u.nominal_value
+            line.measurements.profile_flux_err[i] = flux_u.std_dev
+            line.measurements.FWHM_p[i] = fwhm_u.nominal_value
+
+            # Check parameters error propagation
+            self.review_err_propagation(line.measurements, i, comp_label.label, user_conf, line.group)
+
+        # Compute the equivalent widths
+        line.measurements.eqw = line.measurements.profile_flux / line.measurements.cont
+        line.measurements.eqw_err = np.abs(line.measurements.eqw) * np.sqrt(
+            np.square(line.measurements.profile_flux_err / line.measurements.profile_flux) +
+            np.square(line.measurements.cont_err / line.measurements.cont))
+
+        # Line kinematics
+        line.measurements.z_line = line.measurements.center / (self.ref_wave / (1 + redshift)) - 1
+        line.measurements.v_r = c_KMpS * (line.measurements.center - self.ref_wave) / self.ref_wave
+        line.measurements.v_r_err = c_KMpS * line.measurements.center_err / self.ref_wave
+        line.measurements.sigma_vel = c_KMpS * line.measurements.sigma / self.ref_wave
+        line.measurements.sigma_vel_err = c_KMpS * line.measurements.sigma_err / self.ref_wave
+
+        # Fitting diagnostics
+        line.measurements.chisqr, line.measurements.redchi = self.output.chisqr, self.output.redchi
+        line.measurements.aic, line.measurements.bic = self.output.aic, self.output.bic
+
+        # Updated signal-to-noise based on a successful profile fitting
+        if self.output.errorbars:
+            line.measurements.snr_line = signal_to_noise_rola(line.measurements.amp,
+                                                              line.measurements.cont_err,
+                                                              line.measurements.n_pixels)
+
+        return
+
 
     def define_param(self, idx, line, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
 
@@ -985,16 +1051,20 @@ class LineFitting:
 
         return
 
-    def profile_fitting(self, line, x_arr, y_arr, err_arr, cont_arr, user_conf, fit_method='leastsq'):
+    def profile_fitting(self, line, x_arr, y_arr, err_arr, cont_arr, user_conf, fit_method='leastsq', scale_covar=True,
+                        lmfit_covar=False):
 
         # Compile the Lmfit component models
         self.profile = ProfileModelCompiler(line, self._spec.redshift, user_conf, y_arr, cont_arr, self._narrow_check)
 
         # Fit the models
-        self.profile.fit(line, x_arr, y_arr, err_arr, fit_method)
+        self.profile.fit(line, x_arr, y_arr, err_arr, fit_method, scale_covar=scale_covar)
 
         # Store the results into the line attributes
-        self.profile.measurements_calc(line, user_conf, self._spec.redshift)
+        if lmfit_covar:
+            self.profile.measurements_calc_uvars(line, user_conf, self._spec.redshift)
+        else:
+            self.profile.measurements_calc(line, user_conf, self._spec.redshift)
 
         return
 
@@ -1059,6 +1129,7 @@ class LineFitting:
             err_arr = self._spec.err_flux
 
         return cont_arr, err_arr
+
 
     def pixel_error_calculation(self, idcs_continua, user_error_from_bands):
         # TODO delete this one
@@ -1157,3 +1228,23 @@ class LineFitting:
             print(report)
 
 
+# def compute_inst_sigma_array(wave_arr, res_power=None):
+#
+#     # Aproximation using the wavelength array
+#     if res_power is None:
+#         deltalamb_arr = np.diff(wave_arr)
+#         R_arr = wave_arr[1:] / deltalamb_arr
+#         FWHM_arr = wave_arr[1:] / R_arr
+#
+#         sigma_arr = np.zeros(wave_arr.size)
+#         sigma_arr[:-1] = FWHM_arr / k_gFWHM
+#         sigma_arr[-1] = sigma_arr[-2]
+#
+#     # Use the true R_arr
+#     else:
+#         if wave_arr.size != res_power.size:
+#             raise LiMe_Error(f'The size fo the spectrum array and the resolving power array must have the same size')
+#         FWHM_arr = wave_arr / res_power
+#         sigma_arr = FWHM_arr / k_gFWHM
+#
+#     return sigma_arr

@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,10 +10,10 @@ from collections import UserDict
 
 from lime.fitting.lines import profiles_computation, linear_continuum_computation
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
-    parse_unit_convertion, is_luminosity_unit, flux_to_luminosity, au
+    parse_unit_convertion, is_luminosity_unit, flux_to_luminosity, au, cropping_spectrum
 
 from lime.inference.detection import FeatureDetection
-from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures
+from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures, SpectrumPlotter
 from lime.plotting.plots_interactive import SpectrumCheck, CubeCheck, SampleCheck
 from lime.plotting.bokeh_plots import BokehFigures
 from lime.io import _LOG_EXPORT_RECARR, save_frame, LiMe_Error, check_file_dataframe, check_file_array_mask, load_frame, lime_cfg
@@ -233,56 +234,6 @@ def check_sample_levels(levels, necessary_levels=("id", "file")):
     return
 
 
-def cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux, input_err, pixel_mask):
-
-    if crop_waves is not None:
-        # TODO warning message
-        idx_min = np.searchsorted(input_wave, crop_waves[0]) if crop_waves[0] != 0 else 0
-        idx_max = np.searchsorted(input_wave, crop_waves[1]) if crop_waves[1] != -1 else None
-
-        idcs_crop = (idx_min, idx_max)
-        input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
-
-        # Spectrum
-        if len(input_flux.shape) == 1:
-            input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
-            if input_err is not None:
-                input_err = input_err[idcs_crop[0]:idcs_crop[1]]
-
-        # Cube
-        elif len(input_flux.shape) == 3:
-            input_flux = input_flux[idcs_crop[0]:idcs_crop[1], :, :]
-            if input_err is not None:
-                input_err = input_err[idcs_crop[0]:idcs_crop[1], :, :]
-
-        # Not recognized
-        else:
-            raise LiMe_Error(f'The dimensions of the input flux are {input_flux.shape}. LiMe only recognized flux 1D '
-                             f'arrays for Spectrum objects and 3D arrays for Cube objects')
-
-        if pixel_mask is not None:
-            pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
-
-    if crop_flux is not None:
-
-        # Validate percentiles
-        for perctl, name in zip(crop_flux, ("Min percentile", "Max percentile")):
-            if not np.isscalar(perctl):
-                raise TypeError(f"{name} must be a scalar.")
-            if not (0.0 <= perctl <= 100):
-                raise ValueError(f"{name} must be in the range [0, 100].")
-
-        if crop_flux[0] >= crop_flux[1]:
-            raise ValueError(f"The lower percentile limit ({crop_flux[0]}) must be  must be smaller than upper limit "
-                             f"({crop_flux[1]}).")
-
-        # Clip the flux to the limits
-        lo, hi = np.percentile(input_flux[~pixel_mask], crop_flux)
-        input_flux[~pixel_mask] = np.clip(input_flux[~pixel_mask], lo, hi)
-
-    return input_wave, input_flux, input_err, pixel_mask
-
-
 def spec_normalization_masking(input_wave, input_flux, input_err, pixel_mask, redshift, norm_flux):
 
     # Wavelength
@@ -470,7 +421,7 @@ class Spectrum:
         self.retrieve = SpecRetriever(self)
 
         # Plotting objects
-        self.plot = SpectrumFigures(self)
+        # self.plot = SpectrumFigures(self)
         self.check = SpectrumCheck(self)
         self.bokeh = BokehFigures(self)
 
@@ -698,6 +649,10 @@ class Spectrum:
 
         # Create the LiMe object
         return cls(**fits_args)
+
+    @cached_property
+    def plot(self) -> SpectrumPlotter:
+        return SpectrumPlotter(self)
 
     def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, crop_flux, res_power,
                         units_wave, units_flux, pixel_mask, label):
@@ -1064,7 +1019,6 @@ class Spectrum:
         >>> spec.save_spectrum('ha_components.txt', line_label='H1_6563A', split_components=True)
         """
 
-
         # Headers for the default list
         headers = np.array(["wave", "flux", "err_flux", "pixel_mask"])
 
@@ -1173,60 +1127,134 @@ class Spectrum:
 
         return output
 
-    def update_redshift(self, redshift):
+    # def update_redshift(self, redshift):
+    #
+    #     """
+    #     Update the spectrum's redshift and recompute its rest-frame wavelength.
+    #
+    #     The normalization is preserved, and masked pixels remain unchanged.
+    #
+    #     Parameters
+    #     ----------
+    #     redshift : float
+    #         New redshift value to assign to the spectrum. The value should represent
+    #         the observed-to-rest-frame wavelength scaling factor
+    #         (:math:`1 + z = \\lambda_\\mathrm{obs} / \\lambda_\\mathrm{rest}`).
+    #
+    #     Returns
+    #     -------
+    #     None
+    #         The method updates the spectrum in place, modifying the attributes:
+    #         ``redshift``, ``wave_rest``.
+    #
+    #     Notes
+    #     -----
+    #     - Internally, this method reuses the existing data arrays stored in
+    #       ``self.wave``, ``self.flux``, and ``self.err_flux``.
+    #     - The pixel mask (``flux.mask``) is preserved and applied consistently
+    #       to the updated arrays.
+    #     - The update is performed through :func:`lime.spec_normalization_masking`,
+    #       which handles normalization, masking, and wavelength conversion.
+    #     - The normalization factor is fixed to unity (``norm_flux=1``) for this
+    #       operation.
+    #
+    #     Examples
+    #     --------
+    #     Update a spectrum to a new redshift:
+    #
+    #     >>> spec.update_redshift(0.0145)
+    #     >>> spec.wave_rest[:5]
+    #     array([4932.1, 4932.9, 4933.8, 4934.6, 4935.5])
+    #
+    #     The observed-frame wavelength array (``wave``) remains unchanged,
+    #     while the rest-frame array (``wave_rest``) is updated accordingly.
+    #     """
+    #
+    #     # Check if it is a masked array
+    #     input_wave = self.wave.data
+    #     input_flux = self.flux.data
+    #     input_err = self.err_flux.data
+    #     pixel_mask = self.flux.mask
+    #
+    #     # Normalization and masking
+    #     self.redshift = redshift
+    #     self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
+    #                                                                                      input_err, pixel_mask,
+    #                                                                                      self.redshift, 1)
+    #
+    #     return
+
+
+
+    def doppler_corr(self, redshift=0, scale_flux=True, return_spectrum=True, **kwargs):
 
         """
-        Update the spectrum's redshift and recompute its rest-frame wavelength.
+        Shift the spectrum wavelength array to another redshift.
 
-        The normalization is preserved, and masked pixels remain unchanged.
+        By default (``redshift=0``) the output spectrum is in the rest frame.
 
         Parameters
         ----------
         redshift : float
-            New redshift value to assign to the spectrum. The value should represent
-            the observed-to-rest-frame wavelength scaling factor
-            (:math:`1 + z = \\lambda_\\mathrm{obs} / \\lambda_\\mathrm{rest}`).
+            Redshift of the output spectrum. The default value is 0 (rest frame).
+        scale_flux : bool, optional
+            If True, the flux and its uncertainty are divided by
+            :math:`(1 + z_{new}) / (1 + z_{old})` to conserve the integrated flux.
+            Only valid for flux densities per unit wavelength. The default value is False.
+        return_spectrum : bool, optional
+            If True, return a new :class:`lime.Spectrum` and leave the current one unchanged.
+            If False, update the current spectrum in place. The default value is True.
+        **kwargs
+            Additional arguments for :meth:`lime.workflow.SpecRetriever.spectrum`
+            (e.g. ``pixel_mask``, ``mask_intvls``, ``smooth_sigma``).
 
         Returns
         -------
-        None
-            The method updates the spectrum in place, modifying the attributes:
-            ``redshift``, ``wave_rest``.
-
-        Notes
-        -----
-        - Internally, this method reuses the existing data arrays stored in
-          ``self.wave``, ``self.flux``, and ``self.err_flux``.
-        - The pixel mask (``flux.mask``) is preserved and applied consistently
-          to the updated arrays.
-        - The update is performed through :func:`lime.spec_normalization_masking`,
-          which handles normalization, masking, and wavelength conversion.
-        - The normalization factor is fixed to unity (``norm_flux=1``) for this
-          operation.
+        lime.Spectrum or None
+            New spectrum at the requested redshift if ``return_spectrum=True``, otherwise None.
+            The normalization, units, resolving power, label and pixel mask are preserved.
+            The lines frame is not.
 
         Examples
         --------
-        Update a spectrum to a new redshift:
-
-        >>> spec.update_redshift(0.0145)
-        >>> spec.wave_rest[:5]
-        array([4932.1, 4932.9, 4933.8, 4934.6, 4935.5])
-
-        The observed-frame wavelength array (``wave``) remains unchanged,
-        while the rest-frame array (``wave_rest``) is updated accordingly.
+        >>> spec_rest = spec.doppler_corr(0)
+        >>> spec.doppler_corr(0.0145, return_spectrum=False)
         """
 
-        # Check if it is a masked array
-        input_wave = self.wave.data
-        input_flux = self.flux.data
-        input_err = self.err_flux.data
-        pixel_mask = self.flux.mask
+        # Unpack the observed-frame arrays (flux without normalization)
+        wave_arr, flux_arr, err_arr, pixel_mask = self.retrieve.spectrum(return_arrays=True, **kwargs)
 
-        # Normalization and masking
-        self.redshift = redshift
-        self.wave, self.wave_rest, self.flux, self.err_flux = spec_normalization_masking(input_wave, input_flux,
-                                                                                         input_err, pixel_mask,
-                                                                                         self.redshift, 1)
+        # Wavelength scaling between the current and the new frame
+        z_factor = (1 + redshift) / (1 + self.redshift)
+        wave_arr = wave_arr * z_factor
+
+        # Conserve the integrated flux
+        if scale_flux:
+
+            # The scaling is only valid for flux densities per unit wavelength
+            try:
+                unit_flux = au.Unit(self.units_flux)
+                is_per_wave = any(unit_flux.is_equivalent(au.Unit(key)) for key in ('FLAM', 'PHOTLAM', 'LLAM'))
+            except (TypeError, ValueError):
+                is_per_wave = False
+
+            if not is_per_wave:
+                _logger.warning(f'scale_flux=True assumes a flux density per unit wavelength, but the spectrum '
+                                f'flux units are "{self.units_flux}". The flux scaling may be incorrect.')
+
+            flux_arr = flux_arr / z_factor
+            err_arr = None if err_arr is None else err_arr / z_factor
+
+        spec_kwargs = dict(input_wave=wave_arr, input_flux=flux_arr, input_err=err_arr, redshift=redshift,
+                           norm_flux=self.norm_flux, res_power=self.res_power, units_wave=self.units_wave,
+                           units_flux=self.units_flux, pixel_mask=pixel_mask, id_label=self.label)
+
+        # Return a new object
+        if return_spectrum:
+            return Spectrum(**spec_kwargs)
+
+        # Update the current object
+        Spectrum.__init__(self, **spec_kwargs)
 
         return
 

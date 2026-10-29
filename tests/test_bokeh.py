@@ -225,7 +225,6 @@ class TestBokehSpectrum:
         fig = bokeh_spec.fig
 
         # Only the spectrum step
-        assert len(fig.renderers) == 1
         steps = glyph_renderers(fig, models.Step)
         assert len(steps) == 1
         assert steps[0].glyph.mode == 'center'

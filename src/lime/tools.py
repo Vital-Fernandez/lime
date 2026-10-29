@@ -1170,3 +1170,57 @@ class ProgressBar:
         print(post_text)
 
         return
+
+
+def cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux, input_err, pixel_mask, exclude_mask=True):
+
+    if crop_waves is not None:
+        # TODO warning message
+        idx_min = np.searchsorted(input_wave, crop_waves[0]) if crop_waves[0] != 0 else 0
+        idx_max = np.searchsorted(input_wave, crop_waves[1]) if crop_waves[1] != -1 else None
+
+        idcs_crop = (idx_min, idx_max)
+        input_wave = input_wave[idcs_crop[0]:idcs_crop[1]]
+
+        # Spectrum
+        if len(input_flux.shape) == 1:
+            input_flux = input_flux[idcs_crop[0]:idcs_crop[1]]
+            if input_err is not None:
+                input_err = input_err[idcs_crop[0]:idcs_crop[1]]
+
+        # Cube
+        elif len(input_flux.shape) == 3:
+            input_flux = input_flux[idcs_crop[0]:idcs_crop[1], :, :]
+            if input_err is not None:
+                input_err = input_err[idcs_crop[0]:idcs_crop[1], :, :]
+
+        # Not recognized
+        else:
+            raise LiMe_Error(f'The dimensions of the input flux are {input_flux.shape}. LiMe only recognized flux 1D '
+                             f'arrays for Spectrum objects and 3D arrays for Cube objects')
+
+        if pixel_mask is not None:
+            pixel_mask = pixel_mask[idcs_crop[0]:idcs_crop[1]]
+
+    if crop_flux is not None:
+
+        # Validate percentiles
+        for perctl, name in zip(crop_flux, ("Min percentile", "Max percentile")):
+            if not np.isscalar(perctl):
+                raise TypeError(f"{name} must be a scalar.")
+            if not (0.0 <= perctl <= 100):
+                raise ValueError(f"{name} must be in the range [0, 100].")
+
+        if crop_flux[0] >= crop_flux[1]:
+            raise ValueError(f"The lower percentile limit ({crop_flux[0]}) must be  must be smaller than upper limit "
+                             f"({crop_flux[1]}).")
+
+        # Clip the flux to the limits
+        if exclude_mask:
+            lo, hi = np.percentile(input_flux[~pixel_mask], crop_flux)
+            input_flux[~pixel_mask] = np.clip(input_flux[~pixel_mask], lo, hi)
+        else:
+            lo, hi = np.nanpercentile(input_flux, crop_flux)
+            input_flux = np.clip(input_flux, lo, hi)
+
+    return input_wave, input_flux, input_err, pixel_mask

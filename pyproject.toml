@@ -24,7 +24,7 @@ dependencies = ["astropy>=8.0",
 [project.optional-dependencies]
 full = ["asdf~=4.1",
         "aspect-stable~=0.8",
-        "bokeh>=3.9",
+        "bokeh>=3.10",
         "mplcursors~=0.6",
         "openpyxl~=3.1",
         "PyLaTeX~=1.4",

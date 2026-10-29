@@ -6,7 +6,7 @@ from pandas import isnull
 from lime.transitions import label_decomposition, Line
 from lime.plotting.format import theme
 from lime.plotting.plots import frame_mask_switch, line_profile_generator
-from lime.plotting.utils import color_selector
+from lime.plotting.utils import color_selector, _NO_FIG
 from lime.io import check_file_dataframe, LiMe_Error
 from lime.plotting.utils import parse_bands_arguments
 from lime.fitting.lines import profiles_computation, linear_continuum_computation
@@ -19,7 +19,10 @@ try:
     from bokeh import models
     from bokeh.models import ColumnDataSource, Legend, LegendItem, LogScale, Range1d, Label, GridPlot
     from bokeh.models import BoxAnnotation
-    from bokeh.models import WheelZoomTool, PanTool, HoverTool
+    from bokeh.models import WheelZoomTool, PanTool, HoverTool, BoxSelectTool
+    from bokeh.events import SelectionGeometry, DoubleTap
+    from bokeh.io import curdoc
+    from bokeh.io.state import curstate
 
     bokeh_check = True
 except ImportError:
@@ -411,11 +414,370 @@ def redshift_fit_evaluation_bokeh(spectrum, z_infered, data_mask, gauss_arr, z_a
     # streamlit_bokeh(column(p1, p2), use_container_width=True)
 
 
-# Sentinel object for non input figures
-_NO_FIG = object()
+# # Sentinel object for non input figures
+# _NO_FIG = object()
 
 
-class BokehFigures:
+def spec_mask_bokeh(fig, idcs_mask, x, y, z_corr):
+
+    # Plot the masked pixels (True entries) as crosses
+    if idcs_mask is None:
+        return
+
+    idcs_mask = np.asarray(idcs_mask)
+    if idcs_mask.dtype == bool and idcs_mask.shape == np.shape(x) and idcs_mask.any():
+        fig.scatter(np.asarray(x)[idcs_mask] / z_corr, np.asarray(y)[idcs_mask] * z_corr, marker='x', size=6,
+                    color=theme.colors['mask_marker'] if 'mask_marker' in theme.colors else 'red')
+
+    return
+
+
+class BokehMaskSelection:
+
+    """
+    Interactive Bokeh editor to define wavelength masks on a 1D spectrum.
+
+    Bokeh version of :class:`MaskSelection`. It is accessed via ``Spectrum.bokeh.masks`` and runs a Bokeh server
+    application, so every change in the browser is written immediately to the output file by the Python callbacks.
+
+    Mouse controls
+    --------------
+    - **Left-click and drag** on an empty area (with the "Add mask region" tool active, the default): create a span.
+    - **Drag** a span edge: resize the span.
+    - **Drag** the interior of a span: move the span.
+    - **Double-click** on a span: delete it.
+    - Use the toolbar to switch to pan/zoom, and select the "Add mask region" tool again to keep adding spans.
+
+    Notes
+    -----
+    - The output file has the same format as :meth:`MaskSelection.masks`: two columns (``w_low``, ``w_high``),
+      sorted by ``w_low``. If the last region is deleted, the file is removed.
+    - Depending on the context, :meth:`masks` will:
+        * add the figure to the current document if it is called within a ``bokeh serve`` application,
+        * display it in the notebook if ``bokeh.io.output_notebook()`` has been called,
+        * otherwise, launch a local Bokeh server, open the browser and block until the tab is closed
+          (or ``Ctrl+C``).
+    - Each browser session reloads the regions from ``fname``, hence reloading the page keeps the edits.
+    """
+
+    def __init__(self):
+
+        # Interactive state (prefixed to avoid collisions in the BokehFigures mixin)
+        self._mask_regions = []     # list of BoxAnnotation in the DISPLAY frame
+        self._mask_fname = None
+        self._mask_rest_frame = False
+        self._mask_match_frame = True
+        self._mask_z_corr = 1.0
+        self._mask_wave_min, self._mask_wave_max = None, None
+        self._mask_click_tol_px = 3
+
+        return
+
+    def masks(self, fname=None, intvls=None, match_obs_frame=True, label=None, line_list=None, log_scale=False,
+              rest_frame=False, show_err=False, show_masks=True, fig_cfg=None, ax_cfg=None, port=5006,
+              notebook_url='localhost:8888', doc=None):
+
+        """
+        Interactive Bokeh editor to select wavelength spans over a 1D spectrum.
+
+        Left-click and drag to create a span. Double-click on a span to delete it.
+        Drag a span edge to resize it, or its interior to move it.
+        Every change is written immediately to ``fname``.
+
+        Parameters
+        ----------
+        fname : str or pathlib.Path, optional
+            Output text file for the selected regions. Its parent directory must exist, otherwise
+            a :class:`~lime.LiMe_Error` is raised. If ``None``, the regions are not saved.
+        intvls : str, pathlib.Path or array-like, optional
+            Initial regions: a path to a text file or an ``(N, 2)`` array of ``(w_low, w_high)``
+            pairs. Ignored if ``fname`` already exists.
+        match_obs_frame : bool, optional
+            If ``True`` (default), the stored wavelengths (``fname`` and ``intvls``) are kept in the
+            rest frame and converted to the displayed frame using the spectrum redshift. If
+            ``False``, they are used as they appear in the figure.
+        label : str, optional
+            Legend label for the spectrum.
+        line_list : pandas.DataFrame or list, optional
+            Lines to overplot on the spectrum. Lines without redshift use the spectrum redshift.
+        log_scale : bool, optional
+            If ``True``, the flux axis uses a logarithmic scale. Default is ``False``.
+        rest_frame : bool, optional
+            If ``True``, the spectrum is displayed in the rest frame. Default is ``False``
+            (observed frame).
+        show_err : bool, optional
+            If ``True`` and the spectrum has uncertainties, the 1σ flux band is plotted.
+        show_masks : bool, optional
+            If ``True`` (default), the spectrum masked pixels are plotted.
+        fig_cfg : dict, optional
+            Bokeh figure configuration overrides (see ``theme.fig_defaults``).
+        ax_cfg : dict, optional
+            Axes labels overrides.
+        port : int, optional
+            Port for the local Bokeh server. Default is 5006.
+        notebook_url : str, optional
+            Jupyter server URL, used if the editor is displayed in a notebook. Default is ``"localhost:8888"``.
+        doc : bokeh.document.Document, optional
+            Session document to build the editor into (e.g. from a ``BokehASGI`` or ``Server`` application
+            function). If provided, no server is launched.
+
+        Returns
+        -------
+        None
+            The selected regions are written to ``fname``.
+
+        Raises
+        ------
+        LiMe_Error
+            If Bokeh is not installed or the directory of ``fname`` does not exist.
+
+        Examples
+        --------
+        >>> spec.bokeh.masks("masks.txt", rest_frame=True, show_err=True)
+        """
+
+        if not bokeh_check:
+            raise LiMe_Error(f'Bokeh is not installed')
+
+        self._mask_rest_frame = rest_frame
+        self._mask_match_frame = match_obs_frame
+
+        # Resolve the output file
+        if fname is not None:
+            self._mask_fname = Path(fname)
+            if not self._mask_fname.parent.is_dir():
+                raise LiMe_Error(f'Output regions directory does not exist ({self._mask_fname.parent.as_posix()})')
+        else:
+            self._mask_fname = None
+
+        # Application building the figure for each browser session
+        def mask_app(doc):
+            self._mask_build_doc(doc, intvls, label, line_list, log_scale, rest_frame, show_err, show_masks,
+                                 fig_cfg, ax_cfg)
+
+        # Input session document (e.g. BokehASGI or Server application function)
+        if doc is not None:
+            mask_app(doc)
+
+        # Inside a "bokeh serve" application
+        elif curdoc().session_context is not None:
+            mask_app(curdoc())
+
+        # Inside a notebook
+        elif curstate().notebook:
+            show(mask_app, notebook_url=notebook_url)
+
+        # Python script/console: launch a local server
+        else:
+            self._mask_serve(mask_app, port)
+
+        return
+
+    def _mask_build_doc(self, doc, intvls, label, line_list, log_scale, rest_frame, show_err, show_masks, fig_cfg,
+                        ax_cfg):
+
+        # Reset the regions for the new session
+        self._mask_regions = []
+
+        # Base figure: same plot as Spectrum.bokeh.spectrum, kept in memory (in_fig=None: not displayed)
+        self.spectrum(label=label, line_list=line_list, rest_frame=rest_frame, log_scale=log_scale,
+                      include_fits=False, show_masks=show_masks, show_err=show_err, in_fig=None,
+                      fig_cfg=fig_cfg, ax_cfg=ax_cfg)
+
+        # Frame correction and wavelength range for loading/saving the regions
+        wave_plot, _, _, self._mask_z_corr, _ = frame_mask_switch(self._spec, rest_frame)
+        self._mask_wave_min = float(wave_plot.min() / self._mask_z_corr)
+        self._mask_wave_max = float(wave_plot.max() / self._mask_z_corr)
+
+        # Tool to draw new regions (bound to an empty renderer to avoid hit-testing the spectrum)
+        dummy = self.fig.scatter(x=[], y=[], visible=False)
+        select_tool = BoxSelectTool(dimensions='width', renderers=[dummy], description='Add mask region')
+        self.fig.add_tools(select_tool)
+        self.fig.toolbar.active_drag = select_tool
+
+        # Draw the input regions
+        self._mask_load_and_draw(intvls)
+
+        # Interaction callbacks
+        self.fig.on_event(SelectionGeometry, self._mask_on_select)
+        self.fig.on_event(DoubleTap, self._mask_on_double_tap)
+
+        doc.add_root(self.fig)
+        doc.title = 'LiMe mask selection'
+
+        return
+
+    def _mask_serve(self, app, port):
+
+        from bokeh.server.server import Server
+
+        def app_with_exit(doc):
+            app(doc)
+            doc.on_session_destroyed(_on_destroyed)
+
+        # Stop the server when no browser session remains (a page reload opens a new one)
+        def _on_destroyed(session_context):
+            def _check():
+                if len(server.get_sessions('/')) == 0:
+                    server.io_loop.stop()
+            server.io_loop.call_later(2, _check)
+
+        server = Server({'/': app_with_exit}, port=port, num_procs=1,
+                        check_unused_sessions_milliseconds=1000, unused_session_lifetime_milliseconds=1000)
+        server.start()
+        _logger.info(f'Mask selection running at http://localhost:{port}/ (close the tab or press Ctrl+C to finish)')
+
+        server.io_loop.add_callback(server.show, '/')
+        try:
+            server.io_loop.start()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.stop()
+            server.unlisten()
+
+        return
+
+    # ------------------------------------------------------------------ #
+    #  Frame conversions  (display <-> stored)
+    # ------------------------------------------------------------------ #
+    def _mask_store_to_display(self, arr):
+        if self._mask_match_frame:
+            return arr * (1 + self._spec.redshift) / self._mask_z_corr
+        return arr
+
+    def _mask_display_to_store(self, arr):
+        if self._mask_match_frame:
+            return arr * self._mask_z_corr / (1 + self._spec.redshift)
+        return arr
+
+    def _mask_load_and_draw(self, intervals):
+
+        src = None
+        load_failed = False
+
+        if self._mask_fname is not None and self._mask_fname.is_file():
+            try:
+                data = np.loadtxt(self._mask_fname, ndmin=2)
+                src = data[:, :2] if data.size > 0 else np.empty((0, 2))
+            except (ValueError, OSError) as e:
+                load_failed = True
+                _logger.warning(f'Could not parse existing regions file ({self._mask_fname}): {e}. '
+                                f'Leaving it untouched; no regions will be loaded or saved this session.')
+
+        if load_failed:
+            self._mask_regions = []
+            self._mask_fname = None
+            return
+
+        if src is None and intervals is not None:
+            if isinstance(intervals, (str, Path)):
+                src = np.loadtxt(intervals, ndmin=2)[:, :2]
+            else:
+                src = np.atleast_2d(np.asarray(intervals, dtype=float))[:, :2]
+
+        skip_save = False
+
+        if src is not None and src.size > 0:
+            disp = self._mask_store_to_display(src)
+
+            # Keep only intervals overlapping the spectrum wavelength range
+            in_range = (disp[:, 1] >= self._mask_wave_min) & (disp[:, 0] <= self._mask_wave_max)
+            n_total, n_kept = disp.shape[0], int(in_range.sum())
+
+            if n_kept == 0:
+                _logger.warning(f'All {n_total} input interval(s) fall outside the spectrum wavelength range '
+                                f'({self._mask_wave_min:.2f}-{self._mask_wave_max:.2f}). None were loaded; the '
+                                f'existing file (if any) was left untouched.')
+                skip_save = True
+            else:
+                for low, high in disp[in_range]:
+                    low, high = sorted((float(low), float(high)))
+                    self._mask_add_region(low, high)
+
+        if not skip_save:
+            self._mask_save_regions()
+
+        return
+
+    def _mask_save_regions(self):
+
+        if self._mask_fname is None:
+            return
+
+        if len(self._mask_regions) == 0:
+            if self._mask_fname.is_file():
+                self._mask_fname.unlink()
+            return
+
+        arr = np.sort(np.array([[b.left, b.right] for b in self._mask_regions], dtype=float), axis=1)
+        arr = self._mask_display_to_store(arr)
+        arr = arr[np.argsort(arr[:, 0])]
+        np.savetxt(self._mask_fname, arr, fmt='%.8f', header='w_low w_high')
+
+        return
+
+    def _mask_add_region(self, low, high):
+
+        box = BoxAnnotation(left=low, right=high, editable=True, movable='x', resizable='x',
+                            fill_color=theme.colors['line_band'], fill_alpha=0.3,
+                            line_color=theme.colors['line_band'], line_width=1.4)
+
+        # Save on every edge change from the browser
+        box.on_change('left', self._mask_on_edit)
+        box.on_change('right', self._mask_on_edit)
+
+        self.fig.add_layout(box)
+        self._mask_regions.append(box)
+
+        return box
+
+    def _mask_region_at(self, x):
+        for box in reversed(self._mask_regions):
+            if min(box.left, box.right) <= x <= max(box.left, box.right):
+                return box
+        return None
+
+    def _mask_on_select(self, event):
+
+        # Only act on the final selection (mouse release)
+        if not event.final or event.geometry is None:
+            return
+
+        geom = event.geometry
+        x0, x1 = geom.get('x0'), geom.get('x1')
+        if x0 is None or x1 is None:
+            return
+
+        # Discard clicks without dragging
+        sx0, sx1 = geom.get('sx0'), geom.get('sx1')
+        if sx0 is not None and sx1 is not None and abs(sx1 - sx0) < self._mask_click_tol_px:
+            return
+
+        low, high = sorted((float(x0), float(x1)))
+        self._mask_add_region(low, high)
+        self._mask_save_regions()
+
+        return
+
+    def _mask_on_double_tap(self, event):
+
+        if event.x is None:
+            return
+
+        box = self._mask_region_at(event.x)
+        if box is not None:
+            self._mask_regions.remove(box)
+            self.fig.center = [r for r in self.fig.center if r is not box]
+            self._mask_save_regions()
+
+        return
+
+    def _mask_on_edit(self, attr, old, new):
+        self._mask_save_regions()
+
+
+class BokehFigures(BokehMaskSelection):
 
     def __init__(self, spectrum):
 
@@ -425,6 +787,8 @@ class BokehFigures:
         # Container for the bokeh
         self.fig = None
 
+        # Mask selection state
+        BokehMaskSelection.__init__(self)
 
         return
 
@@ -507,7 +871,7 @@ class BokehFigures:
         return
 
     def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
-                 include_fits=True, show_cont=False, show_comps=False, in_fig=_NO_FIG, fig_cfg=None,
+                 include_fits=True, show_cont=False, show_comps=False, show_masks=True, in_fig=_NO_FIG, fig_cfg=None,
                  ax_cfg=None, show_err=False):
 
         # Check bokeh has been installed
@@ -661,6 +1025,10 @@ class BokehFigures:
                         # Add legend *below* the plot
                         self.fig.add_layout(style_legend, 'below')
 
+            # Masked pixels
+            if show_masks:
+                spec_mask_bokeh(self.fig, idcs_mask, wave_plot, flux_plot, z_corr)
+
             # Plot labels
             self.fig.xaxis.axis_label = AXES_CONF['xlabel']
             self.fig.yaxis.axis_label = AXES_CONF['ylabel']
@@ -669,7 +1037,8 @@ class BokehFigures:
             update_bokeh_figure(self.fig, PLT_CONF)
 
             # Hide the legend if there are line profiles
-            self.fig.legend.visible = legend_check
+            if self.fig.legend:
+                self.fig.legend.visible = legend_check
 
             # Save, display or keep
             save_close_fig_swicth(fname, self.fig, display_check)

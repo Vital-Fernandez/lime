@@ -6,12 +6,12 @@ from matplotlib import pyplot as plt, gridspec, patches, rc_context, colors, lin
 from pathlib import Path
 
 from lime.io import check_file_dataframe, load_spatial_mask, LiMe_Error, _LOG_COLUMNS_LATEX
-from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr
+from lime.tools import PARAMETER_LATEX_DICT, unique_line_arr, cropping_spectrum
 from lime.transitions import format_line_mask_option, Line, label_decomposition
 from lime.fitting.lines import c_KMpS, profiles_computation, linear_continuum_computation, PROFILE_FUNCTIONS
 
-from lime.plotting.format import theme, latex_science_float
-from lime.plotting.utils import parse_bands_arguments, color_selector
+from lime.plotting.format import theme, latex_science_float, spectrum_figure_labels
+from lime.plotting.utils import parse_bands_arguments, color_selector, PlotAccessor, _NO_FIG, label_maker
 
 
 _logger = logging.getLogger('LiMe')
@@ -36,10 +36,6 @@ except ImportError:
 if mplcursors_check:
     from mplcursors._mplcursors import _default_annotation_kwargs as popupProps
     popupProps['bbox']['alpha'] = 0.9
-
-
-# Sentinel object for non input figures
-_NO_FIG = object()
 
 
 def mplcursors_legend(line, log, latex_label, norm_flux, units_wave, units_flux):
@@ -100,7 +96,7 @@ def save_close_fig_swicth(file_path=None, bbox_inches=None, fig_obj=None, maximi
     return
 
 
-def frame_mask_switch(observation, rest_frame):
+def frame_mask_switch(observation, rest_frame, crop_waves=None, crop_flux=None):
 
     # Doppler factor for rest _frame plots
     z_corr = (1 + observation.redshift) if rest_frame else 1
@@ -111,7 +107,13 @@ def frame_mask_switch(observation, rest_frame):
     flux_plot = observation.flux.data
     err_plot = None if observation.err_flux is None else observation.err_flux.data
 
-    return wave_plot, flux_plot, err_plot, z_corr, idcs_mask
+    if (crop_waves is None) and (crop_flux is None):
+        return wave_plot, flux_plot, err_plot, z_corr, idcs_mask
+    else:
+        wave_plot, flux_plot, err_plot, idcs_mask = cropping_spectrum(crop_waves, crop_flux, wave_plot, flux_plot,
+                                                                      err_plot, idcs_mask, exclude_mask=False)
+        return wave_plot, flux_plot, err_plot, z_corr, idcs_mask
+
 
 
 def _mplcursor_parser(line_g_list, list_comps, log, norm_flux, units_wave, units_flux):
@@ -847,53 +849,12 @@ class Plotter:
         return
 
 
-    # def _plot_continuum_fit(self, continuum_fit, idcs_cont, low_lim, high_lim, threshold_factor, plot_title=''):
-    #
-    #     norm_flux = self._spec.norm_flux
-    #     wave = self._spec.wave
-    #     flux = self._spec.flux
-    #     units_wave = self._spec.units_wave
-    #     units_flux = self._spec.units_flux
-    #     redshift = self._spec.redshift
-    #
-    #     # Assign the default axis labels
-    #     PLOT_CONF = theme.fig_defaults(None)
-    #     AXES_CONF = theme.ax_defaults(None, units_wave, units_flux, norm_flux)
-    #
-    #     wave_plot, flux_plot, z_corr, idcs_mask = frame_mask_switch(wave, flux, redshift, False)
-    #
-    #     with rc_context(PLOT_CONF):
-    #
-    #         fig, ax = plt.subplots()
-    #
-    #         # Object spectrum
-    #         ax.step(wave_plot, flux_plot, label='Object spectrum', color=theme.colors['fg'], where='mid')
-    #
-    #         # Band limits
-    #         label = r'$16^{{th}}/{} - 84^{{th}}\cdot{}$ flux percentiles band'.format(threshold_factor, threshold_factor)
-    #         ax.axhspan(low_lim, high_lim, alpha=0.2, label=label, color=theme.colors['line_band'])
-    #         ax.axhline(np.median(flux_plot[idcs_cont]), label='Median flux', linestyle=':', color='black')
-    #
-    #         # Masked and rectected pixels
-    #         ax.scatter(wave_plot[~idcs_cont], flux_plot[~idcs_cont], label='Rejected pixels', color=theme.colors['peak'], facecolor='none')
-    #         ax.scatter(wave_plot[idcs_mask], flux_plot[idcs_mask], marker='x', label='Masked pixels', color=theme.colors['mask_marker'])
-    #
-    #         # Output continuum
-    #         ax.plot(wave_plot, continuum_fit, label='Continuum')
-    #
-    #         ax.update(AXES_CONF)
-    #         ax.legend()
-    #         plt.tight_layout()
-    #         plt.show()
-    #
-    #     return
 
-
-def mplcursor_parser(mpl_key_list, spec):
+def mplcursor_parser(mpl_key_list, lines_frame, norm_flux, units_wave, units_flux):
 
     if mplcursors_check and len(mpl_key_list) > 0:
         for i, (label, latex, curve_plt) in enumerate(mpl_key_list):
-            label_complex = mplcursors_legend(label, spec.frame, latex, spec.norm_flux, spec.units_wave, spec.units_flux)
+            label_complex = mplcursors_legend(label, lines_frame, latex, norm_flux, units_wave, units_flux)
             mplcursors.cursor(curve_plt).connect("add", lambda sel, label=label_complex: sel.annotation.set_text(label))
 
     return
@@ -1024,19 +985,19 @@ def spec_peak_calculation(spec, match_bands, detect_limit, peak_idcs, continuum=
     return
 
 
-def spec_profile_plotter(ax, spec, line_i, z_corr):
+def spec_profile_plotter(ax, line_i, z_corr, redshift, norm_flux):
 
     # Compute the profile arrays
-    wave_array = np.linspace(line_i.mask[2], line_i.mask[3], 100) * (1 + spec.redshift)
+    wave_array = np.linspace(line_i.mask[2], line_i.mask[3], 100) * (1 + redshift)
     cont_array = line_i.measurements.m_cont * wave_array + line_i.measurements.n_cont
     flux_array = line_profile_generator(line_i, wave_array)
 
     # Plot Continuum
-    ax.plot(wave_array/z_corr, cont_array * z_corr / spec.norm_flux,
+    ax.plot(wave_array/z_corr, cont_array * z_corr / norm_flux,
             color=theme.colors['cont'], linestyle='--', linewidth=0.5)
 
     # Combined component
-    comb_array = (flux_array.sum(axis=0) + cont_array) * z_corr / spec.norm_flux
+    comb_array = (flux_array.sum(axis=0) + cont_array) * z_corr / norm_flux
     line_format = color_selector(line_i.label, line_i.measurements.observations, 0, n_comps=1,
                                  scale_dict=theme.plt, colors_dict=theme.colors)
     curve_plot = ax.plot(wave_array / z_corr, comb_array, **line_format)
@@ -1048,7 +1009,7 @@ def spec_profile_plotter(ax, spec, line_i, z_corr):
         for j, y_arr in enumerate(flux_array):
             line_format = color_selector(line_i.list_comps[j].label, line_i.measurements.observations, j, n_comps=flux_array.shape[0],
                                          scale_dict=theme.plt, colors_dict=theme.colors)
-            single_array = (cont_array + y_arr) * z_corr / spec.norm_flux
+            single_array = (cont_array + y_arr) * z_corr / norm_flux
             curve_plot = ax.plot(wave_array/z_corr, single_array, **line_format)
 
             mplcursor_list.append((line_i.list_comps[j].label, line_i.list_comps[j].latex_label, curve_plot))
@@ -1059,20 +1020,37 @@ def spec_profile_plotter(ax, spec, line_i, z_corr):
     return mplcursor_list
 
 
-def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_dict=None):
+def spec_lines_plotter(ax, line_list, wave_plot, flux_plot, redshift, z_corr, color_dict=None):
+
+    color_dict = theme.colors.copy() if color_dict is None else color_dict
+
+    # Decompose the line labels and apply the redshift correction
+    label_arr, lambda_arr, orig_arr, z_arr = label_decomposition(line_list, params_list=['label', 'wavelength',
+                                                                                         'origin', 'redshift'])
+    z_arr[isnull(z_arr)] = redshift
+    lambda_arr = lambda_arr * (1 + z_arr)
+
+    # Crop to the plotted wavelength range
+    idcs = (lambda_arr > wave_plot[0]) & (lambda_arr < wave_plot[-1])
+    if not idcs.any():
+        return False
+
+    line_list = np.array(line_list)[idcs]
+    line_waves, orig_arr = lambda_arr[idcs], orig_arr[idcs]
 
     # Loop through the lines and plot the markers
-    idcs_lines = np.searchsorted(x, line_waves)
-    y0 = y[idcs_lines]
+    idcs_lines = np.searchsorted(wave_plot, line_waves)
+    y0 = flux_plot[idcs_lines]
     dy = 0.01 * (ax.get_ylim()[1] - ax.get_ylim()[0])
 
-    # By default all the indexes are None
-    orig_arr = np.array(["none" if x is None else x for x in orig_arr])
+    # By default all the origins are None
+    orig_arr = np.array(["none" if o is None else o for o in orig_arr])
     val, idcs_unique = np.unique(orig_arr, return_index=True)
+    single_none = (len(idcs_unique) == 1) and (val[0] == 'none')
 
     for i, line in enumerate(line_list):
 
-        ymin = np.max(y[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, y.size - 1)]) + (5 * dy)
+        ymin = np.max(flux_plot[max(idcs_lines[i] - 5, 0): min(idcs_lines[i] + 5, flux_plot.size - 1)]) + (5 * dy)
         ymax = ymin + dy
 
         if orig_arr[i] == "none":
@@ -1083,14 +1061,23 @@ def spec_lines_plotter(ax, line_list, line_waves, x, y, z_corr, orig_arr, color_
                 color = ax._get_lines.get_next_color()
                 color_dict['origin'][orig_arr[i]] = color
 
-        x_coord = x[idcs_lines[i]]/z_corr
-        label = orig_arr[i] if i in idcs_unique else '_'
+        x_coord = wave_plot[idcs_lines[i]] / z_corr
+
+        # Add the origin label only for the first line of each origin
+        label = '_' if single_none or i not in idcs_unique else orig_arr[i]
 
         ax.vlines(x_coord, ymin, ymax, color=color, linewidth=1)
         ax.vlines(x_coord, y0[i], ymin, label=label, color=color, linewidth=0.5, linestyles=':')
-        ax.text(x_coord, ymax + dy/2, line, rotation=90, va="bottom", ha="center", color=color, fontsize=theme.plt['label_lines'])
+        ax.text(x_coord, ymax + dy/2, line, rotation=90, va="bottom", ha="center", color=color,
+                fontsize=theme.plt['label_lines'])
 
-    return
+    # Confirm the legend
+    if (len(orig_arr) > 1) and ~np.all(isnull(orig_arr)):
+        multi_orig = True
+    else:
+        multi_orig = False
+
+    return multi_orig
 
 
 def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colors['match_line']):
@@ -1143,32 +1130,87 @@ def spec_bands_plotter(ax, bands, x, y, z_corr, redshift, match_color=theme.colo
     return
 
 
-def spec_components_plotter(spec, ax, wave_plot, flux_plot, z_corr):
+# def spec_components_plotter(spec, ax, wave_plot, flux_plot, z_corr):
+#
+#     if spec.infer.pred_arr is not None:
+#
+#         # Use np.histogram to get the counts in each bin
+#         categories = np.sort(np.unique(spec.infer.pred_arr))
+#         legend_scatter = []
+#
+#         for category in categories:
+#             if category != 0:
+#
+#                 # Get category properties
+#                 feature_name = spec.infer.model_mgr.medium.number_feature_dict[category]
+#                 feature_color = aspect.cfg['colors'][feature_name]
+#                 idcs_feature = spec.infer.pred_arr == category
+#                 legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
+#                                                     markerfacecolor=feature_color, markersize=8, label=feature_name))
+#
+#                 # Count the pixels for each category
+#                 bins = [40, 60, 80, 100]
+#                 counts, _ = np.histogram(spec.infer.conf_arr[idcs_feature], bins=bins)
+#                 for idx_conf, count_conf in enumerate(counts):
+#                     if count_conf > 0:
+#                         # Get indeces matching the detections
+#                         idcs_count = np.where((bins[idx_conf] < spec.infer.conf_arr[idcs_feature]) &
+#                                               (spec.infer.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
+#                         idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True
+#
+#                         # Generate nan arrays with the data to avoid filling non detections
+#                         wave_nan, flux_nan = np.full(wave_plot.size, np.nan), np.full(flux_plot.size, np.nan)
+#                         wave_nan[idcs_nonnan] = wave_plot[idcs_nonnan] / z_corr
+#                         flux_nan[idcs_nonnan] = flux_plot[idcs_nonnan] * z_corr
+#
+#                         # Plot with the corresponding colors and linestyle
+#                         ax.step(wave_nan, flux_nan, label=feature_name, where='mid', color=feature_color,
+#                                      linestyle=category_conf_styles[idx_conf])
+#
+#             # Legend category
+#             legend_category = ax.legend(handles=legend_scatter, edgecolor=theme.colors['fg'])
+#             legend_category.get_frame().set_linewidth(0.5)
+#             ax.add_artist(legend_category)
+#
+#             # Create the extra legend with the confidence
+#             line1 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle=':', label="> 40% conf.")
+#             line2 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle='--', label="> 60% conf.")
+#             line3 = mlines.Line2D([], [], color=theme.colors['fg'], linestyle='-', label="> 80% conf.")
+#             legend_conf = ax.legend(handles=[line1, line2, line3], loc="lower center", ncol=3,
+#                                          edgecolor=theme.colors['fg'])
+#             legend_conf.get_frame().set_linewidth(0.5)
+#
+#     else:
+#         _logger.warning(f'The observation does not have a components array. Please run "Spec.infer.components"')
+#
+#     return
 
-    if spec.infer.pred_arr is not None:
+def spec_components_plotter(ax, wave_plot, flux_plot, z_corr, pred_arr, conf_arr, number_feature_dict):
+
+    if pred_arr is not None:
 
         # Use np.histogram to get the counts in each bin
-        categories = np.sort(np.unique(spec.infer.pred_arr))
+        categories = np.sort(np.unique(pred_arr))
         legend_scatter = []
 
         for category in categories:
             if category != 0:
 
                 # Get category properties
-                feature_name = spec.infer.model_mgr.medium.number_feature_dict[category]
+                feature_name = number_feature_dict[category]
                 feature_color = aspect.cfg['colors'][feature_name]
-                idcs_feature = spec.infer.pred_arr == category
+                idcs_feature = pred_arr == category
                 legend_scatter.append(mlines.Line2D([], [], marker='o', color='w',
                                                     markerfacecolor=feature_color, markersize=8, label=feature_name))
 
                 # Count the pixels for each category
                 bins = [40, 60, 80, 100]
-                counts, _ = np.histogram(spec.infer.conf_arr[idcs_feature], bins=bins)
+                counts, _ = np.histogram(conf_arr[idcs_feature], bins=bins)
                 for idx_conf, count_conf in enumerate(counts):
                     if count_conf > 0:
                         # Get indeces matching the detections
-                        idcs_count = np.where((bins[idx_conf] < spec.infer.conf_arr[idcs_feature]) &
-                                              (spec.infer.conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
+                        idcs_count = np.where((bins[idx_conf] < conf_arr[idcs_feature]) &
+                                              (conf_arr[idcs_feature] <= bins[idx_conf + 1]))[0]
                         idcs_nonnan = np.where(idcs_feature)[0][idcs_count]  # Returns indices where mask is True
 
                         # Generate nan arrays with the data to avoid filling non detections
@@ -1330,11 +1372,11 @@ def line_band_scaler(axis, y, y_scale, scale_dict=theme.plt):
     return
 
 
-def line_residual_plotter(axis, spec, line, x, y, err, z_corr, scale_dict=theme.plt):
+def line_residual_plotter(axis, line, x, y, err, z_corr, redshift, norm_flux, scale_dict=theme.plt):
 
     # Continuum level
-    cont_level = line.measurements.cont / spec.norm_flux
-    cont_std = line.measurements.cont_err / spec.norm_flux
+    cont_level = line.measurements.cont / norm_flux
+    cont_std = line.measurements.cont_err / norm_flux
 
     # Compute the profile arrays
     cont_array = line.measurements.m_cont * x + line.measurements.n_cont
@@ -1343,7 +1385,7 @@ def line_residual_plotter(axis, spec, line, x, y, err, z_corr, scale_dict=theme.
 
     # Lower plot residual
     label_residual = r'$\frac{F_{obs} - F_{fit}}{F_{cont}}$'
-    residual = ((y - comb_array / spec.norm_flux) / cont_level)
+    residual = ((y - comb_array / norm_flux) / cont_level)
     axis.step(x / z_corr, residual * z_corr, where='mid', color=theme.colors['fg'],
               linewidth=scale_dict['spectrum_width'])
 
@@ -1359,7 +1401,7 @@ def line_residual_plotter(axis, spec, line, x, y, err, z_corr, scale_dict=theme.
         axis.fill_between(x / z_corr, -err_norm * z_corr, err_norm * z_corr, label=label, facecolor='salmon', alpha=0.3)
 
     # Residual y axis limit from std at line location
-    idx_w3, idx_w4 = np.searchsorted(x, np.array(line.mask[2:4]) * (1 + spec.redshift))
+    idx_w3, idx_w4 = np.searchsorted(x, np.array(line.mask[2:4]) * (1 + redshift))
     resd_limit = np.std(residual[idx_w3:idx_w4]) * 5
 
     try:
@@ -1376,6 +1418,849 @@ def line_residual_plotter(axis, spec, line, x, y, err, z_corr, scale_dict=theme.
 
     return
 
+
+def matplotlib_spectrum_display(wave_plot, flux_plot, err_plot, z_corr, idcs_mask, units_wave, units_flux,
+                                lines_frame, cont_arr, cont_std, redshift, norm_flux, pred_arr, conf_arr, number_feature_dict,
+                                label=None, bands=None, line_list=None, log_scale=False, show_profiles=True, show_cont=False,
+                                show_err=False, show_masks=True, show_comps=False, show_legend=True, in_fig=_NO_FIG,
+                                in_ax=None, ax_cfg=None):
+
+    # Infer figure structure
+    if in_ax is not None:
+        fig, ax = in_ax.figure, in_ax
+    else:
+        fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+        ax = fig.add_subplot()
+
+    # Plot the spectrum
+    ax.step(wave_plot/z_corr, flux_plot*z_corr, label=label, where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'], zorder=10)
+
+    # Plot the uncertainty shaded area
+    if show_err:
+        if err_plot is not None:
+            ax.fill_between(x=wave_plot / z_corr, y1=(flux_plot - err_plot) * z_corr, y2=(flux_plot + err_plot) * z_corr,
+                            step='mid', alpha=0.2, color='lime', ec=None)
+        else:
+            _logger.info(f'The input spectrum does not include an uncertainty array')
+
+    # Plot bands if provided
+    if bands is not None:
+        spec_bands_plotter(ax, check_file_dataframe(bands), wave_plot, flux_plot, z_corr, redshift)
+
+    # Plot line markers
+    if line_list is not None:
+        multi_orig = spec_lines_plotter(ax, line_list, wave_plot, flux_plot, redshift, z_corr)
+
+        if multi_orig:
+            show_legend = True
+
+    # Plot the fittings
+    if show_profiles and lines_frame.size > 0:
+        mplcursor_list = []
+        for line_label in unique_line_arr(lines_frame):
+            line = Line.from_transition(line_label, data_frame=lines_frame)
+            mplcursor_list += spec_profile_plotter(ax, line, z_corr, redshift, norm_flux)
+
+        # Pop-ups
+        mplcursor_parser(mplcursor_list, lines_frame, norm_flux, units_wave, units_flux)
+
+    # Plot the fit continuum
+    if show_cont and cont_arr is not None:
+        ax.plot(wave_plot / z_corr, cont_arr * z_corr, label='Continuum', color=theme.colors['cont'], linestyle='--')
+
+        low_limit, high_limit = cont_arr - cont_std, cont_arr + cont_std
+        ax.fill_between(wave_plot / z_corr, low_limit * z_corr, high_limit * z_corr, alpha=0.2, color=theme.colors['inspection_uncertainty'])
+
+    # Show components
+    if show_comps:
+        spec_components_plotter(ax, wave_plot, flux_plot, z_corr, pred_arr, conf_arr, number_feature_dict)
+        show_legend = False
+
+    # Show the masks
+    if show_masks:
+        spec_mask_plotter(ax, idcs_mask, wave_plot, flux_plot, z_corr, lines_frame)
+
+    # Switch y_axis to logarithmic scale if requested
+    if log_scale:
+        ax.set_yscale('log')
+
+    # Add or remove legend according to the plot type:
+    if show_legend:
+        ax.legend()
+
+    # Figure wording
+    if ax_cfg is not None:
+        # Not overwritting if provided
+        if in_ax is not None:
+            current = {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel()}
+            ax_cfg = {key: value for key, value in ax_cfg.items() if not current.get(key)}
+        ax.set(**ax_cfg)
+
+    return fig, ax
+
+
+def matplotlib_resolution_display(wave_plot, z_corr, res_power, in_fig=_NO_FIG, in_ax=None, ax_cfg=None):
+
+    # Infer figure structure
+    if in_ax is not None:
+        fig, ax = in_ax.figure, in_ax
+    else:
+        fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+        ax = fig.add_subplot()
+
+    # Plot resolving power
+    if res_power is not None:
+        y_data = np.asarray(res_power)
+        if np.ndim(y_data) == 0:
+            y_data = np.full(wave_plot.size, float(y_data))
+        ax.plot(wave_plot/z_corr, y_data, color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
+
+    # Plot pixel width
+    else:
+        delta = np.diff(wave_plot/z_corr)
+        y_data = np.concatenate([delta, [delta[-1]]])
+        ax.step(wave_plot/z_corr, y_data, color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'], where='mid')
+
+    # Figure wording (Not overwritting if provided)
+    if ax_cfg is not None:
+        if in_ax is not None:
+            current = {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel()}
+            ax_cfg = {key: value for key, value in ax_cfg.items() if not current.get(key)}
+        ax.set(**ax_cfg)
+
+    return fig, ax
+
+
+
+def matplotlib_grid_display(wave_plot, flux_plot, z_corr, line_list, lines_frame, redshift, norm_flux, units_wave,
+                            units_flux, n_rows, n_cols, y_scale='auto', show_profiles=True, show_adjacent=False,
+                            in_fig=_NO_FIG):
+
+    # Figure structure
+    fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+    grid_spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols)
+    ax_list = [None] * line_list.size
+
+    # Container for mpl_cursors
+    mplcursor_list = []
+
+    # Loop throught the lines and plot the line for each axis.
+    for i, line_label in enumerate(line_list):
+        ax = ax_list[i] = fig.add_subplot(grid_spec[i])
+
+        # Check components
+        line_i = Line.from_transition(line_label, data_frame=lines_frame)
+
+        # Establish the limits for the line spectrum plot
+        idcs_m = np.searchsorted(wave_plot, np.array(line_i.mask) * (1 + redshift))
+        idx_blue = idcs_m[0] - 5 if idcs_m[0] > 5 else idcs_m[0]
+        idx_red = idcs_m[-1] + 5 if idcs_m[-1] + 5 < wave_plot.size else idcs_m[-1]
+
+        # Plot the spectrum
+        ax.step(wave_plot[idx_blue:idx_red] / z_corr, flux_plot[idx_blue:idx_red] * z_corr,
+                where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
+
+        # Continuum bands
+        line_band_plotter(ax, wave_plot, flux_plot, z_corr, idcs_m, line_i.label, theme.colors,
+                          show_adjacent=show_adjacent, m_cont=norm_flux * line_i.measurements.m_cont,
+                          n_cont=norm_flux * line_i.measurements.n_cont)
+
+        # Plot the profiles and link to the mplcursors pop-ups
+        if show_profiles and (line_i.measurements is not None):
+            mplcursor_list += spec_profile_plotter(ax, line_i, z_corr, redshift, norm_flux)
+
+        # Set the scale
+        line_band_scaler(ax, flux_plot[idx_blue:idx_red] * z_corr, y_scale)
+
+        # Formatting the figure
+        ax.yaxis.set_major_locator(plt.NullLocator())
+        ax.xaxis.set_major_locator(plt.NullLocator())
+
+        ax.update({'title': line_i.latex_label})
+        ax.yaxis.set_ticklabels([])
+        ax.axes.yaxis.set_visible(False)
+
+    # Pop-ups
+    mplcursor_parser(mplcursor_list, lines_frame, norm_flux, units_wave, units_flux)
+
+    return fig, ax_list
+
+
+def matplotlib_bands_display(wave_plot, flux_plot, err_plot, z_corr, idcs_mask, idcs_bands, line, lines_frame,
+                             cont_arr, redshift, norm_flux, units_wave, units_flux, y_scale='auto', show_profile=True,
+                             show_err=False, show_bands=True, show_cont=False, in_fig=_NO_FIG, in_ax=None,
+                             ax_cfg=None):
+
+    # Infer figure structure (the residual axis is only added to the figures created here)
+    if in_ax is not None:
+        fig, ax_list = in_ax.figure, [in_ax]
+    else:
+        fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+        if show_profile:
+            grid_ax = fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3, 1])
+            spec_ax = fig.add_subplot(grid_ax[0])
+            ax_list = [spec_ax, fig.add_subplot(grid_ax[1], sharex=spec_ax)]
+        else:
+            ax_list = [fig.add_subplot()]
+    ax = ax_list[0]
+
+    # Line region
+    idcs_win = slice(idcs_bands[0], idcs_bands[5])
+    x_win, y_win = wave_plot[idcs_win], flux_plot[idcs_win]
+
+    # Plot the spectrum
+    ax.step(x_win/z_corr, y_win * z_corr, where='mid', color=theme.colors['fg'], linewidth=theme.plt['spectrum_width'])
+
+    # Line bands, using the fitted continuum as the lower limit if the line has been measured
+    m_cont, n_cont = line.measurements.m_cont, line.measurements.n_cont
+    if m_cont is not None:
+        m_cont, n_cont = m_cont/norm_flux, n_cont/norm_flux
+    line_band_plotter(ax, wave_plot, flux_plot, z_corr, idcs_bands, line.label, color_dict=theme.colors,
+                      show_adjacent=show_bands, m_cont=m_cont, n_cont=n_cont)
+
+    # Central point
+    if show_profile:
+        ax.scatter(line.measurements.peak_wave/z_corr, line.measurements.cont*z_corr/norm_flux, marker='+',
+                   facecolor=theme.colors['fg'], linewidth=float(theme.plt['spectrum_width'])/2)
+
+    # Plot the uncertainty
+    if show_err and (err_plot is not None):
+        idcs_line = slice(idcs_bands[2], idcs_bands[3])
+        ax.fill_between(x=wave_plot[idcs_line] / z_corr,
+                        y1=(flux_plot[idcs_line] - err_plot[idcs_line]) * z_corr,
+                        y2=(flux_plot[idcs_line] + err_plot[idcs_line]) * z_corr,
+                        step='mid', alpha=1, color=theme.colors['line_band'], ec=None)
+
+    # Add the fitting results
+    if show_profile:
+
+        # Plot profile
+        mplcursor_list = spec_profile_plotter(ax, line, z_corr, redshift, norm_flux)
+
+        # Residual flux component
+        if len(ax_list) > 1:
+            line_residual_plotter(ax_list[1], line, x_win, y_win, None if err_plot is None else err_plot[idcs_win],
+                                  z_corr, redshift, norm_flux)
+
+        # Pop-ups
+        mplcursor_parser(mplcursor_list, lines_frame, norm_flux, units_wave, units_flux)
+
+    # Plot the masked pixels
+    spec_mask_plotter(ax, idcs_mask[idcs_win], x_win, y_win, z_corr, lines_frame, line.param_arr('label'))
+
+    # Display the legend
+    if show_profile:
+        ax.legend()
+
+    # Set the scale
+    line_band_scaler(ax, y=y_win * z_corr, y_scale=y_scale)
+
+    # Fitted continuum
+    if show_cont:
+        if cont_arr is not None:
+            ax.plot(x_win/z_corr, cont_arr[idcs_win] * z_corr, color=theme.colors['cont'], linewidth=2,
+                    linestyle="dashed", label='fitted continuum')
+        else:
+            _logger.info('The input spectrum does not have a fitted continuum')
+
+    # Figure wording (Not overwritting if provided)
+    if ax_cfg is not None:
+        if in_ax is not None:
+            current = {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel()}
+            ax_cfg = {key: value for key, value in ax_cfg.items() if not current.get(key)}
+        ax.set(**ax_cfg)
+
+    return fig, ax_list
+
+
+def matplotlib_velocity_display(wave_plot, flux_plot, idcs_bands, line, y_scale='linear', in_fig=_NO_FIG, in_ax=None,
+                                ax_cfg=None):
+
+    # Infer figure structure
+    if in_ax is not None:
+        fig, ax = in_ax.figure, in_ax
+    else:
+        fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+        ax = fig.add_subplot()
+    trans = ax.get_xaxis_transform()
+
+    # Velocity spectrum for the line region
+    idcs_win = slice(idcs_bands[0], idcs_bands[5])
+    flux_plot = flux_plot[idcs_win]
+    cont_plot = line.measurements.m_cont * wave_plot[idcs_win] + line.measurements.n_cont
+    vel_plot = c_KMpS * (wave_plot[idcs_win] - line.measurements.peak_wave) / line.measurements.peak_wave
+
+    # Line edges
+    w_limits = np.array([line.measurements.w_i, line.measurements.w_f])
+    v_i, v_f = c_KMpS * (w_limits - line.measurements.peak_wave) / line.measurements.peak_wave
+
+    # Plot the spectrum
+    ax.step(vel_plot, flux_plot, label=line.latex_label, where='mid', color=theme.colors['fg'],
+            linewidth=theme.plt['spectrum_width'])
+
+    # Velocity percentiles
+    target_percen = ['v_1', 'v_5', 'v_10', 'v_50', 'v_90', 'v_95', 'v_99']
+    for i_percentil, percentil in enumerate(target_percen):
+
+        vel_per = line.measurements.__getattribute__(percentil)
+        label_text = None if i_percentil > 0 else r'$v_{Pth}$'
+        ax.axvline(x=vel_per, label=label_text, color=theme.colors['fg'], linestyle='dotted', alpha=0.5)
+
+        label_plot = r'$v_{{{}}}$'.format(percentil[2:])
+        ax.text(vel_per, 0.80, label_plot, ha='center', va='center', rotation='vertical',
+                backgroundcolor=theme.colors['bg'], transform=trans, alpha=0.5)
+
+    # Velocity edges
+    label_v_i, label_v_f = r'$v_{{0}}$', r'$v_{{100}}$'
+    ax.axvline(x=v_i, alpha=0.5, color=theme.colors['fg'], linestyle='dotted')
+    ax.text(v_i, 0.80, label_v_i, ha='center', va='center', rotation='vertical',
+            backgroundcolor=theme.colors['bg'], transform=trans, alpha=0.5)
+
+    ax.axvline(x=v_f, alpha=0.5, color=theme.colors['fg'], linestyle='dotted')
+    ax.text(v_f, 0.80, label_v_f, ha='center', va='center', rotation='vertical',
+            backgroundcolor=theme.colors['bg'], transform=trans, alpha=0.5)
+
+    # Plot the line profile
+    ax.plot(vel_plot, cont_plot, linestyle='--', color=theme.colors['fg'])
+
+    # Plot velocity bands
+    w80 = line.measurements.v_90-line.measurements.v_10
+    label_arrow = r'$w_{{80}}={:0.1f}\,Km/s$'.format(w80)
+    p1 = patches.FancyArrowPatch((line.measurements.v_10, 0.4),
+                                 (line.measurements.v_90, 0.4),
+                                 label=label_arrow,
+                                 arrowstyle='<->',
+                                 color='tab:blue',
+                                 transform=trans,
+                                 mutation_scale=20)
+    ax.add_patch(p1)
+
+    # Plot FWHM bands
+    label_arrow = r'$FWZI={:0.1f}\,Km/s$'.format(line.measurements.FWZI)
+    p2 = patches.FancyArrowPatch((v_i, 0),
+                                 (v_f, 0),
+                                 label=label_arrow,
+                                 arrowstyle='<->',
+                                 color='tab:red',
+                                 transform=ax.transData,
+                                 mutation_scale=20)
+    ax.add_patch(p2)
+
+    # Median velocity
+    label_vmed = r'$v_{{med}}={:0.1f}\,Km/s$'.format(line.measurements.v_med)
+    ax.axvline(x=line.measurements.v_med, color=theme.colors['fg'], label=label_vmed, linestyle='dashed', alpha=0.5)
+
+    # Peak velocity
+    label_vmed = r'$v_{{peak}}$'
+    ax.axvline(x=0.0, color=theme.colors['fg'], label=label_vmed, alpha=0.5)
+
+    # Set the scale
+    _auto_flux_scale(ax, y=flux_plot, y_scale=y_scale)
+
+    # Legend
+    ax.legend()
+
+    # Figure wording
+    if ax_cfg is not None:
+        if in_ax is not None:
+            current = {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel()}
+            ax_cfg = {key: value for key, value in ax_cfg.items() if not current.get(key)}
+        ax.set(**ax_cfg)
+
+    return fig, ax
+
+
+class SpectrumPlotter(PlotAccessor):
+
+    def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
+                 crop_waves=None, crop_flux=None, show_profiles=True, show_cont=False, show_err=False, show_masks=True,
+                 show_components=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None, maximize=False):
+
+        """
+        Plot the spectrum flux as a function of wavelength.
+
+        This method generates a 1D spectrum visualization, optionally including
+        fitted profiles, continua, error regions, and masks. The plot can be
+        displayed interactively or saved directly to a file.
+
+        Parameters
+        ----------
+        fname : str, optional
+           Output file path for saving the plot (e.g., ``"spectrum.png"``).
+           If not provided, the plot is displayed in a new window.
+        label : str, optional
+           Label for the spectrum in the plot legend. Default is ``"Observed spectrum"``.
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+           Bands dataframe or path to its file. If provided, line bands are
+           overplotted (see :ref:`bands documentation <line-bands-doc>`).
+        line_list : list, optional
+           Line labels to mark on the spectrum. Lines outside the plotted wavelength range are skipped.
+        rest_frame : bool, optional
+           If ``True``, plot the spectrum in rest-frame wavelengths. Default is
+           ``False`` (observed frame).
+        log_scale : bool, optional
+           If ``True``, display the flux on a logarithmic y-scale. Default is
+           ``False``.
+        crop_waves : tuple or numpy.ndarray, optional
+           Two-element ``(min, max)`` wavelength range used to crop the input arrays.
+        crop_flux : tuple, optional
+           Two-element ``(min_percentile, max_percentile)`` range used to clip the flux array
+           by percentile. Defaults to ``None``, equivalent to ``(1, 100)`` (i.e. the 1st to
+           100th percentile).
+        show_profiles : bool, optional
+           If ``True`` (default), overlay the fitted line profiles stored in
+           the spectrum’s frame.
+        show_cont : bool, optional
+           If ``True``, overlay the fitted continuum and its 1σ uncertainty
+           region. Default is ``False``.
+        show_err : bool, optional
+           If ``True``, fill a shaded region representing flux uncertainties
+           (``err_flux``). Default is ``False``.
+        show_masks : bool, optional
+           If ``True`` (default), display masked pixels as red markers.
+        show_components : bool, optional
+           If ``True``, plot spectral components as colored sections in the spectrum if available
+        title : str, optional
+           Figure title. Default is none.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into. If not provided, a new figure is created and shown (or saved and
+            closed if ``fname`` is given). If ``None``, a new figure is created but not shown, so you can add your own
+            artists and call ``spec.plot.show()``. With an existing or ``None`` figure, ``fname`` saves it without
+            closing it.
+        in_ax : matplotlib.axes.Axes, optional
+           Existing Matplotlib axes to plot into. It takes precedence over ``in_fig``, and the figure is
+           neither shown nor saved.
+        fig_cfg : dict, optional
+           Matplotlib figure configuration dictionary (e.g., size, DPI).
+           See `matplotlib.RcParams
+           <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        maximize : bool, optional
+           If ``True``, maximize the plot window after rendering. Default is
+           ``False``.
+
+        Notes
+        -----
+        - The figure is constructed using the current theme defaults (see
+         ``theme.fig_defaults`` and ``theme.ax_defaults``).
+        - If :mod:`mplcursors` is installed, interactive tooltips are available:
+         left-click on a fitted profile to display its parameters, and right-click
+         to remove the annotation.
+        - If both ``fname`` and ``in_fig`` are omitted, the figure is shown
+         interactively on screen.
+        - All wavelength and flux units follow the current spectrum settings
+         (see :class:`lime.Spectrum` attributes ``units_wave`` and ``units_flux``).
+
+        Examples
+        --------
+        Plot a basic observed-frame spectrum:
+
+        >>> spec.plot.spectrum()
+
+        Plot in rest-frame wavelengths with fitted profiles and continuum:
+
+        >>> spec.plot.spectrum(rest_frame=True, show_profiles=True, show_cont=True)
+
+        Save the spectrum with logarithmic scaling:
+
+        >>> spec.plot.spectrum(fname="spectrum_log.png", log_scale=True)
+        """
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Unpack plot axis data
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._obj, rest_frame, crop_waves, crop_flux)
+
+        # Unpack Aspect data
+        comps = (None, None, None)
+        if show_components:
+            if hasattr(self._obj.infer, 'pred_arr'):
+                comps = (self._obj.infer.pred_arr, self._obj.infer.conf_arr,
+                         self._obj.infer.model_mgr.medium.number_feature_dict)
+            else:
+                _logger.warning(f'No prediction array. Please run Aspect on the spectrum')
+                show_components = False
+        else:
+            show_components = False
+
+        # Get the figure style
+        plt_cfg = theme.fig_defaults(fig_cfg)
+        ax_cfg = label_maker('spectrum', title=title, units_wave=self._obj.units_wave, units_flux=self._obj.units_flux,
+                             norm_flux=self._obj.norm_flux)
+        legend_check = True if label is not None else False
+
+        # Generate figure
+        with rc_context(plt_cfg):
+            self.fig, self.ax = matplotlib_spectrum_display(wave_plot, flux_plot, err_plot, z_corr, idcs_mask,
+                                                            self._obj.units_wave, self._obj.units_flux, self._obj.frame,
+                                                            self._obj.cont, self._obj.cont_std,
+                                                            self._obj.redshift, self._obj.norm_flux,
+                                                            *comps,
+                                                            label=label, bands=bands, line_list=line_list,
+                                                            log_scale=log_scale, show_profiles=show_profiles, show_cont=show_cont,
+                                                            show_err=show_err, show_masks=show_masks, show_comps=show_components,
+                                                            show_legend=legend_check,
+                                                            in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_cfg)
+
+            # Display | save | pass figure
+            self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig, in_ax=in_ax)
+
+        return
+
+    def resolution(self, fname=None, rest_frame=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None,
+                   maximize=False):
+
+        """
+        Plot the spectral resolution as a function of wavelength.
+
+        If the resolving power (``res_power``) is available, it is plotted against
+        wavelength. Otherwise, the pixel width (``np.diff(wave)``) is plotted instead.
+
+        Parameters
+        ----------
+        fname : str, optional
+            Output file path for saving the plot. If not provided, the plot is
+            displayed in a new window.
+        rest_frame : bool, optional
+            If ``True``, plot in rest-frame wavelengths. Default is ``False``.
+        title : str, optional
+            Figure title. Default describes the plotted quantity.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into. If not provided, a new figure is created and shown (or saved and
+            closed if ``fname`` is given). If ``None``, a new figure is created but not shown, so you can add your own
+            artists and call ``spec.plot.show()``. With an existing or ``None`` figure, ``fname`` saves it without
+            closing it.
+        in_ax : matplotlib.axes.Axes, optional
+            Existing Matplotlib axes to plot into. It takes precedence over ``in_fig``, and the figure is
+            neither shown nor saved.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration dictionary.
+        maximize : bool, optional
+            If ``True``, maximize the plot window after rendering. Default is ``False``.
+        """
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Unpack plot axis data
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._obj, rest_frame)
+
+        # Get the figure style
+        plt_cfg = theme.fig_defaults(fig_cfg)
+        ax_cfg = label_maker('resolution', title=title, units_wave=self._obj.units_wave,
+                             res_power_check=self._obj.res_power is not None)
+
+        # Generate figure
+        with rc_context(plt_cfg):
+            self.fig, self.ax = matplotlib_resolution_display(wave_plot, z_corr, self._obj.res_power,
+                                                              in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_cfg)
+
+            # Display | save | pass figure
+            self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig, in_ax=in_ax)
+
+        return
+
+    def grid(self, fname=None, y_scale='auto', n_cols=6, n_rows=None, col_row_scale=(2, 1.5), show_profiles=True,
+             show_adjacent=False, in_fig=_NO_FIG, fig_cfg=None, maximize=False):
+
+        """
+        Plot measured line cutouts and profile from the spectrum frame in a grid of subplots.
+
+        This function arranges per-line panels into an ``n_rows × n_cols`` grid.
+        The figure can be shown in a new window or saved to disk. If :mod:`mplcursors` is installed,
+        left-clicking a fitted profile shows its parameters; right-click removes the annotation.
+
+        Parameters
+        ----------
+        fname : str or pathlib.Path, optional
+            File path to save the figure. If not provided, the figure is shown in a new window.
+        y_scale : {"auto", "linear", "log"}, optional
+            Y-axis scaling per panel. ``"auto"`` chooses a sensible scale; otherwise
+            use Matplotlib’s ``"linear"``, ``"log"`` or ``symlog``. Default is ``"auto"``.
+        n_cols : int, optional
+            Number of columns in the grid. Default is ``6``.
+        n_rows : int, optional
+            Number of rows in the grid. If omitted, it may be inferred from the
+            number of lines and ``n_cols``.
+        col_row_scale : tuple of (float, float), optional
+            Multiplicative factors for panel width and height (in inches).
+            Default is ``(2.0, 1.5)``.
+        show_profiles : bool, optional
+            If ``True``, overlay fitted profiles where available. Default is ``True``.
+        show_adjacent : bool, optional
+            If ``True``, overlay the adjacent continua bands on the line plot cell. Default is ``False``.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into. If not provided, a new figure is created and shown (or saved and
+            closed if ``fname`` is given). If ``None``, a new figure is created but not shown, so you can add your own
+            artists and call ``spec.plot.show()``. With an existing or ``None`` figure, ``fname`` saves it without
+            closing it.
+        fig_cfg : dict, optional
+            Figure configuration (e.g., size, DPI). See `matplotlib.RcParams
+            <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        maximize : bool, optional
+            If ``True``, maximize the window after rendering. Default is ``False``.
+
+        Notes
+        -----
+        - Lines are selected from the current spectrum lines log (``Spectrum.frame``).
+        - The panels are plotted in rest-frame wavelength and titled with the line label.
+
+        Examples
+        --------
+        Save a grid to file:
+
+        >>> spec.plot.grid(fname="lines_grid.png", n_cols=6, n_rows=3)
+
+        Plot the grid with logarithmic scaling:
+
+        >>> spec.plot.grid(y_scale="log")
+
+        Enlarge the panels:
+
+        >>> spec.plot.grid(col_row_scale=(2.5, 2.0))
+        """
+
+        # Check lines have been measured
+        if self._obj.frame.index.size == 0:
+            _logger.info('The bands log does not contain lines')
+            return
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Get the line list and compute the number of rows
+        line_list = unique_line_arr(self._obj.frame)
+
+        # Compute the rows and columns number
+        if line_list.size > n_cols:
+            n_rows = n_rows or int(np.ceil(line_list.size / n_cols))
+        else:
+            n_cols, n_rows = line_list.size, 1
+
+        # Unpack plot axis data (always in the rest frame)
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._obj, rest_frame=True)
+
+        # User configuration overwrites default configuration
+        size_conf = {'figure.figsize': (n_cols * col_row_scale[0], n_rows * col_row_scale[1])}
+        size_conf = size_conf if fig_cfg is None else {**size_conf, **fig_cfg}
+        plt_cfg = theme.fig_defaults(size_conf, fig_type='grid')
+
+        # Generate figure
+        with rc_context(plt_cfg):
+            self.fig, self.ax = matplotlib_grid_display(wave_plot, flux_plot, z_corr, line_list, self._obj.frame,
+                                                        self._obj.redshift, self._obj.norm_flux, self._obj.units_wave,
+                                                        self._obj.units_flux, n_rows, n_cols, y_scale=y_scale,
+                                                        show_profiles=show_profiles, show_adjacent=show_adjacent,
+                                                        in_fig=in_fig)
+
+            # Display | save | pass figure
+            self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig)
+
+        return
+
+    def bands(self, label=None, bands=None, fname=None, rest_frame=False, y_scale='auto', show_profile=True,
+              show_err=False, show_bands=True, show_cont=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None,
+              maximize=False):
+
+        """
+        Plot a single spectral line with optional profile fit and continua bands.
+
+        If ``label`` is not provided, the last measured line in the spectrum log is
+        selected. A bands table (DataFrame or file path) may be supplied to resolve
+        the target line or to fetch its band limits (see
+        :ref:`bands documentation <line-bands-doc>`).
+
+        Parameters
+        ----------
+        label : str, optional
+            Line label to display. If ``None``, use the last line found in the
+            spectrum’s measurement log.
+        bands : pandas.DataFrame, str, or pathlib.Path, optional
+            Bands table or a path to it. Used to resolve the line (when needed) and
+            to obtain the band edges (w1–w6).
+        fname : str or pathlib.Path, optional
+            File path to save the figure. If not provided, the plot is shown
+            interactively.
+        rest_frame : bool, optional
+            If ``True``, plot using rest-frame wavelengths. Default is ``False``.
+        y_scale : {"auto", "linear", "log"}, optional
+            Y-axis scaling for the panel. ``"auto"`` chooses a sensible scale based
+            on the local data; otherwise use Matplotlib’s ``"linear"`` or ``"log"``.
+            Default is ``"auto"``.
+        show_profile : bool, optional
+            If ``True`` (default), overlay the fitted line profile and a residuals
+            panel when fit results are available.
+        show_err : bool, optional
+            If ``True``, fill a shaded band showing the flux uncertainty (``err_flux``)
+            within the central line region. Default is ``False``.
+        show_bands : bool, optional
+            If ``True`` (default), draw the continuum bands next to the central band for reference.
+        show_cont : bool, optional
+            If ``True``, overlay the spectrum fitted continuum. Default is ``False``.
+        title : str, optional
+            Figure title. Default is none.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into. If not provided, a new figure is created and shown (or saved and
+            closed if ``fname`` is given). If ``None``, a new figure is created but not shown, so you can add your own
+            artists and call ``spec.plot.show()``. With an existing or ``None`` figure, ``fname`` saves it without
+            closing it.
+        in_ax : matplotlib.axes.Axes, optional
+            Existing Matplotlib axes to plot into. It takes precedence over ``in_fig``, and the figure is
+            neither shown nor saved. The residuals panel is not included in this case.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration (e.g., size, DPI). See
+            `matplotlib.RcParams
+            <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        maximize : bool, optional
+            If ``True``, maximize the window after rendering. Default is ``False``.
+
+        Notes
+        -----
+        - If :mod:`mplcursors` is installed, profile components become interactive:
+          left-click to show fit parameters, right-click to remove the annotation.
+        - When ``show_profile`` is enabled and fit results exist, the layout includes
+          a residuals axis aligned in wavelength with the main panel.
+        - Masked pixels are indicated within the line window; wavelength and flux
+          units follow the current spectrum settings.
+
+        Examples
+        --------
+        Plot the last measured line in observed frame:
+
+        >>> spec.plot.bands()
+
+        Plot a specific line using bands from a file and show uncertainties:
+
+        >>> spec.plot.bands("O3_5007A", bands="my_bands.xlsx", show_err=True)
+
+        Save a rest-frame plot with a logarithmic scale:
+
+        >>> spec.plot.bands("H1_4861A", rest_frame=True, y_scale="log", fname="hbeta_rest.png")
+
+        """
+
+        # Check which line should be plotted
+        line = parse_bands_arguments(label, bands, self._obj.frame)
+
+        if line is None:
+            _logger.info(f'The line "{label}" was not found in the spectrum log for plotting.')
+            return
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Check if the line has measuring data
+        show_profile = show_profile and (line.measurements.intg_flux is not None)
+
+        # Unpack plot axis data
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._obj, rest_frame)
+        idcs_bands = line.index_bands(self._obj.wave, self._obj.redshift, just_band_edges=True)
+
+        # Get the figure style
+        plt_cfg = theme.fig_defaults(fig_cfg, fig_type='bands')
+        ax_cfg = label_maker('bands', title=title, units_wave=self._obj.units_wave, units_flux=self._obj.units_flux,
+                             norm_flux=self._obj.norm_flux)
+
+        # Generate figure
+        with rc_context(plt_cfg):
+            self.fig, self.ax = matplotlib_bands_display(wave_plot, flux_plot, err_plot, z_corr, idcs_mask, idcs_bands,
+                                                         line, self._obj.frame, self._obj.cont, self._obj.redshift,
+                                                         self._obj.norm_flux, self._obj.units_wave, self._obj.units_flux,
+                                                         y_scale=y_scale, show_profile=show_profile, show_err=show_err,
+                                                         show_bands=show_bands, show_cont=show_cont,
+                                                         in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_cfg)
+
+            # Display | save | pass figure
+            self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig, in_ax=in_ax)
+
+        return
+
+    def velocity_profile(self, line=None, fname=None, y_scale='linear', title=None, in_fig=_NO_FIG, in_ax=None,
+                         fig_cfg=None, maximize=False):
+
+        """
+        Plot a line with the velocity profile percentiles.
+
+        This visualization converts the wavelength frame to the velocity frame and displays the velocity
+        percentils (``v_1``, ``v_5``, ``v_10``, ``v_50``, ``v_90``, ``v_95``, ``v_99``), median velocity (``v_med``)
+        the full width at zero intensity (``FWZI``) and the ``w80 = v_90 - v_10`` width.
+
+        Parameters
+        ----------
+        line : str, optional
+            Line label to display. If ``None`` the last line fitted is displayed.
+        fname : str or pathlib.Path, optional
+            Output file path to save the figure. If not provided, the figure is shown
+            interactively.
+        y_scale : {"linear", "log"}, optional
+            Y-axis scale for the flux in the velocity panel. Default is ``"linear"``.
+        title : str, optional
+            Figure title. Default is none.
+        in_fig : matplotlib.figure.Figure, optional
+            Existing Matplotlib figure to plot into. If not provided, a new figure is created and shown (or saved and
+            closed if ``fname`` is given). If ``None``, a new figure is created but not shown, so you can add your own
+            artists and call ``spec.plot.show()``. With an existing or ``None`` figure, ``fname`` saves it without
+            closing it.
+        in_ax : matplotlib.axes.Axes, optional
+            Existing Matplotlib axes to plot into. It takes precedence over ``in_fig``, and the figure is
+            neither shown nor saved.
+        fig_cfg : dict, optional
+            Matplotlib figure configuration (e.g., size, DPI). See `matplotlib.RcParams
+            <https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams>`_.
+        maximize : bool, optional
+            If ``True``, maximize the window after rendering. Default is ``False``.
+
+        Notes
+        -----
+        - The velocity axis is computed as
+          :math:`v = c\\,\\frac{\\lambda - \\lambda_{\\rm peak}}{\\lambda_{\\rm peak}}`,
+          with ``c`` in km/s and ``λ_peak`` from the line fit (``measurements.peak_wave``).
+        - The plotting window is derived from the line bands and the current spectrum redshift;
+          rest-frame band edges are shifted to the observed frame internally.
+
+        Examples
+        --------
+        Plot the velocity profile for a measured line:
+
+        >>> spec.plot.velocity_profile(line="O3_5007A")
+
+        Plot the velocity profile and save the plot:
+
+        >>> spec.plot.velocity_profile(line="O3_5007A", fname="o3_velocity.png")
+
+        Use logarithmic y-scale and a custom title:
+
+        >>> spec.plot.velocity_profile("H1_4861A", y_scale="log", title="Hβ velocity profile")
+        """
+
+        # Check which line should be plotted
+        label = line
+        line = parse_bands_arguments(label, None, self._obj.frame)
+
+        if (line is None) or (line.measurements.intg_flux is None):
+            _logger.info(f'The line "{label}" was not found in the spectrum log for plotting.')
+            return
+
+        # Clear previous figure
+        self.reset_figure()
+
+        # Unpack plot axis data
+        wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._obj, rest_frame=False)
+        idcs_bands = line.index_bands(self._obj.wave, self._obj.redshift, just_band_edges=True)
+
+        # Get the figure style
+        plt_cfg = theme.fig_defaults(fig_cfg)
+        ax_cfg = label_maker('velocity', title=title, units_flux=self._obj.units_flux, norm_flux=self._obj.norm_flux)
+
+        # Generate figure
+        with rc_context(plt_cfg):
+            self.fig, self.ax = matplotlib_velocity_display(wave_plot, flux_plot, idcs_bands, line, y_scale=y_scale,
+                                                            in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_cfg)
+
+            # Display | save | pass figure
+            self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig, in_ax=in_ax)
+
+        return
 
 
 class SpectrumFigures:
@@ -1401,8 +2286,8 @@ class SpectrumFigures:
         return
 
     def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
-                 show_profiles=True, show_cont=False, show_err=False, show_masks=True, show_components=False,
-                 in_fig=_NO_FIG, fig_cfg=None, ax_cfg=None, maximize=False):
+                 crop_waves=None, crop_flux=None, show_profiles=True, show_cont=False, show_err=False,  show_masks=True, show_components=False,
+                 in_fig=_NO_FIG, in_ax=None, fig_cfg=None, ax_cfg=None, maximize=False):
 
         """
         Plot the spectrum flux as a function of wavelength.
@@ -1427,6 +2312,12 @@ class SpectrumFigures:
         log_scale : bool, optional
             If ``True``, display the flux on a logarithmic y-scale. Default is
             ``False``.
+        crop_waves : tuple or numpy.ndarray, optional
+            Two-element ``(min, max)`` wavelength range used to crop the input arrays.
+        crop_flux : tuple, optional
+            Two-element ``(min_percentile, max_percentile)`` range used to clip the flux array
+            by percentile. Defaults to ``None``, equivalent to ``(1, 100)`` (i.e. the 1st to
+            100th percentile).
         show_profiles : bool, optional
             If ``True`` (default), overlay the fitted line profiles stored in
             the spectrum’s frame.
@@ -1499,15 +2390,16 @@ class SpectrumFigures:
         # Create and fill the figure
         with rc_context(plt_cfg):
 
-            # Establish figure
-            self.fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
-
-            # Establish the axes
-            self.ax = self.fig.add_subplot()
-            self.ax.set(** ax_labels_cfg)
+            # Infer figure structure
+            if in_ax is not None:
+                self.fig, self.ax = in_ax.figure, in_ax
+            else:
+                self.fig = plt.figure() if (in_fig is None) or (in_fig is _NO_FIG) else in_fig
+                self.ax = self.fig.add_subplot()
+            self.ax.set(**ax_labels_cfg)
 
             # Reference _frame for the plot
-            wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame)
+            wave_plot, flux_plot, err_plot, z_corr, idcs_mask = frame_mask_switch(self._spec, rest_frame, crop_waves, crop_flux)
 
             # Plot the spectrum
             self.ax.step(wave_plot/z_corr, flux_plot * z_corr, label=label, where='mid', color=theme.colors['fg'],
@@ -1554,10 +2446,10 @@ class SpectrumFigures:
                 mplcursor_list = []
                 for line_label in unique_line_arr(self._spec.frame):
                     line = Line.from_transition(line_label, data_frame=self._spec.frame)
-                    mplcursor_list += spec_profile_plotter(self.ax, self._spec, line, z_corr)
+                    mplcursor_list += spec_profile_plotter(self.ax, line, z_corr, self._spec.redshift, self._spec.norm_flux)
 
                 # Pop-ups
-                mplcursor_parser(mplcursor_list, self._spec)
+                mplcursor_parser(mplcursor_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave, self._spec.units_flux)
 
             # Plot the fit continuum
             if show_cont and self._spec.cont is not None:
@@ -1586,7 +2478,8 @@ class SpectrumFigures:
                 self.ax.legend()
 
             # By default, plot on screen unless an output address is provided
-            save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
+            if in_ax is None:
+                save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
 
         return
 
@@ -1785,7 +2678,7 @@ class SpectrumFigures:
 
                     # Plot the profiles and link to the mplcursors pop-ups
                     if show_profiles and (line_i.measurements is not None):
-                        mplcursor_list += spec_profile_plotter(self.ax[i], self._spec, line_i, z_corr)
+                        mplcursor_list += spec_profile_plotter(self.ax[i], self._spec, self._spec.redshift, self._spec.norm_flux)
 
                     # Set the scale
                     line_band_scaler(self.ax[i], flux_plot[idx_blue:idx_red] * z_corr, y_scale)
@@ -1803,7 +2696,7 @@ class SpectrumFigures:
                     self.ax[i].axes.yaxis.set_visible(False)
 
             # Pop-ups
-            mplcursor_parser(mplcursor_list, self._spec)
+            mplcursor_parser(mplcursor_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave, self._spec.units_flux)
 
             # By default, plot on screen unless an output address is provided
             save_close_fig_swicth(fname, 'tight', self.fig, maximize, display_check)
@@ -1953,7 +2846,7 @@ class SpectrumFigures:
                 if show_profile:
 
                     # Plot profile
-                    mplcursor_list = spec_profile_plotter(self.ax[0], self._spec, line, z_corr)
+                    mplcursor_list = spec_profile_plotter(self.ax[0], line, z_corr, self._spec.redshift, self._spec.norm_flux)
 
                     # Residual flux component
                     line_residual_plotter(self.ax[1], self._spec, line,
@@ -1963,7 +2856,7 @@ class SpectrumFigures:
                                             z_corr)
 
                     # Pop-ups
-                    mplcursor_parser(mplcursor_list, self._spec)
+                    mplcursor_parser(mplcursor_list, self._spec.frame, self._spec.norm_flux, self._spec.units_wave, self._spec.units_flux)
 
                 # Plot the masked pixels
                 spec_mask_plotter(self.ax[0],
@@ -2212,6 +3105,7 @@ class SpectrumFigures:
         plt.show(**kwargs)
 
         return
+
 
     def save_fig(self, fname):
 

@@ -159,3 +159,8 @@ LiMe small update - 2.5.0 - XX/XX/XXXX
     - Corrected a typo in the instrumental sigma calculation formula of the documentation
     - Added function to compute observation redshift from line centroids
     - Added the argument distance in unit_conversion function for Spectrum. If this value is provided the spectrum flux will be converted to solar luminosities. If an astropy quantity is not provided it assumes mega parsecs.
+    - The frame_mask_switch now takes option to crop_wave and crop_flux arguments for the plotting. This arguments will be
+      added to the plotting functions.
+    - The cropping function has been moved from observations to tools.
+    - Updated .plot methodology to use @cached_property
+    - Improved warning message for missing parent line kinematics export

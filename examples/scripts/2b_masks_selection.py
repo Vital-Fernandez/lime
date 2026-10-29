@@ -2,6 +2,8 @@ from pathlib import Path
 import numpy as np
 import lime
 
+lime.theme.set_style('dark')
+
 
 # State the data files
 data_folder = Path('../doc_notebooks/0_resources/')
@@ -22,4 +24,8 @@ gp_spec = lime.Spectrum.from_file(obsFitsFile, instrument='osiris', redshift=z_o
 fname = f'./stored_masks.txt'
 # intervals = np.array([[5000, 5050], [5100, 5150]])
 intervals = np.array([[4000, 4100], [3800, 3900]])
-gp_spec.check.masks(fname, intervals, log_scale=True, rest_frame=False)
+gp_spec.check.masks(fname, intervals, line_list=['O3_5007A', 'H1_6563A'], log_scale=True, rest_frame=False)
+
+# fname = f'./stored_masks_bokeh.txt'
+# intervals = np.array([[4000, 4100], [3800, 3900]])
+gp_spec.bokeh.masks(fname, intervals, log_scale=True, rest_frame=False)
