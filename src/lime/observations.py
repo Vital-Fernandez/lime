@@ -1,7 +1,6 @@
 import logging
 from functools import cached_property
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -10,7 +9,7 @@ from collections import UserDict
 
 from lime.fitting.lines import profiles_computation, linear_continuum_computation
 from lime.tools import extract_fluxes, normalize_fluxes, ProgressBar, check_units, extract_wcs_header, \
-    parse_unit_convertion, is_luminosity_unit, flux_to_luminosity, au, cropping_spectrum
+     parse_unit_convertion, is_luminosity_unit, flux_to_luminosity, au, cropping_spectrum, check_lsf
 
 from lime.inference.detection import FeatureDetection
 from lime.plotting.plots import SpectrumFigures, SampleFigures, CubeFigures, SpectrumPlotter
@@ -396,7 +395,7 @@ class Spectrum:
 
     def __init__(self, input_wave=None, input_flux=None, input_err=None, redshift=None, norm_flux=None, crop_waves=None,
                  crop_flux=None, res_power=None, units_wave='AA', units_flux='FLAM', pixel_mask=None, id_label=None,
-                 review_inputs=True):
+                 review_inputs=True, lsf=None, lsf_nsub=None):
 
         # Class attributes
         self.label = None
@@ -414,6 +413,7 @@ class Spectrum:
         self.res_power = None
         self.units_wave = None
         self.units_flux = None
+        self.lsf = None
 
         # Treatments objects
         self.fit = SpecTreatment(self)
@@ -428,7 +428,7 @@ class Spectrum:
         # Review and assign the attibutes data
         if review_inputs:
             self._set_attributes(input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, crop_flux, res_power,
-                                 units_wave, units_flux, pixel_mask, id_label)
+                                 units_wave, units_flux, pixel_mask, id_label, lsf, lsf_nsub)
 
         return
 
@@ -502,7 +502,7 @@ class Spectrum:
 
     @classmethod
     def from_file(cls, fname, instrument, redshift=None, norm_flux=None, crop_waves=None, crop_flux=None, res_power=None,
-                  units_wave=None, units_flux=None, pixel_mask=None, id_label=None, wcs=None, **kwargs):
+                  units_wave=None, units_flux=None, pixel_mask=None, id_label=None, wcs=None, lsf=None, lsf_nsub=None, **kwargs):
 
         """
         Create a :class:`~lime.transitions.Spectrum` instance from an observational FITS file or .txt file.
@@ -599,7 +599,8 @@ class Spectrum:
 
         # Update the file parameters with the user parameters
         input_args = dict(redshift=redshift, norm_flux=norm_flux, crop_waves=crop_waves, crop_flux=crop_flux,
-                          res_power=res_power, units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs)
+                          res_power=res_power, units_wave=units_wave, units_flux=units_flux, id_label=id_label, wcs=wcs,
+                          lsf=lsf, lsf_nsub=lsf_nsub)
 
         if cls._fitsMgr.spectrum_check:
             input_args.pop('wcs')
@@ -655,7 +656,7 @@ class Spectrum:
         return SpectrumPlotter(self)
 
     def _set_attributes(self, input_wave, input_flux, input_err, redshift, norm_flux, crop_waves, crop_flux, res_power,
-                        units_wave, units_flux, pixel_mask, label):
+                        units_wave, units_flux, pixel_mask, label, lsf, lsf_nsub):
 
         # Class attributes
         self.label = label
@@ -683,6 +684,9 @@ class Spectrum:
 
         # Set the instrumental sigma correction
         self.res_power = res_power
+
+        # Set the instrument line spread function
+        self.lsf = check_lsf(lsf, lsf_nsub)
 
         # Review the final data
         check_spectra_arrays(self)
@@ -1247,7 +1251,8 @@ class Spectrum:
 
         spec_kwargs = dict(input_wave=wave_arr, input_flux=flux_arr, input_err=err_arr, redshift=redshift,
                            norm_flux=self.norm_flux, res_power=self.res_power, units_wave=self.units_wave,
-                           units_flux=self.units_flux, pixel_mask=pixel_mask, id_label=self.label)
+                           units_flux=self.units_flux, pixel_mask=pixel_mask, id_label=self.label,
+                           lsf=self.lsf)
 
         # Return a new object
         if return_spectrum:
@@ -1344,6 +1349,9 @@ class Spectrum:
         has_mask = (self.wave is not None) and np.any(self.wave.mask)
         has_err = self.err_flux is not None
 
+        # Line spread function
+        lsf_str = 'None' if self.lsf is None else (f'{"table" if self.lsf.fname is None else Path(self.lsf.fname).name} '
+                                                   f'(nsub={self.lsf.nsub})')
         return (
             f'\n{"=" * 60}\n'
             f'  {label_str}\n'
@@ -1361,6 +1369,7 @@ class Spectrum:
             f'    wmax         : {wmax_str} {self.units_wave}\n'
             f'    Resolution   : {res_str}\n'
             f'    Res. power   : {res_power_str}\n'
+            f'    LSF          : {lsf_str}\n'
             f'{"-" * 60}\n'
             f'  Checks\n'
             f'    Masked pixels     : {"yes" if has_mask else "no"}\n'

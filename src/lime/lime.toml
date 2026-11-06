@@ -117,3 +117,35 @@ kcwi.units_wave = "AA"
 kcwi.units_flux = "1e16*FLAM"
 kcwi.pixel_mask = "nan"
 kcwi.id_label = 'null'
+
+[voigt_default_params.b]
+HI   = 100
+AlII = 10
+CII  = 10
+CIIa = 10
+FeII = 10
+NI   = 10
+NiII = 10
+OI   = 10
+PII  = 10
+SII  = 10
+SIII  = 10
+SiII = 10
+SiIII = 10
+SiIV = 10
+
+[voigt_default_params.logN]
+HI   = 20
+AlII = 13
+CII  = 14.5
+CIIa = 14
+FeII = 14
+NI   = 15
+NiII = 14
+OI   = 15
+PII  = 14
+SII  = 15
+SIII  = 15
+SiII = 14
+SiIII = 14
+SiIV = 14

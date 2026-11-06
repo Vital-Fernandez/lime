@@ -829,7 +829,6 @@ class ProfileModelCompiler:
 
         return
 
-
     def define_param(self, idx, line, param_label, param_value, default_conf={}, user_conf={}, z_obj=0):
 
         comps = line.list_comps
@@ -1051,6 +1050,7 @@ class LineFitting:
 
         return
 
+
     def profile_fitting(self, line, x_arr, y_arr, err_arr, cont_arr, user_conf, fit_method='leastsq', scale_covar=True,
                         lmfit_covar=False):
 
@@ -1226,25 +1226,3 @@ class LineFitting:
             return report
         else:
             print(report)
-
-
-# def compute_inst_sigma_array(wave_arr, res_power=None):
-#
-#     # Aproximation using the wavelength array
-#     if res_power is None:
-#         deltalamb_arr = np.diff(wave_arr)
-#         R_arr = wave_arr[1:] / deltalamb_arr
-#         FWHM_arr = wave_arr[1:] / R_arr
-#
-#         sigma_arr = np.zeros(wave_arr.size)
-#         sigma_arr[:-1] = FWHM_arr / k_gFWHM
-#         sigma_arr[-1] = sigma_arr[-2]
-#
-#     # Use the true R_arr
-#     else:
-#         if wave_arr.size != res_power.size:
-#             raise LiMe_Error(f'The size fo the spectrum array and the resolving power array must have the same size')
-#         FWHM_arr = wave_arr / res_power
-#         sigma_arr = FWHM_arr / k_gFWHM
-#
-#     return sigma_arr

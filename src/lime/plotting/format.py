@@ -53,6 +53,7 @@ def spectrum_figure_labels(units_wave, units_flux, norm_flux, plotting_library='
 
     return x_label, y_label
 
+
 class Themer:
 
     def __init__(self, conf, style=None):

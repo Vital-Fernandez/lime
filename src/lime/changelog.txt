@@ -164,3 +164,4 @@ LiMe small update - 2.5.0 - XX/XX/XXXX
     - The cropping function has been moved from observations to tools.
     - Updated .plot methodology to use @cached_property
     - Improved warning message for missing parent line kinematics export
+    - Added fit ionic abundances for the fitting of voigt opacity profiles in UV observations

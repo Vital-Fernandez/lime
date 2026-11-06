@@ -51,7 +51,9 @@ def flux_label(units_flux, norm_flux):
     return y_label
 
 
-def label_maker(plot_type, library='matplotlib', **kwargs):
+def label_maker(plot_type, library='matplotlib', user_ax_cfg=None, **kwargs):
+
+    # User input
     title = kwargs.get('title')
 
     match plot_type:
@@ -80,11 +82,19 @@ def label_maker(plot_type, library='matplotlib', **kwargs):
             raise KeyError(f'Plot type is not recognized: {plot_type}')
 
     if library == 'matplotlib':
-        return {'xlabel': x_label, 'ylabel': y_label, 'title': title}
+        default_labels = {'xlabel': x_label, 'ylabel': y_label, 'title': title}
+
+        if user_ax_cfg is None:
+            return default_labels
+        else:
+            return {**default_labels, **user_ax_cfg}
 
     if library == 'bokeh':
         x_label, y_label = x_label.replace('$', '$$'), y_label.replace('$', '$$')
-        return x_label, y_label
+        if user_ax_cfg is None:
+            return x_label, y_label
+        else:
+            return user_ax_cfg.get('xlabel', x_label), user_ax_cfg.get('ylabel', y_label)
 
     return
 

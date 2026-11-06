@@ -243,7 +243,8 @@ def groupify_lines_df(bands, fit_cfg, groups_dict, spec, save_group_label=False)
             exclude_list += list(unique_comp_list)
 
             # Recover lines redshifts
-            z_corr_arr = (1 + bands.z_line) if 'z_line' in bands.columns else None
+            # z_corr_arr = (1 + bands.z_line) if 'z_line' in bands.columns else None # TODO this one used to work...
+            z_corr_arr = (1 + bands.z_line.fillna(spec.redshift)) if 'z_line' in bands.columns else None
 
             # Default values
             w3_min = bands.loc[idcs_comps, 'w3'].min()

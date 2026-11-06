@@ -94,10 +94,24 @@ _RANGE_ATTRIBUTES_FIT = np.arange(_ATTRIBUTES_FIT.size)
 # Dictionary with the parameter dtypes
 _LOG_TYPES_DICT = dict(zip(_PARAMS_CONF_TABLE.index.to_numpy(),
                            _PARAMS_CONF_TABLE.dtype.to_numpy()))
+_LOG_FLOAT_DTYPES = {col: 'float64' for col, dt in _LOG_EXPORT_DICT.items() if dt.startswith('<f')}
 
 
 class LiMe_Error(Exception):
     """LiMe exception function"""
+
+
+def deep_dict_update(base_dict, new_dict):
+
+    # Recursive update: the new_dict entries overwrite those in base_dict at every level of nested dictionaries
+    output_dict = {**base_dict}
+    for key, value in new_dict.items():
+        if isinstance(value, dict) and isinstance(output_dict.get(key), dict):
+            output_dict[key] = deep_dict_update(output_dict[key], value)
+        else:
+            output_dict[key] = value
+
+    return output_dict
 
 
 def strtobool(val):
@@ -116,12 +130,42 @@ def strtobool(val):
         raise ValueError("invalid truth value %r" % (val,))
 
 
+# def hdu_to_log_df(file_path, page_name):
+#
+#     with fits.open(file_path) as hdul:
+#         hdu_log = hdul[page_name].data
+#
+#     df_log = pd.DataFrame.from_records(data=hdu_log, index='index')
+#     df_log.index.name = None
+#
+#     return df_log
+
+_LOG_FLOAT_DTYPES = {col: 'float64' for col, dt in _LOG_EXPORT_DICT.items() if dt.startswith('<f')}
+
+def hdu_to_pandas(hdu):
+
+    # Convert from numpy records -> DataFrame
+    df_log = pd.DataFrame.from_records(data=hdu, index='index')
+
+    # Remove the index entry
+    df_log.index.name = None
+
+    # FITS stores big-endian: cast float columns to native byte order
+    df_log = df_log.astype(_LOG_FLOAT_DTYPES)
+
+    return df_log
+
+
 def hdu_to_log_df(file_path, page_name):
 
     with fits.open(file_path) as hdul:
         hdu_log = hdul[page_name].data
 
     df_log = pd.DataFrame.from_records(data=hdu_log, index='index')
+    df_log.index.name = None
+
+    # FITS stores big-endian: cast float columns to native byte order
+    df_log = df_log.astype(_LOG_FLOAT_DTYPES)
 
     return df_log
 
@@ -699,7 +743,7 @@ def check_file_dataframe(df_variable, variable_type=pd.DataFrame, ext='FRAME', s
 
 
 def check_fit_conf(fit_conf, default_key, obj_key, update_default=True, group_list=None, fit_cfg_suffix='_line_fitting',
-                   line_detection=False):
+                   line_detection=False, deep_update=False):
 
     # Check that there is an input configuration
     if fit_conf is not None:
@@ -749,8 +793,11 @@ def check_fit_conf(fit_conf, default_key, obj_key, update_default=True, group_li
             custom_cfg = {} if custom_cfg is None else custom_cfg
             custom_detect = custom_cfg.get('line_detection', {})
 
-            # Update default configuration if requested else use only custom
-            output_cfg = {**default_cfg, **custom_cfg} if update_default else (custom_cfg if custom_cfg else default_cfg)
+            # Update default configuration if requested (deep update for nested entries) else use only custom
+            if update_default:
+                output_cfg = deep_dict_update(default_cfg, custom_cfg) if deep_update else {**default_cfg, **custom_cfg}
+            else:
+                output_cfg = custom_cfg if custom_cfg else default_cfg
 
             # Update default detection if requested else use only custom
             if line_detection:
@@ -854,7 +901,6 @@ def log_parameters_calculation(input_log, parameter_list, formulae_list):
 
 
     return
-
 
 
 def log_to_HDU(log, ext_name=None, column_dtypes=None, header_dict=None):

@@ -10,7 +10,7 @@ from matplotlib.widgets import RadioButtons, SpanSelector, Slider
 from matplotlib.ticker import NullLocator
 from astropy.io import fits
 
-from lime.io import load_frame, save_frame, LiMe_Error, check_file_dataframe
+from lime.io import load_frame, save_frame, LiMe_Error, check_file_dataframe, hdu_to_pandas
 from lime.plotting.plots import Plotter, frame_mask_switch, save_close_fig_swicth, mplcursor_parser,\
                     determine_cube_images, load_spatial_mask, check_image_size, \
                     image_plot, spatial_mask_plot, _masks_plot, theme, line_band_plotter, spec_mask_plotter, \
@@ -642,8 +642,12 @@ class MaskSelection:
                 orig_arr, z_arr = orig_arr[idcs], z_arr[idcs]
 
                 # Plot the components
-                spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, self.z_corr,
-                                                     orig_arr, theme.colors.copy())
+                # spec_lines_plotter(self.ax, np.array(line_list)[idcs], lambda_arr, wave_plot, flux_plot, self.z_corr,
+                #                                      orig_arr, theme.colors.copy())
+
+                spec_lines_plotter(self.ax, np.array(line_list)[idcs], wave_plot, flux_plot, self._spec.redshift,
+                                   self.z_corr, theme.colors.copy())
+
 
             if show_masks:
                 spec_mask_plotter(self.ax, idcs_mask, wave_plot, flux_plot, self.z_corr, self._spec.frame)
@@ -1489,7 +1493,7 @@ class CubeInspection:
             mplcursor_list = []
             for line_label in unique_line_arr(spec.frame):
                 line = Line.from_transition(line_label, data_frame=spec.frame)
-                mplcursor_list += spec_profile_plotter(self.ax[1], line, z_corr, self._spec.redshift, self._spec.norm_flux)
+                mplcursor_list += spec_profile_plotter(self.ax[1], line, z_corr, spec.redshift, spec.norm_flux)
 
             # Pop-ups
             mplcursor_parser(mplcursor_list, spec.frame, spec.norm_flux, spec.units_wave, spec.units_flux)
@@ -1637,8 +1641,8 @@ class CubeInspection:
 
                 # Better sorry than permission. Faster?
                 try:
-                    log = pd.DataFrame.from_records(data=self.hdul_linelog[ext_name].data, index='index')
-                    spec.load_frame(log)
+                    # log = pd.DataFrame.from_records(data=self.hdul_linelog[ext_name].data, index='index')
+                    spec.load_frame(hdu_to_pandas(self.hdul_linelog[ext_name].data))
 
                 except KeyError:
                     _logger.info(f'Extension {ext_name} not found in the input file')

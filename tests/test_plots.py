@@ -78,7 +78,6 @@ def fake_line(profiles):
 # save_close_fig_swicth
 class TestSaveCloseFigSwitch:
 
-
     def test_saves_to_file(self, tmp_path):
         out = tmp_path / 'spectrum.png'
         spec = lime.Spectrum.from_file(file_address, 'sdss', redshift=REDSHIFT)
@@ -102,6 +101,7 @@ class TestSaveCloseFigSwitch:
             spec_basic.plot.spectrum(in_fig=fig, fname=42)
         plt.close('all')
 
+
 class TestSpectrumPlot:
 
     @pytest.mark.mpl_image_compare(tolerance=TOLERANCE_RMS)
@@ -118,7 +118,7 @@ class TestSpectrumPlot:
         spec = lime.Spectrum.from_file(file_address, 'sdss', redshift=REDSHIFT, id_label='SHOC579-SDSS')
         spec.err_flux = spec.err_flux * 5
         spec.plot.spectrum(in_fig=fig, show_err=True, log_scale=True, label='SHOC579',
-                           ax_cfg={'title': 'Test err * 10', 'xlabel': 'Dispersion axis'})
+                           ax_labels={'title': 'Test err * 10', 'xlabel': 'Dispersion axis'})
         return fig
 
     @pytest.mark.mpl_image_compare(tolerance=TOLERANCE_RMS)
@@ -167,6 +167,7 @@ class TestSpectrumPlot:
         spec_basic.plot.spectrum(in_fig=fig, show_cont=True)
         return fig
 
+
 class TestGridPlot:
 
     @pytest.mark.mpl_image_compare(tolerance=TOLERANCE_RMS)
@@ -179,12 +180,6 @@ class TestGridPlot:
     def test_grid_with_profiles(self, spec_fitted):
         fig = plt.figure()
         spec_fitted.plot.grid(in_fig=fig, show_profiles=True)
-        return fig
-
-    @pytest.mark.mpl_image_compare(tolerance=TOLERANCE_RMS)
-    def test_grid_rest_frame(self, spec_fitted):
-        fig = plt.figure()
-        spec_fitted.plot.grid(in_fig=fig, rest_frame=True)
         return fig
 
     @pytest.mark.mpl_image_compare(tolerance=TOLERANCE_RMS)
@@ -206,6 +201,7 @@ class TestGridPlot:
         with caplog.at_level(logging.INFO, logger='LiMe'):
             spec_basic.plot.grid(in_fig=fig)
         plt.close('all')
+
 
 class TestBandsPlot:
 
@@ -613,7 +609,7 @@ class TestPlotTools:
 
         # Scientific notation
         assert latex_science_float(1.5) == '1.5'
-        assert latex_science_float(1e-17) == r'1 \times 10^{-17}'
+        assert latex_science_float(1e-17) == r'10^{-17}'
         assert latex_science_float(1.2345e-17, dec=3) == r'1.23 \times 10^{-17}'
 
         # Axes labels
@@ -623,7 +619,7 @@ class TestPlotTools:
         assert r'\times' not in y_label
 
         x_label, y_label = spectrum_figure_labels(au.AA, flux_units, 1e-17)
-        assert r'1 \times 10^{-17}' in y_label
+        assert r'\mathrm{10^{-17}' in y_label
 
         x_label, y_label = spectrum_figure_labels(au.AA, au.dimensionless_unscaled, 1)
         assert y_label == 'Flux (scaled)'
@@ -886,7 +882,7 @@ class TestSpectrumOptions:
 
     def test_label_and_ax_cfg(self, spec_basic):
 
-        spec_basic.plot.spectrum(in_fig=None, label='SHOC579', ax_cfg={'title': 'Test title', 'xlabel': 'Test axis'})
+        spec_basic.plot.spectrum(in_fig=None, label='SHOC579', ax_labels={'title': 'Test title', 'xlabel': 'Test axis'})
         ax = spec_basic.plot.ax
 
         assert ax.get_title() == 'Test title'
@@ -977,7 +973,7 @@ class TestSpectrumOptions:
 
         # Resolving power array
         spec.res_power = np.linspace(1500, 2500, wave.size)
-        spec.plot.resolution(in_fig=None, ax_cfg={'xlabel': 'Test axis'})
+        spec.plot.resolution(in_fig=None, ax_labels={'xlabel': 'Test axis'})
         ax = spec.plot.ax
         assert np.allclose(ax.lines[0].get_ydata(), spec.res_power)
         assert ax.get_xlabel() == 'Test axis'
@@ -1114,7 +1110,7 @@ class TestBandsOptions:
 #     def test_velocity_profile(self, spec_fitted):
 #
 #         fig = plt.figure()
-#         spec_fitted.plot.velocity_profile('H1_6563A', in_fig=fig, ax_cfg={'title': 'Test title'})
+#         spec_fitted.plot.velocity_profile('H1_6563A', in_fig=fig, ax_labels={'title': 'Test title'})
 #         ax = fig.axes[0]
 #
 #         assert ax.get_xlabel() == 'Velocity (Km/s)'

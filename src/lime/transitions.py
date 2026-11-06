@@ -1356,7 +1356,8 @@ class LineMeasurements:
         self.a, self.a_err = None, None
         self.b, self.b_err = None, None
         self.c, self.c_err = None, None
-        self.z_line = None
+        self.z_line, self.z_line_err = None, None
+        self.logN, self.logN_err = None, None
         self.v_r, self.v_r_err = None, None
         self.pixel_vel = None
         self.sigma_vel, self.sigma_vel_err = None, None
@@ -1446,6 +1447,7 @@ def parse_line_group_notation(line_list: np.ndarray, relation_list: np.ndarray) 
 
     blend_key = f"{line_list[0]}_b"
     return {blend_key: blend_value, **merge_entries}
+
 
 class Line:
 

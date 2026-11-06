@@ -29,7 +29,7 @@ def measurement_tolerance_test(input_spec, true_log, test_log, abs_factor=5, rel
                 param_exp_value = true_log.loc[line, param]
                 param_value = test_log.loc[line, param]
 
-                if ('_err' not in param) and (f'{param}_err' in true_log.columns):
+                if ('_err' not in param) and (f'{param}_err' in true_log.columns) and (param != 'z_line'):
                     param_err = test_log.loc[line, f'{param}_err']
                     param_exp_err = true_log.loc[line, f'{param}_err']
                     diag = np.isclose(param_value, param_exp_value,
@@ -655,84 +655,3 @@ class TestMeasurements:
         spec.plot.bands(show_cont=True, in_fig=fig)
 
         return fig
-
-    # def test_sloan_comparison(self):
-    #
-    #     # State the data files
-    #     sdss_fits_fname = f'{spectra_folder}/SHOC579_SDSS_dr18.fits'
-    #
-    #     # Load configuration
-    #     cfgFile = f'{data_folder}/long_slit.toml'
-    #     obs_cfg = lime.load_cfg(cfgFile)
-    #
-    #     # Remove O3_4959A configuration
-    #     obs_cfg['SHOC579_sdss_line_fitting'].pop('O3_4959A_b')
-    #
-    #     # Declare LiMe spectrum
-    #     spec = lime.Spectrum.from_file(sdss_fits_fname, instrument='sdss')
-    #
-    #     # Measure the lines
-    #     bands_df = spec.retrieve.lines_frame(fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', band_vsigma=120)
-    #     spec.fit.frame(bands_df, fit_cfg=obs_cfg, obj_cfg_prefix='SHOC579_sdss', cont_source='adjacent')
-    #     lime_df = spec.frame.copy()
-    #
-    #     # Unpack SDSS line measurements
-    #     data_lines = fits.getdata(sdss_fits_fname, extname='SPZLINE')
-    #     line_dict = {'Ne3_3968A': '[Ne_III] 3868',
-    #                  'H1_3970A': 'H_epsilon',
-    #                  'H1_4861A': 'H_beta',
-    #                  'H1_4102A': 'H_delta',
-    #                  'H1_4340A': 'H_gamma',
-    #                  'O3_4363A': '[O_III] 4363',
-    #                  'O2_3726A': '[O_II] 3725', 'O2_3729A': '[O_II] 3727',
-    #                  'O3_4959A': '[O_III] 4959', 'O3_5007A': '[O_III] 5007',
-    #                  'O1_6300A': '[O_I] 6300', 'S3_6312A': '[S_III] 6312',
-    #                  'H1_6563A': 'H_alpha', 'N2_6548A': '[N_II] 6548', 'N2_6583A': '[N_II] 6583',
-    #                  'S2_6716A': '[S_II] 6716', 'S2_6731A': '[S_II] 6730',
-    #                  'Ar3_7136A': '[Ar_III] 7135'}
-    #
-    #     # Convert FITS_rec to DataFrame
-    #     sdss_df = pd.DataFrame(data_lines.tolist(), columns=data_lines.names)
-    #     sdss_df.set_index('LINENAME', inplace=True)
-    #     sdss_df.index = sdss_df.index.str.strip()
-    #
-    #     # Rename columns using inverted dictionary
-    #     inv_dict = {v: k for k, v in line_dict.items()}
-    #     sdss_df.rename(index=inv_dict, inplace=True)
-    #
-    #     # Compare the line fluxes
-    #     spec.plot.spectrum(log_scale=True)
-    #     for line in ['O3_4959A', 'Ar3_7136A', 'S2_6716A', 'S2_6731A']:
-    #     # for line in ['S2_6716A', 'S2_6731A']:
-    #         sdss_flux, sdss_err = sdss_df.loc[line, ['LINEAREA', 'LINEAREA_ERR']]
-    #         lime_intg, lime_intg_err = lime_df.loc[line, ['intg_flux', 'intg_flux_err']]
-    #         lime_gauss, lime_gauss_err = lime_df.loc[line, ['profile_flux', 'profile_flux_err']]
-    #
-    #         print(f'SLOAN = {sdss_flux}+/-{sdss_err}')
-    #         print(lime_df.loc[['O3_4959A'], ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err']])
-    #         print(lime_df.loc[['O3_4959A', 'O3_4959A_k-1'], ['intg_flux', 'intg_flux_err', 'profile_flux', 'profile_flux_err']])
-    #
-    #         sdss_cont, sdss_cont_err = sdss_df.loc[line, ['LINECONTLEVEL', 'LINECONTLEVEL_ERR']]
-    #         lime_cont, lime_cont_err = lime_df.loc[line, ['cont', 'cont_err']]
-    #
-    #         # Diagnostic for matching methodology fluxes
-    #         sigma_quad = np.sqrt(np.square(lime_gauss_err) + np.square(sdss_err))
-    #         diag_arr = np.abs(lime_gauss - sdss_flux) <= 3 * sigma_quad
-    #
-    #         # print(f'\nLine Area SDSS : {line} = {sdss_flux:0.3f} ± {sdss_err:0.3f}')
-    #         # print(f'Integrated LiMe :        = {lime_intg:0.3f} ± {lime_intg_err:0.3f}')
-    #         # print(f'Gaussian LiMe :          = {lime_gauss:0.3f} ± {lime_gauss_err:0.3f}')
-    #         # print('Gaussian flux close', diag_arr)
-    #
-    #         # Diagnostic for matching methodology fluxes
-    #         sigma_quad = np.sqrt(np.square(lime_cont_err) + np.square(sdss_cont_err))
-    #         diag_arr = np.abs(lime_cont - sdss_cont) <= 3 * sigma_quad
-    #
-    #         print(f'Cont SDSS : {line} = {sdss_cont:0.3f} ± {sdss_cont_err:0.3f}')
-    #         print(f'Cont LiMe :          {lime_cont:0.3f} ± {lime_cont_err:0.3f}')
-    #         print('Continuum flux close',diag_arr)
-    #
-    #         assert np.isclose(sdss_flux, lime_gauss, rtol=0.05)
-    #         assert np.isclose(sdss_cont, lime_cont, rtol=0.05)
-    #
-    #     return

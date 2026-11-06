@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from sys import stdout
 from pathlib import Path
+from scipy.interpolate import make_interp_spline
 
 from astropy import units as au
 from astropy.units.core import CompositeUnit, IrreducibleUnit, Unit
@@ -1224,3 +1225,144 @@ def cropping_spectrum(crop_waves, crop_flux, input_wave, input_flux, input_err, 
             input_flux = np.clip(input_flux, lo, hi)
 
     return input_wave, input_flux, input_err, pixel_mask
+
+
+
+def check_lsf(lsf, lsf_nsub=None):
+
+    # No LSF
+    if lsf is None:
+        return None
+
+    # LiMe LSF object (a new nsub overwrites the one stored)
+    if isinstance(lsf, LSF):
+        return lsf if lsf_nsub is None else lsf.copy(nsub=lsf_nsub)
+
+    # HST/COS style table file
+    if isinstance(lsf, (str, Path)):
+        return LSF.from_file(lsf, 1 if lsf_nsub is None else lsf_nsub)
+
+    raise LiMe_Error(f'The input LSF must be the address of an HST/COS style table or a lime LSF object '
+                     f'(input type: {type(lsf)})')
+
+
+
+class LSF:
+
+    """
+    Instrument line spread function (LSF) from an HST/COS style table.
+
+    The first row of the table has the wavelengths (in Angstroms) where the LSF is tabulated and each column below
+    has the kernel at that wavelength in pixel space. The kernel has ``nsub`` samples per spectrum pixel (VoigtFit
+    ``nsub``). The kernels are normalized to unit area and a linear interpolator for the whole table provides the kernel
+    at any wavelength (VoigtFit ``load_lsf``). Beyond the table limits the kernel at the closest table wavelength is used.
+
+    Parameters
+    ----------
+    wave : numpy.ndarray
+        Table wavelengths in Angstroms.
+    kernel : numpy.ndarray
+        Kernel table with shape ``(n_samples, wave.size)``. The number of samples must be odd.
+    nsub : int, optional
+        Number of kernel samples per spectrum pixel. Default is 1.
+    fname : str, optional
+        Address of the LSF table file.
+
+    Examples
+    --------
+    Load an LSF table whose kernels are sampled at the native pixels of a spectrum rebinned by 6 pixels:
+
+    >>> lsf = LSF.from_file("aa_LSFTable_G130M_1291_LP4_cn.dat", nsub=6)
+    >>> kernel_arr = lsf(np.array([1250.0, 1300.0]))
+    """
+
+    def __init__(self, wave, kernel, nsub=1, fname=None):
+
+        # Table data
+        self.wave = np.atleast_1d(np.asarray(wave, dtype=float))
+        self.kernel = np.asarray(kernel, dtype=float)
+        self.kernel = self.kernel[:, None] if self.kernel.ndim == 1 else self.kernel
+        self.nsub = nsub
+        self.fname = None if fname is None else str(fname)
+        self._interp = None
+
+        # Check the table format
+        if self.kernel.shape[1] != self.wave.size:
+            raise LiMe_Error(f'The LSF table has {self.wave.size} wavelengths but {self.kernel.shape[1]} kernel columns')
+
+        if self.kernel.shape[0] % 2 == 0:
+            raise LiMe_Error(f'The LSF kernels must have an odd number of samples (input table: {self.kernel.shape[0]})')
+
+        if (not float(nsub).is_integer()) or (nsub < 1):
+            raise LiMe_Error(f'The LSF "nsub" must be a positive integer (input value: {nsub})')
+        self.nsub = int(nsub)
+
+        # Sort the table by wavelength and normalize the kernels to unit area
+        idcs_sort = np.argsort(self.wave)
+        self.wave, self.kernel = self.wave[idcs_sort], self.kernel[:, idcs_sort]
+        self.kernel = self.kernel / self.kernel.sum(axis=0)
+
+        # Linear interpolator for the whole table along the wavelength axis
+        if self.wave.size > 1:
+            self._interp = make_interp_spline(self.wave, self.kernel, k=1, axis=1)
+
+        return
+
+    @classmethod
+    def from_file(cls, fname, nsub=1):
+
+        """
+        Load an LSF table in the HST/COS format: the first row has the table wavelengths in Angstroms and each column
+        below has the kernel at that wavelength.
+        """
+
+        # Check the file
+        fname = Path(fname)
+        if not fname.is_file():
+            raise LiMe_Error(f'The LSF table file was not found at: {fname}')
+
+        # Read the table
+        table = np.loadtxt(fname)
+
+        return cls(table[0], table[1:], nsub, fname)
+
+    def __call__(self, wave_arr):
+
+        """Normalized kernels at the input wavelengths (Angstroms) with shape ``(wave_arr.size, n_samples)``"""
+
+        wave_arr = np.atleast_1d(np.asarray(wave_arr, dtype=float))
+
+        # Single kernel table
+        if self._interp is None:
+            kernel_arr = np.repeat(self.kernel.T, wave_arr.size, axis=0)
+
+        # Interpolate the table (constant beyond the limits)
+        else:
+            kernel_arr = self._interp(np.clip(wave_arr, self.wave[0], self.wave[-1])).T
+
+        return kernel_arr / kernel_arr.sum(axis=1, keepdims=True)
+
+    def copy(self, nsub=None, wave_factor=1):
+
+        """LSF copy with a new sampling and/or the table wavelengths scaled (e.g. for a redshift correction)"""
+
+        return LSF(self.wave * wave_factor, self.kernel, self.nsub if nsub is None else nsub, self.fname)
+
+    def rebin(self, pixel_factor):
+
+        """LSF for a spectrum whose pixels are ``pixel_factor`` times wider (None if the sampling cannot be matched)"""
+
+        nsub_new = self.nsub * pixel_factor
+        if (nsub_new < 1) or (np.abs(nsub_new - np.round(nsub_new)) > 0.01 * nsub_new):
+            _logger.warning(f'The new pixels are {pixel_factor:0.3f} times wider than the original ones. This does not '
+                            f'match the LSF sampling (nsub = {self.nsub}): the output spectrum does not include an LSF.')
+            return None
+
+        return self.copy(nsub=int(np.round(nsub_new)))
+
+    def __repr__(self):
+
+        file_str = 'table' if self.fname is None else Path(self.fname).name
+
+        return (f'LSF({file_str}: {self.wave.size} wavelengths [{self.wave[0]:0.1f}, {self.wave[-1]:0.1f}] Angstrom, '
+                f'{self.kernel.shape[0]} samples, nsub={self.nsub})')

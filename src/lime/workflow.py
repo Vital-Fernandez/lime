@@ -16,10 +16,11 @@ import lime
 from lime.rsrc_manager import lineDB
 from lime.tools import ProgressBar, join_fits_files, extract_wcs_header, pd_get, res_power_approx, au
 from lime.fitting.lines import LineFitting, signal_to_noise_rola, sigma_corrections, k_gFWHM, velocity_to_wavelength_band, profiles_computation, linear_continuum_computation
-from lime.transitions import Line, lines_frame, _REDSHIFT_DICT, multi_origin_lines_frame
+from lime.transitions import Line, multi_origin_lines_frame
 from lime.retrieve.line_bands import determine_line_groups, groupify_lines_df
 from lime.io import check_file_dataframe, check_file_array_mask, log_to_HDU, results_to_log, load_frame, LiMe_Error, check_fit_conf, lime_cfg
 from lime.fitting.redshift import RedshiftFitting
+from lime.fitting.ionic import IonicFitting
 from lime.plotting.plots import spec_continuum_calculation
 
 try:
@@ -272,9 +273,14 @@ def spectrum_resampling(disp_intvl, pixel_width, pixel_number, constant_pixel_wi
     unique_mask = np.concatenate([[True], np.diff(bin_edges) > tolerance])
 
     if not np.all(unique_mask):
-        n_removed = np.sum(~unique_mask)
+        bad_idx = np.flatnonzero(~unique_mask)       # edge i has ~zero width after edge i-1
+        n_removed = bad_idx.size
+        n_show = min(10, n_removed)
+        bad_centers = ', '.join(f'{w:.4f}' for w in disp_intvl[bad_idx[:n_show] - 1])
         _logger.warning(f'Found {n_removed} duplicate or zero-width bin edge(s) in bin_edges, '
                         f'likely caused by gaps or cuts in wave_arr. '
+                        f'First {n_show} affected output wavelength(s) [Å]: {bad_centers}'
+                        f'{" ..." if n_removed > n_show else ""} '
                         f'These will be removed before binning (tolerance = {tolerance:.2e} Å).')
         bin_edges = bin_edges[unique_mask]
 
@@ -428,7 +434,6 @@ class SpecRetriever:
 
         >>> bands = spec.retrieve.lines_frame(fit_cfg="my_cfg.toml")
         """
-
 
         # Remove the mask from the wavelength array if necessary
         wave_intvl = self._spec.wave.compressed()
@@ -647,7 +652,8 @@ class SpecRetriever:
                                      norm_flux=norm_flux,
                                      crop_waves=crop_waves,
                                      crop_flux=crop_flux,
-                                     pixel_mask=pixel_mask)
+                                     pixel_mask=pixel_mask,
+                                     lsf=self._spec.lsf)
 
         return out_spec
 
@@ -774,7 +780,7 @@ class SpecRetriever:
             return lime.Spectrum(input_wave=disp_intvl, input_flux=flux_binned, input_err=err_binned,
                                  redshift=0 if rest_frame else self._spec.redshift, res_power=self._spec.res_power,
                                  units_wave=self._spec.units_wave, units_flux=self._spec.units_flux,
-                                 norm_flux=norm_flux, pixel_mask=mask_arr)
+                                 norm_flux=norm_flux, pixel_mask=mask_arr, lsf=self._spec.lsf)
 
     def normalization(self, return_spectrum=False, crop_waves=None, crop_flux=None, **kwargs):
 
@@ -845,7 +851,7 @@ class SpecRetriever:
             return lime.Spectrum(self._spec.wave.data, flux_norm.data, err_norm.data, redshift=self._spec.redshift,
                                  units_wave=self._spec.units_wave, units_flux=au.dimensionless_unscaled, norm_flux=1,
                                  res_power=self._spec.res_power, pixel_mask=flux_norm.mask, crop_waves=crop_waves,
-                                 crop_flux=crop_flux)
+                                 crop_flux=crop_flux, lsf=self._spec.lsf)
 
     def upper_line_limit(self, line, bands=None, signal_to_noise=8, err_from_bands=False, continua_sigma=True):
 
@@ -887,12 +893,13 @@ class SpecRetriever:
         return upper_flux
 
 
-class SpecTreatment(LineFitting, RedshiftFitting):
+class SpecTreatment(LineFitting, RedshiftFitting, IonicFitting):
 
     def __init__(self, spectrum):
 
         # Instantiate the dependencies
         LineFitting.__init__(self)
+        IonicFitting.__init__(self)
 
         # Lime spectrum object with the scientific data
         self._spec = spectrum

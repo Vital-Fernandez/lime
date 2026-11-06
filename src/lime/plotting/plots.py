@@ -350,10 +350,10 @@ def spec_plot(ax, spec, rest_frame=False, show_profiles=True, log_scale=False):
         mplcursor_list = []
         for line_label in unique_line_arr(spec.frame):
             line = Line.from_transition(line_label, data_frame=spec.frame)
-            mplcursor_list += spec_profile_plotter(ax, spec, line, z_corr)
+            mplcursor_list += spec_profile_plotter(ax, line, z_corr, spec.redshift, spec.norm_flux)
 
         # Pop-ups
-        mplcursor_parser(mplcursor_list, spec)
+        mplcursor_parser(mplcursor_list, spec.frame, spec.norm_flux, spec.units_wave, spec.units_flux)
 
     # Y scale
     if log_scale:
@@ -1774,7 +1774,7 @@ class SpectrumPlotter(PlotAccessor):
 
     def spectrum(self, fname=None, label=None, bands=None, line_list=None, rest_frame=False, log_scale=False,
                  crop_waves=None, crop_flux=None, show_profiles=True, show_cont=False, show_err=False, show_masks=True,
-                 show_components=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None, maximize=False):
+                 show_components=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None, ax_labels=None, maximize=False):
 
         """
         Plot the spectrum flux as a function of wavelength.
@@ -1885,8 +1885,8 @@ class SpectrumPlotter(PlotAccessor):
 
         # Get the figure style
         plt_cfg = theme.fig_defaults(fig_cfg)
-        ax_cfg = label_maker('spectrum', title=title, units_wave=self._obj.units_wave, units_flux=self._obj.units_flux,
-                             norm_flux=self._obj.norm_flux)
+        ax_labels = label_maker('spectrum', title=title, user_ax_cfg=ax_labels, units_wave=self._obj.units_wave,
+                                 units_flux=self._obj.units_flux, norm_flux=self._obj.norm_flux)
         legend_check = True if label is not None else False
 
         # Generate figure
@@ -1900,7 +1900,7 @@ class SpectrumPlotter(PlotAccessor):
                                                             log_scale=log_scale, show_profiles=show_profiles, show_cont=show_cont,
                                                             show_err=show_err, show_masks=show_masks, show_comps=show_components,
                                                             show_legend=legend_check,
-                                                            in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_cfg)
+                                                            in_fig=in_fig, in_ax=in_ax, ax_cfg=ax_labels)
 
             # Display | save | pass figure
             self.save_close_fig_swicth(fname, 'tight', self.fig, maximize, in_fig=in_fig, in_ax=in_ax)
@@ -1908,7 +1908,7 @@ class SpectrumPlotter(PlotAccessor):
         return
 
     def resolution(self, fname=None, rest_frame=False, title=None, in_fig=_NO_FIG, in_ax=None, fig_cfg=None,
-                   maximize=False):
+                   ax_labels=None, maximize=False):
 
         """
         Plot the spectral resolution as a function of wavelength.
@@ -1947,7 +1947,7 @@ class SpectrumPlotter(PlotAccessor):
 
         # Get the figure style
         plt_cfg = theme.fig_defaults(fig_cfg)
-        ax_cfg = label_maker('resolution', title=title, units_wave=self._obj.units_wave,
+        ax_cfg = label_maker('resolution', title=title, user_ax_cfg=ax_labels, units_wave=self._obj.units_wave,
                              res_power_check=self._obj.res_power is not None)
 
         # Generate figure
@@ -2176,7 +2176,7 @@ class SpectrumPlotter(PlotAccessor):
         return
 
     def velocity_profile(self, line=None, fname=None, y_scale='linear', title=None, in_fig=_NO_FIG, in_ax=None,
-                         fig_cfg=None, maximize=False):
+                         fig_cfg=None, ax_labels=None, maximize=False):
 
         """
         Plot a line with the velocity profile percentiles.
@@ -2250,7 +2250,8 @@ class SpectrumPlotter(PlotAccessor):
 
         # Get the figure style
         plt_cfg = theme.fig_defaults(fig_cfg)
-        ax_cfg = label_maker('velocity', title=title, units_flux=self._obj.units_flux, norm_flux=self._obj.norm_flux)
+        ax_cfg = label_maker('velocity', user_ax_cfg=ax_labels, title=title, units_flux=self._obj.units_flux,
+                             norm_flux=self._obj.norm_flux)
 
         # Generate figure
         with rc_context(plt_cfg):

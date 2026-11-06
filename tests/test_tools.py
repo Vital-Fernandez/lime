@@ -10,6 +10,9 @@ from astropy.io import fits
 import astropy.units as u
 from lime.fitting.lines import c_KMpS
 from lime.tools import redshift_calculation
+from lime.transitions import Line
+from lime.io import _RANGE_ATTRIBUTES_FIT, _ATTRIBUTES_FIT
+
 
 # Data for the tests
 baseline_folder = Path(__file__).parent / 'baseline'
@@ -337,6 +340,46 @@ def test_logs_into_fits():
                         else:
                             assert np.allclose(param_value, param_exp_value, rtol=0.10, equal_nan=True)
 
+
+    return
+
+
+def test_fits_log_load_measurements():
+
+    # Save the baseline log as a fits page (FITS stores big-endian)
+    log_orig = lime.load_frame(lines_log_address)
+    fits_address = outputs_folder / 'log_byteorder.fits'
+    fits_address.unlink(missing_ok=True)
+    lime.save_frame(fits_address, log_orig, page='LINELOG')
+
+    # Read it back
+    log_test = hdu_to_log_df(fits_address, 'LINELOG')
+
+    # No column should remain big-endian
+    big_endian = [c for c in log_test.columns if getattr(log_test[c].dtype, 'byteorder', '=') == '>']
+    assert len(big_endian) == 0, f'Big-endian columns: {big_endian}'
+
+    # List of labels (pandas take) as in Line.load_measurements
+    line_list = ['H1_4861A', 'O3_5007A']
+    assert np.allclose(log_test.loc[line_list, 'profile_flux'].to_numpy(),
+                       log_orig.loc[line_list, 'profile_flux'].to_numpy())
+
+    # Recover the measurements from the fits and the text logs
+    line_txt = Line.from_transition('O3_5007A', data_frame=log_orig, norm_flux=norm_flux)
+    line_fits = Line.from_transition('O3_5007A', data_frame=log_test, norm_flux=norm_flux)
+
+    for j in _RANGE_ATTRIBUTES_FIT:
+        param = _ATTRIBUTES_FIT[j]
+        value_txt = line_txt.measurements.__getattribute__(param)
+        value_fits = line_fits.measurements.__getattribute__(param)
+        if isinstance(value_txt, (float, np.floating, np.ndarray)):
+            assert np.allclose(value_txt, value_fits, equal_nan=True), param
+
+    # Same call as the user script
+    spec.load_frame(fits_address, page='LINELOG')
+    assert set(spec.frame.index) == set(log_orig.index)
+
+    fits_address.unlink()
 
     return
 
